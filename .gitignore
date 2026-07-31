@@ -1,0 +1,9 @@
+.venv/
+__pycache__/
+*.pyc
+data/
+.DS_Store
+uv.lock
+.env
+.env.*
+!.env.example
