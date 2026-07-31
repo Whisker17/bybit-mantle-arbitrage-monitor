@@ -47,13 +47,13 @@ flags, tunables) live in `config/` as validated, typed config — not hardcoded,
 
 ## Architecture
 
-Module layout is fixed by `docs/DESIGN.md` §4.2. Keep this section a short mirror of
-that section — one bullet per top-level module, its single responsibility, and the
-load-bearing interfaces other modules may depend on.
+Module layout is fixed by `docs/DESIGN.md` §4.2. Short mirror:
 
-<!-- Fill in as DESIGN.md §4.2 lands, e.g.:
-- **`<module>/`** — responsibility; depends only on <interface>.
--->
+- **`mba/`** — phase-1 offline WMNT/USDT0 backtest (archived, still runnable). Do not
+  extend for xStocks.
+- **`monitor/`** — phase-2 live Bybit ⇄ Fluxion xStocks panel. All new product code.
+  Subpackages (`symbols`, `bybit`, `fluxion`, `metrics`, `attribution`, `tui`) land
+  with M1–M5. Reuse pieces from `mba` per DESIGN §4.2 table; do not import whole stages.
 
 ## Git workflow (mandatory)
 
