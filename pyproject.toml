@@ -1,7 +1,7 @@
 [project]
-name = "mba"
+name = "bybit-mantle-arbitrage-monitor"
 version = "0.1.0"
-description = "Mantle <> Bybit arbitrage feasibility backtest (WMNT/USDT0)"
+description = "Bybit spot ⇄ Fluxion (Mantle) tokenized-stocks live panel; phase-1 WMNT/USDT0 backtest archived under src/mba"
 requires-python = ">=3.11"
 dependencies = [
     "httpx[socks]>=0.27",
@@ -14,9 +14,35 @@ dependencies = [
     "eth-hash[pycryptodome]>=0.7",
 ]
 
+[dependency-groups]
+dev = [
+    "pytest>=8",
+    "pytest-asyncio>=1.4.0",
+    "ruff>=0.6",
+    "mypy>=1.11",
+]
+
 [build-system]
 requires = ["hatchling"]
 build-backend = "hatchling.build"
 
 [tool.hatch.build.targets.wheel]
 packages = ["src/mba"]
+
+[tool.ruff]
+target-version = "py311"
+line-length = 100
+
+[tool.ruff.lint]
+select = ["E", "F", "I", "UP", "B"]
+
+[tool.pytest.ini_options]
+testpaths = ["tests"]
+asyncio_mode = "strict"
+pythonpath = ["src"]
+
+[tool.mypy]
+python_version = "3.11"
+strict = true
+# Expand as phase-2 modules land (see docs/DESIGN.md §4.2):
+files = ["src/mba"]

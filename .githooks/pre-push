@@ -1,0 +1,53 @@
+#!/usr/bin/env bash
+# Refuse direct pushes to protected branches.
+#
+# This is a local stand-in for GitHub branch protection, which is unavailable on
+# private repos on the Free plan (the API returns 403 "Upgrade to GitHub Pro or make
+# this repository public"). It only guards *this* clone/worktree -- the remote is
+# genuinely unprotected, so the real safeguard is still the workflow in
+# docs/GIT_WORKFLOW.md. Enable server-side protection instead as soon as the repo's
+# plan allows it, and keep this hook as belt-and-braces.
+#
+# Enable once per clone/worktree:
+#   git config core.hooksPath .githooks
+#
+# Emergency override (say why in the PR or commit message):
+#   ALLOW_DIRECT_PUSH=1 git push ...
+
+set -euo pipefail
+
+PROTECTED="main dev"
+BLOCKED=0
+
+# stdin: <local-ref> <local-sha> <remote-ref> <remote-sha>, one line per ref pushed
+while read -r _local_ref _local_sha remote_ref _remote_sha; do
+    [ -z "${remote_ref:-}" ] && continue
+    branch="${remote_ref#refs/heads/}"
+    for p in $PROTECTED; do
+        if [ "$branch" = "$p" ]; then
+            echo "pre-push: refusing to push directly to '$p'." >&2
+            BLOCKED=1
+        fi
+    done
+done
+
+if [ "$BLOCKED" -eq 1 ]; then
+    if [ "${ALLOW_DIRECT_PUSH:-}" = "1" ]; then
+        echo "pre-push: ALLOW_DIRECT_PUSH=1 set -- proceeding anyway." >&2
+        exit 0
+    fi
+    cat >&2 <<'MSG'
+
+  main and dev only accept changes through a pull request:
+    - issue work   : worktree off origin/dev   -> PR base dev    (squash)
+    - release      : release/vX.Y.Z off dev    -> PR base main   (merge commit)
+    - hotfix       : hotfix/<id>-topic off main -> PR base main   (merge commit)
+
+  See docs/GIT_WORKFLOW.md. To override deliberately:
+    ALLOW_DIRECT_PUSH=1 git push ...
+
+MSG
+    exit 1
+fi
+
+exit 0

@@ -1,34 +1,65 @@
-# Mantle ⇄ Bybit arbitrage feasibility backtest (WMNT/USDT0)
+# bybit-mantle-arbitrage-monitor
 
-A POC that answers one question with numbers rather than intuition:
+Bybit spot ⇄ Fluxion (Mantle) **tokenized stocks (xStocks)** live arbitrage panel.
+
+**This tool places no orders and executes no trades.** Phase 1 needs no exchange API
+keys. Phase 2 will use public market data only.
+
+## Status
+
+| Phase | What | Where |
+|-------|------|--------|
+| **1 (archived)** | 29-day offline WMNT/USDT0 feasibility backtest | `src/mba/`, `report/`, tag `phase1-backtest` |
+| **2 (active)** | Real-time Bybit ⇄ Fluxion xStocks panel (TUI first) | `src/monitor/` (skeleton), Linear WHI-730…735 |
+
+Spec of record: [`docs/DESIGN.md`](docs/DESIGN.md). Agent workflow: [`AGENTS.md`](AGENTS.md).
+
+---
+
+## Phase 2 (active)
+
+Live paper-arb monitor over a fixed list of Fluxion-liquid xStocks:
+
+- Prices: AMM pool quote **and** RFQ quote as separate columns (Fluxion is V2/V3 AMM + xChange Atomic RFQ)
+- Data: pure realtime, no historical backfill
+- Economics: two-sided inventory paper arb (Bybit taker 0.10% + Fluxion pool fee + Mantle gas + bilateral slippage)
+- Stats: split by US equity open vs closed session
+- UI: TUI first (Python); Web panel is plan-only for v1
+
+Milestones (Linear project *Mantle <> Bybit Arbitrage Monitor*):
+
+`M0 WHI-736` → `M1 WHI-730` → `M2 WHI-731` → `M3 WHI-732` / `M4 WHI-733` → `M5 WHI-734` → `M6 WHI-735`
+
+M0 (this repo restructure) is done when this README ships. Implementation work starts at M1.
+
+### Setup (phase 2)
+
+```bash
+uv sync
+cp .env.example .env   # optional MANTLE_RPC_URL; LINEAR_API_KEY if no Linear MCP
+git config core.hooksPath .githooks   # once per clone/worktree
+```
+
+Phase-2 modules live under `src/monitor/`. Reuse from phase 1 is listed in
+`docs/DESIGN.md` §4.2 (rpc / V3 quote math / Bybit fee·slippage / attribution heuristics).
+
+---
+
+## Phase 1 (archived) — WMNT/USDT0 feasibility backtest
+
+A POC that answered one question with numbers rather than intuition:
 
 > Over the past ~29 days, did a profitable arbitrage window exist between
 > WMNT/USDT0 on Mantle's two main DEXes and Bybit spot MNTUSDT — how often, and
 > **for how long**?
 
-Duration is the first-class metric. "A spread existed" is nearly meaningless on
-its own: a 2-second window is noise no bot can act on after block inclusion,
-while a 20-minute window is a standing invitation.
+Frozen at tag **`phase1-backtest`**. Code remains runnable under `src/mba/` so the
+delivered reports can be regenerated.
 
-**This tool places no orders and executes no trades.** It needs no exchange API
-keys — Bybit data comes from public endpoints and public CSV archives.
+### Running the phase-1 pipeline
 
-## Setup
-
-```bash
-uv sync
-cp .env.example .env      # then paste your keyed Mantle endpoint into it
-```
-
-`MANTLE_RPC_URL` is optional. Without it the code falls back to the public
-`https://rpc.mantle.xyz`, which caps `eth_getLogs` at 10k blocks and throttles
-hard — expect the scan stages to take substantially longer.
-
-## Running the pipeline
-
-The six stages are ordered and each reads the previous one's Parquet output, so
-run them in sequence. Use `python -u`; without it the progress lines sit in
-stdout's buffer and a redirected log looks frozen.
+Each stage reads the previous one's Parquet under `data/` (gitignored; regenerate or
+restore locally). Use `python -u` so progress lines flush.
 
 ```bash
 uv run python -u -m mba.m1_scan_events    # scan Swap/Mint/Burn logs
@@ -39,99 +70,57 @@ uv run python -u -m mba.m4_align          # align venues, net profit
 uv run python -u -m mba.m5_report         # windows, report, charts
 ```
 
-**M6 before M5, despite the numbering.** M6 only needs M1 and M3, and its decoded
-swap directions let M5's did-anyone-take-it check match on direction — a window
-that says "buy MNT on the DEX" should only count as taken by a swap that actually
-bought MNT there. Run M5 first and it still works, but that check falls back to
-direction-blind and reports itself as an upper bound.
+**M6 before M5, despite the numbering.** M6 only needs M1 and M3; its decoded swap
+directions let M5's did-anyone-take-it check match on direction.
 
-M2 dominates the wall clock: it makes two passes (read state, then quote) over
-~17,700 state-change blocks across both pools, and on the keyed endpoint it
-sustains 8–14 blocks/s, so **budget about an hour**. M1 and M3 are minutes. M4
-(~0.5s) and M5 (~4s) touch only local Parquet; M6 is also seconds, but does make
-a small bounded number of RPC calls — one batched `eth_getCode` sweep to tell
-contracts from EOAs, plus a handful of transaction fetches to classify the top
-beneficiaries. Throughput is endpoint-bound, so on the public RPC everything
-upstream of M4 takes considerably longer.
-
-M1 and M2 both **resume**: re-running after an interruption picks up from the last
-completed partial rather than starting over. M2 keeps per-pool, per-pass partials
-in `data/m2_{state,quotes}_<pool>.parquet`.
-
-Useful flags:
-
-| flag | stage | effect |
-|---|---|---|
-| `--days N` | M1, M2, M3 | shorten the backfill window |
-| `--limit N` | M2 | quote only the first N state-change blocks (smoke test) |
-| `--no-resume` | M1 | discard partials and rescan |
-| `--max-lag-ms N` | M4 | staleness threshold for a matched Bybit print |
-| `--top-n N` | M6 | how many beneficiaries to break out |
-
-## Outputs
+### Phase-1 outputs
 
 ```
-report/report.md         the answer: window counts, durations, go/no-go vs carry
-report/attribution.md    who actually traded these pools, and what they made
+report/report.md         window counts, durations, go/no-go vs carry
+report/attribution.md    who actually traded these pools
 report/*.png             cost vs size, duration CDF, % time profitable, P&L series
-data/*.parquet           every intermediate, so any figure can be re-derived
+data/*.parquet           intermediates (not in git)
 ```
 
-## What the stages do
-
-| stage | output | what it establishes |
-|---|---|---|
-| **M1** | `raw_logs`, `state_changes` | every block where pool state changed |
-| **M2** | `dex_quotes` | contract-quoted price at each of those blocks, per size, both directions |
-| **M3** | `bybit_quotes`, `bybit_book` | L1 reconstructed from the public tape + one live L2 snapshot for depth |
-| **M6** | `swaps_decoded` | concentration, contract-vs-EOA, clustering, realized P&L |
-| **M4** | `opportunities`, `intervals` | venues aligned at-or-before; net profit and breakeven Bybit mid |
-| **M5** | `windows`, `window_summary` | profitable windows, their durations, and the verdict against carry |
-
-## Why the method is what it is
+### Why the method is what it is
 
 **Pool state is piecewise-constant.** It only moves on Swap/Mint/Burn (Agni) and
 Swap/DepositedToBins/WithdrawnFromBins (Moe). Quoting at exactly those blocks
-yields an **exact step function**, not a sample — a long gap between quotes means
-the price genuinely did not move, not that we looked away.
-
-**That is also what avoids the fatal sampling bias.** Sampling only blocks where
-somebody traded covers ~1.3% of blocks, and it is precisely the subset that
-*hides* the finding of interest: "a spread existed and nobody took it."
+yields an **exact step function**, not a sample.
 
 **Profitability factors into a step-function comparison.** Over one DEX interval
 the quantity and USD leg are fixed, so net profit is affine in the Bybit mid with
-constant slope. Profitable ⇔ mid on the right side of a constant `breakeven_mid`.
-That turns duration measurement into an exact comparison instead of a 24-way
-cross join of millions of prints. It is the same arithmetic, factored — not an
-approximation.
+constant slope. That turns duration measurement into an exact comparison.
 
 **Agni is a PancakeSwap-V3 fork, not vanilla Uniswap V3.** Its `Swap` event
 carries two extra `protocolFees` arguments, so the Uniswap `topic0` matches
-nothing. Getting this wrong yields a silent zero-row scan.
+nothing.
 
-## Known limits
+### Phase-1 known limits
 
-- **Main approximation:** Bybit depth beyond L1 comes from a single live
-  orderbook snapshot applied as a multiplicative slippage-vs-mid curve across the
-  window. Historical L2 is not published. The book's *shape* is assumed stable;
-  its absolute price is not.
-- Bybit slippage is measured *from mid* and therefore already includes crossing
-  the half-spread. Adding it to a bid/ask price double-counts.
-- **Window durations resolve to Bybit print times, and that resolution is
-  coarser than the 4s actionable floor** — the weakest part of the duration
-  measurement. Prints are bursty: median gap 4ms, but weighted by the time it
-  actually covers the mean gap is 12s, because quiet stretches dominate the
-  clock. A duration near the floor therefore carries granularity error of that
-  order in *both* directions. Separately, 1.9% of elapsed time sits in DEX
-  intervals no print falls inside, so it is never evaluated at all.
-- Mantle archive state reaches only ~30 days on both endpoints, which is what
-  fixes the window at 29 days.
-- The RPC is load-balanced and **not** read-your-writes consistent, so all
-  queries run behind `HEAD_LAG_BLOCKS` of the reported head.
+- Bybit depth beyond L1 comes from a single live orderbook snapshot applied as a
+  multiplicative slippage-vs-mid curve; historical L2 is not published.
+- Window durations resolve to Bybit print times (coarser than the 4s actionable floor).
+- Mantle archive state reaches only ~30 days.
+- RPC is load-balanced and not read-your-writes consistent (`HEAD_LAG_BLOCKS`).
 
-## Out of scope by design
+### Out of scope (both phases, by design)
 
 No order placement or trade execution. No triangular or multi-hop routing. No
-MEV, gas-auction, or frontrunning modeling. No realtime pipeline. No venues
-beyond Agni V3 and Merchant Moe LB. No Bybit private API.
+MEV / gas-auction modeling as a product feature. No venues beyond those named in
+the active phase.
+
+---
+
+## Agent / process layer
+
+Bootstrapped from [`Whisker17/code-template`](https://github.com/Whisker17/code-template)
+(`154e86bb`). Workflow docs:
+
+| Path | Role |
+|------|------|
+| `AGENTS.md` | agent operating rules (canonical; `CLAUDE.md` is a symlink) |
+| `docs/DESIGN.md` | PRD / spec of record |
+| `docs/GIT_WORKFLOW.md` | main ≡ production, worktree-per-issue, merge lanes |
+| `.claude/skills/` | vendored engineering skills |
+| `.githooks/pre-push` | blocks direct push to `main` / `dev` |
