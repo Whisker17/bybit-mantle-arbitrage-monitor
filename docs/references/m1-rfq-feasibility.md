@@ -19,8 +19,10 @@ Config mirror: `config/pairs.yaml` → `rfq.mode: pollable_quote`.
 | Preferred same-origin proxy | `POST https://fluxion.network/api/limit-order/quote` |
 | Upstream public proxy | `POST https://fluxion-proxy-api-production.up.railway.app/quote` |
 
-No API key required on either path. Upstream is rate-limited to **60 req/min**; do not
-poll faster than **once every 5s** per process (Fluxion trade-skill guidance).
+No API key required on either path. Upstream is rate-limited to **60 req/min**.
+`config/pairs.yaml` sets `min_poll_interval_s: 11` so that polling all **11** inventory
+pairs once each stays under that global budget (`11 * (60/11) ≈ 60`). Do not tighten
+the interval without shrinking the polled set or raising the budget.
 
 ### Request
 

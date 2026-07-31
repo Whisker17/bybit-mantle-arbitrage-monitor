@@ -7,14 +7,15 @@ from pathlib import Path
 from textwrap import dedent
 
 import pytest
-from pydantic import ValidationError
 
 from monitor.symbols import (
+    PairsConfigError,
     RfqMode,
     de_multiplied_price,
     default_pairs_path,
     load_pairs_config,
     multiplier_map,
+    multiplier_map_by_pair_id,
 )
 
 # Fixed inventory constants from the M1 research pass (2026-07-31).
@@ -115,10 +116,14 @@ def test_de_multiplied_price_rejects_non_positive_multiplier() -> None:
 
 def test_multiplier_map_from_config() -> None:
     cfg = load_pairs_config()
-    m = multiplier_map(cfg)
-    assert m["TSLAx"] == Decimal("1")
-    assert m["AAPLx"] == Decimal("1.0026642075893797")
-    assert set(m) == EXPECTED_OVERLAP_IDS
+    by_symbol = multiplier_map(cfg)
+    assert by_symbol["TSLAXUSDT"] == Decimal("1")
+    assert by_symbol["AAPLXUSDT"] == Decimal("1.0026642075893797")
+    assert set(by_symbol) == {p.bybit.symbol for p in cfg.pairs}
+
+    by_id = multiplier_map_by_pair_id(cfg)
+    assert by_id["TSLAx"] == Decimal("1")
+    assert set(by_id) == EXPECTED_OVERLAP_IDS
 
 
 _MINIMAL_CONTRACTS = dedent(
@@ -182,54 +187,60 @@ def _pair_yaml(
     )
 
 
-def test_load_rejects_duplicate_ids(tmp_path: Path) -> None:
+def _write_pairs_yaml(tmp_path: Path, pairs_body: str) -> Path:
     path = tmp_path / "pairs.yaml"
     path.write_text(
         "version: 1\ninventory_as_of: \"2026-07-31\"\nlow_liquidity_threshold_usd: 50000\n"
         + _MINIMAL_CONTRACTS
         + "pairs:\n"
-        + _pair_yaml()
+        + pairs_body,
+        encoding="utf-8",
+    )
+    return path
+
+
+def test_load_rejects_duplicate_ids(tmp_path: Path) -> None:
+    path = _write_pairs_yaml(
+        tmp_path,
+        _pair_yaml()
         + _pair_yaml(
             pair_id="TSLAx",
             symbol="TSLAXUSDT2",
             native="0x1111111111111111111111111111111111111111",
             wrapper="0x2222222222222222222222222222222222222222",
         ),
-        encoding="utf-8",
     )
-    with pytest.raises(ValidationError, match="unique"):
+    with pytest.raises(PairsConfigError, match="unique"):
         load_pairs_config(path)
 
 
 def test_load_rejects_low_liquidity_mismatch(tmp_path: Path) -> None:
     # No AMM ⇒ must be low_liquidity=true; false is invalid.
-    path = tmp_path / "pairs.yaml"
-    path.write_text(
-        "version: 1\ninventory_as_of: \"2026-07-31\"\nlow_liquidity_threshold_usd: 50000\n"
-        + _MINIMAL_CONTRACTS
-        + "pairs:\n"
-        + _pair_yaml(low_liquidity=False, amm_block="amm: null"),
-        encoding="utf-8",
+    path = _write_pairs_yaml(
+        tmp_path,
+        _pair_yaml(low_liquidity=False, amm_block="amm: null"),
     )
-    with pytest.raises(ValidationError, match="low_liquidity"):
+    with pytest.raises(PairsConfigError, match="low_liquidity"):
         load_pairs_config(path)
 
 
 def test_load_rejects_quote_address_mismatch(tmp_path: Path) -> None:
-    path = tmp_path / "pairs.yaml"
-    path.write_text(
-        "version: 1\ninventory_as_of: \"2026-07-31\"\nlow_liquidity_threshold_usd: 50000\n"
-        + _MINIMAL_CONTRACTS
-        + "pairs:\n"
-        + _pair_yaml(quote_token_address="0x0000000000000000000000000000000000000001"),
-        encoding="utf-8",
+    path = _write_pairs_yaml(
+        tmp_path,
+        _pair_yaml(quote_token_address="0x0000000000000000000000000000000000000001"),
     )
-    with pytest.raises(ValidationError, match="quote_token_address"):
+    with pytest.raises(PairsConfigError, match="quote_token_address"):
         load_pairs_config(path)
 
 
 def test_load_rejects_non_mapping_root(tmp_path: Path) -> None:
     path = tmp_path / "pairs.yaml"
     path.write_text("- just a list\n", encoding="utf-8")
-    with pytest.raises(ValueError, match="mapping"):
+    with pytest.raises(PairsConfigError, match="mapping"):
         load_pairs_config(path)
+
+
+def test_load_missing_file_is_clear(tmp_path: Path) -> None:
+    missing = tmp_path / "nope.yaml"
+    with pytest.raises(PairsConfigError, match="not found"):
+        load_pairs_config(missing)

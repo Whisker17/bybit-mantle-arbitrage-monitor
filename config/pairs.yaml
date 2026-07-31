@@ -3,10 +3,10 @@
 # Multipliers below are a snapshot from Bybit instruments-info (xstockMultiplier);
 # M2 may refresh live. Liquidity estimates are inventory-time snapshots, not live TVL.
 #
-# Inventory date: 2026-07-31
 # Overlap rule: Bybit spot symbolType=xstocks ∩ Mantle native xStock (Backed Assets API).
 # Low-liquidity flag: est AMM TVL < low_liquidity_threshold_usd, or no AMM pool found.
 # RFQ conclusion: public EXACT_INPUT quote is pollable (see docs/references/m1-rfq-feasibility.md).
+# Quote basis: Bybit legs are USDT; Fluxion AMM/RFQ are USDC — treat as ~1 until M3 models basis.
 
 version: 1
 inventory_as_of: "2026-07-31"
@@ -29,8 +29,11 @@ rfq:
   proxy_quote_url: "https://fluxion-proxy-api-production.up.railway.app/quote"
   request_type: EXACT_INPUT
   quote_asset: USDC
+  # Global process budget from Fluxion (do not exceed).
   rate_limit_per_minute: 60
-  min_poll_interval_s: 5
+  # Per-request floor AND enough spacing that N pairs stay under rate_limit:
+  # ceil(60 / rate_limit_per_minute * len(pairs)) with 11 pairs → 11s.
+  min_poll_interval_s: 11
   # Settlement: RFQ-priced orders fill through Fluxion Limit Order Protocol on Mantle.
   settlement: limit_order_protocol
 

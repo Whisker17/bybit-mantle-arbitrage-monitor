@@ -25,5 +25,10 @@ def de_multiplied_price(price: Decimal | str, multiplier: Decimal | str) -> Deci
 
 
 def multiplier_map(config: PairsConfig) -> dict[str, Decimal]:
-    """Map pair id → Bybit multiplier from the loaded inventory."""
+    """Map Bybit spot symbol → multiplier (for the Bybit collector boot path)."""
+    return {pair.bybit.symbol: pair.bybit.multiplier for pair in config.pairs}
+
+
+def multiplier_map_by_pair_id(config: PairsConfig) -> dict[str, Decimal]:
+    """Map pair id (e.g. TSLAx) → multiplier for panel/metrics keyed by inventory id."""
     return {pair.id: pair.bybit.multiplier for pair in config.pairs}

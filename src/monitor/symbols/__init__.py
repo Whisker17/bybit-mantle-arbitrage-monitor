@@ -1,6 +1,6 @@
 """Fixed xStock pair list and Bybit multiplier helpers (M1 / WHI-730)."""
 
-from monitor.symbols.load import default_pairs_path, load_pairs_config
+from monitor.symbols.load import PairsConfigError, default_pairs_path, load_pairs_config
 from monitor.symbols.models import (
     AmmPool,
     BybitSymbol,
@@ -11,7 +11,11 @@ from monitor.symbols.models import (
     RfqConfig,
     RfqMode,
 )
-from monitor.symbols.multipliers import de_multiplied_price, multiplier_map
+from monitor.symbols.multipliers import (
+    de_multiplied_price,
+    multiplier_map,
+    multiplier_map_by_pair_id,
+)
 
 __all__ = [
     "AmmPool",
@@ -20,10 +24,12 @@ __all__ = [
     "FluxionSide",
     "Pair",
     "PairsConfig",
+    "PairsConfigError",
     "RfqConfig",
     "RfqMode",
     "de_multiplied_price",
     "default_pairs_path",
     "load_pairs_config",
     "multiplier_map",
+    "multiplier_map_by_pair_id",
 ]

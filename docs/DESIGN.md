@@ -207,6 +207,7 @@ Dependency chain: M0 → M1 → M2 → (M3 ∥ M4) → M5 → M6.
 | xChange RFQ **public quote** API may not exist → degrade to last RFQ fill | **Resolved M1:** public EXACT_INPUT quote is pollable; see `docs/references/m1-rfq-feasibility.md` |
 | Bybit xStocks **multiplier** must be applied or edges are nonsense | **Resolved M1:** `instruments-info.xstockMultiplier` + `de_multiplied_price`; snapshots in `config/pairs.yaml` |
 | Fluxion pool ABI / fork lineage unknown until M1 (phase-1 Agni topic0 trap) | **Resolved M1:** UniV3-lineage factory/quoter; liquid xStock pools fee=3000 USDC. M2 still re-verifies topic0 on live swaps |
+| Bybit quote is **USDT** while Fluxion AMM/RFQ quote is **USDC** — basis not modeled in M1 | M3 |
 | Live book depth quality vs phase-1 single snapshot approximation | M2/M3 |
 | Heuristic thresholds (80% / 20 trades) unvalidated on xStocks | M4 |
 | TUI library choice (textual vs rich) | M5 |
