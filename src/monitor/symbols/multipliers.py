@@ -12,10 +12,10 @@ from __future__ import annotations
 
 from decimal import Decimal
 
-from monitor.symbols.models import Pair, PairsConfig
+from monitor.symbols.models import PairsConfig
 
 
-def de_multiplied_price(price: Decimal | float | str, multiplier: Decimal | float | str) -> Decimal:
+def de_multiplied_price(price: Decimal | str, multiplier: Decimal | str) -> Decimal:
     """Return price / multiplier for Bybit → Fluxion comparison."""
     p = Decimal(str(price))
     m = Decimal(str(multiplier))
@@ -27,7 +27,3 @@ def de_multiplied_price(price: Decimal | float | str, multiplier: Decimal | floa
 def multiplier_map(config: PairsConfig) -> dict[str, Decimal]:
     """Map pair id → Bybit multiplier from the loaded inventory."""
     return {pair.id: pair.bybit.multiplier for pair in config.pairs}
-
-
-def pair_comparable_bybit_mid(pair: Pair, bybit_mid: Decimal | float | str) -> Decimal:
-    return de_multiplied_price(bybit_mid, pair.bybit.multiplier)

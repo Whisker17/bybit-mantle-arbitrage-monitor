@@ -19,7 +19,7 @@ loaded into a typed, validated model at startup.
 
 | File | Loader | Purpose |
 |------|--------|---------|
-| `pairs.yaml` | `monitor.symbols.load_pairs_config` | Fixed Bybit ⇄ Fluxion xStock inventory + RFQ mode (M1 / WHI-730) |
+| `pairs.yaml` | `monitor.symbols.load_pairs_config` | Fixed Bybit ⇄ Fluxion xStock inventory + RFQ mode (M1 / WHI-730). Cross-validates `low_liquidity` vs threshold/AMM and `quote_token_address` vs `contracts`. |
 
 Optional per-deployment override: untracked `pairs.local.yaml` is reserved for later
 milestones if needed; v1 loads the checked-in `pairs.yaml` only.

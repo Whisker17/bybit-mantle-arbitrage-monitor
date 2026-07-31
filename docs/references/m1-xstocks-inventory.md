@@ -13,7 +13,12 @@ Companion to `config/pairs.yaml`. Snapshot date: **2026-07-31**.
    tiers `{100,500,3000,10000}`. Wrappers verified via ERC-4626 `asset() == native`.
    Liquidity estimate: `2 * quote_token.balanceOf(pool)` (USDC 6 decimals ≈ USD), matching
    Fluxion’s published agent skill method. All liquid pools found were **USDC / fee 3000**.
-4. **RFQ** — see `m1-rfq-feasibility.md` (pollable public quote).
+4. **V2 scope** — Fluxion product docs mention AMM V2, but the public agent skill and
+   contract pin only a **V3 factory** (`0xF883…737C`). No V2 factory address is published
+   for xStock inventory. All xStock pools discovered were **V3**; `amm: null` means “no
+   V3 wrapper/USDC|USDT0 pool in the scanned fee tiers,” not a V2 scan. If a V2 factory
+   is published later, re-inventory and extend `AmmPool.kind`.
+5. **RFQ** — see `m1-rfq-feasibility.md` (pollable public quote).
 
 ## Overlap set (in `config/pairs.yaml`)
 

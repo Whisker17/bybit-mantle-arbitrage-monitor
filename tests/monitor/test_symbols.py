@@ -121,67 +121,110 @@ def test_multiplier_map_from_config() -> None:
     assert set(m) == EXPECTED_OVERLAP_IDS
 
 
+_MINIMAL_CONTRACTS = dedent(
+    """\
+    contracts:
+      chain_id: 5000
+      fluxion_v3_factory: "0xF883162Ed9c7E8EF604214c964c678E40c9B737C"
+      fluxion_v3_quoter: "0x3E4eE18Ac7280813236a1EB850679Da5322E14CE"
+      fluxion_v3_router: "0x5628a59dF0ECAC3f3171f877A94bEb26BA6DFAa0"
+      limit_order_protocol: "0x11de6011345586785810e52448a44c6595eedc18"
+      usdc: "0x09Bc4E0D864854c6aFB6eB9A9cdF58aC190D0dF9"
+      usdt0: "0x779Ded0c9e1022225f8E0630b35a9b54bE713736"
+    rfq:
+      mode: pollable_quote
+      quote_url: "https://example.test/quote"
+      proxy_quote_url: "https://example.test/proxy"
+      request_type: EXACT_INPUT
+      quote_asset: USDC
+      rate_limit_per_minute: 60
+      min_poll_interval_s: 5
+      settlement: limit_order_protocol
+    """
+)
+
+
+def _base_coin(pair_id: str) -> str:
+    if pair_id.endswith("x"):
+        return pair_id[:-1].upper() + "X"
+    return pair_id.upper()
+
+
+def _pair_yaml(
+    *,
+    pair_id: str = "TSLAx",
+    symbol: str = "TSLAXUSDT",
+    native: str = "0x8ad3c73f833d3f9a523ab01476625f269aeb7cf0",
+    wrapper: str = "0x43680abf18cf54898be84c6ef78237cfbd441883",
+    quote_token_address: str = "0x09Bc4E0D864854c6aFB6eB9A9cdF58aC190D0dF9",
+    low_liquidity: bool = True,
+    amm_block: str = "amm: null",
+) -> str:
+    base = _base_coin(pair_id)
+    return dedent(
+        f"""\
+        - id: {pair_id}
+          name: test
+          low_liquidity: {str(low_liquidity).lower()}
+          bybit:
+            symbol: {symbol}
+            base_coin: {base}
+            multiplier: "1"
+            multiplier_source: test
+          fluxion:
+            native_token: "{native}"
+            native_decimals: 18
+            quote_token: USDC
+            quote_token_address: "{quote_token_address}"
+            wrapper_token: "{wrapper}"
+            {amm_block}
+        """
+    )
+
+
 def test_load_rejects_duplicate_ids(tmp_path: Path) -> None:
     path = tmp_path / "pairs.yaml"
     path.write_text(
-        dedent(
-            """\
-            version: 1
-            inventory_as_of: "2026-07-31"
-            low_liquidity_threshold_usd: 50000
-            contracts:
-              chain_id: 5000
-              fluxion_v3_factory: "0xF883162Ed9c7E8EF604214c964c678E40c9B737C"
-              fluxion_v3_quoter: "0x3E4eE18Ac7280813236a1EB850679Da5322E14CE"
-              fluxion_v3_router: "0x5628a59dF0ECAC3f3171f877A94bEb26BA6DFAa0"
-              limit_order_protocol: "0x11de6011345586785810e52448a44c6595eedc18"
-              usdc: "0x09Bc4E0D864854c6aFB6eB9A9cdF58aC190D0dF9"
-              usdt0: "0x779Ded0c9e1022225f8E0630b35a9b54bE713736"
-            rfq:
-              mode: pollable_quote
-              quote_url: "https://example.test/quote"
-              proxy_quote_url: "https://example.test/proxy"
-              request_type: EXACT_INPUT
-              quote_asset: USDC
-              rate_limit_per_minute: 60
-              min_poll_interval_s: 5
-              settlement: limit_order_protocol
-            pairs:
-              - id: TSLAx
-                name: Tesla xStock
-                low_liquidity: false
-                bybit:
-                  symbol: TSLAXUSDT
-                  base_coin: TSLAX
-                  multiplier: "1"
-                  multiplier_source: test
-                fluxion:
-                  native_token: "0x8ad3c73f833d3f9a523ab01476625f269aeb7cf0"
-                  native_decimals: 18
-                  quote_token: USDC
-                  quote_token_address: "0x09Bc4E0D864854c6aFB6eB9A9cdF58aC190D0dF9"
-                  wrapper_token: "0x43680abf18cf54898be84c6ef78237cfbd441883"
-                  amm: null
-              - id: TSLAx
-                name: Tesla duplicate
-                low_liquidity: false
-                bybit:
-                  symbol: TSLAXUSDT2
-                  base_coin: TSLAX2
-                  multiplier: "1"
-                  multiplier_source: test
-                fluxion:
-                  native_token: "0x1111111111111111111111111111111111111111"
-                  native_decimals: 18
-                  quote_token: USDC
-                  quote_token_address: "0x09Bc4E0D864854c6aFB6eB9A9cdF58aC190D0dF9"
-                  wrapper_token: "0x2222222222222222222222222222222222222222"
-                  amm: null
-            """
+        "version: 1\ninventory_as_of: \"2026-07-31\"\nlow_liquidity_threshold_usd: 50000\n"
+        + _MINIMAL_CONTRACTS
+        + "pairs:\n"
+        + _pair_yaml()
+        + _pair_yaml(
+            pair_id="TSLAx",
+            symbol="TSLAXUSDT2",
+            native="0x1111111111111111111111111111111111111111",
+            wrapper="0x2222222222222222222222222222222222222222",
         ),
         encoding="utf-8",
     )
     with pytest.raises(ValidationError, match="unique"):
+        load_pairs_config(path)
+
+
+def test_load_rejects_low_liquidity_mismatch(tmp_path: Path) -> None:
+    # No AMM ⇒ must be low_liquidity=true; false is invalid.
+    path = tmp_path / "pairs.yaml"
+    path.write_text(
+        "version: 1\ninventory_as_of: \"2026-07-31\"\nlow_liquidity_threshold_usd: 50000\n"
+        + _MINIMAL_CONTRACTS
+        + "pairs:\n"
+        + _pair_yaml(low_liquidity=False, amm_block="amm: null"),
+        encoding="utf-8",
+    )
+    with pytest.raises(ValidationError, match="low_liquidity"):
+        load_pairs_config(path)
+
+
+def test_load_rejects_quote_address_mismatch(tmp_path: Path) -> None:
+    path = tmp_path / "pairs.yaml"
+    path.write_text(
+        "version: 1\ninventory_as_of: \"2026-07-31\"\nlow_liquidity_threshold_usd: 50000\n"
+        + _MINIMAL_CONTRACTS
+        + "pairs:\n"
+        + _pair_yaml(quote_token_address="0x0000000000000000000000000000000000000001"),
+        encoding="utf-8",
+    )
+    with pytest.raises(ValidationError, match="quote_token_address"):
         load_pairs_config(path)
 
 

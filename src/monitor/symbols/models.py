@@ -2,11 +2,19 @@
 
 from __future__ import annotations
 
+from datetime import date
 from decimal import Decimal
 from enum import StrEnum
 from typing import Annotated, Literal
 
-from pydantic import BaseModel, ConfigDict, Field, field_validator, model_validator
+from pydantic import (
+    AnyHttpUrl,
+    BaseModel,
+    ConfigDict,
+    Field,
+    field_validator,
+    model_validator,
+)
 
 Address = Annotated[str, Field(pattern=r"^0x[0-9a-fA-F]{40}$")]
 
@@ -15,7 +23,6 @@ class RfqMode(StrEnum):
     """M1 conclusion for how M2 should source Fluxion RFQ prices."""
 
     POLLABLE_QUOTE = "pollable_quote"
-    ONCHAIN_FILL_ONLY = "onchain_fill_only"
 
 
 class Contracts(BaseModel):
@@ -34,8 +41,8 @@ class RfqConfig(BaseModel):
     model_config = ConfigDict(extra="forbid", frozen=True)
 
     mode: RfqMode
-    quote_url: str = Field(min_length=1)
-    proxy_quote_url: str = Field(min_length=1)
+    quote_url: AnyHttpUrl
+    proxy_quote_url: AnyHttpUrl
     request_type: Literal["EXACT_INPUT"]
     quote_asset: Literal["USDC"]
     rate_limit_per_minute: int = Field(gt=0)
@@ -63,6 +70,8 @@ class BybitSymbol(BaseModel):
 class AmmPool(BaseModel):
     model_config = ConfigDict(extra="forbid", frozen=True)
 
+    # xStock AMM liquidity on Fluxion is V3 wrapper/USDC only at inventory time
+    # (no V2 factory published for these pairs — see docs/references/m1-xstocks-inventory.md).
     kind: Literal["v3"]
     pool: Address
     fee: int = Field(gt=0, le=1_000_000)
@@ -97,14 +106,14 @@ class PairsConfig(BaseModel):
     model_config = ConfigDict(extra="forbid", frozen=True)
 
     version: int = Field(ge=1)
-    inventory_as_of: str = Field(min_length=1)
+    inventory_as_of: date
     low_liquidity_threshold_usd: float = Field(gt=0)
     contracts: Contracts
     rfq: RfqConfig
     pairs: list[Pair] = Field(min_length=1)
 
     @model_validator(mode="after")
-    def _unique_ids_and_symbols(self) -> PairsConfig:
+    def _invariants(self) -> PairsConfig:
         ids = [p.id for p in self.pairs]
         if len(ids) != len(set(ids)):
             raise ValueError("pair ids must be unique")
@@ -114,6 +123,25 @@ class PairsConfig(BaseModel):
         natives = [p.fluxion.native_token.lower() for p in self.pairs]
         if len(natives) != len(set(natives)):
             raise ValueError("fluxion native_token addresses must be unique")
+
+        quote_addrs = {
+            "USDC": self.contracts.usdc.lower(),
+            "USDT0": self.contracts.usdt0.lower(),
+        }
+        threshold = self.low_liquidity_threshold_usd
+        for pair in self.pairs:
+            expected_quote = quote_addrs[pair.fluxion.quote_token]
+            if pair.fluxion.quote_token_address.lower() != expected_quote:
+                raise ValueError(
+                    f"{pair.id}: fluxion.quote_token_address must match contracts."
+                    f"{pair.fluxion.quote_token.lower()}"
+                )
+            expected_low = _expected_low_liquidity(pair, threshold)
+            if pair.low_liquidity != expected_low:
+                raise ValueError(
+                    f"{pair.id}: low_liquidity={pair.low_liquidity} disagrees with "
+                    f"rule (no AMM or est_liquidity_usd < {threshold})"
+                )
         return self
 
     def pair_by_id(self, pair_id: str) -> Pair:
@@ -127,3 +155,11 @@ class PairsConfig(BaseModel):
 
     def pairs_with_amm(self) -> list[Pair]:
         return [p for p in self.pairs if p.fluxion.amm is not None]
+
+
+def _expected_low_liquidity(pair: Pair, threshold_usd: float) -> bool:
+    """True when no AMM pool or inventory est TVL is below the LP gate."""
+    amm = pair.fluxion.amm
+    if amm is None:
+        return True
+    return amm.est_liquidity_usd < threshold_usd

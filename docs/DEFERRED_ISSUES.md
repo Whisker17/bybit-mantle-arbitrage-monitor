@@ -31,7 +31,15 @@ soon — anything touching key handling, RPC credentials defaults to at least Hi
 
 ## Open
 
-_(none yet)_
+- **RFQ LOP fill topic0 not fill-observed** (Medium, WHI-730 → M2).
+  `docs/references/m1-rfq-feasibility.md` — signature-derived 1inch LOP v4 topics are
+  locked, but no live `OrderFilled` logs were found on
+  `0x11de6011345586785810e52448a44c6595eedc18` in ~200k Mantle blocks at inventory.
+  M2 should confirm topic0 + decode layout from a real fill before M4 attribution.
+
+- **Fluxion V2 factory not published for xStocks** (Low, WHI-730 → M2 if needed).
+  `config/pairs.yaml` / `AmmPool.kind` — inventory is V3-only; DESIGN still says
+  “V2/V3”. Revisit if Fluxion publishes a V2 factory used by xStock pairs.
 
 ---
 
