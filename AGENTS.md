@@ -21,9 +21,12 @@ placeholders. Agents must not assume a module exists until its issue lands. -->
   `src/mba/` with delivered reports in `report/`. Pipeline still runs against local
   parquet under `data/`.
 - **Phase 2 (active):** Bybit ⇄ Fluxion xStocks live panel. Product decisions are in
-  `docs/DESIGN.md`; implementation starts at M1 (WHI-730). Skeleton package:
-  `src/monitor/` (added in WHI-736). Do not assume monitor modules exist until their
-  issues land.
+  `docs/DESIGN.md`.
+  - **M1 (WHI-730) landed:** `config/pairs.yaml` + `monitor/symbols` (fixed overlap
+    list, Bybit multiplier map, RFQ mode `pollable_quote`). Research notes under
+    `docs/references/m1-*.md`.
+  - **Not landed yet:** M2–M6 collectors / metrics / attribution / TUI / web plan.
+    Do not assume those modules exist until their issues land.
 
 ## Build, test, run
 
@@ -52,8 +55,9 @@ Module layout is fixed by `docs/DESIGN.md` §4.2. Short mirror:
 - **`mba/`** — phase-1 offline WMNT/USDT0 backtest (archived, still runnable). Do not
   extend for xStocks.
 - **`monitor/`** — phase-2 live Bybit ⇄ Fluxion xStocks panel. All new product code.
-  Subpackages (`symbols`, `bybit`, `fluxion`, `metrics`, `attribution`, `tui`) land
-  with M1–M5. Reuse pieces from `mba` per DESIGN §4.2 table; do not import whole stages.
+  - **`monitor/symbols`** (M1) — fixed pair list + Bybit multiplier helpers.
+  - Still to land: `bybit`, `fluxion`, `metrics`, `attribution`, `tui` (M2–M5).
+  Reuse pieces from `mba` per DESIGN §4.2 table; do not import whole stages.
 
 ## Git workflow (mandatory)
 

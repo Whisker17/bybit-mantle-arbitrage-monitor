@@ -148,9 +148,14 @@ decision, not M0).
 
 ### 4.3 Key interfaces
 
-_(fill in as M1–M2 lock types: e.g. `QuoteTick`, `SymbolId`, `Session` protocol.
-Strategy/metrics code should depend only on quote interfaces, not on WS client
-internals.)_
+| Type / config | Module | Notes |
+|---------------|--------|-------|
+| `PairsConfig` / `Pair` | `monitor.symbols` | Fixed inventory from `config/pairs.yaml` (M1) |
+| `de_multiplied_price` | `monitor.symbols` | `bybit_mid / xstock_multiplier` before venue compare |
+| RFQ mode | `config/pairs.yaml` `rfq.mode` | **`pollable_quote`** (M1 decision; not fill-only degrade) |
+
+_(M2 fills `QuoteTick` / feed protocols. Strategy/metrics code should depend only on
+quote interfaces, not on WS client internals.)_
 
 ### 4.4 Core flows
 
@@ -199,9 +204,10 @@ Dependency chain: M0 → M1 → M2 → (M3 ∥ M4) → M5 → M6.
 
 | Risk / question | Owner |
 |-----------------|-------|
-| xChange RFQ **public quote** API may not exist → degrade to last RFQ fill | M1 |
-| Bybit xStocks **multiplier** must be applied or edges are nonsense | M1 |
-| Fluxion pool ABI / fork lineage unknown until M1 (phase-1 Agni topic0 trap) | M1 |
+| xChange RFQ **public quote** API may not exist → degrade to last RFQ fill | **Resolved M1:** public EXACT_INPUT quote is pollable; see `docs/references/m1-rfq-feasibility.md` |
+| Bybit xStocks **multiplier** must be applied or edges are nonsense | **Resolved M1:** `instruments-info.xstockMultiplier` + `de_multiplied_price`; snapshots in `config/pairs.yaml` |
+| Fluxion pool ABI / fork lineage unknown until M1 (phase-1 Agni topic0 trap) | **Resolved M1:** UniV3-lineage factory/quoter; liquid xStock pools fee=3000 USDC. M2 still re-verifies topic0 on live swaps |
+| Bybit quote is **USDT** while Fluxion AMM/RFQ quote is **USDC** — basis not modeled in M1 | M3 |
 | Live book depth quality vs phase-1 single snapshot approximation | M2/M3 |
 | Heuristic thresholds (80% / 20 trades) unvalidated on xStocks | M4 |
 | TUI library choice (textual vs rich) | M5 |

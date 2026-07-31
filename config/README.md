@@ -15,4 +15,11 @@ loaded into a typed, validated model at startup.
 - Per-deployment overrides use an untracked `<name>.local.yaml` copy (gitignored), so
   checking out a release tag never conflicts with live settings.
 
-No loader code ships with the template — write it when the first config file lands.
+## Files
+
+| File | Loader | Purpose |
+|------|--------|---------|
+| `pairs.yaml` | `monitor.symbols.load_pairs_config` | Fixed Bybit ⇄ Fluxion xStock inventory + RFQ mode (M1 / WHI-730). Cross-validates `low_liquidity` vs threshold/AMM and `quote_token_address` vs `contracts`. |
+
+Optional per-deployment override: untracked `pairs.local.yaml` is reserved for later
+milestones if needed; v1 loads the checked-in `pairs.yaml` only.
