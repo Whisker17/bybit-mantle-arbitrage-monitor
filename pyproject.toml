@@ -12,6 +12,8 @@ dependencies = [
     "duckdb>=1.0",
     "matplotlib>=3.8",
     "eth-hash[pycryptodome]>=0.7",
+    "pydantic>=2.13.4",
+    "pyyaml>=6.0.3",
 ]
 
 [dependency-groups]
@@ -20,6 +22,7 @@ dev = [
     "pytest-asyncio>=1.4.0",
     "ruff>=0.6",
     "mypy>=1.11",
+    "types-pyyaml>=6.0.12.20260724",
 ]
 
 [build-system]
