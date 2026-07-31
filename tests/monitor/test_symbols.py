@@ -143,7 +143,7 @@ _MINIMAL_CONTRACTS = dedent(
       request_type: EXACT_INPUT
       quote_asset: USDC
       rate_limit_per_minute: 60
-      min_poll_interval_s: 5
+      min_poll_interval_s: 1
       settlement: limit_order_protocol
     """
 )

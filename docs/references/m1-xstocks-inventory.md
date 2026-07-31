@@ -66,3 +66,11 @@ comparable_bybit_mid = bybit_token_mid / xstock_multiplier
 
 Implemented in `monitor.symbols.de_multiplied_price`. Snapshot multipliers live in YAML;
 M2 may refresh from instruments-info without changing pair identity.
+
+## Wrapper vs native price basis (M2)
+
+AMM pools are **wrapper**/USDC, not native/USDC. Inventory verifies each wrapper’s
+`asset()` equals the native token, but does **not** store ERC-4626 conversion
+(`convertToAssets` / share ratio) or wrapper decimals. M2 must convert pool mids to
+native units before comparing to the de-multiplied Bybit mid (logged in
+`docs/DEFERRED_ISSUES.md`).

@@ -6,6 +6,7 @@ from pathlib import Path
 from typing import Any
 
 import yaml
+from pydantic import ValidationError
 
 from monitor.symbols.models import PairsConfig
 
@@ -44,5 +45,5 @@ def load_pairs_config(path: Path | None = None) -> PairsConfig:
         )
     try:
         return PairsConfig.model_validate(data)
-    except Exception as exc:
+    except ValidationError as exc:
         raise PairsConfigError(f"invalid pairs config at {config_path}: {exc}") from exc

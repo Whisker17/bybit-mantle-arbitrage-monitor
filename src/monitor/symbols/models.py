@@ -5,6 +5,7 @@ from __future__ import annotations
 from datetime import date
 from decimal import Decimal
 from enum import StrEnum
+from math import ceil
 from typing import Annotated, Literal
 
 from pydantic import (
@@ -142,6 +143,16 @@ class PairsConfig(BaseModel):
                     f"{pair.id}: low_liquidity={pair.low_liquidity} disagrees with "
                     f"rule (no AMM or est_liquidity_usd < {threshold})"
                 )
+
+        # Per-pair poll floor so concurrent EXACT_INPUT quotes stay ≤ rate_limit.
+        n_pairs = len(self.pairs)
+        min_interval = ceil(60 * n_pairs / self.rfq.rate_limit_per_minute)
+        if self.rfq.min_poll_interval_s + 1e-9 < min_interval:
+            raise ValueError(
+                f"rfq.min_poll_interval_s={self.rfq.min_poll_interval_s} is too small "
+                f"for {n_pairs} pairs at {self.rfq.rate_limit_per_minute}/min "
+                f"(need ≥ {min_interval}s per pair)"
+            )
         return self
 
     def pair_by_id(self, pair_id: str) -> Pair:

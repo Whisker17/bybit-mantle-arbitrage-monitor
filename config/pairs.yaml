@@ -29,10 +29,11 @@ rfq:
   proxy_quote_url: "https://fluxion-proxy-api-production.up.railway.app/quote"
   request_type: EXACT_INPUT
   quote_asset: USDC
-  # Global process budget from Fluxion (do not exceed).
+  # Global process budget from Fluxion (applies to both quote URLs; do not exceed).
   rate_limit_per_minute: 60
-  # Per-request floor AND enough spacing that N pairs stay under rate_limit:
-  # ceil(60 / rate_limit_per_minute * len(pairs)) with 11 pairs → 11s.
+  # Minimum seconds between successive RFQ quote calls for the *same* pair, and
+  # the cadence for round-robin across all pairs: ceil(60 * N / rate_limit) with
+  # N=11 → 11s (exactly fills 60/min if every pair is polled each cycle).
   min_poll_interval_s: 11
   # Settlement: RFQ-priced orders fill through Fluxion Limit Order Protocol on Mantle.
   settlement: limit_order_protocol
