@@ -31,6 +31,12 @@ soon — anything touching key handling, RPC credentials defaults to at least Hi
 
 ## Open
 
+- **Open vs closed RFQ coverage / lag not measured on continuous tape** (Medium, WHI-753 → WHI-760).
+  `docs/references/m4-closed-session-rfq.md` is a weekend one-shot (3 rounds +
+  slim JSON sample). Needs a running collector through ≥1 NYSE RTH day then a
+  re-analysis of `fluxion_rfq_quotes` (+ Bybit) for open/closed contrast and
+  multi-hour lag. Tracked as WHI-760.
+
 - **Mantle block ingest P95 / head_lag not re-measured** (Medium, WHI-743).
   `config/collector.yaml` `mantle.head_lag_blocks` stays `0`. Smoke saw
   `last_block_ingest_latency_ms ≈ 7s` and `collector_gaps` "block N not found"

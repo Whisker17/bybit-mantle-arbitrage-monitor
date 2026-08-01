@@ -44,6 +44,9 @@ placeholders. Agents must not assume a module exists until its issue lands. -->
   - **Retention (WHI-751) landed:** SQLite prune + `bybit_book` → 1m downsample,
     disk waterline (warn/critical), in-collector loop + `python -m monitor.retention`.
     Policy in `config/collector.yaml` `retention:`; design math in DESIGN §5.1.
+  - **Closed-session RFQ research (WHI-753) landed:** weekend RFQ still
+    two-sided on liquid pairs and tracks Bybit mid — session ≠ mechanism; note
+    in `docs/references/m4-closed-session-rfq.md` + DESIGN / M4 rule updates.
   - **Not landed yet:** M6 Web plan doc only.
     Do not assume that module exists until its issue lands.
 

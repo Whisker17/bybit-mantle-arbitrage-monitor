@@ -24,6 +24,11 @@ No API key required on either path. Upstream is rate-limited to **60 req/min**.
 pairs once each stays under that global budget (`11 * (60/11) ≈ 60`). Do not tighten
 the interval without shrinking the polled set or raising the budget.
 
+**Endpoint parity (WHI-753):** both URLs return the same HTTP status and
+near-identical `price`/`amountOut` (shared MM book); `requestId` differs per
+URL. Prefer primary; Railway is a failover, not a second venue. Closed-session
+availability: see `docs/references/m4-closed-session-rfq.md`.
+
 ### Request
 
 ```json
