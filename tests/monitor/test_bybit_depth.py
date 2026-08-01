@@ -14,6 +14,8 @@ from monitor.bybit.depth_math import (
     sorted_bid_levels,
     vwap_curve,
 )
+from monitor.bybit.ws import DepthEmitThrottle
+from monitor.quotes import BybitBookTick
 
 PAIR_IDS = {"AAPLXUSDT": "AAPLx", "TSLAXUSDT": "TSLAx"}
 MULTIPLIERS = {"AAPLXUSDT": Decimal("2"), "TSLAXUSDT": Decimal("1")}
@@ -43,7 +45,6 @@ def test_apply_side_ops_snapshot_and_delta() -> None:
         is_snapshot=True,
     )
     assert sorted_bid_levels(snap)[0] == (Decimal("100"), Decimal("1"))
-    # delete top, insert new
     nxt = apply_side_ops(
         snap,
         [(Decimal("100"), Decimal("0")), (Decimal("101"), Decimal("0.5"))],
@@ -55,12 +56,9 @@ def test_apply_side_ops_snapshot_and_delta() -> None:
 
 
 def test_book_vwap_hand_example() -> None:
-    # bids: 100×1 + 99×2  → for $150 notional: 100*1 + 99*(50/99) wait:
-    # notional walk: take 100 of first level (qty=1), remain 50 → 50/99 qty at 99
     levels = [(Decimal("100"), Decimal("1")), (Decimal("99"), Decimal("2"))]
     vwap = book_vwap_for_notional(levels, Decimal("150"))
     assert vwap is not None
-    # spent 150, qty = 1 + 50/99
     expected = Decimal("150") / (Decimal("1") + Decimal("50") / Decimal("99"))
     assert abs(vwap - expected) < Decimal("1e-9")
 
@@ -84,25 +82,21 @@ def test_depth_snapshot_multi_level_vwap() -> None:
             "seq": 100,
         },
     }
-    result = tracker.apply(payload, recv_ts_ms=1_700_000_000_010)
-    assert result is not None
-    assert result.book.bid == Decimal("100.0")
-    assert result.book.ask == Decimal("101.0")
-    assert result.depth is not None
-    d = result.depth
+    book = tracker.apply(payload, recv_ts_ms=1_700_000_000_010)
+    assert book is not None
+    assert book.bid == Decimal("100.0")
+    assert book.ask == Decimal("101.0")
+    d = tracker.depth_tick("TSLAXUSDT")
+    assert d is not None
     assert d.buckets_usd == tuple(BUCKETS)
-    # $10 fits L1 bid @ 100
     assert d.bid_vwap_dm[0] == Decimal("100")
     assert d.ask_vwap_dm[0] == Decimal("101")
-    # $50 still L1 (1*100=100 depth)
     assert d.bid_vwap_dm[1] == Decimal("100")
-    # $100 needs second level on bid: 100@100 + 0 notional? 100 notional exact L1
     assert d.bid_vwap_dm[2] == Decimal("100")
 
 
 def test_depth_applies_multiplier_before_vwap() -> None:
     tracker = _tracker()
-    # m=2: raw bid 200 size 1 → dm 100, size 2 → $200 depth at 100
     payload = {
         "topic": "orderbook.50.AAPLXUSDT",
         "type": "snapshot",
@@ -115,14 +109,14 @@ def test_depth_applies_multiplier_before_vwap() -> None:
             "seq": 1,
         },
     }
-    result = tracker.apply(payload)
-    assert result is not None
-    assert result.book.bid_de_multiplied == Decimal("100")
-    assert result.depth is not None
-    # $10 and $50 fillable at dm price 100; $100 fillable (depth $200)
-    assert result.depth.bid_vwap_dm[0] == Decimal("100")
-    assert result.depth.bid_vwap_dm[1] == Decimal("100")
-    assert result.depth.bid_vwap_dm[2] == Decimal("100")
+    book = tracker.apply(payload)
+    assert book is not None
+    assert book.bid_de_multiplied == Decimal("100")
+    d = tracker.depth_tick("AAPLXUSDT")
+    assert d is not None
+    assert d.bid_vwap_dm[0] == Decimal("100")
+    assert d.bid_vwap_dm[1] == Decimal("100")
+    assert d.bid_vwap_dm[2] == Decimal("100")
 
 
 def test_depth_delta_merge_and_delete() -> None:
@@ -152,13 +146,14 @@ def test_depth_delta_merge_and_delete() -> None:
             "seq": 2,
         },
     }
-    result = tracker.apply(delta, gap=True)
-    assert result is not None
-    assert result.book.bid == Decimal("100.5")
-    assert result.book.ask == Decimal("101.0")
-    assert result.book.gap is True
-    assert result.depth is not None
-    assert result.depth.gap is True
+    book = tracker.apply(delta, gap=True)
+    assert book is not None
+    assert book.bid == Decimal("100.5")
+    assert book.ask == Decimal("101.0")
+    assert book.gap is True
+    d = tracker.depth_tick("TSLAXUSDT")
+    assert d is not None
+    assert d.gap is True
 
 
 def test_orphan_delta_dropped() -> None:
@@ -200,13 +195,13 @@ def test_u_gap_marks_pending_gap_on_next_emit() -> None:
             "s": "TSLAXUSDT",
             "b": [["100.1", "1"]],
             "a": [["101", "1"]],
-            "u": 5,  # skipped 2,3,4
+            "u": 5,
             "seq": 2,
         },
     }
-    result = tracker.apply(jump)
-    assert result is not None
-    assert result.book.gap is True
+    book = tracker.apply(jump)
+    assert book is not None
+    assert book.gap is True
 
 
 def test_vwap_curve_parallel_buckets() -> None:
@@ -215,7 +210,45 @@ def test_vwap_curve_parallel_buckets() -> None:
     )
     curve = vwap_curve(levels, [Decimal("5"), Decimal("50")])
     assert curve[0] == Decimal("10")
-    # 10 notional at 10 + 40 at 11
     expected = Decimal("50") / (Decimal("1") + Decimal("40") / Decimal("11"))
     assert curve[1] is not None
     assert abs(curve[1] - expected) < Decimal("1e-9")
+
+
+def _book(
+    *,
+    pair: str = "TSLAx",
+    recv: int,
+    bid: str = "100",
+    ask: str = "101",
+) -> BybitBookTick:
+    return BybitBookTick(
+        pair_id=pair,
+        symbol="TSLAXUSDT",
+        exchange_ts_ms=recv,
+        recv_ts_ms=recv,
+        bid=Decimal(bid),
+        ask=Decimal(ask),
+        bid_de_multiplied=Decimal(bid),
+        ask_de_multiplied=Decimal(ask),
+        multiplier=Decimal("1"),
+    )
+
+
+def test_depth_emit_throttle_interval() -> None:
+    thr = DepthEmitThrottle(emit_interval_ms=1000, mid_change_bps=Decimal("0"))
+    b0 = _book(recv=1_000)
+    assert thr.should_emit(b0) is True
+    thr.mark_emitted(b0)
+    assert thr.should_emit(_book(recv=1_500)) is False
+    assert thr.should_emit(_book(recv=2_000)) is True
+
+
+def test_depth_emit_throttle_mid_move() -> None:
+    thr = DepthEmitThrottle(emit_interval_ms=10_000, mid_change_bps=Decimal("10"))
+    b0 = _book(recv=1_000, bid="100", ask="100")  # mid 100
+    thr.mark_emitted(b0)
+    # 5 bps move — below threshold
+    assert thr.should_emit(_book(recv=1_100, bid="100.05", ask="100.05")) is False
+    # 20 bps move
+    assert thr.should_emit(_book(recv=1_200, bid="100.20", ask="100.20")) is True

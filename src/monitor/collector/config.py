@@ -3,11 +3,12 @@
 from __future__ import annotations
 
 import os
+from decimal import Decimal, InvalidOperation
 from pathlib import Path
 from typing import Any, Literal
 
 import yaml
-from pydantic import BaseModel, ConfigDict, Field, model_validator
+from pydantic import BaseModel, ConfigDict, Field, field_validator, model_validator
 
 # repo root = collector -> monitor -> src -> repo
 _REPO_ROOT = Path(__file__).resolve().parents[3]
@@ -28,11 +29,20 @@ class BybitDepthConfig(BaseModel):
     # Min wall-clock gap between depth rows per symbol (ms).
     emit_interval_ms: int = Field(default=1000, ge=50)
     # Also emit when mid moves by ≥ this many bps since last depth row (0 = off).
-    mid_change_bps: float = Field(default=1.0, ge=0)
-    # USD notional ladder for precomputed bid/ask VWAP (PnL v2 buckets).
+    # YAML may supply a number or string; stored as Decimal for consumers.
+    mid_change_bps: Decimal = Field(default=Decimal("1"), ge=0)
+    # USD notional ladder for precomputed bid/ask VWAP (PnL v2 buckets / DESIGN §2.6.3).
     buckets_usd: list[str] = Field(
         default_factory=lambda: ["10", "50", "100", "500", "1000", "10000"]
     )
+
+    @field_validator("mid_change_bps", mode="before")
+    @classmethod
+    def _mid_as_decimal(cls, v: object) -> Decimal:
+        try:
+            return Decimal(str(v))
+        except (InvalidOperation, ValueError) as exc:
+            raise ValueError(f"mid_change_bps must be a number, got {v!r}") from exc
 
     @model_validator(mode="after")
     def _buckets(self) -> BybitDepthConfig:
@@ -40,8 +50,8 @@ class BybitDepthConfig(BaseModel):
             raise ValueError("bybit.depth.buckets_usd must be non-empty")
         for raw in self.buckets_usd:
             try:
-                q = float(raw)
-            except ValueError as exc:
+                q = Decimal(str(raw))
+            except (InvalidOperation, ValueError) as exc:
                 raise ValueError(f"invalid bucket {raw!r}") from exc
             if q <= 0:
                 raise ValueError(f"bucket must be > 0, got {raw!r}")

@@ -87,13 +87,17 @@ def de_multiplied_levels(
     multiplier: Decimal,
 ) -> list[tuple[Decimal, Decimal]]:
     """Apply price/m and size*m so notional is invariant."""
+    from monitor.symbols.multipliers import de_multiplied_price
+
     if multiplier <= 0:
         raise ValueError(f"multiplier must be > 0, got {multiplier}")
     out: list[tuple[Decimal, Decimal]] = []
     for price, size in levels:
         if price <= 0 or size <= 0:
             continue
-        out.append((price / multiplier, size * multiplier))
+        out.append(
+            (de_multiplied_price(price, multiplier), de_multiplied_size(size, multiplier))
+        )
     return out
 
 

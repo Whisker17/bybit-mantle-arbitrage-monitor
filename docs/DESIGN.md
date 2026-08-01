@@ -229,7 +229,6 @@ Planned `src/monitor/` packages (land with their issues; empty package until the
 |------------------|----------------|-------------|
 | `monitor/symbols` | fixed xStock list, Bybit multiplier map | M1 |
 | `monitor/bybit` | live Bybit book/trades WS; orderbook.50 + `bybit_depth` VWAP | M2 (WHI-731); depth WHI-755 |
-
 | `monitor/fluxion` | AMM state/quotes + RFQ feed | M2 (landed WHI-731) |
 | `monitor/storage` | SQLite journal for collector ticks + retention | M2 (landed WHI-731); retention WHI-751 |
 | `monitor/collector` | daemon orchestrating feeds → SQLite (+ retention loop) | M2 (landed WHI-731); retention WHI-751 |
@@ -312,11 +311,14 @@ at ticket open), **unbounded growth exhausts the disk in weeks**.
 
 | Regime | Observed / assumed write rate | Dominant table | Approx size |
 |--------|-------------------------------|----------------|-------------|
-| US closed / weekend quiet | ~7 rows/s all pairs | `bybit_book` (orderbook.1) | ~150 MiB/day |
-| US open (orderbook.1 hot) | 3–5× weekend (order-of-magnitude) | `bybit_book` | ~0.5–0.8 GiB/day |
+| US closed / weekend quiet | ~7 L1 rows/s all pairs (when L1 changes) | `bybit_book` | ~150 MiB/day |
+| US open (book hot) | 3–5× weekend (order-of-magnitude) | `bybit_book` | ~0.5–0.8 GiB/day |
+| Depth journal (WHI-755) | ≤1 row/s/pair @ `emit_interval_ms: 1000` (~11 rows/s) | `bybit_depth` | ~0.2–0.4 GiB/day |
 
-Derivation (weekend): \(7 \times 86400 \approx 6.0 \times 10^5\) rows/day; ~250 B/row
-payload+index overhead → ~150 MiB/day. At 0.5 GiB/day open + shared free 5.2 GiB
+Derivation (weekend L1): \(7 \times 86400 \approx 6.0 \times 10^5\) rows/day; ~250 B/row
+payload+index overhead → ~150 MiB/day. Depth: ~11 pairs × 86400 × ~300–400 B/row
+(JSON VWAP curves) → ~0.25–0.35 GiB/day at 1 Hz throttle; mid-move flush adds little
+on quiet books. At 0.5 GiB/day open L1 + depth + shared free 5.2 GiB
 → **disk full in ~1–2 weeks** without retention. Measure live with:
 
 ```bash
@@ -327,8 +329,9 @@ python -m monitor.retention --growth-only
 
 | Table | Default TTL | Rationale |
 |-------|-------------|-----------|
-| `bybit_book` raw | **2 days** | Bulk of bytes. TUI cold-start uses ≤`edge_history_max_samples` (2k) recent books; sparklines use ≤240 points. |
+| `bybit_book` raw | **2 days** | Bulk of bytes. TUI cold-start uses ≤`edge_history_max_samples` (2k) recent books; sparklines use ≤240 points. Daemon skips insert when L1 bid/ask unchanged (WHI-755). |
 | `bybit_book_1m` | **14 days** | Before deleting raw books older than the raw TTL, last-in-minute L1 is upserted here (downsample). Compact series for forensics / future cold-start. |
+| `bybit_depth` | **2 days** | Precomputed PnL-bucket VWAP curves (WHI-755). Throttled (`emit_interval_ms` + optional mid-move). Sized like a second bulk table — same raw TTL as L1 until growth re-measured. |
 | `bybit_trades` | **7 days** | ≥ TUI 24h volume window (`volume_window_ms`). |
 | `fluxion_pool_state` | **7 days** | Edge rebuild + sparklines. |
 | `fluxion_rfq_quotes` | **3 days** | Poll tape; RFQ notional is small vs book. |
@@ -347,10 +350,12 @@ Attribution reads swaps/fills, which are never pruned by default.
 Steady-state bound (order of magnitude, ~10 pairs):
 
 - raw book ≈ 2 × 150 MiB–0.8 GiB ≈ **0.3–1.6 GiB**
+- depth curves ≈ 2 × 0.25–0.4 GiB ≈ **0.5–0.8 GiB** (1 Hz throttle)
 - 1m bars ≈ 10 pairs × 14 d × 1440 min × ~120 B ≈ **~25 MiB**
 - trades + pool + RFQ quotes (TTL windows) + permanent swaps/fills ≪ book
 
-→ **steady-state journal ≪ free disk** when TTLs hold.
+→ **steady-state journal ≪ free disk** when TTLs hold. Re-measure after
+deploy with `python -m monitor.retention --growth-only` (WHI-755 AC).
 
 #### Runtime
 
@@ -367,9 +372,10 @@ Steady-state bound (order of magnitude, ~10 pairs):
    `SqliteStore`). Existing DBs stay at their original mode — freelist pages are
    still reused so size **plateaus** after the first full prune cycle; run once
    with `--full-vacuum` (or critical waterline) to shrink the file on disk.
-5. **Schema:** `SCHEMA_VERSION=2` adds `bybit_book_1m` + prune indexes via
-   `CREATE IF NOT EXISTS` (no destructive migration). Meta key is updated for
-   operators; readers do not gate on the integer.
+5. **Schema:** `SCHEMA_VERSION` bumps add tables via `CREATE IF NOT EXISTS`
+   (no destructive migration). v2 = `bybit_book_1m`; v3 = `bybit_depth`
+   (WHI-755). Meta key is updated for operators; readers do not gate on the
+   integer.
 
 #### Disk waterline (`retention.disk`)
 

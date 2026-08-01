@@ -28,6 +28,8 @@ async def test_handle_raw_orderbook_uses_shared_depth_tracker() -> None:
         book_topic_prefix="orderbook.50",
         depth_enabled=True,
         depth_buckets_usd=[Decimal("10"), Decimal("50")],
+        depth_emit_interval_ms=1000,
+        depth_mid_change_bps=Decimal("0"),  # interval-only
     )
 
     snap = {
@@ -42,6 +44,7 @@ async def test_handle_raw_orderbook_uses_shared_depth_tracker() -> None:
             "seq": 1,
         },
     }
+    # Same L1, deeper level change — book still updates state; depth throttled.
     delta = {
         "topic": "orderbook.50.TSLAXUSDT",
         "type": "delta",
@@ -60,9 +63,10 @@ async def test_handle_raw_orderbook_uses_shared_depth_tracker() -> None:
     assert len(books) == 2
     assert books[0].bid == Decimal("100")
     assert books[0].ask == Decimal("101")
-    assert books[1].bid == Decimal("100")  # retained across shared tracker
-    assert books[1].ask == Decimal("101")  # best ask unchanged; size on 102 updated
-    assert len(depths) == 2
+    assert books[1].bid == Decimal("100")
+    assert books[1].ask == Decimal("101")
+    # First message emits depth; second is within interval → no second VWAP build.
+    assert len(depths) == 1
     assert depths[0].bid_vwap_dm[0] == Decimal("100")
     assert trades == []
 
@@ -78,6 +82,7 @@ async def test_handle_raw_ignores_tickers_when_prefix_is_orderbook() -> None:
         on_book=books.append,
         on_trade=lambda _t: None,
         book_topic_prefix="orderbook.1",
+        depth_enabled=False,
     )
     await coll._handle_raw(
         json.dumps(

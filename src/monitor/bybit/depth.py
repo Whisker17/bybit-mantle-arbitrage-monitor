@@ -45,19 +45,12 @@ class _DepthState:
     pending_gap: bool = False
 
 
-@dataclass(frozen=True, slots=True)
-class DepthApplyResult:
-    """One accepted book update: always L1 when two-sided; depth when requested."""
-
-    book: BybitBookTick
-    depth: BybitDepthTick | None
-
-
 class DepthBookTracker:
     """Per-symbol multi-level book: snapshot/delta merge, drop non-increasing u/seq.
 
-    Emits L1 ``BybitBookTick`` (same shape as the orderbook.1 path) plus an optional
-    ``BybitDepthTick`` with precomputed de-multiplied VWAP at configured USD buckets.
+    ``apply`` always returns L1 ``BybitBookTick`` (same shape as the orderbook.1
+    path). Call ``depth_tick`` separately when the journal wants a throttled
+    precomputed VWAP curve — so 50-level sort/VWAP work is not done every delta.
     """
 
     def __init__(
@@ -66,7 +59,6 @@ class DepthBookTracker:
         pair_id_by_symbol: Mapping[str, str],
         multiplier_by_symbol: Mapping[str, Decimal],
         buckets_usd: Sequence[Decimal] | None = None,
-        emit_depth: bool = True,
     ) -> None:
         self._pair_id_by_symbol = dict(pair_id_by_symbol)
         self._multiplier_by_symbol = dict(multiplier_by_symbol)
@@ -77,8 +69,9 @@ class DepthBookTracker:
             if q <= 0:
                 raise ValueError(f"bucket must be > 0, got {q}")
         self._buckets_usd: tuple[Decimal, ...] = tuple(raw)
-        self._emit_depth = emit_depth
         self._states: dict[str, _DepthState] = {}
+        # Last accepted L1 book per symbol (for depth_tick without re-merge).
+        self._last_book: dict[str, BybitBookTick] = {}
 
     @property
     def buckets_usd(self) -> tuple[Decimal, ...]:
@@ -90,7 +83,7 @@ class DepthBookTracker:
         *,
         recv_ts_ms: int | None = None,
         gap: bool = False,
-    ) -> DepthApplyResult | None:
+    ) -> BybitBookTick | None:
         update = parse_orderbook_l1_update(payload)
         if update is None:
             return None
@@ -181,29 +174,41 @@ class DepthBookTracker:
             multiplier=mult,
             gap=tick_gap,
         )
+        self._last_book[update.symbol] = book
+        return book
 
-        depth: BybitDepthTick | None = None
-        if self._emit_depth:
-            bid_lv_dm = de_multiplied_levels(sorted_bid_levels(state.bids), mult)
-            ask_lv_dm = de_multiplied_levels(sorted_ask_levels(state.asks), mult)
-            depth = BybitDepthTick(
-                pair_id=pair_id,
-                symbol=update.symbol,
-                exchange_ts_ms=exchange_ts,
-                recv_ts_ms=recv,
-                bid=bid,
-                ask=ask,
-                bid_de_multiplied=book.bid_de_multiplied,
-                ask_de_multiplied=book.ask_de_multiplied,
-                multiplier=mult,
-                depth_levels=max(len(bid_lv_dm), len(ask_lv_dm)),
-                buckets_usd=self._buckets_usd,
-                bid_vwap_dm=tuple(vwap_curve(bid_lv_dm, list(self._buckets_usd))),
-                ask_vwap_dm=tuple(vwap_curve(ask_lv_dm, list(self._buckets_usd))),
-                gap=tick_gap,
-            )
+    def depth_tick(self, symbol: str) -> BybitDepthTick | None:
+        """Build a precomputed VWAP curve from the current book for ``symbol``.
 
-        return DepthApplyResult(book=book, depth=depth)
+        Call only when the consumer is about to journal a depth row (throttle
+        gate). Returns None if the book is not established / two-sided.
+        """
+        symbol = symbol.upper()
+        state = self._states.get(symbol)
+        book = self._last_book.get(symbol)
+        mult = self._multiplier_by_symbol.get(symbol)
+        if state is None or book is None or mult is None or not state.established:
+            return None
+        bid_lv_dm = de_multiplied_levels(sorted_bid_levels(state.bids), mult)
+        ask_lv_dm = de_multiplied_levels(sorted_ask_levels(state.asks), mult)
+        if not bid_lv_dm or not ask_lv_dm:
+            return None
+        return BybitDepthTick(
+            pair_id=book.pair_id,
+            symbol=book.symbol,
+            exchange_ts_ms=book.exchange_ts_ms,
+            recv_ts_ms=book.recv_ts_ms,
+            bid=book.bid,
+            ask=book.ask,
+            bid_de_multiplied=book.bid_de_multiplied,
+            ask_de_multiplied=book.ask_de_multiplied,
+            multiplier=mult,
+            depth_levels=max(len(bid_lv_dm), len(ask_lv_dm)),
+            buckets_usd=self._buckets_usd,
+            bid_vwap_dm=tuple(vwap_curve(bid_lv_dm, list(self._buckets_usd))),
+            ask_vwap_dm=tuple(vwap_curve(ask_lv_dm, list(self._buckets_usd))),
+            gap=book.gap,
+        )
 
     @staticmethod
     def _is_in_order(state: _DepthState, u: int | None, seq: int | None) -> bool:

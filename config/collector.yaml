@@ -24,7 +24,7 @@ bybit:
     # Throttle depth journal rows per symbol (L1 bybit_book is unthrottled).
     emit_interval_ms: 1000
     # Also flush when mid moves by ≥ this many bps since last depth row.
-    mid_change_bps: 1.0
+    mid_change_bps: 1
     # PnL v2 AMM ladder (DESIGN §2.6.3) — de-multiplied USD notional.
     buckets_usd: ["10", "50", "100", "500", "1000", "10000"]
 
