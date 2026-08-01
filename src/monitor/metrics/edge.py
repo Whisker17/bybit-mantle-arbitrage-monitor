@@ -25,8 +25,13 @@ from decimal import Decimal
 from typing import Literal
 
 from monitor.metrics.amm_pool import AmmPoolState
-from monitor.metrics.amm_slip import fee_bps_from_pool_fee, fluxion_amm_slip_bps, gas_bps
-from monitor.metrics.bybit_slip import bybit_slip_bps
+from monitor.metrics.amm_slip import (
+    FluxionLeg,
+    fee_bps_from_pool_fee,
+    fluxion_amm_slip_bps,
+    gas_bps,
+)
+from monitor.metrics.bybit_slip import BPS, BybitLeg, bybit_slip_bps
 from monitor.metrics.config import MetricsConfig
 
 VenueKind = Literal["amm", "rfq"]
@@ -79,7 +84,7 @@ def spread_bps(bybit_mid: Decimal, other_mid: Decimal) -> Decimal:
     """Signed (other - bybit) / bybit in bps. Positive ⇒ other richer than Bybit."""
     if bybit_mid <= 0 or other_mid <= 0:
         raise ValueError("mids must be positive")
-    return (other_mid - bybit_mid) / bybit_mid * Decimal(10_000)
+    return (other_mid - bybit_mid) / bybit_mid * BPS
 
 
 def direction_aware_gross_bps(
@@ -91,8 +96,8 @@ def direction_aware_gross_bps(
     if bybit_mid <= 0 or fluxion_mid <= 0:
         raise ValueError("mids must be positive")
     if direction == "buy_fluxion_sell_bybit":
-        return (bybit_mid - fluxion_mid) / bybit_mid * Decimal(10_000)
-    return (fluxion_mid - bybit_mid) / bybit_mid * Decimal(10_000)
+        return (bybit_mid - fluxion_mid) / bybit_mid * BPS
+    return (fluxion_mid - bybit_mid) / bybit_mid * BPS
 
 
 def _costs(
@@ -134,6 +139,8 @@ def compute_edge(
     bybit_mid = mid_from_bid_ask(bybit_bid, bybit_ask)
     gross = direction_aware_gross_bps(bybit_mid, fluxion_mid, direction)
 
+    bybit_dir: BybitLeg
+    fluxion_dir: FluxionLeg
     if direction == "buy_fluxion_sell_bybit":
         bybit_dir = "sell"
         fluxion_dir = "buy"

@@ -46,6 +46,17 @@ soon — anything touching key handling, RPC credentials defaults to at least Hi
   `config/pairs.yaml` / `AmmPool.kind` — inventory is V3-only; DESIGN still says
   “V2/V3”. Revisit if Fluxion publishes a V2 factory used by xStock pairs.
 
+- **USDT/USDC basis left at 0 bps** (Medium, WHI-732 → measure when live).
+  `config/metrics.yaml` `usdt_usdc_basis_bps` / DESIGN §8 — M3 exposes the wear
+  knob but ships 0 (1:1). Populate from a measured Bybit USDT vs Fluxion USDC
+  series before treating net edge as production-accurate.
+
+- **Live Bybit depth not on the quote tick** (Medium, WHI-732 → M2/M5).
+  `BybitBookTick` is L1-only; `compute_edge(..., bybit_depth=)` supports VWAP walk
+  but `build_edge_snapshot` has no depth source. Ladder rungs therefore share L1
+  half-spread slip (differ by gas only on RFQ). Wire orderbook depth when M2
+  streams it or M5 polls REST snapshots.
+
 ---
 
 ## Resolved

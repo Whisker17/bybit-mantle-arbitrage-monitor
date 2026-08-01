@@ -4,6 +4,9 @@ Percentiles are **time-weighted**: each sample carries weight equal to the
 forward gap until the next sample (capped by ``max_breach_gap_ms``), matching
 DESIGN §2.4 "time-weighted stats". Breach duration uses the same gap rule so
 overnight / reconnect windows do not inflate open-session totals.
+
+One ``EdgeStats`` instance is one series (pair × venue × direction at the
+breach ladder size). Callers (M5 TUI) must not mix venues into one instance.
 """
 
 from __future__ import annotations
@@ -32,7 +35,7 @@ class Distribution:
 
     @classmethod
     def from_values(cls, values: list[Decimal]) -> Distribution:
-        """Equal-weight convenience (tests / ad-hoc). Prefer weighted path."""
+        """Equal-weight convenience (unit tests). Prefer weighted path in prod."""
         if not values:
             return cls.empty()
         weights = [Decimal(1)] * len(values)
@@ -46,17 +49,19 @@ class Distribution:
             return cls.empty()
         if len(values) != len(weights):
             raise ValueError("values/weights length mismatch")
-        pairs = sorted(zip(values, weights, strict=True), key=lambda p: p[0])
+        # Zero-weight samples (capped overnight gaps) contribute to max only.
+        weighted = [(v, w) for v, w in zip(values, weights, strict=True) if w > 0]
+        all_max = max(values)
+        if not weighted:
+            return cls(count=len(values), p50=None, p95=None, p99=None, max=all_max)
+        pairs = sorted(weighted, key=lambda p: p[0])
         total_w = sum((w for _, w in pairs), Decimal(0))
-        if total_w <= 0:
-            # fall back to equal weight
-            return cls.from_values(values)
         return cls(
             count=len(values),
             p50=_weighted_percentile(pairs, total_w, 50),
             p95=_weighted_percentile(pairs, total_w, 95),
             p99=_weighted_percentile(pairs, total_w, 99),
-            max=pairs[-1][0],
+            max=all_max,
         )
 
 
@@ -86,8 +91,8 @@ class BreachStats:
     """Cost-floor breach episodes for one series.
 
     A breach is a contiguous run of samples where ``net_edge_bps > 0`` (and
-    fillable) at ``config.breach_size_usd``. Duration sums inter-sample gaps
-    while breaching, each gap capped by ``max_breach_gap_ms``.
+    fillable) at ``breach_size_usd``. Duration sums inter-sample gaps while
+    breaching, each gap capped by ``max_gap_ms``.
     """
 
     episode_count: int
@@ -100,7 +105,6 @@ class _SeriesState:
     # (value, weight_ms) — weight is the *forward* gap to the next sample.
     samples: list[tuple[Decimal, Decimal]] = field(default_factory=list)
     last_ts_ms: int | None = None
-    last_value: Decimal | None = None
     last_breaching: bool = False
     episode_count: int = 0
     total_duration_ms: int = 0
@@ -108,16 +112,23 @@ class _SeriesState:
 
 @dataclass
 class EdgeStats:
-    """Running cumulative stats, optionally split by session."""
+    """Running cumulative stats for one series, optionally split by session.
 
-    max_gap_ms: int = 300_000
+    Construct via ``EdgeStats.from_config(cfg)`` so gap/size come from YAML.
+    """
+
+    max_gap_ms: int
+    breach_size_usd: Decimal
     _all: _SeriesState = field(default_factory=_SeriesState)
     _open: _SeriesState = field(default_factory=_SeriesState)
     _closed: _SeriesState = field(default_factory=_SeriesState)
 
     @classmethod
     def from_config(cls, config: MetricsConfig) -> EdgeStats:
-        return cls(max_gap_ms=config.max_breach_gap_ms)
+        return cls(
+            max_gap_ms=config.max_breach_gap_ms,
+            breach_size_usd=config.breach_size_usd,
+        )
 
     def observe(
         self,
@@ -141,14 +152,9 @@ class EdgeStats:
         *,
         ts_ms: int,
         session: SessionKind,
-        config: MetricsConfig,
     ) -> None:
-        """Record only when ``edge.size_usd`` matches ``config.breach_size_usd``.
-
-        Other ladder sizes are ignored so the configured cost floor is the one
-        that drives breach episode accounting.
-        """
-        if edge.size_usd != config.breach_size_usd:
+        """Record only when ``edge.size_usd`` matches this stats' breach size."""
+        if edge.size_usd != self.breach_size_usd:
             return
         self.observe(
             net_edge_bps=edge.net_edge_bps,
@@ -168,20 +174,21 @@ class EdgeStats:
         ts_ms: int,
         fillable: bool,
     ) -> None:
-        gap_ms = 0
-        if state.last_ts_ms is not None and ts_ms >= state.last_ts_ms:
+        if state.last_ts_ms is not None:
+            if ts_ms < state.last_ts_ms:
+                # Out-of-order: ignore for duration/weight, still store sample.
+                state.samples.append((net_edge_bps, Decimal(0)))
+                state.last_breaching = fillable and net_edge_bps > 0
+                # Do not rewind last_ts_ms.
+                return
             raw = ts_ms - state.last_ts_ms
             # Cap: overnight / reconnect must not inflate duration or weights.
-            gap_ms = raw if raw <= self.max_gap_ms else 0
+            gap_ms = raw if 0 < raw <= self.max_gap_ms else 0
             if state.last_breaching and gap_ms > 0:
                 state.total_duration_ms += gap_ms
-            # Assign the forward weight to the *previous* sample.
-            if state.samples and state.last_value is not None:
+            if state.samples:
                 prev_val, _ = state.samples[-1]
-                # Replace last sample's weight with the realized forward gap
-                # (0 if gap was capped out — sample stays for max, not Pxx).
-                weight = Decimal(gap_ms) if gap_ms > 0 else Decimal(0)
-                state.samples[-1] = (prev_val, weight)
+                state.samples[-1] = (prev_val, Decimal(gap_ms))
 
         state.samples.append((net_edge_bps, Decimal(0)))  # weight filled later
         breaching = fillable and net_edge_bps > 0
@@ -189,14 +196,20 @@ class EdgeStats:
             state.episode_count += 1
         state.last_breaching = breaching
         state.last_ts_ms = ts_ms
-        state.last_value = net_edge_bps
 
     def distribution(self, session: SessionKind | None = None) -> Distribution:
         st = self._state(session)
         if not st.samples:
             return Distribution.empty()
         values = [v for v, _ in st.samples]
-        weights = [w if w > 0 else Decimal(1) for _, w in st.samples]
+        weights = [w for _, w in st.samples]
+        # Last open sample has weight 0 until a successor arrives — give it
+        # unit weight so it still contributes to live percentiles.
+        if weights and weights[-1] == 0 and any(w > 0 for w in weights[:-1]):
+            weights = list(weights)
+            weights[-1] = Decimal(1)
+        elif all(w == 0 for w in weights):
+            weights = [Decimal(1)] * len(weights)
         return Distribution.from_weighted(values, weights)
 
     def breach_stats(self, session: SessionKind | None = None) -> BreachStats:

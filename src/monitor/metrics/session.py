@@ -16,9 +16,10 @@ from zoneinfo import ZoneInfo
 from monitor.metrics.config import MetricsConfig, SessionConfig
 
 # Fixed NYSE full holidays (no session). Observed Monday/Friday shifts included.
-# Extend annually when the year approaches; tests pin representative days.
-# Years covered: 2025–2027. Dates outside this range still get weekday RTH
-# hours but no holiday table — log/extend before use in production.
+# Years covered: 2025–2027. session_kind raises for other years so the table
+# cannot silently expire (acceptance: open/closed matches the calendar).
+_CALENDAR_YEARS: frozenset[int] = frozenset({2025, 2026, 2027})
+
 _NYSE_FULL_HOLIDAYS: frozenset[date] = frozenset(
     {
         # 2025
@@ -111,6 +112,12 @@ def session_kind(
     sc = _as_session_config(config)
     et = _as_et(ts, ZoneInfo(sc.timezone))
     d = et.date()
+    if d.year not in _CALENDAR_YEARS:
+        raise ValueError(
+            f"NYSE holiday table covers {_CALENDAR_YEARS}; got {d.year}. "
+            "Extend _NYSE_FULL_HOLIDAYS / _NYSE_EARLY_CLOSE in "
+            "monitor.metrics.session before classifying this timestamp."
+        )
     if et.weekday() >= 5:
         return SessionKind.CLOSED
     if nyse_is_full_holiday(d):

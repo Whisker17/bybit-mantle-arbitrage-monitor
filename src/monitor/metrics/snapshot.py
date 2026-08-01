@@ -16,6 +16,7 @@ from monitor.metrics.edge import (
     Direction,
     EdgeResult,
     VenueKind,
+    compute_edge,
     compute_edge_ladder,
     mid_from_bid_ask,
     spread_bps,
@@ -150,8 +151,6 @@ def build_edge_snapshot(
         if not _rfq_side_matches(tick, direction):
             continue
         for size in config.size_ladder_usd:
-            from monitor.metrics.edge import compute_edge
-
             rfq_edges.append(
                 compute_edge(
                     pair_id=bybit.pair_id,

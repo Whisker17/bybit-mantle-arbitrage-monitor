@@ -11,6 +11,12 @@ minimum take cost. When full book levels are supplied, walk VWAP for exact size.
 from __future__ import annotations
 
 from decimal import Decimal
+from typing import Literal
+
+BookSide = Literal["bid", "ask"]
+BybitLeg = Literal["buy", "sell"]
+
+BPS = Decimal(10_000)
 
 
 def half_spread_bps(bid: Decimal, ask: Decimal) -> Decimal:
@@ -20,7 +26,7 @@ def half_spread_bps(bid: Decimal, ask: Decimal) -> Decimal:
     if ask < bid:
         raise ValueError(f"crossed book bid={bid} ask={ask}")
     mid = (bid + ask) / 2
-    return (ask - bid) / mid / 2 * Decimal(10_000)
+    return (ask - bid) / mid / 2 * BPS
 
 
 def l1_slip_bps_from_mid(bid: Decimal, ask: Decimal) -> Decimal:
@@ -33,7 +39,7 @@ def book_vwap_slip_bps(
     *,
     size_usd: Decimal,
     mid: Decimal,
-    side: str,
+    side: BookSide,
 ) -> Decimal | None:
     """Walk ``levels`` (price, size) for ``size_usd`` notional; slip vs mid in bps.
 
@@ -66,7 +72,7 @@ def book_vwap_slip_bps(
         slip = (mid - vwap) / mid
     else:
         slip = (vwap - mid) / mid
-    return slip * Decimal(10_000)
+    return slip * BPS
 
 
 def bybit_slip_bps(
@@ -74,7 +80,7 @@ def bybit_slip_bps(
     bid: Decimal,
     ask: Decimal,
     size_usd: Decimal,
-    direction: str,
+    direction: BybitLeg,
     depth: list[tuple[Decimal, Decimal]] | None = None,
 ) -> Decimal | None:
     """Bybit slip vs mid for one leg.
@@ -89,5 +95,5 @@ def bybit_slip_bps(
     if depth is None:
         # L1 model: fill at top of book; slip vs mid = half-spread.
         return l1_slip_bps_from_mid(bid, ask)
-    side = "ask" if direction == "buy" else "bid"
+    side: BookSide = "ask" if direction == "buy" else "bid"
     return book_vwap_slip_bps(depth, size_usd=size_usd, mid=mid, side=side)

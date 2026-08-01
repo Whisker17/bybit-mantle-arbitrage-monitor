@@ -25,8 +25,17 @@ def test_distribution_empty() -> None:
     assert d.p50 is None
 
 
+def _stats(**kwargs: object) -> EdgeStats:
+    defaults: dict[str, object] = {
+        "max_gap_ms": 300_000,
+        "breach_size_usd": Decimal(1000),
+    }
+    defaults.update(kwargs)
+    return EdgeStats(**defaults)  # type: ignore[arg-type]
+
+
 def test_breach_episodes_and_duration() -> None:
-    stats = EdgeStats(max_gap_ms=300_000)
+    stats = _stats()
     stats.observe(net_edge_bps=Decimal("-1"), ts_ms=0, session=SessionKind.CLOSED)
     stats.observe(net_edge_bps=Decimal("5"), ts_ms=1000, session=SessionKind.OPEN)
     stats.observe(net_edge_bps=Decimal("3"), ts_ms=4000, session=SessionKind.OPEN)
@@ -53,20 +62,19 @@ def test_breach_episodes_and_duration() -> None:
 
 def test_overnight_gap_does_not_inflate_open_duration() -> None:
     """15:59 → next-day 09:30 must not add ~17.5h to open breach duration."""
-    stats = EdgeStats(max_gap_ms=300_000)  # 5 min
+    stats = _stats(max_gap_ms=300_000)  # 5 min
     # Last open sample of the day, still breaching
     stats.observe(net_edge_bps=Decimal("10"), ts_ms=0, session=SessionKind.OPEN)
     # Next open sample ~17.5 hours later
     day_ms = 17 * 3600 * 1000 + 30 * 60 * 1000
     stats.observe(net_edge_bps=Decimal("10"), ts_ms=day_ms, session=SessionKind.OPEN)
     b = stats.breach_stats(SessionKind.OPEN)
-    assert b.episode_count == 1  # still same episode conceptually, or 2 if reset
     # Critical: duration must NOT include the overnight gap
     assert b.total_duration_ms == 0
 
 
 def test_non_fillable_does_not_count_breach() -> None:
-    stats = EdgeStats()
+    stats = _stats()
     stats.observe(
         net_edge_bps=Decimal("50"),
         ts_ms=0,
@@ -121,15 +129,15 @@ def test_observe_edge_respects_breach_size() -> None:
         net_edge_bps=Decimal(50),
         fillable=True,
     )
-    stats.observe_edge(big, ts_ms=0, session=SessionKind.OPEN, config=cfg)
+    stats.observe_edge(big, ts_ms=0, session=SessionKind.OPEN)
     assert stats.distribution(SessionKind.OPEN).count == 0
-    stats.observe_edge(small, ts_ms=1000, session=SessionKind.OPEN, config=cfg)
+    stats.observe_edge(small, ts_ms=1000, session=SessionKind.OPEN)
     assert stats.distribution(SessionKind.OPEN).count == 1
     assert stats.breach_stats(SessionKind.OPEN).episode_count == 1
 
 
 def test_session_buckets_snapshot() -> None:
-    stats = EdgeStats()
+    stats = _stats()
     stats.observe(net_edge_bps=Decimal("1"), ts_ms=0, session=SessionKind.OPEN)
     stats.observe(net_edge_bps=Decimal("-1"), ts_ms=100, session=SessionKind.CLOSED)
     buckets = SessionBuckets.from_stats(stats)

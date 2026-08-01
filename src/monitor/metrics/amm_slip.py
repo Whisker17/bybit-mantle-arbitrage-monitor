@@ -16,11 +16,14 @@ from __future__ import annotations
 
 from dataclasses import dataclass
 from decimal import Decimal
+from typing import Literal
 
 from monitor.fluxion.pools import mid_from_sqrt_price_x96
 from monitor.metrics.amm_pool import AmmPoolState
 
 Q96 = Decimal(2**96)
+BPS = Decimal(10_000)
+FluxionLeg = Literal["buy", "sell"]
 # Cap price move within one range step: refuse fills that move sqrt price by
 # more than this fraction of current sqrtP (safety rail vs silent understate).
 _MAX_SQRT_MOVE_FRAC = Decimal("0.5")
@@ -119,7 +122,7 @@ def fluxion_amm_slip_bps(
     pool: AmmPoolState,
     *,
     size_usd: Decimal,
-    direction: str,
+    direction: FluxionLeg,
 ) -> AmmSwapResult:
     """Compute AMM execution slip vs mid for a USD notional.
 
@@ -169,7 +172,7 @@ def fluxion_amm_slip_bps(
         if amount_out <= 0:
             return _unfillable(mid, size_usd, "zero_out")
         exec_price = size_usd / amount_out
-        slip = (exec_price - mid) / mid * Decimal(10_000)
+        slip = (exec_price - mid) / mid * BPS
         return AmmSwapResult(
             amount_in=size_usd,
             amount_out=amount_out,
@@ -202,7 +205,7 @@ def fluxion_amm_slip_bps(
     if amount_out <= 0 or base_qty <= 0:
         return _unfillable(mid, base_qty, "zero_out")
     exec_price = amount_out / base_qty
-    slip = (mid - exec_price) / mid * Decimal(10_000)
+    slip = (mid - exec_price) / mid * BPS
     return AmmSwapResult(
         amount_in=base_qty,
         amount_out=amount_out,
@@ -219,4 +222,4 @@ def gas_bps(gas_usd: Decimal, size_usd: Decimal) -> Decimal:
         raise ValueError("size_usd must be positive")
     if gas_usd < 0:
         raise ValueError("gas_usd must be >= 0")
-    return gas_usd / size_usd * Decimal(10_000)
+    return gas_usd / size_usd * BPS
