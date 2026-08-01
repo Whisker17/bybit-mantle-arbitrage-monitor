@@ -16,27 +16,17 @@ import {
   fmtSession,
   fmtSignedBps,
 } from "@/lib/format";
-import type { PairOverviewRow } from "@/lib/types";
-
-type DetailResponse = {
-  pair_id: string;
-  name: string;
-  low_liquidity: boolean;
-  generated_ts_ms: number;
-  session_now: string;
-  overview: PairOverviewRow;
-  error?: string | null;
-};
+import type { PairDetailStubResponse, SessionKind } from "@/lib/types";
 
 export function PairDetailStub({ pairId }: { pairId: string }) {
-  const [data, setData] = useState<DetailResponse | null>(null);
+  const [data, setData] = useState<PairDetailStubResponse | null>(null);
   const [err, setErr] = useState<string | null>(null);
 
   useEffect(() => {
     let cancelled = false;
     void (async () => {
       try {
-        const d = await fetchJson<DetailResponse>(
+        const d = await fetchJson<PairDetailStubResponse>(
           `/api/pairs/${encodeURIComponent(pairId)}`,
         );
         if (!cancelled) {
@@ -69,14 +59,15 @@ export function PairDetailStub({ pairId }: { pairId: string }) {
   }
 
   const o = data.overview;
+  const session: SessionKind = data.session_now;
 
   return (
     <div className="space-y-4">
       <div className="rounded-md border border-border bg-card px-3 py-3">
         <div className="mb-2 flex flex-wrap items-center gap-2">
           <span className="text-sm font-semibold">{data.name}</span>
-          <Badge variant={data.session_now === "open" ? "open" : "closed"}>
-            {fmtSession(data.session_now as "open" | "closed")}
+          <Badge variant={session === "open" ? "open" : "closed"}>
+            {fmtSession(session)}
           </Badge>
           {data.low_liquidity && <Badge variant="muted">low-liq</Badge>}
         </div>

@@ -81,3 +81,16 @@ export const SORT_KEYS: { key: SortKey; label: string }[] = [
   { key: "bybit_mid", label: "Bybit mid" },
   { key: "pair_id", label: "Pair" },
 ];
+
+export const SORT_KEY_SET: ReadonlySet<SortKey> = new Set(
+  SORT_KEYS.map((s) => s.key),
+);
+
+export function isSortKey(value: string): value is SortKey {
+  return SORT_KEY_SET.has(value as SortKey);
+}
+
+/** Default direction when switching to a column (pair_id asc; metrics desc). */
+export function defaultSortDesc(key: SortKey): boolean {
+  return key !== "pair_id";
+}

@@ -1,7 +1,7 @@
 import { Badge } from "@/components/ui/badge";
+import { cn } from "@/lib/cn";
 import { fmtAgeMs, fmtSession, fmtTsMs } from "@/lib/format";
 import type { HealthResponse, OverviewResponse } from "@/lib/types";
-import { cn } from "@/lib/cn";
 
 type Props = {
   health: HealthResponse | null;
@@ -38,7 +38,7 @@ export function StatusBar({
           aria-hidden
         />
         collector{" "}
-        <Badge variant={alive ? "ok" : "warning"}>
+        <Badge variant={alive ? "open" : "warning"}>
           {alive ? "alive" : "down"}
         </Badge>
       </span>

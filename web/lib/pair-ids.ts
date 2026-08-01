@@ -1,20 +1,30 @@
-/**
- * Fixed monitor pair ids — mirrors config/pairs.yaml (M1 / WHI-730).
- * Used for static-export generateStaticParams on /pair/{id}/.
- * Keep in sync when pairs.yaml gains or drops an id.
- */
-export const PAIR_IDS = [
-  "AAPLx",
-  "CRCLx",
-  "GOOGLx",
-  "HOODx",
-  "METAx",
-  "NVDAx",
-  "TSLAx",
-  "SPCXx",
-  "AMZNx",
-  "COINx",
-  "MCDx",
-] as const;
+import fs from "node:fs";
+import path from "node:path";
 
-export type PairId = (typeof PAIR_IDS)[number];
+/**
+ * Build-time pair id list from config/pairs.yaml (source of truth — M1).
+ * Used only by generateStaticParams for Next static export of /pair/{id}/.
+ * Do not retype the inventory here.
+ */
+export function loadPairIdsFromConfig(): string[] {
+  const candidates = [
+    path.join(process.cwd(), "config", "pairs.yaml"),
+    path.join(process.cwd(), "..", "config", "pairs.yaml"),
+  ];
+  const yamlPath = candidates.find((p) => fs.existsSync(p));
+  if (!yamlPath) {
+    throw new Error(
+      `pairs.yaml not found (cwd=${process.cwd()}); expected config/pairs.yaml`,
+    );
+  }
+  const text = fs.readFileSync(yamlPath, "utf8");
+  const ids: string[] = [];
+  for (const line of text.split("\n")) {
+    const m = /^\s+- id:\s+(\S+)\s*$/.exec(line);
+    if (m) ids.push(m[1]);
+  }
+  if (ids.length === 0) {
+    throw new Error(`no pair ids parsed from ${yamlPath}`);
+  }
+  return ids;
+}

@@ -86,6 +86,8 @@ uv run python -m monitor.api
 # Optional: uv run python -m monitor.api --host 127.0.0.1 --port 8000
 # Web static export (build on laptop/CI — never on the 1GB VPS):
 #   cd web && npm ci && npm run build   # → web/out
+# Web pure-helper unit tests (format/sort):
+#   cd web && npm test
 # Deploy to VPS (rsync out/ + API sources, restart systemd):
 #   ./scripts/deploy-web.sh user@host
 ```

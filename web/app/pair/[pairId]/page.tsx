@@ -1,14 +1,14 @@
 import Link from "next/link";
 
-import { PAIR_IDS } from "@/lib/pair-ids";
+import { loadPairIdsFromConfig } from "@/lib/pair-ids";
 import { PairDetailStub } from "./pair-detail-stub";
 
 /**
- * Static-export requires every dynamic path to be known at build time.
- * Pair list mirrors config/pairs.yaml via lib/pair-ids.ts.
+ * Static-export requires every dynamic path at build time.
+ * Ids come from config/pairs.yaml via loadPairIdsFromConfig (not a hand list).
  */
 export function generateStaticParams() {
-  return PAIR_IDS.map((pairId) => ({ pairId }));
+  return loadPairIdsFromConfig().map((pairId) => ({ pairId }));
 }
 
 export default async function PairPage({

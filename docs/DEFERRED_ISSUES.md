@@ -99,10 +99,16 @@ soon — anything touching key handling, RPC credentials defaults to at least Hi
 
 - **OpenAPI lacks response schemas** (Low, WHI-757 → later).
   Routes still return `dict[str, Any]` after `to_json_dict`; `/docs` lists paths
-  but not field shapes. WHI-758 moved hand-written wire types to
-  `web/lib/types.ts` (shared by overview + pair stub) — still not generated
+  but not field shapes. WHI-758 keeps hand-written wire types in
+  `web/lib/types.ts` (overview + pair stub share them) — still not generated
   from OpenAPI. Add Pydantic response models (or generate TS) when a consumer
   needs compile-time parity.
+
+- **Full shadcn/ui CLI not installed** (Low, WHI-758 → polish if needed).
+  Spec allowed "shadcn/ui + Tailwind"; WHI-758 ships Tailwind v4 + hand-rolled
+  `components/ui/{badge,button,input}` in the shadcn style (no `components.json`,
+  no Radix). Fine for a dense ops table; run `shadcn init` only if later pages
+  need the full component catalog (risk: name collisions with these files).
 
 - **API `uv sync` installs full phase-1 stack on VPS** (Low, WHI-757 → later).
   `pyproject.toml` still pulls polars/pyarrow/duckdb/matplotlib/textual for the

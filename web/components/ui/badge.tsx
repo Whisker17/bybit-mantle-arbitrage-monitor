@@ -2,7 +2,7 @@ import type { HTMLAttributes } from "react";
 
 import { cn } from "@/lib/cn";
 
-type BadgeVariant = "default" | "open" | "closed" | "muted" | "warning" | "ok";
+type BadgeVariant = "default" | "open" | "closed" | "muted" | "warning";
 
 const variants: Record<BadgeVariant, string> = {
   default: "bg-muted text-muted-foreground border-border",
@@ -10,7 +10,6 @@ const variants: Record<BadgeVariant, string> = {
   closed: "bg-muted text-muted-foreground border-border",
   muted: "bg-muted/60 text-muted-foreground border-border/60",
   warning: "bg-warning/15 text-warning border-warning/40",
-  ok: "bg-positive/15 text-positive border-positive/30",
 };
 
 export function Badge({

@@ -45,6 +45,17 @@ export type OverviewResponse = {
   error?: string | null;
 };
 
+/** Subset of PairDetailModel used by the WHI-758 route stub (full detail = WHI-759). */
+export type PairDetailStubResponse = {
+  pair_id: string;
+  name: string;
+  low_liquidity: boolean;
+  generated_ts_ms: number;
+  session_now: SessionKind;
+  overview: PairOverviewRow;
+  error?: string | null;
+};
+
 export type CollectorGap = {
   gap_id?: string | null;
   source?: string | null;

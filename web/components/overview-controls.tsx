@@ -2,9 +2,9 @@
 
 import { Button } from "@/components/ui/button";
 import { Input } from "@/components/ui/input";
+import { cn } from "@/lib/cn";
 import { SORT_KEYS } from "@/lib/sort";
 import type { SortKey } from "@/lib/types";
-import { cn } from "@/lib/cn";
 
 type Props = {
   query: string;

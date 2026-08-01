@@ -1,6 +1,6 @@
 "use client";
 
-import { useRouter } from "next/navigation";
+import Link from "next/link";
 
 import { Badge } from "@/components/ui/badge";
 import { cn } from "@/lib/cn";
@@ -69,8 +69,6 @@ function BpsCell({ value }: { value: string | null }) {
 }
 
 export function PairsTable({ rows, sortKey, sortDesc, onSort }: Props) {
-  const router = useRouter();
-
   return (
     <div className="overflow-x-auto rounded-md border border-border">
       <table className="w-full min-w-[1100px] border-collapse text-xs">
@@ -121,24 +119,19 @@ export function PairsTable({ rows, sortKey, sortDesc, onSort }: Props) {
               return (
                 <tr
                   key={row.pair_id}
-                  role="link"
-                  tabIndex={0}
-                  onClick={() => router.push(`/pair/${row.pair_id}/`)}
-                  onKeyDown={(e) => {
-                    if (e.key === "Enter" || e.key === " ") {
-                      e.preventDefault();
-                      router.push(`/pair/${row.pair_id}/`);
-                    }
-                  }}
                   className={cn(
-                    "border-b border-border/60 cursor-pointer transition-colors",
-                    "hover:bg-muted/50 focus-visible:bg-muted/50 focus-visible:outline-none",
+                    "border-b border-border/60 transition-colors hover:bg-muted/50",
                     dim && "opacity-50",
                   )}
                 >
                   <td className="px-2 py-1.5 font-medium text-foreground">
                     <span className="inline-flex items-center gap-1.5">
-                      {row.pair_id}
+                      <Link
+                        href={`/pair/${row.pair_id}/`}
+                        className="hover:underline underline-offset-2 focus-visible:outline-none focus-visible:ring-1 focus-visible:ring-ring rounded-sm"
+                      >
+                        {row.pair_id}
+                      </Link>
                       {row.low_liquidity && (
                         <Badge variant="muted" className="normal-case">
                           low-liq
