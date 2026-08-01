@@ -214,6 +214,123 @@ def test_l1_tracker_ignores_delta_before_snapshot() -> None:
     assert tracker.apply(orphan) is None
 
 
+def test_l1_tracker_drops_crossed_book() -> None:
+    tracker = _tracker()
+    snap = {
+        "type": "snapshot",
+        "ts": 1,
+        "data": {
+            "s": "TSLAXUSDT",
+            "b": [["100", "1"]],
+            "a": [["101", "1"]],
+            "u": 1,
+            "seq": 1,
+        },
+    }
+    assert tracker.apply(snap) is not None
+    # One-sided delta that would cross the retained bid.
+    crossed = {
+        "type": "delta",
+        "ts": 2,
+        "data": {
+            "s": "TSLAXUSDT",
+            "b": [],
+            "a": [["99", "1"]],
+            "u": 2,
+            "seq": 2,
+        },
+    }
+    assert tracker.apply(crossed) is None
+
+
+def test_l1_tracker_marks_gap_on_noncontiguous_u() -> None:
+    tracker = _tracker()
+    snap = {
+        "type": "snapshot",
+        "ts": 1,
+        "data": {
+            "s": "TSLAXUSDT",
+            "b": [["100", "1"]],
+            "a": [["101", "1"]],
+            "u": 1,
+            "seq": 1,
+        },
+    }
+    assert tracker.apply(snap) is not None
+    jump = {
+        "type": "delta",
+        "ts": 2,
+        "data": {
+            "s": "TSLAXUSDT",
+            "b": [],
+            "a": [["102", "1"]],
+            "u": 5,  # skipped 2,3,4
+            "seq": 2,
+        },
+    }
+    tick = tracker.apply(jump)
+    assert tick is not None
+    assert tick.gap is True
+    # Subsequent contiguous update is clean.
+    next_delta = {
+        "type": "delta",
+        "ts": 3,
+        "data": {
+            "s": "TSLAXUSDT",
+            "b": [],
+            "a": [["103", "1"]],
+            "u": 6,
+            "seq": 3,
+        },
+    }
+    tick2 = tracker.apply(next_delta)
+    assert tick2 is not None
+    assert tick2.gap is False
+
+
+def test_l1_snapshot_without_u_clears_watermark() -> None:
+    """Resync snapshot omitting u must not leave a stale high watermark."""
+    tracker = _tracker()
+    first = {
+        "type": "snapshot",
+        "ts": 1,
+        "data": {
+            "s": "TSLAXUSDT",
+            "b": [["100", "1"]],
+            "a": [["101", "1"]],
+            "u": 50,
+            "seq": 10,
+        },
+    }
+    assert tracker.apply(first) is not None
+    resync = {
+        "type": "snapshot",
+        "ts": 2,
+        "data": {
+            "s": "TSLAXUSDT",
+            "b": [["90", "1"]],
+            "a": [["91", "1"]],
+            # no u / seq
+        },
+    }
+    assert tracker.apply(resync) is not None
+    # Low-u delta after watermark clear must be accepted.
+    delta = {
+        "type": "delta",
+        "ts": 3,
+        "data": {
+            "s": "TSLAXUSDT",
+            "b": [],
+            "a": [["92", "1"]],
+            "u": 1,
+            "seq": 1,
+        },
+    }
+    tick = tracker.apply(delta)
+    assert tick is not None
+    assert tick.ask == Decimal("92")
+
+
 def test_l1_tracker_snapshot_resets_even_if_u_regresses() -> None:
     tracker = _tracker()
     first = {

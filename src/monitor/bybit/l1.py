@@ -2,6 +2,7 @@
 
 from __future__ import annotations
 
+import logging
 from collections.abc import Mapping
 from dataclasses import dataclass
 from decimal import Decimal
@@ -11,6 +12,8 @@ from monitor.bybit.parse import apply_l1_side, parse_orderbook_l1_update
 from monitor.quotes import BybitBookTick, now_ms
 from monitor.symbols.multipliers import de_multiplied_price
 
+logger = logging.getLogger(__name__)
+
 
 @dataclass(slots=True)
 class _L1State:
@@ -19,6 +22,7 @@ class _L1State:
     last_u: int | None = None
     last_seq: int | None = None
     established: bool = False  # True after first accepted snapshot
+    pending_gap: bool = False  # set when u jumps (message loss)
 
 
 class L1BookTracker:
@@ -60,9 +64,31 @@ class L1BookTracker:
 
         is_snapshot = update.msg_type == "snapshot"
         if not is_snapshot and not state.established:
+            logger.debug("bybit l1 drop orphan delta symbol=%s", update.symbol)
             return None
         if not is_snapshot and not self._is_in_order(state, update.u, update.seq):
+            logger.debug(
+                "bybit l1 drop stale update symbol=%s u=%s last_u=%s",
+                update.symbol,
+                update.u,
+                state.last_u,
+            )
             return None
+
+        if (
+            not is_snapshot
+            and update.u is not None
+            and state.last_u is not None
+            and update.u > state.last_u + 1
+        ):
+            # Non-contiguous u ⇒ missed delta(s); next emitted tick is gapped.
+            state.pending_gap = True
+            logger.debug(
+                "bybit l1 u gap symbol=%s last_u=%s u=%s",
+                update.symbol,
+                state.last_u,
+                update.u,
+            )
 
         state.bid = apply_l1_side(
             state.bid,
@@ -77,20 +103,36 @@ class L1BookTracker:
             prefer_high=False,
         )
 
-        if update.u is not None:
-            state.last_u = update.u
-        if update.seq is not None:
-            state.last_seq = update.seq
+        # Snapshot always rewrites sequence watermarks (even to None).
         if is_snapshot:
+            state.last_u = update.u
+            state.last_seq = update.seq
             state.established = True
+            state.pending_gap = False
+        else:
+            if update.u is not None:
+                state.last_u = update.u
+            if update.seq is not None:
+                state.last_seq = update.seq
 
         if state.bid is None or state.ask is None:
             return None
         if state.bid <= 0 or state.ask <= 0:
             return None
+        # Independent side merges can briefly cross; never emit unusable L1.
+        if state.bid >= state.ask:
+            logger.debug(
+                "bybit l1 drop crossed book symbol=%s bid=%s ask=%s",
+                update.symbol,
+                state.bid,
+                state.ask,
+            )
+            return None
 
         recv = recv_ts_ms if recv_ts_ms is not None else now_ms()
         exchange_ts = update.exchange_ts_ms if update.exchange_ts_ms is not None else recv
+        tick_gap = gap or state.pending_gap
+        state.pending_gap = False
         return BybitBookTick(
             pair_id=pair_id,
             symbol=update.symbol,
@@ -101,7 +143,7 @@ class L1BookTracker:
             bid_de_multiplied=de_multiplied_price(state.bid, mult),
             ask_de_multiplied=de_multiplied_price(state.ask, mult),
             multiplier=mult,
-            gap=gap,
+            gap=tick_gap,
         )
 
     @staticmethod

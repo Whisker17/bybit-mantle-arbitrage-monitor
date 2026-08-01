@@ -144,8 +144,7 @@ def apply_l1_side(
     price = current
     for p, s in ops:
         if p <= 0:
-            # Malformed price: drop current if we cannot trust it
-            price = None
+            # Skip malformed price entry; keep prior L1.
             continue
         if s <= 0:
             if price == p:
