@@ -210,10 +210,13 @@ def _bybit_vwap(
     side: Literal["bid", "ask"],
     depth: list[tuple[Decimal, Decimal]] | None,
 ) -> tuple[Decimal, DepthSource] | None:
-    """Return (vwap, source) for ``base_qty`` on the traded side, or None."""
+    """Return (vwap, source) for ``base_qty`` on the traded side, or None.
+
+    Empty depth list degrades to L1 (same as missing depth) — hummingbot-pnl §5.3.
+    """
     if base_qty <= 0:
         return None
-    if depth is not None:
+    if depth:  # non-empty multi-level book only
         vwap = book_vwap_for_base(depth, base_qty)
         if vwap is None:
             return None
@@ -494,7 +497,7 @@ def _pnl_buy_fluxion_sell_bybit(
             q_base=q,
             bybit_mid=bybit_mid,
             reason="unfillable_or_range_exhausted",
-            depth_source="book" if bybit_bids is not None else "l1",
+            depth_source="book" if bybit_bids else "l1",
             config=config,
             gas=gas,
         )
@@ -517,7 +520,7 @@ def _pnl_buy_fluxion_sell_bybit(
             q_base=q,
             bybit_mid=bybit_mid,
             reason="bybit_book_unfillable",
-            depth_source="book" if bybit_bids is not None else "l1",
+            depth_source="book" if bybit_bids else "l1",
             config=config,
             gas=gas,
         )
@@ -585,7 +588,7 @@ def _pnl_buy_bybit_sell_fluxion(
             q_base=q,
             bybit_mid=bybit_mid,
             reason=reason,
-            depth_source="book" if bybit_asks is not None else "l1",
+            depth_source="book" if bybit_asks else "l1",
             config=config,
             gas=gas,
         )
@@ -698,7 +701,7 @@ def _pnl_rfq(
                 q_base=q,
                 bybit_mid=bybit_mid,
                 reason="bybit_book_unfillable",
-                depth_source="book" if bybit_bids is not None else "l1",
+                depth_source="book" if bybit_bids else "l1",
                 config=config,
                 gas=gas,
             )
@@ -765,7 +768,7 @@ def _pnl_rfq(
             q_base=q,
             bybit_mid=bybit_mid,
             reason=reason,
-            depth_source="book" if bybit_asks is not None else "l1",
+            depth_source="book" if bybit_asks else "l1",
             config=config,
             gas=gas,
         )

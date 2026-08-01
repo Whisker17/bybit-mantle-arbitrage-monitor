@@ -525,3 +525,33 @@ def test_amm_sell_exact_in() -> None:
     out = amm_quote_out_for_base_in(amm, Decimal(1))
     assert out is not None
     assert abs(out - Decimal(100)) < Decimal("0.5")
+
+
+def test_empty_depth_list_degrades_to_l1() -> None:
+    """Empty bids/asks list is L1, not book-unfillable (hummingbot-pnl §5.3)."""
+    cfg = _cfg(gas=Decimal(0), fee_bps=Decimal(10))
+    mid = Decimal(100)
+    amm = _pool_at_mid(mid, pool_fee=0)
+    r = compute_pnl_usd(
+        pair_id="TEST",
+        bybit_bid=mid,
+        bybit_ask=mid,
+        size_usd=Decimal(1000),
+        direction="buy_fluxion_sell_bybit",
+        venue="amm",
+        config=cfg,
+        amm=amm,
+        bybit_bids=[],
+    )
+    assert r.fillable
+    assert r.bybit_depth_source == "l1"
+    opt = optimal_size(
+        pair_id="TEST",
+        bybit_bid=mid,
+        bybit_ask=mid,
+        direction="buy_fluxion_sell_bybit",
+        config=cfg,
+        amm=amm,
+        bybit_bids=[],
+    )
+    assert opt is not None
