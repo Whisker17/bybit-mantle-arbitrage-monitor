@@ -33,7 +33,12 @@ placeholders. Agents must not assume a module exists until its issue lands. -->
     RFQ), net paper edge with wear breakdown at $1K/$5K/$20K, NYSE open/closed
     session segmentation, cumulative P50/P95/P99/max + cost-floor breach stats.
     Tunables in `config/metrics.yaml`.
-  - **Not landed yet:** M4–M6 attribution / TUI / web plan.
+  - **M4 (WHI-733) landed:** `monitor/attribution` — mechanism RFQ/AMM labels,
+    AMM taker behavior pipeline (contract/EOA, convergence, activity regime,
+    Bybit lead-lag → arb_bot / price_keeper / retail / unknown), pair aggregates
+    for M5. Tunables in `config/attribution.yaml`; rules in
+    `docs/references/m4-attribution-labels.md`.
+  - **Not landed yet:** M5–M6 TUI / web plan.
     Do not assume those modules exist until their issues land.
 
 ## Build, test, run
@@ -69,7 +74,8 @@ Module layout is fixed by `docs/DESIGN.md` §4.2. Short mirror:
   - **`monitor/bybit`**, **`monitor/fluxion`**, **`monitor/storage`**,
     **`monitor/collector`** (M2) — live feeds → SQLite.
   - **`monitor/metrics`** (M3) — edge, wear, session stats from quote ticks.
-  - Still to land: `attribution`, `tui` (M4–M5).
+  - **`monitor/attribution`** (M4) — mechanism + behavior labels / aggregates.
+  - Still to land: `tui` (M5).
   Reuse pieces from `mba` per DESIGN §4.2 table; do not import whole stages.
 
 ## Git workflow (mandatory)
