@@ -19,6 +19,35 @@ class CollectorConfigError(Exception):
     """Fail-fast error for missing or malformed collector config / env."""
 
 
+class BybitDepthConfig(BaseModel):
+    """Throttled multi-level VWAP journal (WHI-755 / PnL v2 Bybit leg)."""
+
+    model_config = ConfigDict(extra="forbid", frozen=True)
+
+    enabled: bool = True
+    # Min wall-clock gap between depth rows per symbol (ms).
+    emit_interval_ms: int = Field(default=1000, ge=50)
+    # Also emit when mid moves by ≥ this many bps since last depth row (0 = off).
+    mid_change_bps: float = Field(default=1.0, ge=0)
+    # USD notional ladder for precomputed bid/ask VWAP (PnL v2 buckets).
+    buckets_usd: list[str] = Field(
+        default_factory=lambda: ["10", "50", "100", "500", "1000", "10000"]
+    )
+
+    @model_validator(mode="after")
+    def _buckets(self) -> BybitDepthConfig:
+        if not self.buckets_usd:
+            raise ValueError("bybit.depth.buckets_usd must be non-empty")
+        for raw in self.buckets_usd:
+            try:
+                q = float(raw)
+            except ValueError as exc:
+                raise ValueError(f"invalid bucket {raw!r}") from exc
+            if q <= 0:
+                raise ValueError(f"bucket must be > 0, got {raw!r}")
+        return self
+
+
 class BybitCollectorConfig(BaseModel):
     model_config = ConfigDict(extra="forbid", frozen=True)
 
@@ -29,6 +58,7 @@ class BybitCollectorConfig(BaseModel):
     reconnect_max_s: float = Field(gt=0)
     post_reconnect_gap_s: float = Field(ge=0)
     ping_interval_s: float = Field(gt=0)
+    depth: BybitDepthConfig = Field(default_factory=BybitDepthConfig)
 
     @model_validator(mode="after")
     def _reconnect_bounds(self) -> BybitCollectorConfig:
@@ -120,6 +150,7 @@ class RetentionConfig(BaseModel):
     # None = never prune that table.
     bybit_book_raw_ms: int | None = Field(default=172_800_000, ge=1)  # 2d
     bybit_book_1m_ms: int | None = Field(default=1_209_600_000, ge=1)  # 14d
+    bybit_depth_ms: int | None = Field(default=172_800_000, ge=1)  # 2d VWAP curve
     bybit_trades_ms: int | None = Field(default=604_800_000, ge=1)  # 7d
     fluxion_pool_state_ms: int | None = Field(default=604_800_000, ge=1)
     fluxion_rfq_quotes_ms: int | None = Field(default=259_200_000, ge=1)  # 3d

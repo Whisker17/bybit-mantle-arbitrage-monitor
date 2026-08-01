@@ -187,7 +187,8 @@ not a proven continuous global max.
 |-------|-------|
 | This research + DESIGN §2.6 | **WHI-754** (landed with the research note) |
 | Pure metrics engine + tests + bucket/optimal API | **WHI-756** |
-| Live Bybit multi-level depth on the quote path | Deferred depth work (see `docs/DEFERRED_ISSUES.md`); engine accepts depth when present, L1 otherwise |
+| Live Bybit multi-level depth journal | **WHI-755** (`bybit_depth` precomputed VWAPs @ PnL buckets; L1 still `bybit_book`) |
+| Engine consumes depth / L1 fallback | **WHI-756**; until then M3 edge stays L1 (see `docs/DEFERRED_ISSUES.md`) |
 
 ## 3. Cross-cutting Policies
 
@@ -222,7 +223,8 @@ Planned `src/monitor/` packages (land with their issues; empty package until the
 | Module (planned) | Responsibility | First issue |
 |------------------|----------------|-------------|
 | `monitor/symbols` | fixed xStock list, Bybit multiplier map | M1 |
-| `monitor/bybit` | live Bybit book/trades WS | M2 (landed WHI-731) |
+| `monitor/bybit` | live Bybit book/trades WS; orderbook.50 + `bybit_depth` VWAP | M2 (WHI-731); depth WHI-755 |
+
 | `monitor/fluxion` | AMM state/quotes + RFQ feed | M2 (landed WHI-731) |
 | `monitor/storage` | SQLite journal for collector ticks + retention | M2 (landed WHI-731); retention WHI-751 |
 | `monitor/collector` | daemon orchestrating feeds → SQLite (+ retention loop) | M2 (landed WHI-731); retention WHI-751 |

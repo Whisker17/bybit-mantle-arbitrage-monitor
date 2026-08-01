@@ -10,6 +10,7 @@ WAL.
 
 from __future__ import annotations
 
+import json
 import sqlite3
 from dataclasses import dataclass
 from decimal import Decimal
@@ -19,6 +20,7 @@ from monitor.quotes import (
     RFQ_BUY_SIDES,
     RFQ_SELL_SIDES,
     BybitBookTick,
+    BybitDepthTick,
     FluxionPoolStateTick,
     FluxionRfqQuoteTick,
     FluxionSwapTick,
@@ -73,6 +75,44 @@ class JournalReader:
             (pair_id,),
         ).fetchone()
         return None if row is None else _row_to_bybit_book(row)
+
+    def latest_bybit_depth(self, pair_id: str) -> BybitDepthTick | None:
+        """Latest precomputed multi-level VWAP curve for a pair (WHI-755)."""
+        row = self._conn.execute(
+            """
+            SELECT * FROM bybit_depth
+            WHERE pair_id = ?
+            ORDER BY exchange_ts_ms DESC, id DESC
+            LIMIT 1
+            """,
+            (pair_id,),
+        ).fetchone()
+        return None if row is None else _row_to_bybit_depth(row)
+
+    def bybit_depth_vwap(
+        self,
+        pair_id: str,
+        *,
+        size_usd: Decimal,
+        side: str,
+    ) -> Decimal | None:
+        """Look up precomputed VWAP for ``size_usd`` on ``side`` (bid|ask).
+
+        Exact bucket match only — does not interpolate between ladder rungs.
+        Returns None if no depth row, side invalid, unfillable, or size not in
+        the stored bucket list.
+        """
+        if side not in ("bid", "ask"):
+            raise ValueError(f"side must be bid|ask, got {side!r}")
+        tick = self.latest_bybit_depth(pair_id)
+        if tick is None:
+            return None
+        target = Decimal(str(size_usd))
+        for i, q in enumerate(tick.buckets_usd):
+            if q == target:
+                curve = tick.bid_vwap_dm if side == "bid" else tick.ask_vwap_dm
+                return curve[i]
+        return None
 
     def latest_pool_state(self, pair_id: str) -> FluxionPoolStateTick | None:
         row = self._conn.execute(
@@ -245,6 +285,45 @@ def _row_to_bybit_book(row: sqlite3.Row) -> BybitBookTick:
         bid_de_multiplied=_d(row["bid_de_multiplied"]),
         ask_de_multiplied=_d(row["ask_de_multiplied"]),
         multiplier=_d(row["multiplier"]),
+        gap=bool(row["gap"]),
+    )
+
+
+def _json_decimal_list(raw: object) -> tuple[Decimal, ...]:
+    items = json.loads(str(raw))
+    if not isinstance(items, list):
+        raise ValueError("expected JSON array")
+    return tuple(Decimal(str(x)) for x in items)
+
+
+def _json_optional_decimal_list(raw: object) -> tuple[Decimal | None, ...]:
+    items = json.loads(str(raw))
+    if not isinstance(items, list):
+        raise ValueError("expected JSON array")
+    out: list[Decimal | None] = []
+    for x in items:
+        if x is None:
+            out.append(None)
+        else:
+            out.append(Decimal(str(x)))
+    return tuple(out)
+
+
+def _row_to_bybit_depth(row: sqlite3.Row) -> BybitDepthTick:
+    return BybitDepthTick(
+        pair_id=str(row["pair_id"]),
+        symbol=str(row["symbol"]),
+        exchange_ts_ms=int(row["exchange_ts_ms"]),
+        recv_ts_ms=int(row["recv_ts_ms"]),
+        bid=_d(row["bid"]),
+        ask=_d(row["ask"]),
+        bid_de_multiplied=_d(row["bid_de_multiplied"]),
+        ask_de_multiplied=_d(row["ask_de_multiplied"]),
+        multiplier=_d(row["multiplier"]),
+        depth_levels=int(row["depth_levels"]),
+        buckets_usd=_json_decimal_list(row["buckets_usd"]),
+        bid_vwap_dm=_json_optional_decimal_list(row["bid_vwap_dm"]),
+        ask_vwap_dm=_json_optional_decimal_list(row["ask_vwap_dm"]),
         gap=bool(row["gap"]),
     )
 

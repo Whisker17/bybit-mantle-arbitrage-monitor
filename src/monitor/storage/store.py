@@ -2,6 +2,7 @@
 
 from __future__ import annotations
 
+import json
 import sqlite3
 import threading
 from collections.abc import Iterable, Sequence
@@ -10,6 +11,7 @@ from typing import TYPE_CHECKING
 
 from monitor.quotes import (
     BybitBookTick,
+    BybitDepthTick,
     BybitTradeTick,
     CollectorGap,
     FluxionPoolStateTick,
@@ -100,6 +102,38 @@ class SqliteStore:
                 bid, ask, bid_de_multiplied, ask_de_multiplied,
                 multiplier, gap
             ) VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?)
+            """,
+            rows,
+        )
+
+    def insert_bybit_depth(self, ticks: Iterable[BybitDepthTick]) -> int:
+        rows = [
+            (
+                t.pair_id,
+                t.symbol,
+                t.exchange_ts_ms,
+                t.recv_ts_ms,
+                str(t.bid),
+                str(t.ask),
+                str(t.bid_de_multiplied),
+                str(t.ask_de_multiplied),
+                str(t.multiplier),
+                t.depth_levels,
+                json.dumps([str(q) for q in t.buckets_usd]),
+                json.dumps([None if v is None else str(v) for v in t.bid_vwap_dm]),
+                json.dumps([None if v is None else str(v) for v in t.ask_vwap_dm]),
+                1 if t.gap else 0,
+            )
+            for t in ticks
+        ]
+        return self._insert_many(
+            """
+            INSERT INTO bybit_depth (
+                pair_id, symbol, exchange_ts_ms, recv_ts_ms,
+                bid, ask, bid_de_multiplied, ask_de_multiplied,
+                multiplier, depth_levels, buckets_usd, bid_vwap_dm, ask_vwap_dm,
+                gap
+            ) VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)
             """,
             rows,
         )
@@ -288,6 +322,7 @@ class SqliteStore:
         if table not in {
             "bybit_book",
             "bybit_book_1m",
+            "bybit_depth",
             "bybit_trades",
             "fluxion_pool_state",
             "fluxion_swaps",

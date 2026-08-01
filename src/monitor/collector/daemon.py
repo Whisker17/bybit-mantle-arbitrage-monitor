@@ -7,6 +7,7 @@ import asyncio
 import logging
 import signal
 import sys
+from decimal import Decimal
 from pathlib import Path
 
 from monitor.bybit.ws import BybitWsCollector
@@ -24,6 +25,7 @@ from monitor.fluxion.rfq import RfqPoller
 from monitor.fluxion.rpc import Rpc
 from monitor.quotes import (
     BybitBookTick,
+    BybitDepthTick,
     BybitTradeTick,
     CollectorGap,
     FluxionPoolStateTick,
@@ -64,6 +66,9 @@ class CollectorDaemon:
         # After resume, mark all pairs' books gap=1 until this wall-clock ms
         # (mirrors BybitWsCollector post-reconnect gap window).
         self._book_gap_until_ms: int = 0
+        # Depth journal throttle state (WHI-755): per pair last emit wall-clock + mid.
+        self._depth_last_emit_ms: dict[str, int] = {}
+        self._depth_last_mid_dm: dict[str, Decimal] = {}
 
     def request_stop(self) -> None:
         self._stop.set()
@@ -74,6 +79,8 @@ class CollectorDaemon:
             p.bybit.symbol.upper(): p.bybit.multiplier for p in self.pairs.pairs
         }
         symbols = list(pair_id_by_symbol.keys())
+        depth_cfg = self.cfg.bybit.depth
+        depth_buckets = [Decimal(q) for q in depth_cfg.buckets_usd]
 
         bybit = BybitWsCollector(
             ws_url=self.cfg.bybit.ws_url,
@@ -83,12 +90,15 @@ class CollectorDaemon:
             on_book=self._on_book,
             on_trade=self._on_trade,
             on_gap=self._on_gap,
+            on_depth=self._on_depth if depth_cfg.enabled else None,
             book_topic_prefix=self.cfg.bybit.book_topic_prefix,
             trade_topic_prefix=self.cfg.bybit.trade_topic_prefix,
             reconnect_min_s=self.cfg.bybit.reconnect_min_s,
             reconnect_max_s=self.cfg.bybit.reconnect_max_s,
             post_reconnect_gap_s=self.cfg.bybit.post_reconnect_gap_s,
             ping_interval_s=self.cfg.bybit.ping_interval_s,
+            depth_enabled=depth_cfg.enabled,
+            depth_buckets_usd=depth_buckets,
         )
 
         tasks = [
@@ -101,12 +111,14 @@ class CollectorDaemon:
         self.store.set_meta("rpc_url_kind", rpc_url_kind(self.rpc_url))
         logger.info(
             "collector started pairs=%d amm_pools=%d sqlite=%s rpc_kind=%s "
-            "retention=%s",
+            "retention=%s bybit_book=%s depth=%s",
             len(self.pairs.pairs),
             len(self.pairs.pairs_with_amm()),
             self.store.path,
             rpc_url_kind(self.rpc_url),
             self.cfg.retention.enabled,
+            self.cfg.bybit.book_topic_prefix,
+            depth_cfg.enabled,
         )
         try:
             await self._stop.wait()
@@ -154,6 +166,53 @@ class CollectorDaemon:
                 gap=True,
             )
         await asyncio.to_thread(self.store.insert_bybit_book, [tick])
+
+    def _should_emit_depth(self, tick: BybitDepthTick) -> bool:
+        """Throttle depth journal: interval and/or mid-move (config)."""
+        depth_cfg = self.cfg.bybit.depth
+        mid = (tick.bid_de_multiplied + tick.ask_de_multiplied) / 2
+        last_ms = self._depth_last_emit_ms.get(tick.pair_id)
+        last_mid = self._depth_last_mid_dm.get(tick.pair_id)
+        if last_ms is None:
+            return True
+        if tick.recv_ts_ms - last_ms >= depth_cfg.emit_interval_ms:
+            return True
+        if depth_cfg.mid_change_bps > 0 and last_mid is not None and last_mid > 0:
+            move_bps = abs(mid - last_mid) / last_mid * Decimal(10_000)
+            if move_bps >= Decimal(str(depth_cfg.mid_change_bps)):
+                return True
+        return False
+
+    async def _on_depth(self, tick: BybitDepthTick) -> None:
+        if not self.cfg.bybit.depth.enabled:
+            return
+        if self._book_writes_paused:
+            return
+        if tick.recv_ts_ms < self._book_gap_until_ms or (
+            not tick.gap and now_ms() < self._book_gap_until_ms
+        ):
+            tick = BybitDepthTick(
+                pair_id=tick.pair_id,
+                symbol=tick.symbol,
+                exchange_ts_ms=tick.exchange_ts_ms,
+                recv_ts_ms=tick.recv_ts_ms,
+                bid=tick.bid,
+                ask=tick.ask,
+                bid_de_multiplied=tick.bid_de_multiplied,
+                ask_de_multiplied=tick.ask_de_multiplied,
+                multiplier=tick.multiplier,
+                depth_levels=tick.depth_levels,
+                buckets_usd=tick.buckets_usd,
+                bid_vwap_dm=tick.bid_vwap_dm,
+                ask_vwap_dm=tick.ask_vwap_dm,
+                gap=True,
+            )
+        if not self._should_emit_depth(tick):
+            return
+        mid = (tick.bid_de_multiplied + tick.ask_de_multiplied) / 2
+        self._depth_last_emit_ms[tick.pair_id] = tick.recv_ts_ms
+        self._depth_last_mid_dm[tick.pair_id] = mid
+        await asyncio.to_thread(self.store.insert_bybit_depth, [tick])
 
     async def _on_trade(self, tick: BybitTradeTick) -> None:
         await asyncio.to_thread(self.store.insert_bybit_trades, [tick])

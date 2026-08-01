@@ -8,9 +8,10 @@ sqlite_path: data/monitor.db
 bybit:
   # Public spot multiplexed stream.
   ws_url: "wss://stream.bybit.com/v5/public/spot"
-  # Spot public tickers has no bid1/ask1 — L1 is orderbook.1 (snapshot + delta;
-  # at depth=1 each push carries the full top level). Same pit as WHI-630.
-  book_topic_prefix: "orderbook.1"
+  # Multi-level book (WHI-755). L1 still derived from best bid/ask and written
+  # to bybit_book; precomputed bucket VWAPs go to bybit_depth. orderbook.1 still
+  # works if you need L1-only (depth.enabled false).
+  book_topic_prefix: "orderbook.50"
   trade_topic_prefix: "publicTrade"
   reconnect_min_s: 1.0
   reconnect_max_s: 60.0
@@ -18,6 +19,14 @@ bybit:
   post_reconnect_gap_s: 5.0
   # Ping interval recommended by Bybit (~20s).
   ping_interval_s: 20.0
+  depth:
+    enabled: true
+    # Throttle depth journal rows per symbol (L1 bybit_book is unthrottled).
+    emit_interval_ms: 1000
+    # Also flush when mid moves by ≥ this many bps since last depth row.
+    mid_change_bps: 1.0
+    # PnL v2 AMM ladder (DESIGN §2.6.3) — de-multiplied USD notional.
+    buckets_usd: ["10", "50", "100", "500", "1000", "10000"]
 
 mantle:
   public_rpc_url: "https://rpc.mantle.xyz"
@@ -67,6 +76,7 @@ retention:
   # bybit_book is the bulk; keep ≥ max(TUI edge_history cold-start, sparkline).
   bybit_book_raw_ms: 172800000      # 2 days raw L1
   bybit_book_1m_ms: 1209600000      # 14 days of 1-minute bars after downsample
+  bybit_depth_ms: 172800000         # 2 days precomputed VWAP curves (WHI-755)
   bybit_trades_ms: 604800000        # 7 days (≥ TUI 24h volume window)
   fluxion_pool_state_ms: 604800000  # 7 days (edge rebuild / sparkline)
   fluxion_rfq_quotes_ms: 259200000  # 3 days

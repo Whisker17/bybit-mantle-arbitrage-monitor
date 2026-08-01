@@ -90,6 +90,7 @@ def main(argv: list[str] | None = None) -> int:
                         "full_vacuum": True,
                         "bybit_book_raw_ms": None,
                         "bybit_book_1m_ms": None,
+                        "bybit_depth_ms": None,
                         "bybit_trades_ms": None,
                         "fluxion_pool_state_ms": None,
                         "fluxion_rfq_quotes_ms": None,

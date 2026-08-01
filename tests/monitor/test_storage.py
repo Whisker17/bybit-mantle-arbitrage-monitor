@@ -7,6 +7,7 @@ from pathlib import Path
 
 from monitor.quotes import (
     BybitBookTick,
+    BybitDepthTick,
     BybitTradeTick,
     CollectorGap,
     FluxionPoolStateTick,
@@ -14,7 +15,7 @@ from monitor.quotes import (
     FluxionRfqQuoteTick,
     FluxionSwapTick,
 )
-from monitor.storage import SqliteStore
+from monitor.storage import JournalReader, SqliteStore
 from monitor.storage.schema import SCHEMA_VERSION
 
 
@@ -24,6 +25,41 @@ def test_schema_bootstrap_and_meta(tmp_path: Path) -> None:
         assert store.get_meta("schema_version") == str(SCHEMA_VERSION)
         store.set_meta("last_block", "123")
         assert store.get_meta("last_block") == "123"
+
+
+def test_insert_bybit_depth_and_reader_vwap(tmp_path: Path) -> None:
+    db = tmp_path / "depth.db"
+    store = SqliteStore(db)
+    depth = BybitDepthTick(
+        pair_id="TSLAx",
+        symbol="TSLAXUSDT",
+        exchange_ts_ms=1_700_000_000_000,
+        recv_ts_ms=1_700_000_000_050,
+        bid=Decimal("100"),
+        ask=Decimal("101"),
+        bid_de_multiplied=Decimal("100"),
+        ask_de_multiplied=Decimal("101"),
+        multiplier=Decimal("1"),
+        depth_levels=3,
+        buckets_usd=(Decimal("10"), Decimal("50"), Decimal("100")),
+        bid_vwap_dm=(Decimal("100"), Decimal("99.5"), None),
+        ask_vwap_dm=(Decimal("101"), Decimal("101.2"), Decimal("102")),
+        gap=False,
+    )
+    assert store.insert_bybit_depth([depth]) == 1
+    assert store.count("bybit_depth") == 1
+    store.close()
+
+    with JournalReader(db) as reader:
+        got = reader.latest_bybit_depth("TSLAx")
+        assert got is not None
+        assert got.bid_vwap_dm[0] == Decimal("100")
+        assert got.bid_vwap_dm[2] is None
+        assert reader.bybit_depth_vwap("TSLAx", size_usd=Decimal("50"), side="bid") == (
+            Decimal("99.5")
+        )
+        assert reader.bybit_depth_vwap("TSLAx", size_usd=Decimal("100"), side="bid") is None
+        assert reader.bybit_depth_vwap("TSLAx", size_usd=Decimal("999"), side="ask") is None
 
 
 def test_insert_bybit_book_and_trades_with_gap(tmp_path: Path) -> None:

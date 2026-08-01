@@ -469,11 +469,16 @@ def test_parse_public_trades() -> None:
     assert ticks[0].gap is True
 
 
-def test_build_subscribe_args_uses_orderbook_l1() -> None:
+def test_build_subscribe_args_uses_book_prefix() -> None:
     args = build_subscribe_args(["TSLAXUSDT", "AAPLXUSDT"])
-    assert "orderbook.1.TSLAXUSDT" in args
+    # Default prefix is orderbook.50 (WHI-755); override still works for L1.
+    assert "orderbook.50.TSLAXUSDT" in args
     assert "publicTrade.TSLAXUSDT" in args
-    assert "orderbook.1.AAPLXUSDT" in args
+    assert "orderbook.50.AAPLXUSDT" in args
     assert "publicTrade.AAPLXUSDT" in args
     assert len(args) == 4
     assert not any(a.startswith("tickers.") for a in args)
+    l1 = build_subscribe_args(
+        ["TSLAXUSDT"], book_prefix="orderbook.1", trade_prefix="publicTrade"
+    )
+    assert l1 == ["orderbook.1.TSLAXUSDT", "publicTrade.TSLAXUSDT"]
