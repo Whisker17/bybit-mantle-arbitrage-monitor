@@ -10,7 +10,7 @@ keys. Phase 2 will use public market data only.
 | Phase | What | Where |
 |-------|------|--------|
 | **1 (archived)** | 29-day offline WMNT/USDT0 feasibility backtest | `src/mba/`, `report/`, tag `phase1-backtest` |
-| **2 (active)** | Real-time Bybit ⇄ Fluxion xStocks panel (TUI first) | `src/monitor/` (skeleton), Linear WHI-730…735 |
+| **2 (active)** | Real-time Bybit ⇄ Fluxion xStocks panel (TUI first) | `src/monitor/` (M1 symbols + M2 collectors), Linear WHI-732…735 |
 
 Spec of record: [`docs/DESIGN.md`](docs/DESIGN.md). Agent workflow: [`AGENTS.md`](AGENTS.md).
 
@@ -30,7 +30,7 @@ Milestones (Linear project *Mantle <> Bybit Arbitrage Monitor*):
 
 `M0 WHI-736` → `M1 WHI-730` → `M2 WHI-731` → `M3 WHI-732` / `M4 WHI-733` → `M5 WHI-734` → `M6 WHI-735`
 
-M0 (this repo restructure) is done when this README ships. Implementation work starts at M1.
+M0–M2 landed. Remaining: metrics (M3), attribution (M4), TUI (M5), web plan (M6).
 
 ### Setup (phase 2)
 
@@ -42,6 +42,21 @@ git config core.hooksPath .githooks   # once per clone/worktree
 
 Phase-2 modules live under `src/monitor/`. Reuse from phase 1 is listed in
 `docs/DESIGN.md` §4.2 (rpc / V3 quote math / Bybit fee·slippage / attribution heuristics).
+
+### Live collector (M2)
+
+Long-running daemon: Bybit public WS (L1 book + trades, de-multiplied) + Mantle
+per-block Multicall3 pool state + Swap/LOP logs + RFQ quote poll → SQLite
+(`data/monitor.db` by default; gitignored).
+
+```bash
+uv run python -m monitor.collector
+# optional overrides:
+uv run python -m monitor.collector --sqlite /tmp/monitor.db
+```
+
+Config: `config/pairs.yaml` (inventory) + `config/collector.yaml` (WS/RPC/RFQ tunables).
+No trading credentials. Optional keyed `MANTLE_RPC_URL` in `.env` for less throttling.
 
 ---
 

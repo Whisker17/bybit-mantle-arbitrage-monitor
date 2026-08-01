@@ -31,24 +31,27 @@ soon — anything touching key handling, RPC credentials defaults to at least Hi
 
 ## Open
 
-- **RFQ LOP fill topic0 not fill-observed** (Medium, WHI-730 → M2).
-  `docs/references/m1-rfq-feasibility.md` — signature-derived 1inch LOP v4 topics are
-  locked, but no live `OrderFilled` logs were found on
-  `0x11de6011345586785810e52448a44c6595eedc18` in ~200k Mantle blocks at inventory.
-  M2 should confirm topic0 + decode layout from a real fill before M4 attribution.
+- **RFQ LOP fill topic0 not fill-observed** (Medium, WHI-730 → M2 → M4).
+  `docs/references/m1-rfq-feasibility.md` / `monitor.fluxion.abi.TOPIC0_ORDER_FILLED` —
+  M2 collectors subscribe with signature-derived 1inch LOP v4 topics and persist
+  `fluxion_rfq_fills`, but no live fill was observed at inventory or wiring time.
+  Confirm topic0 + decode layout from a real fill before M4 attribution trusts labels.
 
-- **Fluxion V2 factory not published for xStocks** (Low, WHI-730 → M2 if needed).
+- **RFQ fill rows lack pair/direction/size/price/taker** (Medium, WHI-731 → M4).
+  `fluxion_rfq_fills` stores order_hash + remaining + tx_hash only — `OrderFilled`
+  does not encode pair identity. Enrich from receipt Transfer/LOP order bytes when
+  a live fill is available; needed for M4 mechanism labels on RFQ legs.
+
+- **Fluxion V2 factory not published for xStocks** (Low, WHI-730 → later if needed).
   `config/pairs.yaml` / `AmmPool.kind` — inventory is V3-only; DESIGN still says
   “V2/V3”. Revisit if Fluxion publishes a V2 factory used by xStock pairs.
-
-- **Wrapper→native share conversion not in inventory** (Medium, WHI-730 → M2).
-  `config/pairs.yaml` Fluxion AMM is wrapper/USDC V3; Bybit mid is native-token.
-  M1 verifies `wrapper.asset() == native` but does not record `convertToAssets` /
-  share ratio or wrapper decimals. M2 AMM quotes must convert wrapper mid to
-  native-comparable units before edge math.
 
 ---
 
 ## Resolved
 
-_(none yet)_
+- **Wrapper→native share conversion not in inventory** (Medium, WHI-730 → M2 / WHI-731).
+  `monitor.fluxion.pools.fetch_pool_states` — each block Multicall3 includes
+  ERC-4626 `convertToAssets(1e wrapper_decimals)` and stores
+  `mid_usdc_per_wrapper`, `mid_usdc_per_native`, `wrapper_assets_per_share` in
+  `fluxion_pool_state`.

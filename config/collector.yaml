@@ -1,0 +1,51 @@
+# Live collector tunables — M2 / WHI-731.
+# Secrets (RPC key) stay in .env; this file is checked-in non-secret config.
+
+version: 1
+
+sqlite_path: data/monitor.db
+
+bybit:
+  # Public spot multiplexed stream.
+  ws_url: "wss://stream.bybit.com/v5/public/spot"
+  # tickers = full bookTicker-equivalent (bid1/ask1 every update; no delta book).
+  book_topic_prefix: "tickers"
+  trade_topic_prefix: "publicTrade"
+  reconnect_min_s: 1.0
+  reconnect_max_s: 60.0
+  # After reconnect, mark book/trade ticks as gap=1 for this many seconds.
+  post_reconnect_gap_s: 5.0
+  # Ping interval recommended by Bybit (~20s).
+  ping_interval_s: 20.0
+
+mantle:
+  public_rpc_url: "https://rpc.mantle.xyz"
+  multicall3: "0xca11bde05977b3631167028862be2a173976ca11"
+  # Poll head; Mantle block time ≈ 2s. Faster poll keeps ingest latency low.
+  block_poll_interval_s: 0.25
+  # Keep near tip so block_ts→DB can meet P95 < 2s. Raise to 1–2 on flaky keyed LB.
+  head_lag_blocks: 0
+  # If head advances more than this beyond last processed, flag gap on subsequent rows.
+  max_block_gap: 1
+  # Far-behind jump window (no historical backfill beyond this many tip blocks).
+  max_catchup_blocks: 15
+  rpc_min_interval_s: 0.05
+  rpc_timeout_s: 30.0
+  rpc_retries: 5
+  # Fetch gasUsed + effectiveGasPrice for swap txs (xStock pools are quiet).
+  fetch_swap_receipts: true
+
+rfq:
+  # Notional for EXACT_INPUT quote polls (USDC has 6 decimals). 100 USDC.
+  amount_usdc_raw: "100000000"
+  # Sell-native leg size in native raw (18 dec). 0.1 token ≈ mid-size RFQ sample.
+  amount_native_raw: "100000000000000000"
+  # Prefer same-origin proxy; fall back to upstream on non-2xx / transport error.
+  prefer_primary_url: true
+  # Poll both buy (USDC→native) and sell (native→USDC) legs for each pair.
+  poll_both_sides: true
+  # HTTP timeout for quote POSTs.
+  http_timeout_s: 20.0
+
+logging:
+  level: INFO
