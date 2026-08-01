@@ -21,6 +21,26 @@ pair / direction / taker enrichment (see `docs/DEFERRED_ISSUES.md`); they still
 contribute to **global** RFQ vs AMM share, but pair-scoped RFQ share only counts
 fills that carry a `pair_id`.
 
+### Session is not mechanism (WHI-753)
+
+**Do not** map US equity closed / weekend → “AMM-only” at the mechanism layer.
+Mechanism is **always** fill-sourced (LOP vs pool Swap). Closed-session RFQ
+*quotes* remain available for liquid inventory pairs and track Bybit mid
+(`docs/references/m4-closed-session-rfq.md`); that is a quote-regime fact, not
+a redefinition of labels.
+
+Implications:
+
+- Session filters (`open` / `closed` / `all`) only **segment** aggregates; they
+  do not rewrite `amm` ↔ `rfq`.
+- A closed-session RFQ fill is still `rfq` (MM-driven), not reclassified as
+  AMM drift.
+- `activity_regime` on AMM takers (`all_hours` / `rth_only`) is orthogonal: it
+  describes *when those addresses trade the pool*, not whether the RFQ book
+  exists outside RTH.
+- Paper edge in closed hours must still score the RFQ column when
+  `FluxionRfqQuoteTick.available` is true — same as open.
+
 ## Behavior layer (AMM takers only)
 
 Unit of analysis is the **taker address** = Swap `recipient` (pool beneficiary),

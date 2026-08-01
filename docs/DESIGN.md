@@ -17,8 +17,11 @@ long, after realistic costs, and who is moving the prices.
 
 - **Pairs:** fixed list of Fluxion-liquid xStocks (~10); exact set locked in M1.
 - **Price bases:** AMM pool quote **and** RFQ quote as **separate columns**
-  (Fluxion = V2/V3 AMM + xChange Atomic RFQ; RFQ dominates open hours, AMM
-  dominates closed hours).
+  (Fluxion = V2/V3 AMM + xChange Atomic RFQ). **RFQ quotes remain live for
+  liquid pairs outside US RTH** (weekend two-sided quotes track Bybit mid;
+  see `docs/references/m4-closed-session-rfq.md` / WHI-753). Do not treat
+  closed hours as “AMM-only pricing.” Fill-volume regime open vs closed is
+  still measured from on-chain LOP + Swap, not inferred from the wall clock.
 - **Data:** pure realtime, accumulate from zero — **no historical backfill**.
 - **Arb definition:** two-sided inventory paper arb. Wear =
   Bybit taker **0.10%** + Fluxion pool fee + Mantle gas + bilateral slippage.
@@ -60,7 +63,7 @@ be de-multiplied before comparison).
 |--------|--------|-------|
 | Bybit mid / L1 | public WS or REST | apply symbol multiplier |
 | Fluxion AMM | on-chain pool quote (V2/V3) | contract quote preferred over reimplemented math |
-| Fluxion RFQ | xChange Atomic RFQ public API if available | **open risk:** if no public quote API, degrade to last RFQ fill (M1 decides) |
+| Fluxion RFQ | xChange Atomic RFQ public API (`pollable_quote`) | Live column when HTTP 200; 204 = unavailable. Quotes can be two-sided on weekends (WHI-753). |
 
 ### 2.3 Paper edge
 
@@ -289,7 +292,7 @@ Dependency chain: M0 → M1 → M2 → (M3 ∥ M4) → M5 → M6.
 | Continue WMNT/USDT0 product | User rejected phase-1 POC product direction 2026-08-01 |
 | Web-first UI | TUI faster for operator; Web deferred to plan-only M6 |
 | Historical backfill for live panel | Product is forward-looking paper arb, not another backtest |
-| Single blended AMM+RFQ price | Must show both; regimes differ open vs closed |
+| Single blended AMM+RFQ price | Must show both; quote availability and spreads still differ by pair and session, but closed ≠ RFQ-off (WHI-753) |
 | Auto-trade / bot execution | Explicit non-goal |
 
 ## 8. Known Risks & Open Questions
@@ -297,6 +300,7 @@ Dependency chain: M0 → M1 → M2 → (M3 ∥ M4) → M5 → M6.
 | Risk / question | Owner |
 |-----------------|-------|
 | xChange RFQ **public quote** API may not exist → degrade to last RFQ fill | **Resolved M1:** public EXACT_INPUT quote is pollable; see `docs/references/m1-rfq-feasibility.md` |
+| Closed hours assumed RFQ-dark / AMM-only pricing | **Resolved WHI-753:** liquid pairs still quote two-sided RFQ on weekends and track Bybit mid; see `docs/references/m4-closed-session-rfq.md`. Open-vs-closed *fill* rates still open. |
 | Bybit xStocks **multiplier** must be applied or edges are nonsense | **Resolved M1:** `instruments-info.xstockMultiplier` + `de_multiplied_price`; snapshots in `config/pairs.yaml` |
 | Fluxion pool ABI / fork lineage unknown until M1 (phase-1 Agni topic0 trap) | **Resolved M1:** UniV3-lineage factory/quoter; liquid xStock pools fee=3000 USDC. M2 still re-verifies topic0 on live swaps |
 | Bybit quote is **USDT** while Fluxion AMM/RFQ quote is **USDC** — basis not modeled in M1 | M3 |
