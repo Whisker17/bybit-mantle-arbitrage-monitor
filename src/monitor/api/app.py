@@ -59,13 +59,20 @@ def create_app(
 ) -> FastAPI:
     """Build the ASGI app. Prefer ``python -m monitor.api`` for production."""
 
-    app_state = state
+    # Resolve API config once so CORS and lifespan share the same object.
+    # Prefer explicit state.api / api over a second disk load.
+    if state is not None:
+        resolved_api = state.api
+        app_state: AppState | None = state
+    else:
+        resolved_api = api if api is not None else load_api_config(api_config_path)
+        app_state = None
 
     @asynccontextmanager
     async def lifespan(app: FastAPI) -> AsyncIterator[None]:
         nonlocal app_state
         if app_state is None:
-            app_state = build_app_state(api_config_path=api_config_path, api=api)
+            app_state = build_app_state(api_config_path=api_config_path, api=resolved_api)
         app.state.app_state = app_state
         try:
             yield
@@ -85,15 +92,11 @@ def create_app(
         lifespan=lifespan,
     )
 
-    # CORS is empty on VPS (nginx same-origin). Local dogfood can list origins.
-    # Middleware is always attached; empty allow_origins means no CORS headers.
-    cfg_for_cors = api if api is not None else (
-        load_api_config(api_config_path) if api_config_path is not None else load_api_config()
-    )
-    if cfg_for_cors.cors_origins:
+    # CORS empty on VPS (nginx same-origin). Local dogfood can list origins.
+    if resolved_api.cors_origins:
         application.add_middleware(
             CORSMiddleware,
-            allow_origins=list(cfg_for_cors.cors_origins),
+            allow_origins=list(resolved_api.cors_origins),
             allow_methods=["GET"],
             allow_headers=["*"],
         )
@@ -103,6 +106,7 @@ def create_app(
 
     @application.get("/")
     def root() -> dict[str, Any]:
+        """Tiny discovery index (OpenAPI is the real contract)."""
         return {
             "service": "monitor.api",
             "docs": "/docs",

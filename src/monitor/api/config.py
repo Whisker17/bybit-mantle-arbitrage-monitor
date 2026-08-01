@@ -3,10 +3,10 @@
 from __future__ import annotations
 
 from pathlib import Path
-from typing import Any
+from typing import Any, Self
 
 import yaml
-from pydantic import BaseModel, ConfigDict, Field, field_validator
+from pydantic import BaseModel, ConfigDict, Field, field_validator, model_validator
 
 _REPO_ROOT = Path(__file__).resolve().parents[3]
 _DEFAULT_API_PATH = _REPO_ROOT / "config" / "api.yaml"
@@ -32,6 +32,23 @@ class ApiConfig(BaseModel):
     @classmethod
     def _none_to_list(cls, value: object) -> object:
         return [] if value is None else value
+
+    @model_validator(mode="after")
+    def _cross_field(self) -> Self:
+        # Poll slower than the stale window makes every healthy sample look dead
+        # if clients only refresh at poll_interval_s (client-side lag aside).
+        poll_ms = int(self.poll_interval_s * 1000)
+        if poll_ms > self.collector_stale_ms:
+            raise ValueError(
+                f"poll_interval_s={self.poll_interval_s}s ({poll_ms}ms) must be "
+                f"<= collector_stale_ms={self.collector_stale_ms}"
+            )
+        if self.recent_gap_window_ms < self.collector_stale_ms:
+            raise ValueError(
+                f"recent_gap_window_ms={self.recent_gap_window_ms} must be "
+                f">= collector_stale_ms={self.collector_stale_ms}"
+            )
+        return self
 
     def resolved_sqlite_path(self, *, cwd: Path | None = None) -> Path:
         path = Path(self.sqlite_path)

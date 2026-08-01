@@ -2,8 +2,11 @@
 
 from __future__ import annotations
 
+import threading
 from dataclasses import dataclass, field
 from pathlib import Path
+
+from fastapi import Request
 
 from monitor.api.config import ApiConfig
 from monitor.attribution.config import AttributionConfig
@@ -18,9 +21,8 @@ from monitor.tui.model import RunningEdgeState
 class AppState:
     """Loaded configs + optional reader + running edge stats.
 
-    The reader is opened at startup when the journal exists; if the collector
-    has not created the DB yet, routes that need data return 503 / empty health
-    until restart (operator starts collector first in normal deploy).
+    Sync FastAPI handlers run on Starlette's threadpool, so mutations of
+    ``edge_state`` and reader open/reopen take ``lock``.
     """
 
     api: ApiConfig
@@ -31,8 +33,25 @@ class AppState:
     db_path: Path
     reader: JournalReader | None
     edge_state: RunningEdgeState = field(default_factory=RunningEdgeState)
+    lock: threading.Lock = field(default_factory=threading.Lock)
+
+    def ensure_reader(self) -> JournalReader | None:
+        """Open the journal if it appeared after process start (collector race)."""
+        with self.lock:
+            if self.reader is not None:
+                return self.reader
+            if not self.db_path.is_file():
+                return None
+            self.reader = JournalReader(self.db_path)
+            return self.reader
 
     def close(self) -> None:
-        if self.reader is not None:
-            self.reader.close()
-            self.reader = None
+        with self.lock:
+            if self.reader is not None:
+                self.reader.close()
+                self.reader = None
+
+
+def app_state_from_request(request: Request) -> AppState:
+    """FastAPI dependency helper — single access path for routes."""
+    return request.app.state.app_state  # type: ignore[no-any-return]

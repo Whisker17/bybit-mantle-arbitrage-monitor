@@ -25,14 +25,7 @@ def to_jsonable(value: object) -> Any:
         return [to_jsonable(v) for v in value]
     if is_dataclass(value) and not isinstance(value, type):
         return {k: to_jsonable(v) for k, v in asdict(value).items()}
-    # Fallback for plain objects with __dict__ (should not be common).
-    if hasattr(value, "__dict__"):
-        return {
-            k: to_jsonable(v)
-            for k, v in vars(value).items()
-            if not k.startswith("_")
-        }
-    return str(value)
+    raise TypeError(f"cannot JSON-serialize {type(value)!r}")
 
 
 def to_json_dict(value: object) -> dict[str, Any]:

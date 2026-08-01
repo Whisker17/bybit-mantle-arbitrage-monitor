@@ -28,6 +28,35 @@ class HealthStatus:
     poll_interval_s: float | None = None
     error: str | None = None
 
+    @classmethod
+    def unavailable(
+        cls,
+        *,
+        db_path: str,
+        now: int | None = None,
+        poll_interval_s: float | None = None,
+        error: str,
+    ) -> HealthStatus:
+        """Health when the journal file is missing or unreadable."""
+        ts = now if now is not None else now_ms()
+        return cls(
+            ok=False,
+            generated_ts_ms=ts,
+            db_path=db_path,
+            db_exists=False,
+            collector_started_ms=None,
+            collector_stopped_ms=None,
+            last_block=None,
+            last_block_ingest_latency_ms=None,
+            freshest_recv_ts_ms=None,
+            age_ms=None,
+            collector_alive=False,
+            gap_recent=False,
+            recent_gaps=[],
+            poll_interval_s=poll_interval_s,
+            error=error,
+        )
+
 
 def _meta_int(reader: JournalReader, key: str) -> int | None:
     raw = reader.get_meta(key)
@@ -52,7 +81,7 @@ def _meta_float(reader: JournalReader, key: str) -> float | None:
 def build_health(
     reader: JournalReader,
     *,
-    now_ms: int | None = None,
+    now: int | None = None,
     stale_ms: int,
     gap_window_ms: int,
     poll_interval_s: float | None = None,
@@ -62,10 +91,7 @@ def build_health(
     ``collector_alive`` is true when the freshest recv is within ``stale_ms`` and
     the process has not written ``collector_stopped_ms`` after the last start.
     """
-    # Keyword shadows the imported now_ms function; resolve wall clock carefully.
-    from monitor.quotes import now_ms as wall_now_ms
-
-    ts = wall_now_ms() if now_ms is None else now_ms
+    ts = now if now is not None else now_ms()
 
     started = _meta_int(reader, "collector_started_ms")
     stopped = _meta_int(reader, "collector_stopped_ms")
@@ -99,28 +125,5 @@ def build_health(
     )
 
 
-def missing_db_health(
-    *,
-    db_path: str,
-    now: int | None = None,
-    poll_interval_s: float | None = None,
-    error: str,
-) -> HealthStatus:
-    ts = now if now is not None else now_ms()
-    return HealthStatus(
-        ok=False,
-        generated_ts_ms=ts,
-        db_path=db_path,
-        db_exists=False,
-        collector_started_ms=None,
-        collector_stopped_ms=None,
-        last_block=None,
-        last_block_ingest_latency_ms=None,
-        freshest_recv_ts_ms=None,
-        age_ms=None,
-        collector_alive=False,
-        gap_recent=False,
-        recent_gaps=[],
-        poll_interval_s=poll_interval_s,
-        error=error,
-    )
+# Back-compat alias used by early tests / callers.
+missing_db_health = HealthStatus.unavailable

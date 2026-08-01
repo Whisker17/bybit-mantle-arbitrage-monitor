@@ -5,7 +5,7 @@ from __future__ import annotations
 from decimal import Decimal
 from pathlib import Path
 
-from monitor.api.health import build_health
+from monitor.api.health import HealthStatus, build_health
 from monitor.quotes import BybitBookTick, CollectorGap, now_ms
 from monitor.storage import JournalReader, SqliteStore
 
@@ -83,7 +83,7 @@ def test_build_health_alive(tmp_path: Path) -> None:
     with JournalReader(db) as reader:
         health = build_health(
             reader,
-            now_ms=ts,
+            now=ts,
             stale_ms=30_000,
             gap_window_ms=300_000,
         )
@@ -104,9 +104,16 @@ def test_build_health_stale_collector(tmp_path: Path) -> None:
     with JournalReader(db) as reader:
         health = build_health(
             reader,
-            now_ms=1_000_000,
+            now=1_000_000,
             stale_ms=30_000,
             gap_window_ms=300_000,
         )
     assert health.collector_alive is False
     assert health.ok is False
+
+
+def test_unavailable_health() -> None:
+    h = HealthStatus.unavailable(db_path="/tmp/x.db", now=1, error="missing")
+    assert h.ok is False
+    assert h.db_exists is False
+    assert h.error == "missing"

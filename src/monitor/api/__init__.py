@@ -5,5 +5,11 @@ Deployed as ``python -m monitor.api`` (uvicorn, single worker) behind nginx.
 """
 
 from monitor.api.app import create_app
+from monitor.api.config import ApiConfig, ApiConfigError, load_api_config
 
-__all__ = ["create_app"]
+__all__ = [
+    "ApiConfig",
+    "ApiConfigError",
+    "create_app",
+    "load_api_config",
+]
