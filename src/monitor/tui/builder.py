@@ -466,9 +466,20 @@ def build_spread_series(
             )
         )
     if len(points) > max_points:
-        # Reuse downsample on (ts, spread) then reattach session via index.
+        # Downsample by the larger-magnitude of AMM/RFQ so RFQ-only peaks are
+        # not discarded when AMM is null (fed as 0 would bias the picker).
         series = [
-            (p.ts_ms, p.amm_spread_bps if p.amm_spread_bps is not None else Decimal(0))
+            (
+                p.ts_ms,
+                max(
+                    (
+                        abs(v)
+                        for v in (p.amm_spread_bps, p.rfq_spread_bps)
+                        if v is not None
+                    ),
+                    default=Decimal(0),
+                ),
+            )
             for p in points
         ]
         kept_ts = {t for t, _ in downsample(series, max_points=max_points)}

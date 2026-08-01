@@ -59,9 +59,9 @@ class SpreadPoint:
     """One historical quote join for the detail spread chart.
 
     ``amm_spread_bps`` is (AMM mid − Bybit mid) / Bybit in bps.
-    ``rfq_spread_bps`` is the larger-absolute RFQ side vs Bybit (same rule as
-    the overview RFQ column) when either side quote is available as-of the
-    book timestamp. ``bybit_mid`` is de-multiplied L1 mid for optional overlay.
+    ``rfq_spread_bps`` is the mean of available RFQ buy/sell side spreads
+    as-of the book timestamp (stable series; overview column still uses
+    larger-absolute). ``bybit_mid`` is de-multiplied L1 mid for optional overlay.
     """
 
     ts_ms: int

@@ -176,16 +176,16 @@ export function SpreadChart({ points, className }: Props) {
       plotRef.current?.destroy();
       plotRef.current = null;
     };
-    // Recreate only when empty flips or mid axis toggles (scale layout change).
-    // eslint-disable-next-line react-hooks/exhaustive-deps -- series pushed via setData
-  }, [empty, showMid]);
+    // Recreate when empty flips, mid axis toggles, or AMM/RFQ presence changes
+    // (series.show is fixed at construction; setData alone cannot unhide).
+  }, [empty, showMid, series.hasAmm, series.hasRfq, series.hasMid]);
 
   // Push new samples without destroying the plot (keeps zoom/cursor).
   useEffect(() => {
     if (empty || !plotRef.current || !seriesRef.current) return;
     const s = seriesRef.current;
     plotRef.current.setData([s.xs, s.amm, s.rfq, s.bybitMid]);
-  }, [dataKey, empty, showMid]);
+  }, [dataKey, empty, showMid, series.hasAmm, series.hasRfq]);
 
   if (empty) {
     return (

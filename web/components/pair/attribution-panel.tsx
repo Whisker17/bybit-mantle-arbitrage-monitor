@@ -33,7 +33,8 @@ export function AttributionPanel({ attribution, detail }: Props) {
       ? "n/a (fills unscoped)"
       : fmtPct(detail.rfq_mechanism_share);
 
-  const top = attribution.top_takers.slice(0, 10);
+  // Server already truncates via config/attribution.yaml top_takers_n.
+  const top = attribution.top_takers;
 
   return (
     <div className="space-y-3">

@@ -41,34 +41,39 @@ export function PairDetail({ pairId }: Props) {
   const [pollMs, setPollMs] = useState(DEFAULT_POLL_MS);
 
   const refresh = useCallback(async () => {
-    // Independent fetches so a 503 on detail (missing journal) does not discard
-    // a successful /api/health that should drive poll interval.
-    const [hRes, dRes] = await Promise.allSettled([
-      fetchJson<HealthResponse>("/api/health"),
-      fetchJson<PairDetailResponse>(
+    try {
+      const d = await fetchJson<PairDetailResponse>(
         `/api/pairs/${encodeURIComponent(pairId)}`,
-      ),
-    ]);
-
-    if (hRes.status === "fulfilled") {
-      const h = hRes.value;
-      if (h.poll_interval_s && h.poll_interval_s > 0) {
-        setPollMs(Math.round(h.poll_interval_s * 1000));
-      }
-    }
-
-    if (dRes.status === "fulfilled") {
-      setData(dRes.value);
-      setErr(null);
-    } else {
-      // Keep last good snapshot so panels do not flash empty on a blip.
-      setErr(
-        dRes.reason instanceof Error
-          ? dRes.reason.message
-          : String(dRes.reason),
       );
+      setData(d);
+      setErr(null);
+    } catch (e) {
+      // Keep last good snapshot so panels do not flash empty on a blip.
+      setErr(e instanceof Error ? e.message : String(e));
     }
   }, [pairId]);
+
+  // poll_interval_s changes only on API restart — fetch once, not every tick.
+  useEffect(() => {
+    let cancelled = false;
+    void (async () => {
+      try {
+        const h = await fetchJson<HealthResponse>("/api/health");
+        if (
+          !cancelled &&
+          h.poll_interval_s &&
+          h.poll_interval_s > 0
+        ) {
+          setPollMs(Math.round(h.poll_interval_s * 1000));
+        }
+      } catch {
+        // Keep DEFAULT_POLL_MS.
+      }
+    })();
+    return () => {
+      cancelled = true;
+    };
+  }, []);
 
   useEffect(() => {
     void refresh();
