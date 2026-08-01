@@ -33,6 +33,13 @@ def _topic0(log: Mapping[str, Any]) -> str:
     return str(t0).lower()
 
 
+def _hex_int(log: Mapping[str, Any], key: str) -> int:
+    raw = log.get(key, "0x0")
+    if isinstance(raw, str):
+        return int(raw, 16)
+    return int(raw or 0)
+
+
 def decode_v3_swap_log(
     log: Mapping[str, Any],
     *,
@@ -111,12 +118,8 @@ def decode_v3_swap_log(
     except (ValueError, ZeroDivisionError):
         price = None
 
-    block_number = int(log.get("blockNumber", "0x0"), 16) if isinstance(
-        log.get("blockNumber"), str
-    ) else int(log.get("blockNumber") or 0)
-    log_index = int(log.get("logIndex", "0x0"), 16) if isinstance(
-        log.get("logIndex"), str
-    ) else int(log.get("logIndex") or 0)
+    block_number = _hex_int(log, "blockNumber")
+    log_index = _hex_int(log, "logIndex")
     tx_hash = str(log.get("transactionHash") or "")
 
     return FluxionSwapTick(
@@ -176,12 +179,8 @@ def decode_lop_fill_log(
     except Exception:  # noqa: BLE001
         return None
 
-    block_number = int(log.get("blockNumber", "0x0"), 16) if isinstance(
-        log.get("blockNumber"), str
-    ) else int(log.get("blockNumber") or 0)
-    log_index = int(log.get("logIndex", "0x0"), 16) if isinstance(
-        log.get("logIndex"), str
-    ) else int(log.get("logIndex") or 0)
+    block_number = _hex_int(log, "blockNumber")
+    log_index = _hex_int(log, "logIndex")
 
     return FluxionRfqFillTick(
         block_number=block_number,

@@ -124,9 +124,8 @@ class BybitWsCollector:
             connect = websockets.connect
 
         async with connect(self.ws_url) as ws:
-            was_reconnect = self._ever_connected and self._disconnect_at_ms is not None
             self._ever_connected = True
-            if was_reconnect or self._disconnect_at_ms is not None:
+            if self._disconnect_at_ms is not None:
                 await self._emit_reconnect_gap()
             args = build_subscribe_args(
                 self.symbols,
