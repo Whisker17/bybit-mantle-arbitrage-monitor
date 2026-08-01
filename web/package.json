@@ -7,7 +7,7 @@
     "build": "next build",
     "start": "next start",
     "lint": "next lint",
-    "test": "tsx --test lib/format.test.ts lib/sort.test.ts lib/pair-ids.test.ts"
+    "test": "tsx --test lib/format.test.ts lib/sort.test.ts lib/pair-ids.test.ts lib/spread-chart.test.ts"
   },
   "dependencies": {
     "clsx": "^2.1.1",
@@ -15,7 +15,8 @@
     "next": "^15.5.0",
     "react": "^19.1.0",
     "react-dom": "^19.1.0",
-    "tailwind-merge": "^3.6.0"
+    "tailwind-merge": "^3.6.0",
+    "uplot": "^1.6.32"
   },
   "devDependencies": {
     "@tailwindcss/postcss": "^4.3.3",

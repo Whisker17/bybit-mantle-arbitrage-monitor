@@ -105,6 +105,24 @@ def _rfq_spread_for_overview(
     return max(candidates, key=lambda x: abs(x))
 
 
+def _rfq_spread_for_series(
+    buy_bps: Decimal | None,
+    sell_bps: Decimal | None,
+) -> Decimal | None:
+    """Stable RFQ series point: mean of available sides (not max-abs).
+
+    Overview uses max-abs so the table highlights the worse side. A chart line
+    that flips legs each sample is misleading — average keeps the series on
+    one continuous path when both quotes exist.
+    """
+    candidates = [b for b in (buy_bps, sell_bps) if b is not None]
+    if not candidates:
+        return None
+    if len(candidates) == 1:
+        return candidates[0]
+    return (candidates[0] + candidates[1]) / 2
+
+
 def build_pair_overview_row(
     pair: Pair,
     *,
@@ -400,27 +418,68 @@ def build_spread_series(
     pools: Sequence[FluxionPoolStateTick],
     metrics: MetricsConfig,
     max_points: int,
+    rfq_quotes: Sequence[FluxionRfqQuoteTick] = (),
 ) -> list[SpreadPoint]:
+    """Join Bybit books to as-of AMM pool + RFQ quotes for the detail chart.
+
+    RFQ is optional so older call sites still get AMM-only series; the Web
+    detail page (WHI-759) passes journal RFQ history for the second line.
+    """
     pool_by_ts = sorted(pools, key=lambda p: p.recv_ts_ms)
+    rfq_buy_hist = sorted(
+        [q for q in rfq_quotes if rfq_side_leg(q.side) == "buy"],
+        key=lambda q: q.poll_ts_ms,
+    )
+    rfq_sell_hist = sorted(
+        [q for q in rfq_quotes if rfq_side_leg(q.side) == "sell"],
+        key=lambda q: q.poll_ts_ms,
+    )
     points: list[SpreadPoint] = []
     for book in books:
         if book.bid_de_multiplied <= 0 or book.ask_de_multiplied <= 0:
             continue
         amm = _as_of(pool_by_ts, book.exchange_ts_ms, get_ts=lambda p: p.recv_ts_ms)
+        rfq_buy = _as_of(
+            rfq_buy_hist, book.exchange_ts_ms, get_ts=lambda q: q.poll_ts_ms
+        )
+        rfq_sell = _as_of(
+            rfq_sell_hist, book.exchange_ts_ms, get_ts=lambda q: q.poll_ts_ms
+        )
         snap = build_spread_snapshot(
-            bybit=book, amm=amm, config=metrics, ts_ms=book.exchange_ts_ms
+            bybit=book,
+            amm=amm,
+            config=metrics,
+            rfq_buy=rfq_buy,
+            rfq_sell=rfq_sell,
+            ts_ms=book.exchange_ts_ms,
         )
         points.append(
             SpreadPoint(
                 ts_ms=book.exchange_ts_ms,
                 amm_spread_bps=snap.amm_spread_bps,
                 session=snap.session,
+                rfq_spread_bps=_rfq_spread_for_series(
+                    snap.rfq_buy_spread_bps,
+                    snap.rfq_sell_spread_bps,
+                ),
+                bybit_mid=snap.bybit_mid,
             )
         )
     if len(points) > max_points:
-        # Reuse downsample on (ts, spread) then reattach session via index.
+        # Downsample by the larger-magnitude of AMM/RFQ so RFQ-only peaks are
+        # not discarded when AMM is null (fed as 0 would bias the picker).
         series = [
-            (p.ts_ms, p.amm_spread_bps if p.amm_spread_bps is not None else Decimal(0))
+            (
+                p.ts_ms,
+                max(
+                    (
+                        abs(v)
+                        for v in (p.amm_spread_bps, p.rfq_spread_bps)
+                        if v is not None
+                    ),
+                    default=Decimal(0),
+                ),
+            )
             for p in points
         ]
         kept_ts = {t for t, _ in downsample(series, max_points=max_points)}
@@ -679,6 +738,7 @@ def build_pair_detail(
         pools=pools,
         metrics=metrics,
         max_points=tui.spread_history_max_points,
+        rfq_quotes=rfq_hist,
     )
 
     swaps = reader.swaps(pair.id, limit=tui.trade_stream_limit * 2)

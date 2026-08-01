@@ -71,3 +71,18 @@ body {
   background: hsl(var(--muted-foreground) / 0.35);
   border-radius: 4px;
 }
+
+/* uPlot (pair detail spread chart) — match dark desk theme */
+.spread-uplot {
+  font-family: var(--font-mono);
+}
+.spread-uplot .u-legend {
+  font-size: 10px;
+  color: hsl(var(--muted-foreground));
+}
+.spread-uplot .u-legend .u-series th {
+  font-weight: 500;
+}
+.spread-uplot .u-cursor-pt {
+  border-radius: 50%;
+}

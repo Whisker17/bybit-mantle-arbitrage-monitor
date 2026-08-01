@@ -123,7 +123,18 @@ def test_pair_detail(client: TestClient) -> None:
     assert body["pair_id"] == "AAPLx"
     assert "overview" in body
     assert "edge_amm" in body
+    assert "edge_rfq" in body
     assert "trades" in body
+    assert "spread_series" in body
+    assert isinstance(body["spread_series"], list)
+    # WHI-759 chart fields: even empty series is a list; points carry session.
+    if body["spread_series"]:
+        pt = body["spread_series"][0]
+        assert "ts_ms" in pt
+        assert "amm_spread_bps" in pt
+        assert "session" in pt
+        assert "rfq_spread_bps" in pt or "bybit_mid" in pt
+    assert "attribution" in body
 
 
 def test_pair_trades(client: TestClient) -> None:

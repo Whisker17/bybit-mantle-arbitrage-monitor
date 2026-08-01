@@ -68,10 +68,15 @@ placeholders. Agents must not assume a module exists until its issue lands. -->
   - **Web overview (WHI-758) landed:** dark Tailwind overview table (TUI-parity
     columns + status bar + stale yellow banner + sort/filter + 2s poll + row
     → `/pair/{id}/`). Bucket PnL column still placeholder until API/Web
-    consume WHI-756 models. Pair detail route is a stub (full detail = WHI-759).
-  - **Not landed yet:** pair detail Web (WHI-759); Web/API consumption of PnL
-    v2 bucket table + optimal size. Do not assume those routes exist until
-    their issues land.
+    consume WHI-756 models.
+  - **Web pair detail (WHI-759) landed:** `/pair/{id}/` full detail — uPlot
+    spread series (AMM+RFQ, open/closed bands, optional Bybit mid), Fluxion
+    trade stream, edge stats + cost waterfall + session distributions,
+    attribution (top takers + mechanism donut). Bucket/optimal PnL placeholder
+    until Web wires WHI-756. SpreadPoint gains rfq_spread_bps + bybit_mid for
+    the chart.
+  - **Not landed yet:** Web/API consumption of PnL v2 bucket table + optimal
+    size. Do not assume those routes exist until a wiring issue lands.
 ## Build, test, run
 
 ```bash
@@ -130,8 +135,9 @@ Module layout is fixed by `docs/DESIGN.md` §4.2. Short mirror:
     (**frozen** for new features).
   - **`monitor/api`** (WHI-757) — FastAPI read-only JSON over the journal.
   - **`web/`** (WHI-757+) — Next.js static export; overview (WHI-758);
-    deploy via `scripts/deploy-web.sh` + `deploy/`.
-  - Still to land: pair detail Web (WHI-759); Web/API PnL v2 column wiring.
+    pair detail (WHI-759); deploy via `scripts/deploy-web.sh` + `deploy/`.
+  - Still to land: Web/API PnL v2 column wiring over `pnl_bucket_table` /
+    `optimal_size`.
   Reuse pieces from `mba` per DESIGN §4.2 table; do not import whole stages.
 
 ## Git workflow (mandatory)

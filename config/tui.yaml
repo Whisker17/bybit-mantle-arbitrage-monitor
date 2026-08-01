@@ -26,8 +26,10 @@ default_sort_desc: true
 # Rolling windows used by overview volume columns and detail history.
 # volume_window_ms = 24h per WHI-734 acceptance ("24h 量/笔数").
 volume_window_ms: 86400000
-# Unvalidated display caps (not in DESIGN §2) — retune after live dogfood:
-spread_history_max_points: 240
+# Unvalidated display caps (not in DESIGN §2) — retune after live dogfood.
+# WHI-759 chart AC is "1000+ points without jank"; server downsamples to this
+# cap before JSON so the Web uPlot path can be exercised at that scale.
+spread_history_max_points: 1200
 trade_stream_limit: 80
 # Intentional cap, not a time window: detail-page cumulative P50/P95/P99/max are
 # rebuilt from at most this many of the pair's most recent journal book samples
