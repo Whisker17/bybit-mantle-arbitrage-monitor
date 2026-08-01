@@ -80,6 +80,25 @@ def test_percentile_empty() -> None:
     assert r.p50 is None
 
 
+def test_max_block_number_gap() -> None:
+    from monitor.collector.latency import _max_block_number_gap
+
+    contiguous = [
+        BlockIngestSample.from_timing(
+            block_number=i, block_ts=1, recv_ts_ms=1000, seq=i
+        )
+        for i in range(10, 15)
+    ]
+    assert _max_block_number_gap(contiguous) == 0
+    gapped = contiguous[:2] + [
+        BlockIngestSample.from_timing(
+            block_number=20, block_ts=1, recv_ts_ms=1000, seq=2
+        )
+    ]
+    # 11 -> 20 is a hole of 8 missing numbers (12..19)
+    assert _max_block_number_gap(gapped) == 8
+
+
 def test_samples_from_pool_state_rows_max_recv() -> None:
     rows = [
         (10, 1_700_000_000, 1_700_000_000_100),

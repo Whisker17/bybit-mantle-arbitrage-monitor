@@ -23,8 +23,8 @@ latency_ms = max(0, recv_ts_ms - block_ts * 1000)
 |--------|---------|
 | `block_ts` | On-chain block timestamp (seconds) from `eth_getBlockByNumber` |
 | `recv_ts_ms` | Local wall clock **after** all per-block RPC completes (getBlock + Multicall3 pool state + pool `getLogs` + optional swap receipts + LOP `getLogs`) — see `ChainPoller._process_block` |
-| `poll_wait_ms` | `discovered_ms - block_ts*1000` — age of the block when getBlock is first attempted |
-| `rpc_work_ms` | `recv_ts_ms - discovered_ms` — RPC + decode path only |
+| `poll_wait_ms` | `discovered_ms - block_ts*1000` — age at **this** `_process_block` attempt (pre-getBlock). Re-stamped on every not-found retry, so after retries this is **last-attempt** age, not first-discovery wait. |
+| `rpc_work_ms` | `recv_ts_ms - discovered_ms` — RPC + decode on the successful attempt only |
 
 This matches daemon meta `last_block_ingest_latency_ms` (and WHI-731 wording
 “块时间→入库”). **It is not** “RPC processing only” and **it includes**:
@@ -95,7 +95,10 @@ below applies; do not read A alone as a 30 min zero-gap proof.
 | rpc_work | 1420 | 2164 | actual collector work |
 | **latency** | **8838** | **11383** | sum (order-preserving approx.) |
 
-Rough budget on this host: `skew(5) + head_lag(2) + rpc(1.4) ≈ 8.4 s` ≈ observed P50.
+Rough budget on this host (clean blocks with no not-found retry):
+`skew(5) + head_lag(2) + rpc(1.4) ≈ 8.4 s` ≈ observed P50. After retries,
+`poll_wait` understates total tip-visibility time (last-attempt stamp); use
+`latency_ms` for SLO, not the decomposition, on missy windows.
 
 ### head_lag=0 pathology
 

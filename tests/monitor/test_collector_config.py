@@ -60,6 +60,7 @@ def test_reconnect_max_must_ge_min(tmp_path: Path) -> None:
               rpc_timeout_s: 30
               rpc_retries: 5
               fetch_swap_receipts: true
+              latency_window_blocks: 256
             rfq:
               amount_usdc_raw: "100000000"
               amount_native_raw: "100000000000000000"
@@ -102,6 +103,7 @@ def test_retention_critical_must_le_warn(tmp_path: Path) -> None:
               rpc_timeout_s: 30
               rpc_retries: 5
               fetch_swap_receipts: true
+              latency_window_blocks: 256
             rfq:
               amount_usdc_raw: "100000000"
               amount_native_raw: "100000000000000000"

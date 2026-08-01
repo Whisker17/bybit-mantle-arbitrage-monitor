@@ -214,19 +214,17 @@ class CollectorDaemon:
             self.store.set_meta("last_block_ingest_latency_ms", str(latency_ms))
             self.store.set_meta("last_block", str(block_number))
             # Distribution meta — WHI-749; do not treat last_* as P95.
-            if report.p50 is not None:
-                self.store.set_meta(
-                    "block_ingest_latency_p50_ms", str(int(report.p50))
-                )
-                self.store.set_meta(
-                    "block_ingest_latency_p95_ms", str(int(report.p95 or 0))
-                )
-                self.store.set_meta(
-                    "block_ingest_latency_p99_ms", str(int(report.p99 or 0))
-                )
-                self.store.set_meta(
-                    "block_ingest_latency_n", str(report.count)
-                )
+            # LatencyTracker.add always leaves count >= 1, so p50/p95/p99 are set.
+            self.store.set_meta(
+                "block_ingest_latency_p50_ms", str(int(report.p50 or 0))
+            )
+            self.store.set_meta(
+                "block_ingest_latency_p95_ms", str(int(report.p95 or 0))
+            )
+            self.store.set_meta(
+                "block_ingest_latency_p99_ms", str(int(report.p99 or 0))
+            )
+            self.store.set_meta("block_ingest_latency_n", str(report.count))
 
         poller = ChainPoller(
             rpc,

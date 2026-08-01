@@ -30,8 +30,9 @@ class BlockIngestSample:
     block_ts: int  # chain seconds
     recv_ts_ms: int  # wall ms after RPC
     latency_ms: int
-    # Wall ms when getBlock is first attempted for this process call.
-    # Re-stamped on not-found retries (see WHI-749 note on poll_wait limits).
+    # Wall ms at the start of this ``_process_block`` attempt (pre-getBlock).
+    # Re-stamped on every not-found retry — so poll_wait is last-attempt age,
+    # not first-discovery age (docs/references/m2-block-ingest-latency.md).
     discovered_ms: int | None = None
     # 0-based index in the probe session (for startup vs steady split).
     seq: int = 0
@@ -84,6 +85,12 @@ class GapSample:
 
 @dataclass(frozen=True, slots=True)
 class PercentileReport:
+    """Equal-weight float percentiles for ingest latency samples.
+
+    Deliberately separate from ``monitor.metrics.stats.Distribution`` (Decimal,
+    time-weighted edge series) — collectors must not import metrics.
+    """
+
     count: int
     p50: float | None
     p95: float | None
@@ -110,6 +117,11 @@ class PercentileReport:
         )
 
 
+# When attributing gaps to a sample window, include gaps that start slightly
+# after the last sample recv (poll delay / log lag). Not a retention TTL.
+_GAP_WINDOW_SLACK_MS = 60_000
+
+
 @dataclass(frozen=True, slots=True)
 class LatencyWindowReport:
     """Latency distribution over a sample window (startup or steady)."""
@@ -121,6 +133,8 @@ class LatencyWindowReport:
     rpc_work: PercentileReport
     block_not_found_gaps: int
     other_gaps: int
+    # Max hole in block_number series within this window (0 = contiguous).
+    max_block_number_gap: int = 0
 
 
 @dataclass
@@ -147,7 +161,9 @@ class ProbeResult:
             t0 = min(s.recv_ts_ms for s in samples)
             t1 = max(s.recv_ts_ms for s in samples)
             window_gaps = [
-                g for g in self.gaps if t0 <= g.gap_start_ms <= t1 + 60_000
+                g
+                for g in self.gaps
+                if t0 <= g.gap_start_ms <= t1 + _GAP_WINDOW_SLACK_MS
             ]
         else:
             window_gaps = list(self.gaps)
@@ -161,6 +177,7 @@ class ProbeResult:
             rpc_work=PercentileReport.from_values(works),
             block_not_found_gaps=bnf,
             other_gaps=other,
+            max_block_number_gap=_max_block_number_gap(samples),
         )
 
     def split_reports(self) -> tuple[LatencyWindowReport, LatencyWindowReport]:
@@ -199,8 +216,10 @@ def samples_from_pool_state_rows(
 ) -> list[BlockIngestSample]:
     """Build one sample per block from ``(block_number, block_ts, recv_ts_ms)``.
 
-    When multiple pairs share a block, take max(recv) so latency matches the
-    daemon's ``max(latencies)`` meta stamp for that block batch.
+    When multiple pairs share a block, keep the first non-zero ``block_ts`` and
+    ``max(recv_ts_ms)`` so multi-pair rows collapse to one latency sample.
+    Callers that already ``GROUP BY block_number`` (e.g. analyze-db SQL) pass a
+    single row per block; the collapse is then a no-op.
     """
     by_block: dict[int, tuple[int, int]] = {}
     for block_number, block_ts, recv_ts_ms in rows:
@@ -209,7 +228,6 @@ def samples_from_pool_state_rows(
             by_block[block_number] = (block_ts, recv_ts_ms)
         else:
             bt, rt = prev
-            # Prefer consistent block_ts; keep latest recv.
             by_block[block_number] = (bt if bt else block_ts, max(rt, recv_ts_ms))
     return [
         BlockIngestSample.from_timing(
@@ -220,6 +238,14 @@ def samples_from_pool_state_rows(
         )
         for seq, block_number in enumerate(sorted(by_block))
     ]
+
+
+def _max_block_number_gap(samples: Sequence[BlockIngestSample]) -> int:
+    """Largest hole between successive sorted block numbers (0 if contiguous)."""
+    if len(samples) < 2:
+        return 0
+    nums = sorted(s.block_number for s in samples)
+    return max((b - a - 1 for a, b in zip(nums[:-1], nums[1:], strict=True)), default=0)
 
 
 def format_window(report: LatencyWindowReport) -> str:
@@ -238,6 +264,7 @@ def format_window(report: LatencyWindowReport) -> str:
         f"- rpc_work_ms: {_fmt(report.rpc_work)}",
         f"- block-not-found gaps: {report.block_not_found_gaps}",
         f"- other gaps: {report.other_gaps}",
+        f"- max_block_number_gap: {report.max_block_number_gap}",
     ]
     return "\n".join(lines)
 
