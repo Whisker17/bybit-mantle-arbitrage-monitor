@@ -63,7 +63,7 @@ be de-multiplied before comparison).
 |--------|--------|-------|
 | Bybit mid / L1 | public WS or REST | apply symbol multiplier |
 | Fluxion AMM | on-chain pool quote (V2/V3) | contract quote preferred over reimplemented math |
-| Fluxion RFQ | xChange Atomic RFQ public API (`pollable_quote`) | Live column when HTTP 200; 204 = unavailable. Quotes can be two-sided on weekends (WHI-753). |
+| Fluxion RFQ | xChange Atomic RFQ public API (`pollable_quote`) | Live when HTTP 200 **and** `price` present (`FluxionRfqQuoteTick.available`); 204 / missing price = unavailable. Quotes can be two-sided on weekends (WHI-753). |
 
 ### 2.3 Paper edge
 

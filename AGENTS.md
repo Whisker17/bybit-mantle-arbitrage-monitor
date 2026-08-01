@@ -38,15 +38,15 @@ placeholders. Agents must not assume a module exists until its issue lands. -->
     Bybit lead-lag → arb_bot / price_keeper / retail / unknown), pair aggregates
     for M5. Tunables in `config/attribution.yaml`; rules in
     `docs/references/m4-attribution-labels.md`.
-  - **Research WHI-753 landed:** closed/weekend RFQ still two-sided on liquid
-    pairs and tracks Bybit mid — session ≠ mechanism; note in
-    `docs/references/m4-closed-session-rfq.md` + DESIGN / M4 rule updates.
   - **M5 (WHI-734) landed:** `monitor/tui` — Textual live panel (overview table
     + pair detail). Reads collector SQLite; spreads/edge via M3, attribution via
     M4. Tunables in `config/tui.yaml`. Entry: `python -m monitor.tui`.
   - **Retention (WHI-751) landed:** SQLite prune + `bybit_book` → 1m downsample,
     disk waterline (warn/critical), in-collector loop + `python -m monitor.retention`.
     Policy in `config/collector.yaml` `retention:`; design math in DESIGN §5.1.
+  - **Research WHI-753 landed:** closed/weekend RFQ still two-sided on liquid
+    pairs and tracks Bybit mid — session ≠ mechanism; note in
+    `docs/references/m4-closed-session-rfq.md` + DESIGN / M4 rule updates.
   - **Not landed yet:** M6 Web plan doc only.
     Do not assume that module exists until its issue lands.
 

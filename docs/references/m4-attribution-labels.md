@@ -24,12 +24,11 @@ fills that carry a `pair_id`.
 ### Session is not mechanism (WHI-753)
 
 **Do not** map US equity closed / weekend → “AMM-only” at the mechanism layer.
-Mechanism is **always** fill-sourced (LOP vs pool Swap). Closed-session RFQ
-*quotes* remain available for liquid inventory pairs and track Bybit mid
-(`docs/references/m4-closed-session-rfq.md`); that is a quote-regime fact, not
-a redefinition of labels.
-
-Implications:
+Mechanism is **always** fill-sourced (LOP vs pool Swap), independent of
+`SessionKind`. Closed-session RFQ *quotes* remain available for liquid
+inventory pairs and track Bybit mid — evidence and product wording live in
+`docs/references/m4-closed-session-rfq.md` (research note; this section is
+the normative M4 rule).
 
 - Session filters (`open` / `closed` / `all`) only **segment** aggregates; they
   do not rewrite `amm` ↔ `rfq`.
@@ -38,8 +37,6 @@ Implications:
 - `activity_regime` on AMM takers (`all_hours` / `rth_only`) is orthogonal: it
   describes *when those addresses trade the pool*, not whether the RFQ book
   exists outside RTH.
-- Paper edge in closed hours must still score the RFQ column when
-  `FluxionRfqQuoteTick.available` is true — same as open.
 
 ## Behavior layer (AMM takers only)
 

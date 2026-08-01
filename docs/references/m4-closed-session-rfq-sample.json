@@ -1,0 +1,463 @@
+{
+  "collected_at_utc": "2026-08-01T11:23:57.425979+00:00",
+  "session": "closed_weekend",
+  "notional": {
+    "buy_usdc_raw": "100000000",
+    "sell_native_raw": "100000000000000000"
+  },
+  "note": "Single-round slim sample for repo reproducibility (WHI-753). Primary multi-round tables in m4-closed-session-rfq.md from same-day earlier pass.",
+  "pairs": [
+    {
+      "pair_id": "AAPLx",
+      "bybit_mid_native": "307.6503555877677058824023084",
+      "legs": {
+        "buy": {
+          "primary_status": 200,
+          "proxy_status": 200,
+          "price": "309.70414968572044",
+          "keys": [
+            "amountIn",
+            "amountOut",
+            "chainId",
+            "createdAt",
+            "price",
+            "rawAmountOut",
+            "rawPrice",
+            "requestId",
+            "side",
+            "tokenIn",
+            "tokenOut"
+          ],
+          "createdAt": "2026-08-01T11:22:01.221Z",
+          "requestId": "f56718c1-764c-4ff4-9776-0c984b2b3bc7",
+          "proxy_requestId": "1a10057a-6ca9-4099-9250-03a618d4a0b6",
+          "price_equal": true
+        },
+        "sell": {
+          "primary_status": 200,
+          "proxy_status": 200,
+          "price": "305.26390670696",
+          "keys": [
+            "amountIn",
+            "amountOut",
+            "chainId",
+            "createdAt",
+            "price",
+            "rawAmountOut",
+            "rawPrice",
+            "requestId",
+            "side",
+            "tokenIn",
+            "tokenOut"
+          ],
+          "createdAt": "2026-08-01T11:22:06.590Z",
+          "requestId": "63ae7dbe-24c8-46ad-8c4b-7484833b8dee",
+          "proxy_requestId": "7db6c4de-918e-4940-9a1e-50ff3510d94f",
+          "price_equal": true
+        }
+      },
+      "buy_vs_mid_bps": 66.7574101784784,
+      "sell_vs_mid_bps": -77.57016487916557,
+      "rfq_spread_bps": 144.40564619913124,
+      "rfq_mid_vs_bybit_bps": -5.40637735034359
+    },
+    {
+      "pair_id": "CRCLx",
+      "bybit_mid_native": "61.545",
+      "legs": {
+        "buy": {
+          "primary_status": 200,
+          "proxy_status": 200,
+          "price": "61.970902338462636",
+          "keys": [
+            "amountIn",
+            "amountOut",
+            "chainId",
+            "createdAt",
+            "price",
+            "rawAmountOut",
+            "rawPrice",
+            "requestId",
+            "side",
+            "tokenIn",
+            "tokenOut"
+          ],
+          "createdAt": "2026-08-01T11:22:11.455Z",
+          "requestId": "a62fac78-ab5a-4a24-af47-0422cdc12af7",
+          "proxy_requestId": "67ecc224-dcad-4f42-a988-62417f9515f3",
+          "price_equal": true
+        },
+        "sell": {
+          "primary_status": 204,
+          "proxy_status": 204,
+          "price": null,
+          "keys": null,
+          "createdAt": null,
+          "requestId": null,
+          "proxy_requestId": null,
+          "price_equal": null
+        }
+      },
+      "buy_vs_mid_bps": 69.20177731133901
+    },
+    {
+      "pair_id": "GOOGLx",
+      "bybit_mid_native": "353.9280788446727056691096312",
+      "legs": {
+        "buy": {
+          "primary_status": 200,
+          "proxy_status": 200,
+          "price": "356.6460119276398",
+          "keys": [
+            "amountIn",
+            "amountOut",
+            "chainId",
+            "createdAt",
+            "price",
+            "rawAmountOut",
+            "rawPrice",
+            "requestId",
+            "side",
+            "tokenIn",
+            "tokenOut"
+          ],
+          "createdAt": "2026-08-01T11:22:21.514Z",
+          "requestId": "d28c3588-261b-47c2-9d8c-b4d3dfddde8e",
+          "proxy_requestId": "02b47028-d516-49fc-8f43-ed6a73bea28a",
+          "price_equal": true
+        },
+        "sell": {
+          "primary_status": 200,
+          "proxy_status": 200,
+          "price": "351.54434827842107",
+          "keys": [
+            "amountIn",
+            "amountOut",
+            "chainId",
+            "createdAt",
+            "price",
+            "rawAmountOut",
+            "rawPrice",
+            "requestId",
+            "side",
+            "tokenIn",
+            "tokenOut"
+          ],
+          "createdAt": "2026-08-01T11:22:25.560Z",
+          "requestId": "3a8f4b24-6e18-420f-bc81-4742633c1b9f",
+          "proxy_requestId": "50e4ae6d-3ba4-4ae8-b565-fb33ed586569",
+          "price_equal": true
+        }
+      },
+      "buy_vs_mid_bps": 76.79337259251209,
+      "sell_vs_mid_bps": -67.35070509332988,
+      "rfq_spread_bps": 144.07605457194612,
+      "rfq_mid_vs_bybit_bps": 4.721333749591101
+    },
+    {
+      "pair_id": "HOODx",
+      "bybit_mid_native": "86.235",
+      "legs": {
+        "buy": {
+          "primary_status": 200,
+          "proxy_status": 200,
+          "price": "86.8755783741001",
+          "keys": [
+            "amountIn",
+            "amountOut",
+            "chainId",
+            "createdAt",
+            "price",
+            "rawAmountOut",
+            "rawPrice",
+            "requestId",
+            "side",
+            "tokenIn",
+            "tokenOut"
+          ],
+          "createdAt": "2026-08-01T11:22:31.196Z",
+          "requestId": "864ec5be-92e9-49f8-aafa-7e7f8aa3fb81",
+          "proxy_requestId": "e9bc22bc-b2ea-4df0-9d17-f89e2a230d08",
+          "price_equal": true
+        },
+        "sell": {
+          "primary_status": 204,
+          "proxy_status": 204,
+          "price": null,
+          "keys": null,
+          "createdAt": null,
+          "requestId": null,
+          "proxy_requestId": null,
+          "price_equal": null
+        }
+      },
+      "buy_vs_mid_bps": 74.28287517830347
+    },
+    {
+      "pair_id": "METAx",
+      "bybit_mid_native": "554.6752090191298032252770131",
+      "legs": {
+        "buy": {
+          "primary_status": 200,
+          "proxy_status": 200,
+          "price": "558.8611565053944",
+          "keys": [
+            "amountIn",
+            "amountOut",
+            "chainId",
+            "createdAt",
+            "price",
+            "rawAmountOut",
+            "rawPrice",
+            "requestId",
+            "side",
+            "tokenIn",
+            "tokenOut"
+          ],
+          "createdAt": "2026-08-01T11:22:40.588Z",
+          "requestId": "5b47d186-c206-4971-93c7-03fff2284788",
+          "proxy_requestId": "963b20e6-2fdf-4bdc-80bc-9b5ddac7d914",
+          "price_equal": true
+        },
+        "sell": {
+          "primary_status": 200,
+          "proxy_status": 200,
+          "price": "550.9246781231833",
+          "keys": [
+            "amountIn",
+            "amountOut",
+            "chainId",
+            "createdAt",
+            "price",
+            "rawAmountOut",
+            "rawPrice",
+            "requestId",
+            "side",
+            "tokenIn",
+            "tokenOut"
+          ],
+          "createdAt": "2026-08-01T11:22:44.565Z",
+          "requestId": "ce5b37a9-7d26-45c4-8466-a97b8fe82141",
+          "proxy_requestId": "4fd86047-be56-4402-8336-a9d86425f359",
+          "price_equal": true
+        }
+      },
+      "buy_vs_mid_bps": 75.46664098557595,
+      "sell_vs_mid_bps": -67.61670316181652,
+      "rfq_spread_bps": 143.02720641351985,
+      "rfq_mid_vs_bybit_bps": 3.9249689118797155
+    },
+    {
+      "pair_id": "NVDAx",
+      "bybit_mid_native": "199.8415303173685184415662770",
+      "legs": {
+        "buy": {
+          "primary_status": 200,
+          "proxy_status": 200,
+          "price": "201.38298216336278",
+          "keys": [
+            "amountIn",
+            "amountOut",
+            "chainId",
+            "createdAt",
+            "price",
+            "rawAmountOut",
+            "rawPrice",
+            "requestId",
+            "side",
+            "tokenIn",
+            "tokenOut"
+          ],
+          "createdAt": "2026-08-01T11:22:50.364Z",
+          "requestId": "d5f1706c-18a9-4eb9-8bdf-1aee24ece2d7",
+          "proxy_requestId": "276b2cc7-d65d-4014-948e-90f9e69b1c9f",
+          "price_equal": true
+        },
+        "sell": {
+          "primary_status": 200,
+          "proxy_status": 200,
+          "price": "198.43446999760974",
+          "keys": [
+            "amountIn",
+            "amountOut",
+            "chainId",
+            "createdAt",
+            "price",
+            "rawAmountOut",
+            "rawPrice",
+            "requestId",
+            "side",
+            "tokenIn",
+            "tokenOut"
+          ],
+          "createdAt": "2026-08-01T11:22:54.204Z",
+          "requestId": "2044a486-1ada-4935-bf92-9dda09d832bb",
+          "proxy_requestId": "f9ea7bf8-e303-4b6b-9851-839ce69de41a",
+          "price_equal": true
+        }
+      },
+      "buy_vs_mid_bps": 77.13370907169698,
+      "sell_vs_mid_bps": -70.40880429229223,
+      "rfq_spread_bps": 147.4929195720013,
+      "rfq_mid_vs_bybit_bps": 3.362452389702376
+    },
+    {
+      "pair_id": "TSLAx",
+      "bybit_mid_native": "309.77",
+      "legs": {
+        "buy": {
+          "primary_status": 200,
+          "proxy_status": 200,
+          "price": "312.1204751316337",
+          "keys": [
+            "amountIn",
+            "amountOut",
+            "chainId",
+            "createdAt",
+            "price",
+            "rawAmountOut",
+            "rawPrice",
+            "requestId",
+            "side",
+            "tokenIn",
+            "tokenOut"
+          ],
+          "createdAt": "2026-08-01T11:23:00.137Z",
+          "requestId": "8569cfa9-5fc0-4bd2-ac18-f79247c0b644",
+          "proxy_requestId": "3e756f05-412d-47b7-a82b-22428c291053",
+          "price_equal": true
+        },
+        "sell": {
+          "primary_status": 200,
+          "proxy_status": 200,
+          "price": "307.6503173009512",
+          "keys": [
+            "amountIn",
+            "amountOut",
+            "chainId",
+            "createdAt",
+            "price",
+            "rawAmountOut",
+            "rawPrice",
+            "requestId",
+            "side",
+            "tokenIn",
+            "tokenOut"
+          ],
+          "createdAt": "2026-08-01T11:23:04.632Z",
+          "requestId": "2771e176-2cae-49e8-950a-eaa662099ed4",
+          "proxy_requestId": "69ff28eb-269c-4f22-9de6-3804f4061eba",
+          "price_equal": true
+        }
+      },
+      "buy_vs_mid_bps": 75.87807507614359,
+      "sell_vs_mid_bps": -68.42763014652161,
+      "rfq_spread_bps": 144.2519681554286,
+      "rfq_mid_vs_bybit_bps": 3.725222464810989
+    },
+    {
+      "pair_id": "SPCXx",
+      "bybit_mid_native": "108.94",
+      "legs": {
+        "buy": {
+          "primary_status": 204,
+          "proxy_status": 204,
+          "price": null,
+          "keys": null,
+          "createdAt": null,
+          "requestId": null,
+          "proxy_requestId": null,
+          "price_equal": null
+        },
+        "sell": {
+          "primary_status": 204,
+          "proxy_status": 204,
+          "price": null,
+          "keys": null,
+          "createdAt": null,
+          "requestId": null,
+          "proxy_requestId": null,
+          "price_equal": null
+        }
+      }
+    },
+    {
+      "pair_id": "AMZNx",
+      "bybit_mid_native": "269.575",
+      "legs": {
+        "buy": {
+          "primary_status": 204,
+          "proxy_status": 204,
+          "price": null,
+          "keys": null,
+          "createdAt": null,
+          "requestId": null,
+          "proxy_requestId": null,
+          "price_equal": null
+        },
+        "sell": {
+          "primary_status": 204,
+          "proxy_status": 204,
+          "price": null,
+          "keys": null,
+          "createdAt": null,
+          "requestId": null,
+          "proxy_requestId": null,
+          "price_equal": null
+        }
+      }
+    },
+    {
+      "pair_id": "COINx",
+      "bybit_mid_native": "146.365",
+      "legs": {
+        "buy": {
+          "primary_status": 204,
+          "proxy_status": 204,
+          "price": null,
+          "keys": null,
+          "createdAt": null,
+          "requestId": null,
+          "proxy_requestId": null,
+          "price_equal": null
+        },
+        "sell": {
+          "primary_status": 204,
+          "proxy_status": 204,
+          "price": null,
+          "keys": null,
+          "createdAt": null,
+          "requestId": null,
+          "proxy_requestId": null,
+          "price_equal": null
+        }
+      }
+    },
+    {
+      "pair_id": "MCDx",
+      "bybit_mid_native": "266.3506576304982720294458645",
+      "legs": {
+        "buy": {
+          "primary_status": 204,
+          "proxy_status": 204,
+          "price": null,
+          "keys": null,
+          "createdAt": null,
+          "requestId": null,
+          "proxy_requestId": null,
+          "price_equal": null
+        },
+        "sell": {
+          "primary_status": 204,
+          "proxy_status": 204,
+          "price": null,
+          "keys": null,
+          "createdAt": null,
+          "requestId": null,
+          "proxy_requestId": null,
+          "price_equal": null
+        }
+      }
+    }
+  ]
+}
