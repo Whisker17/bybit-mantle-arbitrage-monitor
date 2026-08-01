@@ -127,9 +127,8 @@ class MetricsConfig(BaseModel):
     # Max inter-sample gap counted toward breach duration (ms). Larger gaps
     # (overnight, collector restart) do not inflate session-segmented duration.
     max_breach_gap_ms: int = Field(default=300_000, ge=1)
-    # PnL v2 cash-flow engine (WHI-756). Optional for backward-compat fixtures;
-    # checked-in config/metrics.yaml always supplies it.
-    pnl_v2: PnlV2Config | None = None
+    # PnL v2 cash-flow engine (WHI-756). Required — fail-fast at load (config/README).
+    pnl_v2: PnlV2Config
 
     @field_validator(
         "size_ladder_usd",
@@ -166,14 +165,6 @@ class MetricsConfig(BaseModel):
                 f"size_ladder_usd={self.size_ladder_usd}"
             )
         return self
-
-    def require_pnl_v2(self) -> PnlV2Config:
-        if self.pnl_v2 is None:
-            raise MetricsConfigError(
-                "metrics config missing pnl_v2 section (required for PnL v2 engine)"
-            )
-        return self.pnl_v2
-
 
 def _hhmm_to_minutes(hhmm: str) -> int:
     hours, minutes = hhmm.split(":")

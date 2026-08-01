@@ -9,6 +9,14 @@ import pytest
 
 from monitor.metrics import MetricsConfigError, default_metrics_path, load_metrics_config
 
+# Minimal valid pnl_v2 block for negative-path fixtures.
+_PNL_V2 = """\
+pnl_v2:
+  buckets_usd: [10, 50, 100, 500, 1000, 10000]
+  q_min_usd: 10
+  config_cap_usd: 10000
+"""
+
 
 def test_default_metrics_path_points_at_repo_config() -> None:
     path = default_metrics_path()
@@ -41,7 +49,7 @@ def test_reject_breach_size_not_on_ladder(tmp_path: Path) -> None:
     p = tmp_path / "metrics.yaml"
     p.write_text(
         dedent(
-            """\
+            f"""\
             version: 1
             size_ladder_usd: [1000, 5000]
             bybit_taker_fee_bps: 10
@@ -52,6 +60,7 @@ def test_reject_breach_size_not_on_ladder(tmp_path: Path) -> None:
               open: "09:30"
               close: "16:00"
               early_close: "13:00"
+            {_PNL_V2}
             """
         ),
         encoding="utf-8",
@@ -64,7 +73,7 @@ def test_reject_non_ascending_ladder(tmp_path: Path) -> None:
     p = tmp_path / "metrics.yaml"
     p.write_text(
         dedent(
-            """\
+            f"""\
             version: 1
             size_ladder_usd: [5000, 1000]
             bybit_taker_fee_bps: 10
@@ -75,9 +84,33 @@ def test_reject_non_ascending_ladder(tmp_path: Path) -> None:
               open: "09:30"
               close: "16:00"
               early_close: "13:00"
+            {_PNL_V2}
             """
         ),
         encoding="utf-8",
     )
     with pytest.raises(MetricsConfigError, match="ascending"):
+        load_metrics_config(p)
+
+
+def test_reject_missing_pnl_v2(tmp_path: Path) -> None:
+    p = tmp_path / "metrics.yaml"
+    p.write_text(
+        dedent(
+            """\
+            version: 1
+            size_ladder_usd: [1000, 5000]
+            bybit_taker_fee_bps: 10
+            gas_usd_per_swap: 0.01
+            breach_size_usd: 1000
+            session:
+              timezone: America/New_York
+              open: "09:30"
+              close: "16:00"
+              early_close: "13:00"
+            """
+        ),
+        encoding="utf-8",
+    )
+    with pytest.raises(MetricsConfigError, match="pnl_v2"):
         load_metrics_config(p)

@@ -20,10 +20,10 @@ from monitor.metrics.amm_slip import (
     amm_quote_in_for_base_out,
     amm_quote_out_for_base_in,
 )
+from monitor.metrics.bybit_slip import BPS
 from monitor.metrics.config import MetricsConfig, PnlV2Config
 from monitor.metrics.edge import Direction, VenueKind, mid_from_bid_ask
 
-BPS = Decimal(10_000)
 DepthSource = Literal["l1", "book"]
 
 # Sentinel for unfillable samples inside the optimal-size search.
@@ -225,6 +225,67 @@ def _bybit_vwap(
     return px, "l1"
 
 
+@dataclass(frozen=True, slots=True)
+class _BybitLegCash:
+    """Bybit cash after received-asset fee + slip vs mid (USD)."""
+
+    cash_usd: Decimal  # recv for sell, spent for buy
+    fee_usd: Decimal
+    slip_usd: Decimal
+    depth_source: DepthSource
+
+
+def _bybit_sell_cash(
+    *,
+    bid: Decimal,
+    ask: Decimal,
+    bybit_mid: Decimal,
+    q: Decimal,
+    f_b: Decimal,
+    depth: list[tuple[Decimal, Decimal]] | None,
+) -> _BybitLegCash | None:
+    """Sell net base ``q`` into bids; returns USDT received after fee."""
+    vwap_res = _bybit_vwap(
+        bid=bid, ask=ask, base_qty=q, side="bid", depth=depth
+    )
+    if vwap_res is None:
+        return None
+    p_bid, depth_src = vwap_res
+    fee = q * p_bid * f_b
+    recv = q * p_bid * (1 - f_b)
+    slip = q * (bybit_mid - p_bid) if bybit_mid > p_bid else Decimal(0)
+    return _BybitLegCash(
+        cash_usd=recv, fee_usd=fee, slip_usd=slip, depth_source=depth_src
+    )
+
+
+def _bybit_buy_cash(
+    *,
+    bid: Decimal,
+    ask: Decimal,
+    bybit_mid: Decimal,
+    q: Decimal,
+    f_b: Decimal,
+    depth: list[tuple[Decimal, Decimal]] | None,
+) -> _BybitLegCash | None:
+    """Buy so **net** base is ``q`` after fee-in-base; returns USDT spent."""
+    if f_b >= 1:
+        return None
+    q_gross = q / (1 - f_b)
+    vwap_res = _bybit_vwap(
+        bid=bid, ask=ask, base_qty=q_gross, side="ask", depth=depth
+    )
+    if vwap_res is None:
+        return None
+    p_ask, depth_src = vwap_res
+    spent = q_gross * p_ask
+    fee = spent - q * p_ask
+    slip = q_gross * (p_ask - bybit_mid) if p_ask > bybit_mid else Decimal(0)
+    return _BybitLegCash(
+        cash_usd=spent, fee_usd=fee, slip_usd=slip, depth_source=depth_src
+    )
+
+
 def _amm_buy_cash(
     amm: AmmPoolState,
     q: Decimal,
@@ -298,7 +359,7 @@ def compute_pnl_usd(
     Depth lists must be de-multiplied ``(price, size)`` ordered best-first.
     Without depth, L1 bid/ask are used (infinite size at top).
     """
-    pnl_cfg = config.require_pnl_v2()
+    pnl_cfg = config.pnl_v2
     if bybit_bid <= 0 or bybit_ask <= 0:
         return _unfillable_result(
             pair_id=pair_id,
@@ -443,14 +504,15 @@ def _pnl_buy_fluxion_sell_bybit(
         )
     usdc_spent, flux_fee, flux_slip = amm_cash
 
-    vwap_res = _bybit_vwap(
+    bybit = _bybit_sell_cash(
         bid=bybit_bid,
         ask=bybit_ask,
-        base_qty=q,
-        side="bid",
+        bybit_mid=bybit_mid,
+        q=q,
+        f_b=f_b,
         depth=bybit_bids,
     )
-    if vwap_res is None:
+    if bybit is None:
         return _unfillable_result(
             pair_id=pair_id,
             venue="amm",
@@ -464,15 +526,11 @@ def _pnl_buy_fluxion_sell_bybit(
             pnl_cfg=pnl_cfg,
             gas=gas,
         )
-    p_bid, depth_src = vwap_res
-    usdt_recv = q * p_bid * (1 - f_b)
-    bybit_fee = q * p_bid * f_b
-    bybit_slip = q * (bybit_mid - p_bid) if bybit_mid > p_bid else Decimal(0)
 
-    pnl_usd = usdt_recv - usdc_spent - gas - basis
+    pnl_usd = bybit.cash_usd - usdc_spent - gas - basis
     costs = PnlCostBreakdownUsd(
-        bybit_fee_usd=bybit_fee,
-        bybit_slip_usd=bybit_slip,
+        bybit_fee_usd=bybit.fee_usd,
+        bybit_slip_usd=bybit.slip_usd,
         fluxion_fee_usd=flux_fee,
         fluxion_slip_usd=flux_slip,
         gas_usd=gas,
@@ -486,11 +544,11 @@ def _pnl_buy_fluxion_sell_bybit(
         q_base=q,
         bybit_mid=bybit_mid,
         spent_usd=usdc_spent,
-        recv_usd=usdt_recv,
+        recv_usd=bybit.cash_usd,
         pnl_usd=pnl_usd,
         fillable=True,
         costs=costs,
-        bybit_depth_source=depth_src,
+        bybit_depth_source=bybit.depth_source,
         reason=None,
         meets_min_profit=_meets_min_profit(
             pnl_cfg, pnl_usd=pnl_usd, size_usd=size_usd, fillable=True
@@ -514,29 +572,16 @@ def _pnl_buy_bybit_sell_fluxion(
     amm: AmmPoolState,
     bybit_asks: list[tuple[Decimal, Decimal]] | None,
 ) -> PnlResult:
-    if f_b >= 1:
-        return _unfillable_result(
-            pair_id=pair_id,
-            venue="amm",
-            direction="buy_bybit_sell_fluxion",
-            size_usd=size_usd,
-            q_base=q,
-            bybit_mid=bybit_mid,
-            reason="invalid_fee",
-            depth_source="book" if bybit_asks is not None else "l1",
-            config=config,
-            pnl_cfg=pnl_cfg,
-            gas=gas,
-        )
-    q_gross = q / (1 - f_b)
-    vwap_res = _bybit_vwap(
+    bybit = _bybit_buy_cash(
         bid=bybit_bid,
         ask=bybit_ask,
-        base_qty=q_gross,
-        side="ask",
+        bybit_mid=bybit_mid,
+        q=q,
+        f_b=f_b,
         depth=bybit_asks,
     )
-    if vwap_res is None:
+    if bybit is None:
+        reason = "invalid_fee" if f_b >= 1 else "bybit_book_unfillable"
         return _unfillable_result(
             pair_id=pair_id,
             venue="amm",
@@ -544,16 +589,12 @@ def _pnl_buy_bybit_sell_fluxion(
             size_usd=size_usd,
             q_base=q,
             bybit_mid=bybit_mid,
-            reason="bybit_book_unfillable",
+            reason=reason,
             depth_source="book" if bybit_asks is not None else "l1",
             config=config,
             pnl_cfg=pnl_cfg,
             gas=gas,
         )
-    p_ask, depth_src = vwap_res
-    usdt_spent = q_gross * p_ask
-    bybit_fee = usdt_spent - q * p_ask  # = q * p_ask * f_b / (1 - f_b)
-    bybit_slip = q_gross * (p_ask - bybit_mid) if p_ask > bybit_mid else Decimal(0)
 
     amm_cash = _amm_sell_cash(amm, q)
     if amm_cash is None:
@@ -565,16 +606,16 @@ def _pnl_buy_bybit_sell_fluxion(
             q_base=q,
             bybit_mid=bybit_mid,
             reason="unfillable_or_range_exhausted",
-            depth_source=depth_src,
+            depth_source=bybit.depth_source,
             config=config,
             pnl_cfg=pnl_cfg,
             gas=gas,
         )
     usdc_recv, flux_fee, flux_slip = amm_cash
-    pnl_usd = usdc_recv - usdt_spent - gas - basis
+    pnl_usd = usdc_recv - bybit.cash_usd - gas - basis
     costs = PnlCostBreakdownUsd(
-        bybit_fee_usd=bybit_fee,
-        bybit_slip_usd=bybit_slip,
+        bybit_fee_usd=bybit.fee_usd,
+        bybit_slip_usd=bybit.slip_usd,
         fluxion_fee_usd=flux_fee,
         fluxion_slip_usd=flux_slip,
         gas_usd=gas,
@@ -587,12 +628,12 @@ def _pnl_buy_bybit_sell_fluxion(
         size_usd=size_usd,
         q_base=q,
         bybit_mid=bybit_mid,
-        spent_usd=usdt_spent,
+        spent_usd=bybit.cash_usd,
         recv_usd=usdc_recv,
         pnl_usd=pnl_usd,
         fillable=True,
         costs=costs,
-        bybit_depth_source=depth_src,
+        bybit_depth_source=bybit.depth_source,
         reason=None,
         meets_min_profit=_meets_min_profit(
             pnl_cfg, pnl_usd=pnl_usd, size_usd=size_usd, fillable=True
@@ -649,14 +690,15 @@ def _pnl_rfq(
         q = rfq.amount_out
         size_usd = q * bybit_mid
         basis = _basis_usd(config, size_usd)
-        vwap_res = _bybit_vwap(
+        bybit = _bybit_sell_cash(
             bid=bybit_bid,
             ask=bybit_ask,
-            base_qty=q,
-            side="bid",
+            bybit_mid=bybit_mid,
+            q=q,
+            f_b=f_b,
             depth=bybit_bids,
         )
-        if vwap_res is None:
+        if bybit is None:
             return _unfillable_result(
                 pair_id=pair_id,
                 venue="rfq",
@@ -670,14 +712,10 @@ def _pnl_rfq(
                 pnl_cfg=pnl_cfg,
                 gas=gas,
             )
-        p_bid, depth_src = vwap_res
-        usdt_recv = q * p_bid * (1 - f_b)
-        bybit_fee = q * p_bid * f_b
-        bybit_slip = q * (bybit_mid - p_bid) if bybit_mid > p_bid else Decimal(0)
-        pnl_usd = usdt_recv - usdc_spent - gas - basis
+        pnl_usd = bybit.cash_usd - usdc_spent - gas - basis
         costs = PnlCostBreakdownUsd(
-            bybit_fee_usd=bybit_fee,
-            bybit_slip_usd=bybit_slip,
+            bybit_fee_usd=bybit.fee_usd,
+            bybit_slip_usd=bybit.slip_usd,
             fluxion_fee_usd=Decimal(0),
             fluxion_slip_usd=Decimal(0),
             gas_usd=gas,
@@ -691,11 +729,11 @@ def _pnl_rfq(
             q_base=q,
             bybit_mid=bybit_mid,
             spent_usd=usdc_spent,
-            recv_usd=usdt_recv,
+            recv_usd=bybit.cash_usd,
             pnl_usd=pnl_usd,
             fillable=True,
             costs=costs,
-            bybit_depth_source=depth_src,
+            bybit_depth_source=bybit.depth_source,
             meets_min_profit=_meets_min_profit(
                 pnl_cfg, pnl_usd=pnl_usd, size_usd=size_usd, fillable=True
             ),
@@ -720,29 +758,16 @@ def _pnl_rfq(
     usdc_recv = rfq.amount_out
     size_usd = q * bybit_mid
     basis = _basis_usd(config, size_usd)
-    if f_b >= 1:
-        return _unfillable_result(
-            pair_id=pair_id,
-            venue="rfq",
-            direction=direction,
-            size_usd=size_usd,
-            q_base=q,
-            bybit_mid=bybit_mid,
-            reason="invalid_fee",
-            depth_source="l1",
-            config=config,
-            pnl_cfg=pnl_cfg,
-            gas=gas,
-        )
-    q_gross = q / (1 - f_b)
-    vwap_res = _bybit_vwap(
+    bybit = _bybit_buy_cash(
         bid=bybit_bid,
         ask=bybit_ask,
-        base_qty=q_gross,
-        side="ask",
+        bybit_mid=bybit_mid,
+        q=q,
+        f_b=f_b,
         depth=bybit_asks,
     )
-    if vwap_res is None:
+    if bybit is None:
+        reason = "invalid_fee" if f_b >= 1 else "bybit_book_unfillable"
         return _unfillable_result(
             pair_id=pair_id,
             venue="rfq",
@@ -750,20 +775,16 @@ def _pnl_rfq(
             size_usd=size_usd,
             q_base=q,
             bybit_mid=bybit_mid,
-            reason="bybit_book_unfillable",
+            reason=reason,
             depth_source="book" if bybit_asks is not None else "l1",
             config=config,
             pnl_cfg=pnl_cfg,
             gas=gas,
         )
-    p_ask, depth_src = vwap_res
-    usdt_spent = q_gross * p_ask
-    bybit_fee = usdt_spent - q * p_ask
-    bybit_slip = q_gross * (p_ask - bybit_mid) if p_ask > bybit_mid else Decimal(0)
-    pnl_usd = usdc_recv - usdt_spent - gas - basis
+    pnl_usd = usdc_recv - bybit.cash_usd - gas - basis
     costs = PnlCostBreakdownUsd(
-        bybit_fee_usd=bybit_fee,
-        bybit_slip_usd=bybit_slip,
+        bybit_fee_usd=bybit.fee_usd,
+        bybit_slip_usd=bybit.slip_usd,
         fluxion_fee_usd=Decimal(0),
         fluxion_slip_usd=Decimal(0),
         gas_usd=gas,
@@ -776,12 +797,12 @@ def _pnl_rfq(
         size_usd=size_usd,
         q_base=q,
         bybit_mid=bybit_mid,
-        spent_usd=usdt_spent,
+        spent_usd=bybit.cash_usd,
         recv_usd=usdc_recv,
         pnl_usd=pnl_usd,
         fillable=True,
         costs=costs,
-        bybit_depth_source=depth_src,
+        bybit_depth_source=bybit.depth_source,
         meets_min_profit=_meets_min_profit(
             pnl_cfg, pnl_usd=pnl_usd, size_usd=size_usd, fillable=True
         ),
@@ -802,7 +823,7 @@ def pnl_bucket_table(
     include_optimal: bool = True,
 ) -> PnlBucketTable:
     """Fixed AMM bucket PnL rows (+ optional RFQ poll rows and optimal size)."""
-    pnl_cfg = config.require_pnl_v2()
+    pnl_cfg = config.pnl_v2
     if amm is None:
         raise ValueError("pnl_bucket_table requires AmmPoolState for AMM buckets")
 
@@ -986,7 +1007,7 @@ def optimal_size(
 
     Does **not** assume concavity. Claim: best among evaluated samples only.
     """
-    pnl_cfg = config.require_pnl_v2()
+    pnl_cfg = config.pnl_v2
     if bybit_bid <= 0 or bybit_ask <= 0:
         return None
     bybit_mid = mid_from_bid_ask(bybit_bid, bybit_ask)

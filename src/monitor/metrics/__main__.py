@@ -16,7 +16,6 @@ import json
 import sys
 from decimal import Decimal
 
-from monitor.fluxion.pools import mid_from_sqrt_price_x96
 from monitor.metrics.amm_pool import AmmPoolState
 from monitor.metrics.config import load_metrics_config
 from monitor.metrics.edge import Direction
@@ -26,13 +25,6 @@ from monitor.metrics.pnl_v2 import pnl_bucket_table
 def _pool(mid: Decimal, pool_fee: int) -> AmmPoolState:
     ratio = Decimal(10) ** 12 / mid
     sqrt_price_x96 = int(ratio.sqrt() * Decimal(2**96))
-    # Verify reconstructable.
-    _ = mid_from_sqrt_price_x96(
-        sqrt_price_x96,
-        token0_is_quote=True,
-        token0_decimals=6,
-        token1_decimals=18,
-    )
     return AmmPoolState(
         pool_fee=pool_fee,
         sqrt_price_x96=sqrt_price_x96,

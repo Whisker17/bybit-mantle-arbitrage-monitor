@@ -26,6 +26,12 @@ FluxionLeg = Literal["buy", "sell"]
 # Cap price move within one range step: refuse fills that move sqrt price by
 # more than this fraction of current sqrtP (safety rail vs silent understate).
 _MAX_SQRT_MOVE_FRAC = Decimal("0.5")
+# Binary-search bracket expansion (numerical method, not product knobs).
+_SOLVE_HI_EXPAND_MAX = 48
+_SOLVE_LO_SHRINK_MAX = 32
+_SOLVE_HI_SEED_MULT = Decimal("1.5")
+_SOLVE_LO_SEED_MULT = Decimal("0.5")
+_SOLVE_HI_ABORT_MID_MULT = Decimal(1000)
 
 
 @dataclass(frozen=True, slots=True)
@@ -332,8 +338,8 @@ def amm_quote_in_for_base_out(
     fee_factor = Decimal(1_000_000 - fee) / Decimal(1_000_000) if fee else Decimal(1)
     if fee_factor <= 0:
         return None
-    lo = base_out * mid * Decimal("0.5")
-    hi = base_out * mid / fee_factor * Decimal("1.5")
+    lo = base_out * mid * _SOLVE_LO_SEED_MULT
+    hi = base_out * mid / fee_factor * _SOLVE_HI_SEED_MULT
     if lo <= 0:
         lo = Decimal("1e-12")
 
@@ -342,11 +348,11 @@ def amm_quote_in_for_base_out(
 
     # Expand hi until fillable and base_out_at(hi) >= target (or give up).
     expanded = 0
-    while expanded < 48:
+    while expanded < _SOLVE_HI_EXPAND_MAX:
         got = _base_at(hi)
         if got is not None and got >= base_out:
             break
-        if got is None and hi > base_out * mid * Decimal(1000):
+        if got is None and hi > base_out * mid * _SOLVE_HI_ABORT_MID_MULT:
             return None
         hi *= 2
         expanded += 1
@@ -356,15 +362,13 @@ def amm_quote_in_for_base_out(
     # Ensure lo is below target (may already overshoot on tiny pools).
     got_lo = _base_at(lo)
     if got_lo is not None and got_lo >= base_out:
-        # Even lo fills — shrink lo toward 0.
         lo = lo / 2 if lo > 0 else Decimal("1e-18")
-        for _ in range(32):
+        for _ in range(_SOLVE_LO_SHRINK_MAX):
             got_lo = _base_at(lo)
             if got_lo is None or got_lo < base_out:
                 break
             lo = lo / 2
 
-    best_quote: Decimal | None = None
     for _ in range(max_iters):
         mid_q = (lo + hi) / 2
         got = _base_at(mid_q)
@@ -378,16 +382,11 @@ def amm_quote_in_for_base_out(
         if got < base_out:
             lo = mid_q
         else:
-            best_quote = mid_q
             hi = mid_q
 
-    # Accept last overshooting quote if within a looser band, else fail.
-    if best_quote is not None:
-        got = _base_at(best_quote)
-        if got is not None and abs(got - base_out) / base_out <= q_tol_rel * 10:
-            return best_quote
-    # Final check at hi (should be the first covering quote).
-    got_hi = _base_at(hi)
-    if got_hi is not None and abs(got_hi - base_out) / base_out <= q_tol_rel * 10:
-        return hi
+    # Strict termination (hummingbot-pnl §5): within q_tol_rel or unfillable.
+    for candidate in (hi, lo, (lo + hi) / 2):
+        got = _base_at(candidate)
+        if got is not None and abs(got - base_out) / base_out <= q_tol_rel:
+            return candidate
     return None

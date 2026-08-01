@@ -208,7 +208,7 @@ def test_bucket_table_six_rungs_hand_recompute() -> None:
     )
     assert len(table.amm_buckets) == 6
     sizes = [r.size_usd for r in table.amm_buckets]
-    assert sizes == cfg.require_pnl_v2().buckets_usd
+    assert sizes == cfg.pnl_v2.buckets_usd
     for r in table.amm_buckets:
         assert r.fillable
         assert r.costs.gas_usd == Decimal("0.01")
