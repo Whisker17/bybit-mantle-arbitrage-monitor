@@ -50,3 +50,32 @@ rfq:
 
 logging:
   level: INFO
+
+# Data retention (WHI-751). Bounds SQLite growth on small VPS disks.
+# Derivation + consumer windows: docs/DESIGN.md §5.1.
+retention:
+  enabled: true
+  # Collector background interval; also run once via `python -m monitor.retention`.
+  interval_s: 3600
+  # Raw TTLs (milliseconds from now). null = never prune.
+  # bybit_book is the bulk; keep ≥ max(TUI edge_history cold-start, sparkline).
+  bybit_book_raw_ms: 172800000      # 2 days raw L1
+  bybit_book_1m_ms: 1209600000      # 14 days of 1-minute bars after downsample
+  bybit_trades_ms: 604800000        # 7 days (≥ TUI 24h volume window)
+  fluxion_pool_state_ms: 604800000  # 7 days (edge rebuild / sparkline)
+  fluxion_rfq_quotes_ms: 259200000  # 3 days
+  fluxion_swaps_ms: null            # permanent — M4 attribution feedstock
+  fluxion_rfq_fills_ms: null        # permanent — M4 attribution feedstock
+  collector_gaps_ms: 2592000000     # 30 days
+  delete_batch_size: 5000
+  # After DELETE, free pages for reuse; pages=0 skips. Full VACUUM is opt-in.
+  incremental_vacuum_pages: 1000
+  full_vacuum: false
+  disk:
+    # Free-space probe path; null = parent directory of sqlite_path.
+    path: null
+    warn_free_bytes: 2147483648       # 2 GiB — accelerate TTLs
+    critical_free_bytes: 1073741824   # 1 GiB — emergency TTLs + pause book writes
+    warn_ttl_factor: 0.25
+    critical_ttl_factor: 0.05
+    pause_book_writes_on_critical: true

@@ -80,6 +80,84 @@ class LoggingConfig(BaseModel):
     level: Literal["DEBUG", "INFO", "WARNING", "ERROR"] = "INFO"
 
 
+class DiskGuardConfig(BaseModel):
+    """Free-disk waterline for accelerated prune / write pause (WHI-751)."""
+
+    model_config = ConfigDict(extra="forbid", frozen=True)
+
+    path: str | None = None
+    warn_free_bytes: int = Field(ge=0)
+    critical_free_bytes: int = Field(ge=0)
+    warn_ttl_factor: float = Field(gt=0, le=1)
+    critical_ttl_factor: float = Field(gt=0, le=1)
+    pause_book_writes_on_critical: bool = True
+
+    @model_validator(mode="after")
+    def _levels(self) -> DiskGuardConfig:
+        if self.critical_free_bytes > self.warn_free_bytes:
+            raise ValueError(
+                f"critical_free_bytes={self.critical_free_bytes} must be <= "
+                f"warn_free_bytes={self.warn_free_bytes}"
+            )
+        if self.critical_ttl_factor > self.warn_ttl_factor:
+            raise ValueError(
+                f"critical_ttl_factor={self.critical_ttl_factor} must be <= "
+                f"warn_ttl_factor={self.warn_ttl_factor}"
+            )
+        return self
+
+
+class RetentionConfig(BaseModel):
+    """SQLite retention policy — bounds journal growth (WHI-751 / DESIGN §5.1)."""
+
+    model_config = ConfigDict(extra="forbid", frozen=True)
+
+    enabled: bool = True
+    interval_s: float = Field(default=3600.0, gt=0)
+    # None = never prune that table.
+    bybit_book_raw_ms: int | None = Field(default=172_800_000, ge=1)  # 2d
+    bybit_book_1m_ms: int | None = Field(default=1_209_600_000, ge=1)  # 14d
+    bybit_trades_ms: int | None = Field(default=604_800_000, ge=1)  # 7d
+    fluxion_pool_state_ms: int | None = Field(default=604_800_000, ge=1)
+    fluxion_rfq_quotes_ms: int | None = Field(default=259_200_000, ge=1)  # 3d
+    fluxion_swaps_ms: int | None = Field(default=None, ge=1)
+    fluxion_rfq_fills_ms: int | None = Field(default=None, ge=1)
+    collector_gaps_ms: int | None = Field(default=2_592_000_000, ge=1)  # 30d
+    delete_batch_size: int = Field(default=5000, ge=1, le=100_000)
+    incremental_vacuum_pages: int = Field(default=1000, ge=0)
+    full_vacuum: bool = False
+    disk: DiskGuardConfig = Field(
+        default_factory=lambda: DiskGuardConfig(
+            path=None,
+            warn_free_bytes=2_147_483_648,
+            critical_free_bytes=1_073_741_824,
+            warn_ttl_factor=0.25,
+            critical_ttl_factor=0.05,
+            pause_book_writes_on_critical=True,
+        )
+    )
+
+    @model_validator(mode="after")
+    def _bar_vs_raw(self) -> RetentionConfig:
+        raw = self.bybit_book_raw_ms
+        bars = self.bybit_book_1m_ms
+        if raw is not None and bars is not None and bars < raw:
+            raise ValueError(
+                f"bybit_book_1m_ms={bars} must be >= bybit_book_raw_ms={raw} "
+                "(bars cover the pruned raw window and beyond)"
+            )
+        return self
+
+
+def default_retention_config() -> RetentionConfig:
+    """Fallback when YAML omits ``retention:`` (tests / partial configs).
+
+    Production values are the checked-in ``config/collector.yaml`` block —
+    edit that file, not these Python field defaults, for deploy tuning.
+    """
+    return RetentionConfig()
+
+
 class CollectorConfig(BaseModel):
     model_config = ConfigDict(extra="forbid", frozen=True)
 
@@ -89,6 +167,7 @@ class CollectorConfig(BaseModel):
     mantle: MantleCollectorConfig
     rfq: RfqCollectorConfig
     logging: LoggingConfig
+    retention: RetentionConfig = Field(default_factory=default_retention_config)
 
     def resolved_sqlite_path(self, repo_root: Path | None = None) -> Path:
         root = repo_root if repo_root is not None else _REPO_ROOT

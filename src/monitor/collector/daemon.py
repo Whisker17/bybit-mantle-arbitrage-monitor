@@ -56,6 +56,13 @@ class CollectorDaemon:
         )
         self._stop = asyncio.Event()
         self._rfq_gap = False
+        # Set by retention loop under disk-critical waterline (WHI-751).
+        self._book_writes_paused = False
+        self._book_pause_logged = False
+        self._book_pause_started_ms: int | None = None
+        # After resume, mark all pairs' books gap=1 until this wall-clock ms
+        # (mirrors BybitWsCollector post-reconnect gap window).
+        self._book_gap_until_ms: int = 0
 
     def request_stop(self) -> None:
         self._stop.set()
@@ -87,15 +94,18 @@ class CollectorDaemon:
             asyncio.create_task(bybit.run(), name="bybit_ws"),
             asyncio.create_task(self._chain_loop(), name="mantle_chain"),
             asyncio.create_task(self._rfq_loop(), name="rfq_poll"),
+            asyncio.create_task(self._retention_loop(), name="retention"),
         ]
         self.store.set_meta("collector_started_ms", str(now_ms()))
         self.store.set_meta("rpc_url_kind", rpc_url_kind(self.rpc_url))
         logger.info(
-            "collector started pairs=%d amm_pools=%d sqlite=%s rpc_kind=%s",
+            "collector started pairs=%d amm_pools=%d sqlite=%s rpc_kind=%s "
+            "retention=%s",
             len(self.pairs.pairs),
             len(self.pairs.pairs_with_amm()),
             self.store.path,
             rpc_url_kind(self.rpc_url),
+            self.cfg.retention.enabled,
         )
         try:
             await self._stop.wait()
@@ -104,10 +114,44 @@ class CollectorDaemon:
             for t in tasks:
                 t.cancel()
             await asyncio.gather(*tasks, return_exceptions=True)
+            # If we shut down while disk-critical, still record the pause window.
+            if self._book_writes_paused and self._book_pause_started_ms is not None:
+                end = now_ms()
+                self.store.insert_gap(
+                    CollectorGap(
+                        source="disk_critical",
+                        gap_start_ms=self._book_pause_started_ms,
+                        gap_end_ms=end,
+                        detail="collector stopped while bybit_book writes paused",
+                    )
+                )
             self.store.set_meta("collector_stopped_ms", str(now_ms()))
             logger.info("collector stopped")
 
     async def _on_book(self, tick: BybitBookTick) -> None:
+        if self._book_writes_paused:
+            # One log line per pause episode — not per tick (~7+/s).
+            if not self._book_pause_logged:
+                logger.error(
+                    "skip bybit_book writes: disk critical (retention pause active)"
+                )
+                self._book_pause_logged = True
+            return
+        if tick.recv_ts_ms < self._book_gap_until_ms or (
+            not tick.gap and now_ms() < self._book_gap_until_ms
+        ):
+            tick = BybitBookTick(
+                pair_id=tick.pair_id,
+                symbol=tick.symbol,
+                exchange_ts_ms=tick.exchange_ts_ms,
+                recv_ts_ms=tick.recv_ts_ms,
+                bid=tick.bid,
+                ask=tick.ask,
+                bid_de_multiplied=tick.bid_de_multiplied,
+                ask_de_multiplied=tick.ask_de_multiplied,
+                multiplier=tick.multiplier,
+                gap=True,
+            )
         await asyncio.to_thread(self.store.insert_bybit_book, [tick])
 
     async def _on_trade(self, tick: BybitTradeTick) -> None:
@@ -234,6 +278,65 @@ class CollectorDaemon:
                     pass
         finally:
             poller.close()
+
+    async def _retention_loop(self) -> None:
+        """Periodic prune under the store lock (WHI-751)."""
+        cfg = self.cfg.retention
+        if not cfg.enabled:
+            logger.info("retention disabled in collector.yaml")
+            return
+        # First pass shortly after boot so a full disk is addressed without
+        # waiting a full interval; subsequent passes honor interval_s.
+        first = True
+        while not self._stop.is_set():
+            if not first:
+                try:
+                    await asyncio.wait_for(self._stop.wait(), timeout=cfg.interval_s)
+                    break
+                except TimeoutError:
+                    pass
+            first = False
+            try:
+                was_paused = self._book_writes_paused
+                report = await asyncio.to_thread(
+                    self.store.run_retention, cfg, now_ms=now_ms()
+                )
+                self._book_writes_paused = report.book_writes_paused
+                if report.book_writes_paused and not was_paused:
+                    self._book_pause_logged = False
+                    self._book_pause_started_ms = report.now_ms
+                    logger.error(
+                        "disk critical free=%s — bybit_book writes paused until "
+                        "retention frees space",
+                        report.free_bytes,
+                    )
+                elif not report.book_writes_paused and was_paused:
+                    start = self._book_pause_started_ms or report.now_ms
+                    self._book_pause_logged = False
+                    self._book_pause_started_ms = None
+                    # Cover all pairs for a few seconds (same idea as WS reconnect).
+                    self._book_gap_until_ms = report.now_ms + 5_000
+                    await asyncio.to_thread(
+                        self.store.insert_gap,
+                        CollectorGap(
+                            source="disk_critical",
+                            gap_start_ms=start,
+                            gap_end_ms=report.now_ms,
+                            detail=(
+                                f"bybit_book writes resumed free={report.free_bytes}"
+                            ),
+                        ),
+                    )
+                    logger.info("disk recovered — bybit_book writes resumed")
+                elif report.disk_level != "ok":
+                    logger.warning(
+                        "disk %s free=%s deleted=%s",
+                        report.disk_level,
+                        report.free_bytes,
+                        report.deleted,
+                    )
+            except Exception as exc:  # noqa: BLE001
+                logger.exception("retention error: %s", exc)
 
 
 def _configure_logging(level: str) -> None:

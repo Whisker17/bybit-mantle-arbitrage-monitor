@@ -7,7 +7,7 @@ window so downstream metrics can exclude or weight them.
 
 from __future__ import annotations
 
-SCHEMA_VERSION = 1
+SCHEMA_VERSION = 2
 
 DDL: tuple[str, ...] = (
     """
@@ -36,6 +36,28 @@ DDL: tuple[str, ...] = (
         ON bybit_book (pair_id, exchange_ts_ms)
     """,
     """
+    CREATE INDEX IF NOT EXISTS idx_bybit_book_ts
+        ON bybit_book (exchange_ts_ms)
+    """,
+    """
+    CREATE TABLE IF NOT EXISTS bybit_book_1m (
+        pair_id             TEXT    NOT NULL,
+        bucket_ts_ms        INTEGER NOT NULL,
+        symbol              TEXT    NOT NULL,
+        bid                 TEXT    NOT NULL,
+        ask                 TEXT    NOT NULL,
+        bid_de_multiplied   TEXT    NOT NULL,
+        ask_de_multiplied   TEXT    NOT NULL,
+        multiplier          TEXT    NOT NULL,
+        n                   INTEGER NOT NULL,
+        PRIMARY KEY (pair_id, bucket_ts_ms)
+    )
+    """,
+    """
+    CREATE INDEX IF NOT EXISTS idx_bybit_book_1m_ts
+        ON bybit_book_1m (bucket_ts_ms)
+    """,
+    """
     CREATE TABLE IF NOT EXISTS bybit_trades (
         id                  INTEGER PRIMARY KEY AUTOINCREMENT,
         pair_id             TEXT    NOT NULL,
@@ -55,6 +77,10 @@ DDL: tuple[str, ...] = (
     """
     CREATE INDEX IF NOT EXISTS idx_bybit_trades_pair_ts
         ON bybit_trades (pair_id, exchange_ts_ms)
+    """,
+    """
+    CREATE INDEX IF NOT EXISTS idx_bybit_trades_ts
+        ON bybit_trades (exchange_ts_ms)
     """,
     """
     CREATE TABLE IF NOT EXISTS fluxion_pool_state (
@@ -79,6 +105,10 @@ DDL: tuple[str, ...] = (
     """
     CREATE INDEX IF NOT EXISTS idx_fluxion_pool_state_pair_block
         ON fluxion_pool_state (pair_id, block_number)
+    """,
+    """
+    CREATE INDEX IF NOT EXISTS idx_fluxion_pool_state_recv
+        ON fluxion_pool_state (recv_ts_ms)
     """,
     """
     CREATE TABLE IF NOT EXISTS fluxion_swaps (
@@ -134,6 +164,10 @@ DDL: tuple[str, ...] = (
         ON fluxion_rfq_quotes (pair_id, poll_ts_ms)
     """,
     """
+    CREATE INDEX IF NOT EXISTS idx_fluxion_rfq_quotes_ts
+        ON fluxion_rfq_quotes (poll_ts_ms)
+    """,
+    """
     CREATE TABLE IF NOT EXISTS fluxion_rfq_fills (
         id                      INTEGER PRIMARY KEY AUTOINCREMENT,
         block_number            INTEGER NOT NULL,
@@ -155,5 +189,9 @@ DDL: tuple[str, ...] = (
         gap_end_ms      INTEGER NOT NULL,
         detail          TEXT    NOT NULL
     )
+    """,
+    """
+    CREATE INDEX IF NOT EXISTS idx_collector_gaps_start
+        ON collector_gaps (gap_start_ms)
     """,
 )
