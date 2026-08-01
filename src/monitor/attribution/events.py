@@ -71,6 +71,8 @@ def amm_trade_from_swap(
         return None
     if notional_usd < 0:
         raise ValueError("notional_usd must be >= 0")
+    # UniV3 Swap topics: sender = msg.sender (often a router), recipient = the
+    # address the pool pays — the beneficiary we label (phase-1 m6 convention).
     taker = swap.recipient.lower()
     sender = swap.sender.lower()
     return AmmTradeEvent(

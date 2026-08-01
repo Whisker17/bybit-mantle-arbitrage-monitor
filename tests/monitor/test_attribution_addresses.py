@@ -2,24 +2,34 @@
 
 from __future__ import annotations
 
-from monitor.attribution import classify_addresses, is_contract_code
+from monitor.attribution import classify_addresses, is_contract_code, probe_roles
 
 
 class FakeRpc:
-    def __init__(self, codes: dict[str, str]) -> None:
-        # keys lowercased without checksum; values are eth_getCode results
-        self.codes = {k.lower(): v for k, v in codes.items()}
+    def __init__(
+        self,
+        codes: dict[str, str] | None = None,
+        txs: dict[str, dict[str, str]] | None = None,
+    ) -> None:
+        self.codes = {k.lower(): v for k, v in (codes or {}).items()}
+        self.txs = {k.lower(): v for k, v in (txs or {}).items()}
         self.calls: list[list[str]] = []
 
     def batch(self, calls: list[tuple[str, list[object]]]) -> list[object]:
-        addrs: list[str] = []
+        keys: list[str] = []
         out: list[object] = []
         for method, params in calls:
-            assert method == "eth_getCode"
-            addr = str(params[0]).lower()
-            addrs.append(addr)
-            out.append(self.codes.get(addr, "0x"))
-        self.calls.append(addrs)
+            if method == "eth_getCode":
+                addr = str(params[0]).lower()
+                keys.append(addr)
+                out.append(self.codes.get(addr, "0x"))
+            elif method == "eth_getTransactionByHash":
+                txh = str(params[0]).lower()
+                keys.append(txh)
+                out.append(self.txs.get(txh))
+            else:
+                raise AssertionError(method)
+        self.calls.append(keys)
         return out
 
 
@@ -46,3 +56,17 @@ def test_classify_addresses_batches_and_dedupes() -> None:
 def test_classify_empty() -> None:
     rpc = FakeRpc({})
     assert classify_addresses([], rpc) == {}
+
+
+def test_probe_roles_entrypoint_vs_internal() -> None:
+    a = "0x" + "11" * 20
+    b = "0x" + "22" * 20
+    rpc = FakeRpc(
+        txs={
+            "0xtxa": {"to": a},
+            "0xtxb": {"to": "0x" + "99" * 20},
+        }
+    )
+    out = probe_roles([(a, "0xtxa"), (b, "0xtxb")], rpc)
+    assert out[a] == "entrypoint"
+    assert out[b] == "internal"

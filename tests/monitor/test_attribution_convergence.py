@@ -4,7 +4,11 @@ from __future__ import annotations
 
 from decimal import Decimal
 
-from monitor.attribution import bybit_move_aligned, is_converging
+from monitor.attribution import (
+    bybit_move_aligned,
+    is_converging,
+    resolve_bybit_mid_prev,
+)
 
 
 def test_sell_converges_when_fluxion_above_bybit() -> None:
@@ -107,3 +111,14 @@ def test_bybit_align_ignores_tiny_move() -> None:
         )
         is None
     )
+
+
+def test_resolve_bybit_mid_prev_uses_lookback() -> None:
+    series = [
+        (1_000, Decimal("100")),
+        (3_000, Decimal("101")),
+        (8_000, Decimal("102")),
+    ]
+    # trade at 10_000, lookback 5000 → anchor 5000 → latest sample ≤5000 is ts=3000
+    assert resolve_bybit_mid_prev(10_000, series, lookback_ms=5_000) == Decimal("101")
+    assert resolve_bybit_mid_prev(10_000, series, lookback_ms=50_000) is None

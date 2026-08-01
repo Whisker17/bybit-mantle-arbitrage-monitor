@@ -11,6 +11,7 @@ from monitor.attribution.aggregate import (
     SessionFilter,
     build_global_mechanism_share,
     build_pair_attribution,
+    window_bounds_ms,
 )
 from monitor.attribution.config import AttributionConfig
 from monitor.attribution.events import AmmTradeEvent, RfqFillEvent
@@ -39,6 +40,7 @@ def build_attribution_snapshot(
     pair_ids: Sequence[str] | None = None,
     session: SessionFilter = "all",
     contract_flags: Mapping[str, bool] | None = None,
+    roles: Mapping[str, str] | None = None,
 ) -> AttributionSnapshot:
     """Build per-pair attribution + global mechanism share.
 
@@ -59,12 +61,11 @@ def build_attribution_snapshot(
             config=config,
             session=session,
             contract_flags=contract_flags,
+            roles=roles,
         )
 
     global_m = build_global_mechanism_share(amm_trades, rfq_fills)
-    stamps: list[int] = [t.ts_ms for t in amm_trades] + [f.ts_ms for f in rfq_fills]
-    start = min(stamps) if stamps else None
-    end = max(stamps) if stamps else None
+    start, end = window_bounds_ms(amm_trades, rfq_fills)
     return AttributionSnapshot(
         session=session,
         global_mechanism=global_m,

@@ -32,13 +32,15 @@ until taker enrichment lands.
 | Feature | Definition |
 |---------|------------|
 | `is_contract` | `eth_getCode(addr) ∉ {0x, empty}` → contract; else EOA. Unknown if RPC skipped. |
+| `role` | Optional `entrypoint` / `internal` from one sample `eth_getTransactionByHash` (`probe_roles`; phase-1 m6 heuristic). |
 | `n_trades` | Count of AMM trades for that address in scope. |
+| `trades_per_day` | Frequency: \((n-1) / span_days\) over first→last trade timestamps; null if \(n < 2\). |
 | `n_buy` / `n_sell` | Counts of `buy_native` / `sell_native`. |
 | `median_notional_usd` | Median absolute USDC-leg notional. |
 | `open_share` / `closed_share` | Fraction of trades in US RTH open vs closed (`monitor.metrics.session`). |
 | `activity_regime` | `all_hours` if `closed_share ≥ min_closed_share_for_all_hours` and `n ≥ min_trades_for_regime`; `rth_only` if closed share below that with enough samples; else `unknown`. |
-| `convergence_ratio` | Share of trades where direction **narrows** Fluxion–Bybit mid gap (see below). Denominator = trades with both mids + known direction. |
-| `bybit_align_ratio` | Share of trades whose direction matches the sign of Bybit mid Δ over `lookback_ms` when \|Δ\| ≥ `min_move_bps`. |
+| `convergence_ratio` | Share of trades where direction **narrows** Fluxion–Bybit mid gap (see below). Denominator = trades with both mids + known direction (`n_convergence_scored`). |
+| `bybit_align_ratio` | Share of trades whose direction matches the sign of Bybit mid Δ over `lookback_ms` when \|Δ\| ≥ `min_move_bps`. Populate `AmmTradeEvent.bybit_mid_prev` via `resolve_bybit_mid_prev(..., lookback_ms=config.bybit_correlation.lookback_ms)`. |
 
 ### Convergence (per trade)
 
@@ -53,10 +55,11 @@ native, Bybit de-multiplied):
 
 Applied after features; first match wins:
 
-1. **`arb_bot`** — `n_trades ≥ arb_bot.min_trades` **and**
+1. **`arb_bot`** — `n_convergence_scored ≥ arb_bot.min_trades` **and**
    `convergence_ratio ≥ arb_bot.min_convergence_ratio` **and**
    (`bybit_align_ratio` is null **or** `≥ arb_bot.min_bybit_align_ratio`).
-   Default gate: ≥80% convergence with ≥20 trades (DESIGN §2.5).
+   Default gate: ≥80% convergence on ≥20 **scorable** trades (DESIGN §2.5).
+   Raw trade count alone is not enough — missing mids must not pad the sample.
 2. **`price_keeper`** — `n_trades ≥ price_keeper.min_trades` **and**
    both directions have share ≥ `min_direction_share` **and**
    `median_notional_usd ≤ max_median_notional_usd` **and**
@@ -79,10 +82,29 @@ or `unknown`, not auto-`arb_bot`).
 
 Session segmentation reuses `SessionKind` from metrics (open / closed / all).
 
-## Acceptance notes
+## Aggregates scope notes
 
-- Thresholds are **configurable** and **documented here** — not magic numbers in UI.
-- Live validation: after a sample window, manually spot-check top-10 takers; retune
-  YAML if labels look wrong. DESIGN §8 flags 80%/20 as unvalidated on xStocks.
-- Output types are pure dataclasses with no TUI dependency so M5 can import them
-  directly.
+- **Time period** = caller's event window × `session` filter (`open` / `closed` /
+  `all`). `window_start_ms` / `window_end_ms` describe that window; multi-bucket
+  calendars (hourly bars) are left to M5 if needed.
+- **Pair RFQ share** requires `RfqFillEvent.pair_id`. Unscoped RFQ fills still
+  count in `build_global_mechanism_share` only — see `docs/DEFERRED_ISSUES.md`
+  (RFQ fill enrichment). M4 does not invent pair identity from LOP topics.
+
+## Acceptance / QA procedure (top-10 spot check)
+
+After a live sample window (≥1 NYSE session preferred):
+
+1. Run collector → build `AttributionSnapshot` for the window (session=`all`).
+2. For each pair, print `top_takers` (default N=10): address, `is_contract`,
+   `role`, `label`, `n_trades`, `trades_per_day`, `convergence_ratio`,
+   `bybit_align_ratio`, `activity_regime`.
+3. Spot-check labels against Mantlescan + Bybit chart: high-convergence contracts
+   trading both sides of the peg should read `arb_bot`; tiny bidirectional
+   flow should read `price_keeper`; thin samples `unknown`.
+4. If labels look wrong, retune `config/attribution.yaml` (do not hardcode
+   thresholds in the TUI). DESIGN §8 flags 80%/20 as unvalidated on xStocks.
+
+Thresholds are **configurable** and **documented here** — not magic numbers in UI.
+Output types are pure dataclasses with no TUI dependency so M5 can import them
+directly.

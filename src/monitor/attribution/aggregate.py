@@ -8,7 +8,7 @@ from decimal import Decimal
 from typing import Literal
 
 from monitor.attribution.config import AttributionConfig
-from monitor.attribution.convergence import trade_convergence_flag
+from monitor.attribution.convergence import convergence_share
 from monitor.attribution.events import AmmTradeEvent, RfqFillEvent
 from monitor.attribution.labels import (
     ActivityRegime,
@@ -16,7 +16,11 @@ from monitor.attribution.labels import (
     TakerProfile,
     label_takers,
 )
-from monitor.attribution.mechanism import Mechanism
+from monitor.attribution.mechanism import (
+    Mechanism,
+    mechanism_for_rfq_fill,
+    mechanism_for_swap,
+)
 from monitor.metrics.session import SessionKind
 
 SessionFilter = SessionKind | Literal["all"]
@@ -50,9 +54,11 @@ class TakerRow:
 
     address: str
     is_contract: bool | None
+    role: str | None
     label: BehaviorLabel
     n_trades: int
     notional_usd: Decimal
+    trades_per_day: float | None
     convergence_ratio: float | None
     bybit_align_ratio: float | None
     open_share: float
@@ -67,9 +73,11 @@ class TakerRow:
         return cls(
             address=f.address,
             is_contract=f.is_contract,
+            role=f.role,
             label=profile.label,
             n_trades=f.n_trades,
             notional_usd=f.notional_usd,
+            trades_per_day=f.trades_per_day,
             convergence_ratio=f.convergence_ratio,
             bybit_align_ratio=f.bybit_align_ratio,
             open_share=f.open_share,
@@ -112,10 +120,11 @@ def _filter_session(
     return [t for t in trades if t.session is session]
 
 
-def _window_bounds(
+def window_bounds_ms(
     amm: Sequence[AmmTradeEvent],
-    rfq: Sequence[RfqFillEvent],
+    rfq: Sequence[RfqFillEvent] = (),
 ) -> tuple[int | None, int | None]:
+    """Inclusive [min, max] wall-clock ms over event timestamps, or (None, None)."""
     stamps: list[int] = [t.ts_ms for t in amm] + [f.ts_ms for f in rfq]
     if not stamps:
         return None, None
@@ -129,21 +138,6 @@ def mechanism_share(
     return MechanismShare(amm_trades=len(amm_trades), rfq_trades=len(rfq_fills))
 
 
-def convergence_share(trades: Sequence[AmmTradeEvent]) -> tuple[float | None, int]:
-    hits = 0
-    scored = 0
-    for t in trades:
-        flag = trade_convergence_flag(t.direction, t.fluxion_mid_pre, t.bybit_mid)
-        if flag is None:
-            continue
-        scored += 1
-        if flag:
-            hits += 1
-    if scored <= 0:
-        return None, 0
-    return hits / scored, scored
-
-
 def label_trade_counts(
     trades: Sequence[AmmTradeEvent],
     labels: Mapping[str, BehaviorLabel],
@@ -151,7 +145,7 @@ def label_trade_counts(
     counts: dict[BehaviorLabel, int] = {lab: 0 for lab in BehaviorLabel}
     for t in trades:
         lab = labels.get(t.taker.lower(), BehaviorLabel.UNKNOWN)
-        counts[lab] = counts.get(lab, 0) + 1
+        counts[lab] += 1
     return counts
 
 
@@ -172,26 +166,32 @@ def build_pair_attribution(
     config: AttributionConfig,
     session: SessionFilter = "all",
     contract_flags: Mapping[str, bool] | None = None,
+    roles: Mapping[str, str] | None = None,
 ) -> PairAttribution:
     """Aggregate mechanism + behavior stats for one pair.
 
     ``amm_trades`` / ``rfq_fills`` should already be scoped to ``pair_id``
     (RFQ fills with ``pair_id is None`` are ignored for pair views — use
     ``build_global_mechanism_share`` for unscoped RFQ counts).
+    Time-period bucketing is the caller's window plus ``session`` filter
+    (open / closed / all); there is no internal multi-bucket rollup.
     """
     amm = [t for t in amm_trades if t.pair_id == pair_id]
     amm = _filter_session(amm, session)
     # Pair-scoped: only fills explicitly tagged with this pair_id (unscoped
-    # RFQ fills contribute to global mechanism share only).
+    # RFQ fills contribute to global mechanism share only — see
+    # docs/DEFERRED_ISSUES.md RFQ fill enrichment).
     rfq = [f for f in rfq_fills if f.pair_id == pair_id]
 
-    profiles = label_takers(amm, config, contract_flags=contract_flags)
+    profiles = label_takers(
+        amm, config, contract_flags=contract_flags, roles=roles
+    )
     labels = {p.address: p.label for p in profiles}
     counts = label_trade_counts(amm, labels)
     conv, n_conv = convergence_share(amm)
     top_n = config.top_takers_n
     top = [TakerRow.from_profile(p) for p in profiles[:top_n]]
-    start, end = _window_bounds(amm, rfq)
+    start, end = window_bounds_ms(amm, rfq)
 
     return PairAttribution(
         pair_id=pair_id,
@@ -217,8 +217,7 @@ def build_global_mechanism_share(
 
 
 def mechanism_of_trade(trade: AmmTradeEvent | RfqFillEvent) -> Mechanism:
-    from monitor.attribution.mechanism import mechanism_for_rfq_fill, mechanism_for_swap
-
+    """Mechanism for a normalized fill event (constant per event type)."""
     if isinstance(trade, AmmTradeEvent):
         return mechanism_for_swap(trade)
     return mechanism_for_rfq_fill(trade)

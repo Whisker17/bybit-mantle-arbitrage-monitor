@@ -15,7 +15,11 @@ Depends on ``monitor.quotes`` + ``monitor.metrics.session``; RPC only for
 optional ``classify_addresses``.
 """
 
-from monitor.attribution.addresses import classify_addresses, is_contract_code
+from monitor.attribution.addresses import (
+    classify_addresses,
+    is_contract_code,
+    probe_roles,
+)
 from monitor.attribution.aggregate import (
     MechanismShare,
     PairAttribution,
@@ -23,9 +27,9 @@ from monitor.attribution.aggregate import (
     TakerRow,
     build_global_mechanism_share,
     build_pair_attribution,
-    convergence_share,
     mechanism_of_trade,
     mechanism_share,
+    window_bounds_ms,
 )
 from monitor.attribution.config import (
     AttributionConfig,
@@ -33,7 +37,12 @@ from monitor.attribution.config import (
     default_attribution_path,
     load_attribution_config,
 )
-from monitor.attribution.convergence import bybit_move_aligned, is_converging
+from monitor.attribution.convergence import (
+    bybit_move_aligned,
+    convergence_share,
+    is_converging,
+    resolve_bybit_mid_prev,
+)
 from monitor.attribution.events import (
     AmmTradeEvent,
     RfqFillEvent,
@@ -91,5 +100,8 @@ __all__ = [
     "mechanism_for_swap",
     "mechanism_of_trade",
     "mechanism_share",
+    "probe_roles",
+    "resolve_bybit_mid_prev",
     "rfq_fill_from_tick",
+    "window_bounds_ms",
 ]

@@ -3,14 +3,13 @@
 from __future__ import annotations
 
 from collections import defaultdict
-from collections.abc import Iterable, Mapping, Sequence
-from dataclasses import dataclass
+from collections.abc import Mapping, Sequence
+from dataclasses import dataclass, replace
 from decimal import Decimal
 from enum import StrEnum
-from statistics import median
 
 from monitor.attribution.config import AttributionConfig
-from monitor.attribution.convergence import bybit_move_aligned, trade_convergence_flag
+from monitor.attribution.convergence import bybit_move_aligned, convergence_share
 from monitor.attribution.events import AmmTradeEvent
 from monitor.metrics.session import SessionKind
 
@@ -42,11 +41,15 @@ class AddressFeatures:
     open_share: float
     closed_share: float
     activity_regime: ActivityRegime
+    # Trades per day over the address's own first→last trade span (None if n < 2).
+    trades_per_day: float | None
     convergence_ratio: float | None
     n_convergence_scored: int
     bybit_align_ratio: float | None
     n_bybit_align_scored: int
     is_contract: bool | None
+    # tx.to == address → entrypoint (router); else internal (when probed).
+    role: str | None
 
 
 @dataclass(frozen=True, slots=True)
@@ -90,8 +93,10 @@ def assign_behavior_label(
     Rules documented in docs/references/m4-attribution-labels.md.
     """
     arb = config.arb_bot
+    # Gate on convergence sample size (not raw trade count): trades missing both
+    # mids must not inflate the ratio toward arb_bot (spec: ≥20 scorable trades).
     if (
-        features.n_trades >= arb.min_trades
+        features.n_convergence_scored >= arb.min_trades
         and features.convergence_ratio is not None
         and features.convergence_ratio >= arb.min_convergence_ratio
     ):
@@ -142,18 +147,20 @@ def compute_address_features(
             open_share=0.0,
             closed_share=0.0,
             activity_regime=ActivityRegime.UNKNOWN,
+            trades_per_day=None,
             convergence_ratio=None,
             n_convergence_scored=0,
             bybit_align_ratio=None,
             n_bybit_align_scored=0,
             is_contract=is_contract,
+            role=None,
         )
 
     n_buy = sum(1 for t in rows if t.direction == "buy_native")
     n_sell = sum(1 for t in rows if t.direction == "sell_native")
     notionals = [t.notional_usd for t in rows]
     notional_sum = sum(notionals, start=Decimal(0))
-    med = Decimal(str(median([float(x) for x in notionals])))
+    med = _median_decimal(notionals)
     max_n = max(notionals)
 
     n_open = sum(1 for t in rows if t.session is SessionKind.OPEN)
@@ -161,18 +168,9 @@ def compute_address_features(
     open_share = n_open / n
     closed_share = n_closed / n
     regime = activity_regime(n_trades=n, closed_share=closed_share, config=config)
+    tpd = _trades_per_day(rows)
 
-    conv_hits = 0
-    conv_scored = 0
-    for t in rows:
-        flag = trade_convergence_flag(
-            t.direction, t.fluxion_mid_pre, t.bybit_mid
-        )
-        if flag is None:
-            continue
-        conv_scored += 1
-        if flag:
-            conv_hits += 1
+    conv_ratio, conv_scored = convergence_share(rows)
 
     align_hits = 0
     align_scored = 0
@@ -203,12 +201,36 @@ def compute_address_features(
         open_share=open_share,
         closed_share=closed_share,
         activity_regime=regime,
-        convergence_ratio=_ratio(conv_hits, conv_scored),
+        trades_per_day=tpd,
+        convergence_ratio=conv_ratio,
         n_convergence_scored=conv_scored,
         bybit_align_ratio=_ratio(align_hits, align_scored),
         n_bybit_align_scored=align_scored,
         is_contract=is_contract,
+        role=None,
     )
+
+
+def _trades_per_day(rows: Sequence[AmmTradeEvent]) -> float | None:
+    if len(rows) < 2:
+        return None
+    stamps = sorted(t.ts_ms for t in rows)
+    span_ms = stamps[-1] - stamps[0]
+    if span_ms <= 0:
+        return None
+    # (n - 1) intervals over span → rate scaled to 24h.
+    return (len(rows) - 1) / (span_ms / 86_400_000.0)
+
+
+def _median_decimal(values: Sequence[Decimal]) -> Decimal:
+    """Median of Decimals without float round-trip."""
+    if not values:
+        return Decimal(0)
+    ordered = sorted(values)
+    mid = len(ordered) // 2
+    if len(ordered) % 2 == 1:
+        return ordered[mid]
+    return (ordered[mid - 1] + ordered[mid]) / Decimal(2)
 
 
 def label_takers(
@@ -216,9 +238,11 @@ def label_takers(
     config: AttributionConfig,
     *,
     contract_flags: Mapping[str, bool] | None = None,
+    roles: Mapping[str, str] | None = None,
 ) -> list[TakerProfile]:
     """Build sorted taker profiles (trade count desc, then address) for a trade set."""
     flags = {k.lower(): v for k, v in (contract_flags or {}).items()}
+    role_map = {k.lower(): v for k, v in (roles or {}).items()}
     by_addr: dict[str, list[AmmTradeEvent]] = defaultdict(list)
     for t in trades:
         by_addr[t.taker.lower()].append(t)
@@ -231,12 +255,11 @@ def label_takers(
             config=config,
             is_contract=flags.get(addr),
         )
+        role = role_map.get(addr)
+        if role is not None:
+            feats = replace(feats, role=role)
         label = assign_behavior_label(feats, config)
         profiles.append(TakerProfile(features=feats, label=label))
 
     profiles.sort(key=lambda p: (-p.features.n_trades, p.address))
     return profiles
-
-
-def label_lookup(profiles: Iterable[TakerProfile]) -> dict[str, BehaviorLabel]:
-    return {p.address: p.label for p in profiles}

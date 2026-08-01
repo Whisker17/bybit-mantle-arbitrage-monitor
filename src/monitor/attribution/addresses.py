@@ -2,16 +2,26 @@
 
 from __future__ import annotations
 
-from collections.abc import Mapping, Sequence
+from collections.abc import Sequence
 from typing import Protocol
-
-from monitor.fluxion.rpc import Rpc, cs
 
 
 class CodeLookup(Protocol):
-    """Minimal RPC surface for tests (avoid live Mantle)."""
+    """Minimal RPC surface for tests (avoid live Mantle).
+
+    Production callers pass ``monitor.fluxion.rpc.Rpc``; attribution does not
+    import the concrete client (DESIGN §4.3 — no WS/RPC client coupling).
+    """
 
     def batch(self, calls: list[tuple[str, list[object]]]) -> list[object]: ...
+
+
+def _rpc_address(addr: str) -> str:
+    """Lowercase 0x-prefixed address for eth_getCode (Mantle accepts non-checksum)."""
+    a = addr.strip().lower()
+    if not a.startswith("0x"):
+        a = "0x" + a
+    return a
 
 
 def is_contract_code(code: object) -> bool:
@@ -26,7 +36,7 @@ def is_contract_code(code: object) -> bool:
 
 def classify_addresses(
     addrs: Sequence[str],
-    rpc: Rpc | CodeLookup,
+    rpc: CodeLookup,
     *,
     batch_size: int = 50,
 ) -> dict[str, bool]:
@@ -50,7 +60,7 @@ def classify_addresses(
     for i in range(0, len(unique), batch_size):
         part = unique[i : i + batch_size]
         calls: list[tuple[str, list[object]]] = [
-            ("eth_getCode", [cs(a), "latest"]) for a in part
+            ("eth_getCode", [_rpc_address(a), "latest"]) for a in part
         ]
         results = rpc.batch(calls)
         if len(results) != len(part):
@@ -63,12 +73,50 @@ def classify_addresses(
     return out
 
 
-def merge_contract_flags(
-    base: Mapping[str, bool],
-    updates: Mapping[str, bool],
-) -> dict[str, bool]:
-    """Return a new map with ``updates`` overlaid on ``base`` (lowercased keys)."""
-    out = {k.lower(): v for k, v in base.items()}
-    for k, v in updates.items():
-        out[k.lower()] = v
+class TxLookup(Protocol):
+    """Minimal surface for entrypoint-vs-internal role probe."""
+
+    def batch(self, calls: list[tuple[str, list[object]]]) -> list[object]: ...
+
+
+def probe_roles(
+    samples: Sequence[tuple[str, str]],
+    rpc: TxLookup,
+    *,
+    batch_size: int = 50,
+) -> dict[str, str]:
+    """Map address → ``entrypoint`` | ``internal`` from one sample tx each.
+
+    Phase-1 ``mba.m6_attribution.probe_roles`` heuristic: if ``tx.to`` equals the
+    address, users call it directly (router/entrypoint); otherwise it is
+    downstream of another entrypoint. ``samples`` is ``(address, tx_hash)``.
+    """
+    if batch_size < 1:
+        raise ValueError("batch_size must be >= 1")
+    # One sample per address (first wins).
+    by_addr: dict[str, str] = {}
+    for addr, tx_hash in samples:
+        key = addr.lower()
+        if key not in by_addr:
+            by_addr[key] = tx_hash
+
+    addrs = list(by_addr.keys())
+    out: dict[str, str] = {}
+    for i in range(0, len(addrs), batch_size):
+        part = addrs[i : i + batch_size]
+        calls: list[tuple[str, list[object]]] = [
+            ("eth_getTransactionByHash", [by_addr[a]]) for a in part
+        ]
+        results = rpc.batch(calls)
+        if len(results) != len(part):
+            raise RuntimeError(
+                f"eth_getTransactionByHash batch size mismatch: "
+                f"expected {len(part)}, got {len(results)}"
+            )
+        for addr, tx in zip(part, results, strict=True):
+            to = ""
+            if isinstance(tx, dict):
+                raw_to = tx.get("to") or ""
+                to = str(raw_to).lower()
+            out[addr] = "entrypoint" if to == addr else "internal"
     return out

@@ -62,25 +62,42 @@ def _feats(**overrides: object) -> AddressFeatures:
         "open_share": 0.5,
         "closed_share": 0.5,
         "activity_regime": ActivityRegime.ALL_HOURS,
+        "trades_per_day": 12.0,
         "convergence_ratio": 0.90,
         "n_convergence_scored": 25,
         "bybit_align_ratio": None,
         "n_bybit_align_scored": 0,
         "is_contract": True,
+        "role": "internal",
     }
     base.update(overrides)
     return AddressFeatures(**base)  # type: ignore[arg-type]
 
 
-def test_arb_bot_at_80pct_with_20_trades() -> None:
+def test_arb_bot_at_80pct_with_20_scored_trades() -> None:
     cfg = _cfg()
     assert assign_behavior_label(_feats(), cfg) is BehaviorLabel.ARB_BOT
 
 
-def test_arb_bot_fails_below_min_trades() -> None:
+def test_arb_bot_fails_below_min_scored_trades() -> None:
     cfg = _cfg()
     assert (
-        assign_behavior_label(_feats(n_trades=19, convergence_ratio=1.0), cfg)
+        assign_behavior_label(
+            _feats(n_trades=25, n_convergence_scored=19, convergence_ratio=1.0),
+            cfg,
+        )
+        is not BehaviorLabel.ARB_BOT
+    )
+
+
+def test_arb_bot_ignores_unscored_padding() -> None:
+    """20 raw trades but only 1 scorable converging must not become arb_bot."""
+    cfg = _cfg()
+    assert (
+        assign_behavior_label(
+            _feats(n_trades=20, n_convergence_scored=1, convergence_ratio=1.0),
+            cfg,
+        )
         is not BehaviorLabel.ARB_BOT
     )
 
@@ -135,7 +152,13 @@ def test_retail_when_enough_samples_no_bot_sig() -> None:
 
 def test_unknown_when_thin_sample() -> None:
     cfg = _cfg()
-    f = _feats(n_trades=2, n_buy=2, n_sell=0, convergence_ratio=1.0)
+    f = _feats(
+        n_trades=2,
+        n_buy=2,
+        n_sell=0,
+        n_convergence_scored=2,
+        convergence_ratio=1.0,
+    )
     assert assign_behavior_label(f, cfg) is BehaviorLabel.UNKNOWN
 
 
