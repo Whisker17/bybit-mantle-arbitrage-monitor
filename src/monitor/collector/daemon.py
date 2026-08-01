@@ -67,8 +67,9 @@ class CollectorDaemon:
         # After resume, mark all pairs' books gap=1 until this wall-clock ms
         # (mirrors BybitWsCollector post-reconnect gap window).
         self._book_gap_until_ms: int = 0
-        # Last written L1 bid/ask per pair — skip duplicate rows under orderbook.50.
-        self._last_book_l1: dict[str, tuple[Decimal, Decimal]] = {}
+        # Last written L1 row fingerprint — skip duplicate rows under orderbook.50
+        # even while sticky gap=True (include gap so first gapped tick still lands).
+        self._last_book_l1: dict[str, tuple[Decimal, Decimal, bool]] = {}
 
     def request_stop(self) -> None:
         self._stop.set()
@@ -156,10 +157,10 @@ class CollectorDaemon:
             not tick.gap and now_ms() < self._book_gap_until_ms
         ):
             tick = replace(tick, gap=True)
-        # orderbook.50 fires often for non-L1 levels; only journal L1 changes
-        # (always write on gap so reconnect windows stay visible).
-        key = (tick.bid, tick.ask)
-        if not tick.gap and self._last_book_l1.get(tick.pair_id) == key:
+        # orderbook.50 fires often for non-L1 levels; only journal when L1 or
+        # gap flag changes (sticky gap must not re-amplify full delta rate).
+        key = (tick.bid, tick.ask, tick.gap)
+        if self._last_book_l1.get(tick.pair_id) == key:
             return
         self._last_book_l1[tick.pair_id] = key
         await asyncio.to_thread(self.store.insert_bybit_book, [tick])

@@ -285,18 +285,20 @@ def test_depth_emit_throttle_mid_move() -> None:
     assert thr.should_emit(_book(recv=1_200, bid="100.20", ask="100.20")) is True
 
 
-def test_l1_dedupe_logic() -> None:
-    """Mirror daemon._on_book skip: only write when bid/ask change or gap."""
-    last: dict[str, tuple[Decimal, Decimal]] = {}
+def test_l1_dedupe_includes_gap_flag() -> None:
+    """Daemon fingerprint is (bid, ask, gap) — sticky gap must not re-amplify."""
+    last: dict[str, tuple[Decimal, Decimal, bool]] = {}
 
     def should_write(pair: str, bid: Decimal, ask: Decimal, *, gap: bool) -> bool:
-        key = (bid, ask)
-        if not gap and last.get(pair) == key:
+        key = (bid, ask, gap)
+        if last.get(pair) == key:
             return False
         last[pair] = key
         return True
 
     assert should_write("TSLAx", Decimal("1"), Decimal("2"), gap=False)
     assert should_write("TSLAx", Decimal("1"), Decimal("2"), gap=False) is False
+    # First gapped tick at same L1 still journals once.
     assert should_write("TSLAx", Decimal("1"), Decimal("2"), gap=True) is True
-    assert should_write("TSLAx", Decimal("1"), Decimal("3"), gap=False) is True
+    assert should_write("TSLAx", Decimal("1"), Decimal("2"), gap=True) is False
+    assert should_write("TSLAx", Decimal("1"), Decimal("3"), gap=True) is True

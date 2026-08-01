@@ -12,6 +12,8 @@ from __future__ import annotations
 
 from decimal import Decimal
 
+from monitor.symbols.multipliers import de_multiplied_price
+
 # bids: high→low; asks: low→high
 SideMap = dict[Decimal, Decimal]
 
@@ -87,8 +89,6 @@ def de_multiplied_levels(
     multiplier: Decimal,
 ) -> list[tuple[Decimal, Decimal]]:
     """Apply price/m and size*m so notional is invariant."""
-    from monitor.symbols.multipliers import de_multiplied_price
-
     if multiplier <= 0:
         raise ValueError(f"multiplier must be > 0, got {multiplier}")
     out: list[tuple[Decimal, Decimal]] = []

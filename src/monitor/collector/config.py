@@ -20,6 +20,12 @@ class CollectorConfigError(Exception):
     """Fail-fast error for missing or malformed collector config / env."""
 
 
+def _default_depth_buckets() -> list[Decimal]:
+    from monitor.bybit.depth import DEFAULT_DEPTH_BUCKETS_USD
+
+    return list(DEFAULT_DEPTH_BUCKETS_USD)
+
+
 class BybitDepthConfig(BaseModel):
     """Throttled multi-level VWAP journal (WHI-755 / PnL v2 Bybit leg)."""
 
@@ -32,7 +38,7 @@ class BybitDepthConfig(BaseModel):
     # Also emit when mid moves by ≥ this many bps since last depth row (0 = off).
     mid_change_bps: Decimal = Field(default=Decimal("1"), ge=0)
     # USD notional ladder (DESIGN §2.6.3 PnL v2 AMM buckets).
-    buckets_usd: list[Decimal] = Field(default_factory=lambda: [])
+    buckets_usd: list[Decimal] = Field(default_factory=_default_depth_buckets)
 
     @field_validator("mid_change_bps", mode="before")
     @classmethod
@@ -45,12 +51,14 @@ class BybitDepthConfig(BaseModel):
     @field_validator("buckets_usd", mode="before")
     @classmethod
     def _buckets_as_decimals(cls, v: object) -> list[Decimal]:
-        if v is None or v == []:
+        if v is None:
             from monitor.bybit.depth import DEFAULT_DEPTH_BUCKETS_USD
 
             return list(DEFAULT_DEPTH_BUCKETS_USD)
         if not isinstance(v, list):
             raise ValueError("buckets_usd must be a list")
+        if not v:
+            raise ValueError("bybit.depth.buckets_usd must be non-empty")
         out: list[Decimal] = []
         for raw in v:
             try:
@@ -60,8 +68,6 @@ class BybitDepthConfig(BaseModel):
             if q <= 0:
                 raise ValueError(f"bucket must be > 0, got {raw!r}")
             out.append(q)
-        if not out:
-            raise ValueError("bybit.depth.buckets_usd must be non-empty")
         return out
 
 

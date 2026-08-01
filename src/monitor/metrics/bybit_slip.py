@@ -13,6 +13,8 @@ from __future__ import annotations
 from decimal import Decimal
 from typing import Literal
 
+from monitor.bybit.depth_math import book_vwap_for_notional
+
 BookSide = Literal["bid", "ask"]
 BybitLeg = Literal["buy", "sell"]
 
@@ -46,9 +48,6 @@ def book_vwap_slip_bps(
     ``side`` is the book side consumed: ``\"bid\"`` when selling base into bids,
     ``\"ask\"`` when buying base from asks. Returns None if the book cannot fill.
     """
-    # Local import avoids a hard package cycle (metrics ↔ bybit depth_math).
-    from monitor.bybit.depth_math import book_vwap_for_notional
-
     if size_usd <= 0 or mid <= 0:
         raise ValueError("size_usd and mid must be positive")
     if side not in ("bid", "ask"):
