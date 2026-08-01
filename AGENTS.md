@@ -56,12 +56,15 @@ placeholders. Agents must not assume a module exists until its issue lands. -->
     stateful N-level book; L1 still `bybit_book`; precomputed bucket VWAP curve
     in `bybit_depth` (throttled). Config `bybit.depth` in `config/collector.yaml`.
   - **Web skeleton (WHI-757) landed:** `monitor/api` (FastAPI read-only over
-    SQLite; reuses TUI builders), `web/` (Next.js static export, skeleton
-    pairs table), `deploy/` + `scripts/deploy-web.sh` (systemd + nginx).
-    Tunables in `config/api.yaml`. TUI frozen for new features — Web is the
-    surface for new metrics.
-  - **Not landed yet:** Web overview polish (WHI-758), pair detail Web, PnL v2
-    engine (WHI-756). Do not assume those modules exist until their issues land.
+    SQLite; reuses TUI builders), `web/` (Next.js static export), `deploy/` +
+    `scripts/deploy-web.sh` (systemd + nginx). Tunables in `config/api.yaml`.
+    TUI frozen for new features — Web is the surface for new metrics.
+  - **Web overview (WHI-758) landed:** dark Tailwind overview table (TUI-parity
+    columns + status bar + stale yellow banner + sort/filter + 2s poll + row
+    → `/pair/{id}/`). Bucket PnL column placeholder until WHI-756. Pair detail
+    route is a stub (full detail = WHI-759).
+  - **Not landed yet:** pair detail Web (WHI-759), PnL v2 engine (WHI-756).
+    Do not assume those modules exist until their issues land.
 ## Build, test, run
 
 ```bash
@@ -86,6 +89,8 @@ uv run python -m monitor.api
 # Optional: uv run python -m monitor.api --host 127.0.0.1 --port 8000
 # Web static export (build on laptop/CI — never on the 1GB VPS):
 #   cd web && npm ci && npm run build   # → web/out
+# Web pure-helper unit tests (format/sort):
+#   cd web && npm test
 # Deploy to VPS (rsync out/ + API sources, restart systemd):
 #   ./scripts/deploy-web.sh user@host
 ```
@@ -113,9 +118,9 @@ Module layout is fixed by `docs/DESIGN.md` §4.2. Short mirror:
   - **`monitor/tui`** (M5) — Textual overview + detail panel over SQLite
     (**frozen** for new features).
   - **`monitor/api`** (WHI-757) — FastAPI read-only JSON over the journal.
-  - **`web/`** (WHI-757+) — Next.js static export; deploy via
-    `scripts/deploy-web.sh` + `deploy/`.
-  - Still to land: richer Web pages (WHI-758+), PnL v2 (WHI-756).
+  - **`web/`** (WHI-757+) — Next.js static export; overview (WHI-758);
+    deploy via `scripts/deploy-web.sh` + `deploy/`.
+  - Still to land: pair detail Web (WHI-759), PnL v2 (WHI-756).
   Reuse pieces from `mba` per DESIGN §4.2 table; do not import whole stages.
 
 ## Git workflow (mandatory)
