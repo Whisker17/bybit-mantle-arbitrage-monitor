@@ -34,7 +34,7 @@ until taker enrichment lands.
 | `is_contract` | `eth_getCode(addr) ∉ {0x, empty}` → contract; else EOA. Unknown if RPC skipped. |
 | `role` | Optional `entrypoint` / `internal` from one sample `eth_getTransactionByHash` (`probe_roles`; phase-1 m6 heuristic). |
 | `n_trades` | Count of AMM trades for that address in scope. |
-| `trades_per_day` | Frequency: \((n-1) / span_days\) over first→last trade timestamps; null if \(n < 2\). |
+| `trades_per_day` | Frequency: \((n-1) / span_days\) over first→last trade timestamps; null if \(n < 2\) or zero span. |
 | `n_buy` / `n_sell` | Counts of `buy_native` / `sell_native`. |
 | `median_notional_usd` | Median absolute USDC-leg notional. |
 | `open_share` / `closed_share` | Fraction of trades in US RTH open vs closed (`monitor.metrics.session`). |
@@ -95,15 +95,23 @@ Session segmentation reuses `SessionKind` from metrics (open / closed / all).
 
 After a live sample window (≥1 NYSE session preferred):
 
-1. Run collector → build `AttributionSnapshot` for the window (session=`all`).
-2. For each pair, print `top_takers` (default N=10): address, `is_contract`,
+1. Run collector → load SQLite / in-memory ticks.
+2. Join each `FluxionSwapTick` to pre-swap pool mid + Bybit mid (and
+   `resolve_bybit_mid_prev` for lookback) → `amm_trade_from_swap` /
+   `swap_notional_usd`; stamp RFQ fills with `session` + optional `pair_id`.
+3. Optionally `classify_addresses_from_config` + `probe_roles_from_config`
+   (`role_samples_from_trades`) and pass flags into `build_attribution_snapshot`.
+4. For each pair, print `top_takers` (default N=10): address, `is_contract`,
    `role`, `label`, `n_trades`, `trades_per_day`, `convergence_ratio`,
    `bybit_align_ratio`, `activity_regime`.
-3. Spot-check labels against Mantlescan + Bybit chart: high-convergence contracts
+5. Spot-check labels against Mantlescan + Bybit chart: high-convergence contracts
    trading both sides of the peg should read `arb_bot`; tiny bidirectional
    flow should read `price_keeper`; thin samples `unknown`.
-4. If labels look wrong, retune `config/attribution.yaml` (do not hardcode
+6. If labels look wrong, retune `config/attribution.yaml` (do not hardcode
    thresholds in the TUI). DESIGN §8 flags 80%/20 as unvalidated on xStocks.
+
+M5 owns the long-running join loop; this package exposes pure builders so the
+QA path is the same functions the panel will call.
 
 Thresholds are **configurable** and **documented here** — not magic numbers in UI.
 Output types are pure dataclasses with no TUI dependency so M5 can import them

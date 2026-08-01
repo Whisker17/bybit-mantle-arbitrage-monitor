@@ -10,6 +10,7 @@ from monitor.attribution import (
     mechanism_for_rfq_fill,
     mechanism_for_swap,
     rfq_fill_from_tick,
+    swap_notional_usd,
 )
 from monitor.metrics.session import SessionKind
 from monitor.quotes import FluxionRfqFillTick, FluxionSwapTick
@@ -87,3 +88,9 @@ def test_unknown_direction_swap_not_converted() -> None:
         session=SessionKind.CLOSED,
     )
     assert trade is None
+
+
+def test_swap_notional_usd_uses_quote_leg() -> None:
+    s = _swap(amount_token0=Decimal("-50"), amount_token1=Decimal("1"))
+    assert swap_notional_usd(s, quote_is_token0=True) == Decimal(50)
+    assert swap_notional_usd(s, quote_is_token0=False) == Decimal(1)

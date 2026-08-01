@@ -22,11 +22,6 @@ class BatchRpc(Protocol):
     def batch(self, calls: list[tuple[str, list[object]]]) -> list[object]: ...
 
 
-# Back-compat aliases for type checkers / call sites.
-CodeLookup = BatchRpc
-TxLookup = BatchRpc
-
-
 class AddressRole(StrEnum):
     """Entrypoint vs internal (phase-1 m6 ``probe_roles``)."""
 
@@ -139,10 +134,14 @@ def probe_roles(
                 f"expected {len(part)}, got {len(results)}"
             )
         for addr, tx in zip(part, results, strict=True):
-            to = ""
-            if isinstance(tx, dict):
-                raw_to = tx.get("to") or ""
-                to = str(raw_to).lower()
+            # RPC miss / null receipt → skip (leave role unknown), not a false
+            # "internal" label from empty to-address.
+            if not isinstance(tx, dict):
+                continue
+            raw_to = tx.get("to") or ""
+            to = str(raw_to).lower()
+            if not to:
+                continue
             out[addr] = (
                 AddressRole.ENTRYPOINT if to == addr else AddressRole.INTERNAL
             )

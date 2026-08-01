@@ -53,6 +53,7 @@ from monitor.attribution.events import (
     RfqFillEvent,
     amm_trade_from_swap,
     rfq_fill_from_tick,
+    swap_notional_usd,
 )
 from monitor.attribution.labels import (
     ActivityRegime,
@@ -113,5 +114,6 @@ __all__ = [
     "resolve_bybit_mid_prev",
     "rfq_fill_from_tick",
     "role_samples_from_trades",
+    "swap_notional_usd",
     "window_bounds_ms",
 ]

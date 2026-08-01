@@ -142,7 +142,12 @@ def compute_address_features(
     is_contract: bool | None = None,
     session_scoped: bool = False,
 ) -> AddressFeatures:
-    """Aggregate features for one taker from their AMM trades."""
+    """Aggregate features for one taker from their AMM trades.
+
+    Pass ``session_scoped=True`` when ``trades`` were already filtered to a
+    single open/closed session so ``activity_regime`` is not forced to a
+    degenerate ``rth_only``.
+    """
     addr = address.lower()
     rows = [t for t in trades if t.taker.lower() == addr]
     n = len(rows)
@@ -228,6 +233,7 @@ def compute_address_features(
 
 
 def _trades_per_day(rows: Sequence[AmmTradeEvent]) -> float | None:
+    """Frequency over first→last trade span; None if n < 2 or zero span."""
     if len(rows) < 2:
         return None
     stamps = sorted(t.ts_ms for t in rows)

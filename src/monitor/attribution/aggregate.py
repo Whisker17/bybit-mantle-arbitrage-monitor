@@ -4,7 +4,6 @@ from __future__ import annotations
 
 from collections.abc import Mapping, Sequence
 from dataclasses import dataclass
-from decimal import Decimal
 from typing import Literal
 
 from monitor.attribution.addresses import AddressRole
@@ -12,8 +11,6 @@ from monitor.attribution.config import AttributionConfig
 from monitor.attribution.convergence import convergence_share
 from monitor.attribution.events import AmmTradeEvent, RfqFillEvent
 from monitor.attribution.labels import (
-    ActivityRegime,
-    AddressFeatures,
     BehaviorLabel,
     TakerProfile,
     label_takers,
@@ -50,72 +47,8 @@ class MechanismShare:
         return self.amm_trades / self.total
 
 
-@dataclass(frozen=True, slots=True)
-class TakerRow:
-    """One top-taker row for the M5 detail panel.
-
-    Nests ``AddressFeatures`` (metrics snapshot pattern) so new features do not
-    require a third field list.
-    """
-
-    features: AddressFeatures
-    label: BehaviorLabel
-
-    @classmethod
-    def from_profile(cls, profile: TakerProfile) -> TakerRow:
-        return cls(features=profile.features, label=profile.label)
-
-    @property
-    def address(self) -> str:
-        return self.features.address
-
-    @property
-    def is_contract(self) -> bool | None:
-        return self.features.is_contract
-
-    @property
-    def role(self) -> AddressRole | None:
-        return self.features.role
-
-    @property
-    def n_trades(self) -> int:
-        return self.features.n_trades
-
-    @property
-    def notional_usd(self) -> Decimal:
-        return self.features.notional_usd
-
-    @property
-    def trades_per_day(self) -> float | None:
-        return self.features.trades_per_day
-
-    @property
-    def convergence_ratio(self) -> float | None:
-        return self.features.convergence_ratio
-
-    @property
-    def bybit_align_ratio(self) -> float | None:
-        return self.features.bybit_align_ratio
-
-    @property
-    def open_share(self) -> float:
-        return self.features.open_share
-
-    @property
-    def closed_share(self) -> float:
-        return self.features.closed_share
-
-    @property
-    def activity_regime(self) -> ActivityRegime:
-        return self.features.activity_regime
-
-    @property
-    def n_buy(self) -> int:
-        return self.features.n_buy
-
-    @property
-    def n_sell(self) -> int:
-        return self.features.n_sell
+# M5 secondary-page name for a labeled taker (same shape as label_takers output).
+TakerRow = TakerProfile
 
 
 @dataclass(frozen=True, slots=True)
@@ -136,7 +69,7 @@ class PairAttribution:
     # Fraction of AMM trades whose *taker* carries each behavior label.
     label_trade_share: dict[BehaviorLabel, float]
     label_trade_counts: dict[BehaviorLabel, int]
-    top_takers: list[TakerRow]
+    top_takers: list[TakerProfile]
     # All labeled profiles (not truncated); useful for offline QA.
     takers: list[TakerProfile]
 
@@ -236,7 +169,7 @@ def build_pair_attribution(
     counts = label_trade_counts(amm, labels)
     conv, n_conv = convergence_share(amm)
     top_n = config.top_takers_n
-    top = [TakerRow.from_profile(p) for p in profiles[:top_n]]
+    top = profiles[:top_n]
     start, end = window_bounds_ms(amm, rfq)
 
     return PairAttribution(

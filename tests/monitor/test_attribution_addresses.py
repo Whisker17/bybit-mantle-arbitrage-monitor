@@ -68,15 +68,20 @@ def test_classify_empty() -> None:
 def test_probe_roles_entrypoint_vs_internal() -> None:
     a = "0x" + "11" * 20
     b = "0x" + "22" * 20
+    c = "0x" + "33" * 20
     rpc = FakeRpc(
         txs={
             "0xtxa": {"to": a},
             "0xtxb": {"to": "0x" + "99" * 20},
+            # missing 0xtxc → omitted from map (not false internal)
         }
     )
-    out = probe_roles([(a, "0xtxa"), (b, "0xtxb")], rpc, batch_size=10)
+    out = probe_roles(
+        [(a, "0xtxa"), (b, "0xtxb"), (c, "0xtxc")], rpc, batch_size=10
+    )
     assert out[a] is AddressRole.ENTRYPOINT
     assert out[b] is AddressRole.INTERNAL
+    assert c not in out
     cfg = load_attribution_config()
     out2 = probe_roles_from_config([(a, "0xtxa")], rpc, cfg)
     assert out2[a] is AddressRole.ENTRYPOINT

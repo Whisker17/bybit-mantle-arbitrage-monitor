@@ -92,7 +92,7 @@ def test_pair_attribution_mechanism_and_convergence() -> None:
     assert panel.label_trade_share[BehaviorLabel.ARB_BOT] == 1.0
     assert len(panel.top_takers) == 1
     assert panel.top_takers[0].label is BehaviorLabel.ARB_BOT
-    assert panel.top_takers[0].is_contract is True
+    assert panel.top_takers[0].features.is_contract is True
     assert panel.window_start_ms is not None
     assert panel.window_end_ms is not None
 
@@ -120,7 +120,7 @@ def test_session_filter_open_only() -> None:
     assert open_panel.mechanism.rfq_trades == 1
     assert open_panel.session is SessionKind.OPEN
     # Session-scoped activity regime is not meaningful → unknown
-    assert open_panel.top_takers[0].activity_regime.value == "unknown"
+    assert open_panel.top_takers[0].features.activity_regime.value == "unknown"
 
 
 def test_global_mechanism_includes_unscoped_rfq() -> None:

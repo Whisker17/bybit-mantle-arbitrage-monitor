@@ -56,6 +56,12 @@ class RfqFillEvent:
     session: SessionKind | None = None
 
 
+def swap_notional_usd(swap: FluxionSwapTick, *, quote_is_token0: bool) -> Decimal:
+    """Absolute USDC-leg notional from a decoded swap (pool amount convention)."""
+    leg = swap.amount_token0 if quote_is_token0 else swap.amount_token1
+    return abs(leg)
+
+
 def amm_trade_from_swap(
     swap: FluxionSwapTick,
     *,
@@ -69,6 +75,14 @@ def amm_trade_from_swap(
     """Lift a decoded swap tick into an attribution event.
 
     Returns None when direction is unknown (cannot label behavior).
+
+    Callers (M5 / offline QA) supply contemporaneous mids and session — typical
+    join::
+
+        notional = swap_notional_usd(swap, quote_is_token0=...)
+        prev = resolve_bybit_mid_prev(ts, bybit_series, lookback_ms=cfg...)
+        session = session_kind(datetime.fromtimestamp(ts/1000, tz=UTC), config=metrics_cfg)
+        event = amm_trade_from_swap(swap, notional_usd=notional, ...)
     """
     if swap.direction not in ("buy_native", "sell_native"):
         return None
@@ -76,6 +90,7 @@ def amm_trade_from_swap(
         raise ValueError("notional_usd must be >= 0")
     # UniV3 Swap topics: sender = msg.sender (often a router), recipient = the
     # address the pool pays — the beneficiary we label (phase-1 m6 convention).
+    # ``sender`` is retained for offline QA / future role probes.
     taker = swap.recipient.lower()
     sender = swap.sender.lower()
     return AmmTradeEvent(
