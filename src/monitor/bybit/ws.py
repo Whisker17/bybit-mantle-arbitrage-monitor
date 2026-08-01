@@ -10,10 +10,12 @@ from collections.abc import Awaitable, Callable, Mapping
 from decimal import Decimal
 from typing import Any
 
+from monitor.bybit.l1 import L1BookTracker
 from monitor.bybit.parse import (
+    DEFAULT_BOOK_PREFIX,
+    DEFAULT_TRADE_PREFIX,
     build_subscribe_args,
     parse_public_trade_message,
-    parse_ticker_message,
 )
 from monitor.quotes import BybitBookTick, BybitTradeTick, CollectorGap, now_ms
 
@@ -42,8 +44,8 @@ class BybitWsCollector:
         on_book: OnBook,
         on_trade: OnTrade,
         on_gap: OnGap | None = None,
-        book_topic_prefix: str = "tickers",
-        trade_topic_prefix: str = "publicTrade",
+        book_topic_prefix: str = DEFAULT_BOOK_PREFIX,
+        trade_topic_prefix: str = DEFAULT_TRADE_PREFIX,
         reconnect_min_s: float = 1.0,
         reconnect_max_s: float = 60.0,
         post_reconnect_gap_s: float = 5.0,
@@ -68,6 +70,10 @@ class BybitWsCollector:
         self._gap_until_ms: int = 0
         self._disconnect_at_ms: int | None = None
         self._ever_connected = False
+        self._l1 = L1BookTracker(
+            pair_id_by_symbol=self.pair_id_by_symbol,
+            multiplier_by_symbol=self.multiplier_by_symbol,
+        )
 
     def request_stop(self) -> None:
         self._stop.set()
@@ -125,6 +131,11 @@ class BybitWsCollector:
 
         async with connect(self.ws_url) as ws:
             self._ever_connected = True
+            # Fresh L1 after (re)connect — Bybit re-sends snapshots on subscribe.
+            self._l1 = L1BookTracker(
+                pair_id_by_symbol=self.pair_id_by_symbol,
+                multiplier_by_symbol=self.multiplier_by_symbol,
+            )
             if self._disconnect_at_ms is not None:
                 await self._emit_reconnect_gap()
             args = build_subscribe_args(
@@ -171,13 +182,7 @@ class BybitWsCollector:
         recv = now_ms()
         use_gap = self._in_gap_window()
         if topic.startswith(f"{self.book_topic_prefix}."):
-            tick = parse_ticker_message(
-                payload,
-                pair_id_by_symbol=self.pair_id_by_symbol,
-                multiplier_by_symbol=self.multiplier_by_symbol,
-                recv_ts_ms=recv,
-                gap=use_gap,
-            )
+            tick = self._l1.apply(payload, recv_ts_ms=recv, gap=use_gap)
             if tick is not None:
                 await _maybe_await(self.on_book(tick))
             return

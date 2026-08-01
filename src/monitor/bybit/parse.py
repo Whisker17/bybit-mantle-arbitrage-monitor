@@ -1,13 +1,23 @@
-"""Parse Bybit v5 public spot WS payloads into normalized ticks."""
+"""Parse Bybit v5 public spot WS payloads into normalized ticks.
+
+Pure functions only — mutable L1 merge state lives in ``l1.L1BookTracker``.
+"""
 
 from __future__ import annotations
 
 from collections.abc import Mapping
+from dataclasses import dataclass
 from decimal import Decimal, InvalidOperation
 from typing import Any
 
-from monitor.quotes import BybitBookTick, BybitTradeTick, now_ms
+from monitor.quotes import BybitTradeTick, now_ms
 from monitor.symbols.multipliers import de_multiplied_price
+
+# Mirrors config/collector.yaml bybit.book_topic_prefix (spot L1; WHI-743).
+# Used only as code-level defaults for tests / unconfigured callers; the daemon
+# always injects the YAML value.
+DEFAULT_BOOK_PREFIX = "orderbook.1"
+DEFAULT_TRADE_PREFIX = "publicTrade"
 
 
 def _dec(value: object) -> Decimal:
@@ -16,57 +26,132 @@ def _dec(value: object) -> Decimal:
     return Decimal(str(value))
 
 
-def parse_ticker_message(
-    payload: dict[str, Any],
-    *,
-    pair_id_by_symbol: Mapping[str, str],
-    multiplier_by_symbol: Mapping[str, Decimal],
-    recv_ts_ms: int | None = None,
-    gap: bool = False,
-) -> BybitBookTick | None:
-    """Parse Bybit v5 ``tickers.{symbol}`` (bookTicker-equivalent bid1/ask1)."""
+def _symbol_from_topic(topic: str) -> str:
+    """Extract symbol from the last dotted segment (e.g. ``orderbook.1.SYMBOL``)."""
+    if not topic or "." not in topic:
+        return ""
+    return topic.rsplit(".", 1)[-1].upper()
+
+
+def _optional_int(value: object) -> int | None:
+    if value is None or value == "":
+        return None
+    try:
+        return int(value)
+    except (TypeError, ValueError):
+        return None
+
+
+def parse_level_ops(levels: object) -> list[tuple[Decimal, Decimal]]:
+    """Parse Bybit ``b``/``a`` entries into ``(price, size)`` ops (size 0 = delete)."""
+    if not isinstance(levels, list):
+        return []
+    out: list[tuple[Decimal, Decimal]] = []
+    for top in levels:
+        if not isinstance(top, (list, tuple)) or len(top) < 2:
+            continue
+        try:
+            price = _dec(top[0])
+            size = _dec(top[1])
+        except (InvalidOperation, TypeError):
+            continue
+        out.append((price, size))
+    return out
+
+
+@dataclass(frozen=True, slots=True)
+class OrderbookL1Update:
+    """One orderbook.1 push after pure parse (before per-symbol L1 merge)."""
+
+    symbol: str
+    msg_type: str  # "snapshot" | "delta" | ""
+    # None = side key absent from ``data``; empty list = key present, no ops.
+    bid_ops: list[tuple[Decimal, Decimal]] | None
+    ask_ops: list[tuple[Decimal, Decimal]] | None
+    u: int | None
+    seq: int | None
+    exchange_ts_ms: int | None
+
+
+def parse_orderbook_l1_update(payload: dict[str, Any]) -> OrderbookL1Update | None:
+    """Parse Bybit v5 ``orderbook.1.{symbol}`` into a typed L1 update (no merge)."""
     data = payload.get("data", payload)
     if not isinstance(data, dict):
         return None
-    symbol = str(data.get("symbol") or data.get("s") or "").upper()
+    symbol = str(data.get("s") or data.get("symbol") or "").upper()
     if not symbol:
-        topic = str(payload.get("topic") or "")
-        if topic.startswith("tickers."):
-            symbol = topic.rsplit(".", 1)[-1].upper()
-    pair_id = pair_id_by_symbol.get(symbol)
-    mult = multiplier_by_symbol.get(symbol)
-    if pair_id is None or mult is None:
+        symbol = _symbol_from_topic(str(payload.get("topic") or ""))
+    if not symbol:
         return None
 
-    bid_raw = data.get("bid1Price")
-    ask_raw = data.get("ask1Price")
-    if bid_raw is None or ask_raw is None or bid_raw == "" or ask_raw == "":
-        return None
-    try:
-        bid = _dec(bid_raw)
-        ask = _dec(ask_raw)
-    except (InvalidOperation, TypeError):
-        return None
-    if bid <= 0 or ask <= 0:
-        return None
+    msg_type = str(payload.get("type") or "").lower()
+    bid_ops = parse_level_ops(data["b"]) if "b" in data else None
+    ask_ops = parse_level_ops(data["a"]) if "a" in data else None
 
     exchange_ts = data.get("ts") or payload.get("ts") or payload.get("cts")
-    recv = recv_ts_ms if recv_ts_ms is not None else now_ms()
+    exchange_ts_ms: int | None
     if exchange_ts is None:
-        exchange_ts = recv
+        exchange_ts_ms = None
+    else:
+        try:
+            exchange_ts_ms = int(exchange_ts)
+        except (TypeError, ValueError):
+            exchange_ts_ms = None
 
-    return BybitBookTick(
-        pair_id=pair_id,
+    return OrderbookL1Update(
         symbol=symbol,
-        exchange_ts_ms=int(exchange_ts),
-        recv_ts_ms=recv,
-        bid=bid,
-        ask=ask,
-        bid_de_multiplied=de_multiplied_price(bid, mult),
-        ask_de_multiplied=de_multiplied_price(ask, mult),
-        multiplier=mult,
-        gap=gap,
+        msg_type=msg_type,
+        bid_ops=bid_ops,
+        ask_ops=ask_ops,
+        u=_optional_int(data.get("u")),
+        seq=_optional_int(data.get("seq")),
+        exchange_ts_ms=exchange_ts_ms,
     )
+
+
+def apply_l1_side(
+    current: Decimal | None,
+    ops: list[tuple[Decimal, Decimal]] | None,
+    *,
+    is_snapshot: bool,
+    prefer_high: bool,
+) -> Decimal | None:
+    """Fold orderbook side ops onto L1 price.
+
+    Snapshot replaces the side from the ops list (best of positive sizes).
+    Delta applies every entry in order: size 0 deletes that price, size > 0
+    sets/updates it — multi-entry moves like ``[[old,0],[new,sz]]`` work.
+    """
+    if ops is None:
+        return None if is_snapshot else current
+
+    if is_snapshot:
+        best: Decimal | None = None
+        for price, size in ops:
+            if size <= 0 or price <= 0:
+                continue
+            if best is None:
+                best = price
+            elif prefer_high:
+                best = max(best, price)
+            else:
+                best = min(best, price)
+        return best
+
+    # delta
+    if not ops:
+        return current
+    price = current
+    for p, s in ops:
+        if p <= 0:
+            # Skip malformed price entry; keep prior L1.
+            continue
+        if s <= 0:
+            if price == p:
+                price = None
+        else:
+            price = p
+    return price
 
 
 def parse_public_trade_message(
@@ -135,10 +220,10 @@ def parse_public_trade_message(
 def build_subscribe_args(
     symbols: list[str],
     *,
-    book_prefix: str = "tickers",
-    trade_prefix: str = "publicTrade",
+    book_prefix: str = DEFAULT_BOOK_PREFIX,
+    trade_prefix: str = DEFAULT_TRADE_PREFIX,
 ) -> list[str]:
-    """Bybit v5 subscribe topic list for tickers (L1) + public trades."""
+    """Bybit v5 subscribe topic list for L1 orderbook + public trades."""
     args: list[str] = []
     for sym in symbols:
         s = sym.upper()
