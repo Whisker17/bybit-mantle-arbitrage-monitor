@@ -9,11 +9,46 @@ from typing import Any
 from monitor.quotes import BybitBookTick, BybitTradeTick, now_ms
 from monitor.symbols.multipliers import de_multiplied_price
 
+# Spot public stream: tickers has no bid1/ask1; L1 is orderbook.1 (WHI-743 / WHI-630).
+_DEFAULT_BOOK_PREFIX = "orderbook.1"
+_DEFAULT_TRADE_PREFIX = "publicTrade"
+
 
 def _dec(value: object) -> Decimal:
     if isinstance(value, Decimal):
         return value
     return Decimal(str(value))
+
+
+def _best_level_price(levels: object) -> Decimal | None:
+    """Top-of-book price from Bybit orderbook ``b`` / ``a`` (list of [price, size])."""
+    if not isinstance(levels, list) or not levels:
+        return None
+    top = levels[0]
+    if not isinstance(top, (list, tuple)) or len(top) < 1:
+        return None
+    try:
+        price = _dec(top[0])
+        size = _dec(top[1]) if len(top) > 1 else Decimal("1")
+    except (InvalidOperation, TypeError, IndexError):
+        return None
+    if price <= 0 or size <= 0:
+        return None
+    return price
+
+
+def _symbol_from_topic(topic: str) -> str:
+    """Extract symbol from ``orderbook.1.SYMBOL`` or ``tickers.SYMBOL``."""
+    if not topic:
+        return ""
+    for prefix in (_DEFAULT_BOOK_PREFIX, "tickers"):
+        p = f"{prefix}."
+        if topic.startswith(p):
+            return topic[len(p) :].upper()
+    # Fallback: last dotted segment (publicTrade.SYMBOL, etc.)
+    if "." in topic:
+        return topic.rsplit(".", 1)[-1].upper()
+    return ""
 
 
 def parse_ticker_message(
@@ -24,29 +59,36 @@ def parse_ticker_message(
     recv_ts_ms: int | None = None,
     gap: bool = False,
 ) -> BybitBookTick | None:
-    """Parse Bybit v5 ``tickers.{symbol}`` (bookTicker-equivalent bid1/ask1)."""
+    """Parse Bybit v5 L1 book from ``orderbook.1.{symbol}`` (a/b levels).
+
+    Spot public ``tickers.{symbol}`` has no bid1/ask1; use orderbook depth 1.
+    At depth=1 both snapshot and delta carry the full top level (WHI-743).
+    Legacy linear/tickers ``bid1Price``/``ask1Price`` is still accepted if present.
+    """
     data = payload.get("data", payload)
     if not isinstance(data, dict):
         return None
     symbol = str(data.get("symbol") or data.get("s") or "").upper()
     if not symbol:
-        topic = str(payload.get("topic") or "")
-        if topic.startswith("tickers."):
-            symbol = topic.rsplit(".", 1)[-1].upper()
+        symbol = _symbol_from_topic(str(payload.get("topic") or ""))
     pair_id = pair_id_by_symbol.get(symbol)
     mult = multiplier_by_symbol.get(symbol)
     if pair_id is None or mult is None:
         return None
 
-    bid_raw = data.get("bid1Price")
-    ask_raw = data.get("ask1Price")
-    if bid_raw is None or ask_raw is None or bid_raw == "" or ask_raw == "":
-        return None
-    try:
-        bid = _dec(bid_raw)
-        ask = _dec(ask_raw)
-    except (InvalidOperation, TypeError):
-        return None
+    bid = _best_level_price(data.get("b"))
+    ask = _best_level_price(data.get("a"))
+    if bid is None or ask is None:
+        # Legacy tickers / linear style (not present on spot public tickers).
+        bid_raw = data.get("bid1Price")
+        ask_raw = data.get("ask1Price")
+        if bid_raw is None or ask_raw is None or bid_raw == "" or ask_raw == "":
+            return None
+        try:
+            bid = _dec(bid_raw)
+            ask = _dec(ask_raw)
+        except (InvalidOperation, TypeError):
+            return None
     if bid <= 0 or ask <= 0:
         return None
 
@@ -135,10 +177,10 @@ def parse_public_trade_message(
 def build_subscribe_args(
     symbols: list[str],
     *,
-    book_prefix: str = "tickers",
-    trade_prefix: str = "publicTrade",
+    book_prefix: str = _DEFAULT_BOOK_PREFIX,
+    trade_prefix: str = _DEFAULT_TRADE_PREFIX,
 ) -> list[str]:
-    """Bybit v5 subscribe topic list for tickers (L1) + public trades."""
+    """Bybit v5 subscribe topic list for L1 orderbook + public trades."""
     args: list[str] = []
     for sym in symbols:
         s = sym.upper()

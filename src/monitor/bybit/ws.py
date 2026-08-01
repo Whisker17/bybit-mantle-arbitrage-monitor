@@ -42,7 +42,7 @@ class BybitWsCollector:
         on_book: OnBook,
         on_trade: OnTrade,
         on_gap: OnGap | None = None,
-        book_topic_prefix: str = "tickers",
+        book_topic_prefix: str = "orderbook.1",
         trade_topic_prefix: str = "publicTrade",
         reconnect_min_s: float = 1.0,
         reconnect_max_s: float = 60.0,

@@ -8,8 +8,9 @@ sqlite_path: data/monitor.db
 bybit:
   # Public spot multiplexed stream.
   ws_url: "wss://stream.bybit.com/v5/public/spot"
-  # tickers = full bookTicker-equivalent (bid1/ask1 every update; no delta book).
-  book_topic_prefix: "tickers"
+  # Spot public tickers has no bid1/ask1 — L1 is orderbook.1 (snapshot + delta;
+  # at depth=1 each push carries the full top level). Same pit as WHI-630.
+  book_topic_prefix: "orderbook.1"
   trade_topic_prefix: "publicTrade"
   reconnect_min_s: 1.0
   reconnect_max_s: 60.0
