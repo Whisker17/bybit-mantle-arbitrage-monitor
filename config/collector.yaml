@@ -25,9 +25,10 @@ mantle:
   # Poll head; Mantle block time ≈ 2s. 0.25s is the measured sweet spot (WHI-749);
   # 0.10s increases block-not-found retries without a useful P95 win.
   block_poll_interval_s: 0.25
-  # Stay 1 block behind tip so LB read-your-writes does not emit
-  # "block N not found" gaps (phase-1 HEAD_LAG lesson; measured WHI-749).
-  # Cost: ~+2s systematic block_ts→recv lag; kills multi-10s catch-up tails.
+  # Stay 1 block behind tip to cut lag=0 catch-up P95 tails (WHI-749 / phase-1
+  # HEAD_LAG lesson). Transient "block N not found" can still occur on multi-
+  # backend keyed LB; poller retries the same N (no skip). Raise to 2 if gap
+  # noise is operationally loud. Cost: ~+2s systematic block_ts→recv lag.
   head_lag_blocks: 1
   # If head advances more than this beyond last processed, flag gap on subsequent rows.
   max_block_gap: 1
@@ -38,6 +39,8 @@ mantle:
   rpc_retries: 5
   # Fetch gasUsed + effectiveGasPrice for swap txs (xStock pools are quiet).
   fetch_swap_receipts: true
+  # Equal-weight samples for meta block_ingest_latency_{p50,p95,p99}_ms.
+  latency_window_blocks: 256
 
 rfq:
   # Notional for EXACT_INPUT quote polls (USDC has 6 decimals). 100 USDC.

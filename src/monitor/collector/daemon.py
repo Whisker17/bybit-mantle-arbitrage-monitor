@@ -17,7 +17,7 @@ from monitor.collector.config import (
     resolve_mantle_rpc_url,
     rpc_url_kind,
 )
-from monitor.collector.latency import LatencyTracker
+from monitor.collector.latency import LatencyTracker, block_ingest_latency_ms
 from monitor.fluxion.chain import ChainPoller
 from monitor.fluxion.pools import PoolMeta
 from monitor.fluxion.rfq import RfqPoller
@@ -189,7 +189,9 @@ class CollectorDaemon:
         )
 
         # Rolling block_ts→recv latency (one sample per block via on_block_done).
-        latency_tracker = LatencyTracker(window=256)
+        latency_tracker = LatencyTracker(
+            window=self.cfg.mantle.latency_window_blocks
+        )
 
         def on_state(ticks: list[FluxionPoolStateTick]) -> None:
             self.store.insert_pool_state(ticks)
@@ -207,7 +209,7 @@ class CollectorDaemon:
         def on_block_done(
             block_number: int, block_ts: int, _discovered_ms: int, recv_ts_ms: int
         ) -> None:
-            latency_ms = max(0, recv_ts_ms - block_ts * 1000)
+            latency_ms = block_ingest_latency_ms(block_ts, recv_ts_ms)
             report = latency_tracker.add(latency_ms)
             self.store.set_meta("last_block_ingest_latency_ms", str(latency_ms))
             self.store.set_meta("last_block", str(block_number))

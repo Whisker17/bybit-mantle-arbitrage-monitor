@@ -39,6 +39,14 @@ class _FakeRpc:
         return "0x" + "0" * 64
 
 
+def test_block_ingest_latency_ms_floor() -> None:
+    from monitor.collector.latency import block_ingest_latency_ms
+
+    assert block_ingest_latency_ms(1_700_000_000, 1_700_000_000_500) == 500
+    # recv before block_ts (clock skew) → 0, not negative
+    assert block_ingest_latency_ms(1_700_000_010, 1_700_000_000_000) == 0
+
+
 def test_latency_tracker_window() -> None:
     from monitor.collector.latency import LatencyTracker
 

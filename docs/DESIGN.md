@@ -294,7 +294,7 @@ the RPC LB, and processing — not “RPC RTT alone.”
 
 | Knob | Default | Why |
 |------|---------|-----|
-| `mantle.head_lag_blocks` | **1** | Avoid LB tip not-found gaps; +~2 s systematic lag |
+| `mantle.head_lag_blocks` | **1** | Cut lag=0 catch-up P95 tails; +~2 s systematic lag (transient not-found still possible) |
 | `mantle.block_poll_interval_s` | **0.25** | Measured sweet spot; 0.10 s increases not-found retries |
 
 **Acceptance (keyed Mantle RPC, steady state after warmup):**

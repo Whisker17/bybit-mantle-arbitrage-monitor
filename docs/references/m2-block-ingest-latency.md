@@ -29,15 +29,21 @@ latency_ms = max(0, recv_ts_ms - block_ts * 1000)
 This matches daemon meta `last_block_ingest_latency_ms` (and WHI-731 wording
 “块时间→入库”). **It is not** “RPC processing only” and **it includes**:
 
-1. Local clock vs chain clock skew (host-dependent; measured **~3–5 s** ahead of
-   Mantle timestamps on this research host).
+1. Local clock vs chain clock skew (host-dependent). **Explicit check** on this
+   research host: `wall_s - block_ts` at tip was **~3–5 s** (wall ahead of
+   Mantle) at two spot samples during the runs — not NTP-corrected. Deploy VPS
+   skew may differ; re-check with
+   `python -c` against `eth_getBlockByNumber` after deploy.
 2. Time until the settled head is visible on the RPC LB.
 3. Full multi-call work for 8 xStock pools (~1–2 s keyed P50).
 
 So a single smoke `last_block_ingest_latency_ms ≈ 7–9 s` is **expected** under
 `head_lag_blocks: 0` on a clock-ahead host; it is not evidence of a 7 s pure
-RPC hang. Use rolling percentiles (`block_ingest_latency_p50/p95/p99_ms` meta,
-or this probe) — never a single meta sample — for SLOs.
+RPC hang. The revised P95 &lt; 15 s SLO is a **freshness** bound that absorbs
+typical host skew + lag=1 + RPC work; operators should still keep NTP sane so
+skew does not dominate. Use rolling percentiles
+(`block_ingest_latency_p50/p95/p99_ms` meta, or this probe) — never a single
+meta sample — for SLOs.
 
 Mantle block interval in-sample: **exactly 2 s** between consecutive blocks.
 
@@ -63,15 +69,23 @@ still ingested (zero holes in the block-number series); misses only flag
 ~+2 s extra P50; leave as operator override if gap noise matters more than
 freshness.
 
-### Startup vs steady (keyed lag=1 run A)
+### Startup vs steady
 
-| Window | n | latency P50 / P95 | notes |
-|--------|---|-------------------|-------|
-| startup | 30 | 8866 / 9819 | no special cold-start spike |
-| steady | 421 | 8823 / 11398 | same regime |
+| Config | Window | n | latency P50 / P95 | notes |
+|--------|--------|---|-------------------|-------|
+| keyed lag=0 | startup | 30 | 7923 / 11622 | first 30 blocks |
+| keyed lag=0 | steady | 384 | 7287 / **49219** | fat tail is **steady**, not warmup |
+| keyed lag=1 A | startup | 30 | 8866 / 9819 | no cold-start spike |
+| keyed lag=1 A | steady | 421 | 8823 / 11398 | same regime |
 
-Startup is **not** the source of the 7–9 s smoke readings; steady-state sits in
-the same band.
+Startup is **not** the source of the 7–9 s smoke readings; lag=0 steady-state
+median is already ~7 s, and the multi-10s P95 is a steady catch-up tail after
+not-found stalls.
+
+**Continuity note:** the “~30 min keyed lag=1” summary stitches two sequential
+15 min probes (A then B), not one uninterrupted 30 min process. Gap rates
+differ between halves (A: 0 not-found; B: ~18 unique) — annotation strategy
+below applies; do not read A alone as a 30 min zero-gap proof.
 
 ### Decomposition (keyed lag=1 run A, all samples)
 

@@ -83,11 +83,10 @@ def run_probe(
         block_number: int, block_ts: int, discovered_ms: int, recv_ts_ms: int
     ) -> None:
         nonlocal seq
-        sample = BlockIngestSample(
+        sample = BlockIngestSample.from_timing(
             block_number=block_number,
             block_ts=block_ts,
             recv_ts_ms=recv_ts_ms,
-            latency_ms=max(0, recv_ts_ms - block_ts * 1000),
             discovered_ms=discovered_ms,
             seq=seq,
         )
@@ -166,9 +165,7 @@ def run_probe(
     )
 
 
-def analyze_db(
-    path: Path, *, warmup_blocks: int = 30
-) -> tuple[list[BlockIngestSample], list[GapSample]]:
+def analyze_db(path: Path) -> tuple[list[BlockIngestSample], list[GapSample]]:
     conn = sqlite3.connect(f"file:{path}?mode=ro", uri=True)
     try:
         rows = conn.execute(
@@ -182,17 +179,6 @@ def analyze_db(
         samples = samples_from_pool_state_rows(
             (int(r[0]), int(r[1]), int(r[2])) for r in rows
         )
-        # Re-number seq after rebuild.
-        samples = [
-            BlockIngestSample(
-                block_number=s.block_number,
-                block_ts=s.block_ts,
-                recv_ts_ms=s.recv_ts_ms,
-                latency_ms=s.latency_ms,
-                seq=i,
-            )
-            for i, s in enumerate(samples)
-        ]
         gap_rows = conn.execute(
             """
             SELECT source, gap_start_ms, gap_end_ms, detail
@@ -298,7 +284,7 @@ def main(argv: list[str] | None = None) -> int:
     pairs = load_pairs_config(args.pairs_config)
 
     if args.analyze_db is not None:
-        samples, gaps = analyze_db(args.analyze_db, warmup_blocks=args.warmup_blocks)
+        samples, gaps = analyze_db(args.analyze_db)
         result = ProbeResult(
             rpc_kind="unknown",
             rpc_host=str(args.analyze_db),

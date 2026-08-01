@@ -2,7 +2,7 @@
 
 Metric (matches daemon ``last_block_ingest_latency_ms``)::
 
-    latency_ms = max(0, recv_ts_ms - block_ts * 1000)
+    latency_ms = block_ingest_latency_ms(block_ts, recv_ts_ms)
 
 where ``block_ts`` is the on-chain block timestamp (seconds) and ``recv_ts_ms``
 is wall clock **after** all per-block RPC (getBlock + pool Multicall + logs +
@@ -17,6 +17,11 @@ from collections.abc import Iterable, Sequence
 from dataclasses import dataclass, field
 
 
+def block_ingest_latency_ms(block_ts: int, recv_ts_ms: int) -> int:
+    """``recv_ts_ms - block_ts*1000``, floored at 0 (never negative from skew)."""
+    return max(0, int(recv_ts_ms) - int(block_ts) * 1000)
+
+
 @dataclass(frozen=True, slots=True)
 class BlockIngestSample:
     """One successfully processed Mantle block."""
@@ -25,14 +30,34 @@ class BlockIngestSample:
     block_ts: int  # chain seconds
     recv_ts_ms: int  # wall ms after RPC
     latency_ms: int
-    # Wall ms when poll_once first observed this block (before RPC work).
+    # Wall ms when getBlock is first attempted for this process call.
+    # Re-stamped on not-found retries (see WHI-749 note on poll_wait limits).
     discovered_ms: int | None = None
     # 0-based index in the probe session (for startup vs steady split).
     seq: int = 0
 
+    @classmethod
+    def from_timing(
+        cls,
+        *,
+        block_number: int,
+        block_ts: int,
+        recv_ts_ms: int,
+        discovered_ms: int | None = None,
+        seq: int = 0,
+    ) -> BlockIngestSample:
+        return cls(
+            block_number=block_number,
+            block_ts=block_ts,
+            recv_ts_ms=recv_ts_ms,
+            latency_ms=block_ingest_latency_ms(block_ts, recv_ts_ms),
+            discovered_ms=discovered_ms,
+            seq=seq,
+        )
+
     @property
     def poll_wait_ms(self) -> int | None:
-        """Age of the block when first seen (poll lag), before RPC work."""
+        """Age of the block when getBlock was attempted (before RPC work)."""
         if self.discovered_ms is None:
             return None
         return max(0, self.discovered_ms - self.block_ts * 1000)
@@ -155,11 +180,11 @@ class ProbeResult:
         return sum(1 for g in self.gaps if g.is_block_not_found)
 
 
-def _percentile(sorted_or_not: Sequence[float], pct: float) -> float:
+def _percentile(values: Sequence[float], pct: float) -> float:
     """Nearest-rank percentile (inclusive). ``pct`` in [0, 100]."""
-    if not sorted_or_not:
+    if not values:
         raise ValueError("empty")
-    xs = sorted(sorted_or_not)
+    xs = sorted(values)
     if pct <= 0:
         return xs[0]
     if pct >= 100:
@@ -186,19 +211,15 @@ def samples_from_pool_state_rows(
             bt, rt = prev
             # Prefer consistent block_ts; keep latest recv.
             by_block[block_number] = (bt if bt else block_ts, max(rt, recv_ts_ms))
-    samples: list[BlockIngestSample] = []
-    for seq, block_number in enumerate(sorted(by_block)):
-        block_ts, recv_ts_ms = by_block[block_number]
-        samples.append(
-            BlockIngestSample(
-                block_number=block_number,
-                block_ts=block_ts,
-                recv_ts_ms=recv_ts_ms,
-                latency_ms=max(0, recv_ts_ms - block_ts * 1000),
-                seq=seq,
-            )
+    return [
+        BlockIngestSample.from_timing(
+            block_number=block_number,
+            block_ts=by_block[block_number][0],
+            recv_ts_ms=by_block[block_number][1],
+            seq=seq,
         )
-    return samples
+        for seq, block_number in enumerate(sorted(by_block))
+    ]
 
 
 def format_window(report: LatencyWindowReport) -> str:
