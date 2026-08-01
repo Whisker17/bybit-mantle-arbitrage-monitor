@@ -10,7 +10,7 @@ keys. Phase 2 will use public market data only.
 | Phase | What | Where |
 |-------|------|--------|
 | **1 (archived)** | 29-day offline WMNT/USDT0 feasibility backtest | `src/mba/`, `report/`, tag `phase1-backtest` |
-| **2 (active)** | Real-time Bybit ⇄ Fluxion xStocks panel (TUI first) | `src/monitor/` (M1 symbols + M2 collectors), Linear WHI-732…735 |
+| **2 (active)** | Real-time Bybit ⇄ Fluxion xStocks panel (TUI + Web) | `src/monitor/` + `web/`, Linear WHI-732…757+ |
 
 Spec of record: [`docs/DESIGN.md`](docs/DESIGN.md). Agent workflow: [`AGENTS.md`](AGENTS.md).
 
@@ -24,13 +24,14 @@ Live paper-arb monitor over a fixed list of Fluxion-liquid xStocks:
 - Data: pure realtime, no historical backfill
 - Economics: two-sided inventory paper arb (Bybit taker 0.10% + Fluxion pool fee + Mantle gas + bilateral slippage)
 - Stats: split by US equity open vs closed session
-- UI: TUI first (Python); Web panel is plan-only for v1
+- UI: TUI (Python, frozen for new features) + Web (Next.js static export +
+  FastAPI on the VPS; WHI-757 skeleton)
 
 Milestones (Linear project *Mantle <> Bybit Arbitrage Monitor*):
 
-`M0 WHI-736` → `M1 WHI-730` → `M2 WHI-731` → `M3 WHI-732` / `M4 WHI-733` → `M5 WHI-734` → `M6 WHI-735`
+`M0 WHI-736` → `M1 WHI-730` → `M2 WHI-731` → `M3 WHI-732` / `M4 WHI-733` → `M5 WHI-734` → Web `WHI-757`…
 
-M0–M2 landed. Remaining: metrics (M3), attribution (M4), TUI (M5), web plan (M6).
+M0–M5 landed. Web skeleton: WHI-757. Next: overview polish WHI-758, PnL v2 WHI-756.
 
 ### Setup (phase 2)
 

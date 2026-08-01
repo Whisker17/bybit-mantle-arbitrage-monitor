@@ -85,6 +85,28 @@ soon — anything touching key handling, RPC credentials defaults to at least Hi
   table so 2028 does not silently misclassify holidays. Extend the frozensets
   (or move to YAML) before first use in 2028.
 
+- **VPS memory / browser acceptance not measured in-repo** (Medium, WHI-757 → first deploy).
+  Acceptance asks for collector+API+nginx RSS on whi715-vps and a browser check
+  against a real journal. Skeleton ships measure commands in `deploy/README.md`
+  but no agent has SSH to the box. Operator records numbers (and any MemoryMax
+  retune) on first `./scripts/deploy-web.sh` dogfood — optionally a short note
+  under `docs/references/`.
+
+- **`/api/pairs/{id}/trades` rebuilds full detail** (Low, WHI-757 → load if needed).
+  `monitor.api.routes.pairs.get_pair_trades` calls `build_pair_detail` so labels
+  match the detail page. Under 2s poll this is the expensive path. Split a
+  trades-only builder when measured latency or MemoryMax pressure requires it.
+
+- **OpenAPI lacks response schemas** (Low, WHI-757 → WHI-758).
+  Routes return `dict[str, Any]` after `to_json_dict`; `/docs` lists paths but
+  not field shapes. Hand-written TS types in `web/app/page.tsx` can drift.
+  Add Pydantic response models (or generate TS) when the overview page hardens.
+
+- **API `uv sync` installs full phase-1 stack on VPS** (Low, WHI-757 → later).
+  `pyproject.toml` still pulls polars/pyarrow/duckdb/matplotlib/textual for the
+  archive + TUI. An `api` optional extra would slim the 1GB box; not required
+  for skeleton correctness.
+
 ---
 
 ## Resolved

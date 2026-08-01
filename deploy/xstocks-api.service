@@ -1,0 +1,37 @@
+# systemd unit: read-only FastAPI panel API (WHI-757).
+# Install on the VPS:
+#   sudo cp deploy/xstocks-api.service /etc/systemd/system/
+#   sudo systemctl daemon-reload
+#   sudo systemctl enable --now xstocks-api
+#
+# Adjust User/WorkingDirectory/Environment to match the deploy layout.
+# Single process, MemoryMax capped for the 1GB box.
+
+[Unit]
+Description=xStocks arbitrage monitor API (read-only FastAPI)
+After=network.target
+# Optional: start after the collector if you co-manage both units.
+# After=network.target xstocks-collector.service
+# Wants=xstocks-collector.service
+
+[Service]
+Type=simple
+User=xstocks
+Group=xstocks
+WorkingDirectory=/opt/xstocks/app
+# uv-managed venv lives next to the checkout (or system path you prefer).
+Environment=PATH=/opt/xstocks/app/.venv/bin:/usr/local/bin:/usr/bin
+Environment=PYTHONUNBUFFERED=1
+# Optional keyed Mantle RPC is not required for the API (read-only journal).
+ExecStart=/opt/xstocks/app/.venv/bin/python -m monitor.api
+Restart=on-failure
+RestartSec=3
+# Hard caps — leave headroom for collector + nginx + OS on a 1GB VPS.
+MemoryMax=256M
+MemoryHigh=200M
+# No write access needed beyond reading the journal + logs.
+NoNewPrivileges=true
+PrivateTmp=true
+
+[Install]
+WantedBy=multi-user.target
