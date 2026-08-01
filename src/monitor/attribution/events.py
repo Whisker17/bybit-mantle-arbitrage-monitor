@@ -43,6 +43,8 @@ class RfqFillEvent:
     """One RFQ / LOP settlement (mechanism=RFQ).
 
     ``pair_id`` is optional until fill enrichment lands (DEFERRED_ISSUES).
+    ``session`` should be stamped by the producer from fill timestamp so
+    session-scoped mechanism share stays coherent with AMM.
     """
 
     ts_ms: int
@@ -51,6 +53,7 @@ class RfqFillEvent:
     log_index: int
     pair_id: str | None = None
     order_hash: str | None = None
+    session: SessionKind | None = None
 
 
 def amm_trade_from_swap(
@@ -97,6 +100,7 @@ def rfq_fill_from_tick(
     *,
     pair_id: str | None = None,
     ts_ms: int | None = None,
+    session: SessionKind | None = None,
 ) -> RfqFillEvent:
     return RfqFillEvent(
         ts_ms=ts_ms if ts_ms is not None else tick.recv_ts_ms,
@@ -105,4 +109,5 @@ def rfq_fill_from_tick(
         log_index=tick.log_index,
         pair_id=pair_id,
         order_hash=tick.order_hash,
+        session=session,
     )

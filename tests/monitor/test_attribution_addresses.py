@@ -2,7 +2,14 @@
 
 from __future__ import annotations
 
-from monitor.attribution import classify_addresses, is_contract_code, probe_roles
+from monitor.attribution import (
+    AddressRole,
+    classify_addresses,
+    is_contract_code,
+    load_attribution_config,
+    probe_roles,
+    probe_roles_from_config,
+)
 
 
 class FakeRpc:
@@ -55,7 +62,7 @@ def test_classify_addresses_batches_and_dedupes() -> None:
 
 def test_classify_empty() -> None:
     rpc = FakeRpc({})
-    assert classify_addresses([], rpc) == {}
+    assert classify_addresses([], rpc, batch_size=50) == {}
 
 
 def test_probe_roles_entrypoint_vs_internal() -> None:
@@ -67,6 +74,9 @@ def test_probe_roles_entrypoint_vs_internal() -> None:
             "0xtxb": {"to": "0x" + "99" * 20},
         }
     )
-    out = probe_roles([(a, "0xtxa"), (b, "0xtxb")], rpc)
-    assert out[a] == "entrypoint"
-    assert out[b] == "internal"
+    out = probe_roles([(a, "0xtxa"), (b, "0xtxb")], rpc, batch_size=10)
+    assert out[a] is AddressRole.ENTRYPOINT
+    assert out[b] is AddressRole.INTERNAL
+    cfg = load_attribution_config()
+    out2 = probe_roles_from_config([(a, "0xtxa")], rpc, cfg)
+    assert out2[a] is AddressRole.ENTRYPOINT

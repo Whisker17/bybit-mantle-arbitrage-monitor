@@ -16,9 +16,14 @@ optional ``classify_addresses``.
 """
 
 from monitor.attribution.addresses import (
+    AddressRole,
+    BatchRpc,
     classify_addresses,
+    classify_addresses_from_config,
     is_contract_code,
     probe_roles,
+    probe_roles_from_config,
+    role_samples_from_trades,
 )
 from monitor.attribution.aggregate import (
     MechanismShare,
@@ -69,10 +74,12 @@ from monitor.attribution.snapshot import AttributionSnapshot, build_attribution_
 __all__ = [
     "ActivityRegime",
     "AddressFeatures",
+    "AddressRole",
     "AmmTradeEvent",
     "AttributionConfig",
     "AttributionConfigError",
     "AttributionSnapshot",
+    "BatchRpc",
     "BehaviorLabel",
     "Mechanism",
     "MechanismShare",
@@ -89,6 +96,7 @@ __all__ = [
     "build_pair_attribution",
     "bybit_move_aligned",
     "classify_addresses",
+    "classify_addresses_from_config",
     "compute_address_features",
     "convergence_share",
     "default_attribution_path",
@@ -101,7 +109,9 @@ __all__ = [
     "mechanism_of_trade",
     "mechanism_share",
     "probe_roles",
+    "probe_roles_from_config",
     "resolve_bybit_mid_prev",
     "rfq_fill_from_tick",
+    "role_samples_from_trades",
     "window_bounds_ms",
 ]

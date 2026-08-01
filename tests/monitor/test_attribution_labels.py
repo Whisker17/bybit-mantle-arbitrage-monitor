@@ -7,6 +7,7 @@ from decimal import Decimal
 from monitor.attribution import (
     ActivityRegime,
     AddressFeatures,
+    AddressRole,
     BehaviorLabel,
     assign_behavior_label,
     compute_address_features,
@@ -68,7 +69,7 @@ def _feats(**overrides: object) -> AddressFeatures:
         "bybit_align_ratio": None,
         "n_bybit_align_scored": 0,
         "is_contract": True,
-        "role": "internal",
+        "role": AddressRole.INTERNAL,
     }
     base.update(overrides)
     return AddressFeatures(**base)  # type: ignore[arg-type]

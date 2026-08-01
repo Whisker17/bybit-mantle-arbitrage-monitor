@@ -49,7 +49,12 @@ def _amm(
     )
 
 
-def _rfq(*, pair: str | None = "AAPLx", i: int = 0) -> RfqFillEvent:
+def _rfq(
+    *,
+    pair: str | None = "AAPLx",
+    i: int = 0,
+    session: SessionKind | None = SessionKind.OPEN,
+) -> RfqFillEvent:
     return RfqFillEvent(
         ts_ms=1_700_000_100_000 + i,
         block_number=2000 + i,
@@ -57,6 +62,7 @@ def _rfq(*, pair: str | None = "AAPLx", i: int = 0) -> RfqFillEvent:
         log_index=i,
         pair_id=pair,
         order_hash=f"0xord{i}",
+        session=session,
     )
 
 
@@ -99,11 +105,22 @@ def test_session_filter_open_only() -> None:
         _amm(taker=taker, session=SessionKind.CLOSED, i=1),
         _amm(taker=taker, session=SessionKind.OPEN, i=2),
     ]
+    rfq = [
+        _rfq(session=SessionKind.OPEN, i=0),
+        _rfq(session=SessionKind.CLOSED, i=1),
+    ]
     open_panel = build_pair_attribution(
-        pair_id="AAPLx", amm_trades=amm, config=cfg, session=SessionKind.OPEN
+        pair_id="AAPLx",
+        amm_trades=amm,
+        rfq_fills=rfq,
+        config=cfg,
+        session=SessionKind.OPEN,
     )
     assert open_panel.mechanism.amm_trades == 2
+    assert open_panel.mechanism.rfq_trades == 1
     assert open_panel.session is SessionKind.OPEN
+    # Session-scoped activity regime is not meaningful → unknown
+    assert open_panel.top_takers[0].activity_regime.value == "unknown"
 
 
 def test_global_mechanism_includes_unscoped_rfq() -> None:

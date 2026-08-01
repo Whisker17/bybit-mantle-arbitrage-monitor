@@ -7,11 +7,13 @@ from dataclasses import dataclass
 from decimal import Decimal
 from typing import Literal
 
+from monitor.attribution.addresses import AddressRole
 from monitor.attribution.config import AttributionConfig
 from monitor.attribution.convergence import convergence_share
 from monitor.attribution.events import AmmTradeEvent, RfqFillEvent
 from monitor.attribution.labels import (
     ActivityRegime,
+    AddressFeatures,
     BehaviorLabel,
     TakerProfile,
     label_takers,
@@ -50,42 +52,70 @@ class MechanismShare:
 
 @dataclass(frozen=True, slots=True)
 class TakerRow:
-    """One top-taker row for the M5 detail panel."""
+    """One top-taker row for the M5 detail panel.
 
-    address: str
-    is_contract: bool | None
-    role: str | None
+    Nests ``AddressFeatures`` (metrics snapshot pattern) so new features do not
+    require a third field list.
+    """
+
+    features: AddressFeatures
     label: BehaviorLabel
-    n_trades: int
-    notional_usd: Decimal
-    trades_per_day: float | None
-    convergence_ratio: float | None
-    bybit_align_ratio: float | None
-    open_share: float
-    closed_share: float
-    activity_regime: ActivityRegime
-    n_buy: int
-    n_sell: int
 
     @classmethod
     def from_profile(cls, profile: TakerProfile) -> TakerRow:
-        f = profile.features
-        return cls(
-            address=f.address,
-            is_contract=f.is_contract,
-            role=f.role,
-            label=profile.label,
-            n_trades=f.n_trades,
-            notional_usd=f.notional_usd,
-            trades_per_day=f.trades_per_day,
-            convergence_ratio=f.convergence_ratio,
-            bybit_align_ratio=f.bybit_align_ratio,
-            open_share=f.open_share,
-            closed_share=f.closed_share,
-            activity_regime=f.activity_regime,
-            n_buy=f.n_buy,
-            n_sell=f.n_sell,
-        )
+        return cls(features=profile.features, label=profile.label)
+
+    @property
+    def address(self) -> str:
+        return self.features.address
+
+    @property
+    def is_contract(self) -> bool | None:
+        return self.features.is_contract
+
+    @property
+    def role(self) -> AddressRole | None:
+        return self.features.role
+
+    @property
+    def n_trades(self) -> int:
+        return self.features.n_trades
+
+    @property
+    def notional_usd(self) -> Decimal:
+        return self.features.notional_usd
+
+    @property
+    def trades_per_day(self) -> float | None:
+        return self.features.trades_per_day
+
+    @property
+    def convergence_ratio(self) -> float | None:
+        return self.features.convergence_ratio
+
+    @property
+    def bybit_align_ratio(self) -> float | None:
+        return self.features.bybit_align_ratio
+
+    @property
+    def open_share(self) -> float:
+        return self.features.open_share
+
+    @property
+    def closed_share(self) -> float:
+        return self.features.closed_share
+
+    @property
+    def activity_regime(self) -> ActivityRegime:
+        return self.features.activity_regime
+
+    @property
+    def n_buy(self) -> int:
+        return self.features.n_buy
+
+    @property
+    def n_sell(self) -> int:
+        return self.features.n_sell
 
 
 @dataclass(frozen=True, slots=True)
@@ -111,13 +141,24 @@ class PairAttribution:
     takers: list[TakerProfile]
 
 
-def _filter_session(
+def filter_amm_session(
     trades: Sequence[AmmTradeEvent],
     session: SessionFilter,
 ) -> list[AmmTradeEvent]:
     if session == "all":
         return list(trades)
     return [t for t in trades if t.session is session]
+
+
+def filter_rfq_session(
+    fills: Sequence[RfqFillEvent],
+    session: SessionFilter,
+) -> list[RfqFillEvent]:
+    if session == "all":
+        return list(fills)
+    # Fills without a session stamp are excluded from session slices so they
+    # cannot inflate open/closed RFQ counts against filtered AMM.
+    return [f for f in fills if f.session is session]
 
 
 def window_bounds_ms(
@@ -166,7 +207,7 @@ def build_pair_attribution(
     config: AttributionConfig,
     session: SessionFilter = "all",
     contract_flags: Mapping[str, bool] | None = None,
-    roles: Mapping[str, str] | None = None,
+    roles: Mapping[str, AddressRole | str] | None = None,
 ) -> PairAttribution:
     """Aggregate mechanism + behavior stats for one pair.
 
@@ -177,14 +218,19 @@ def build_pair_attribution(
     (open / closed / all); there is no internal multi-bucket rollup.
     """
     amm = [t for t in amm_trades if t.pair_id == pair_id]
-    amm = _filter_session(amm, session)
+    amm = filter_amm_session(amm, session)
     # Pair-scoped: only fills explicitly tagged with this pair_id (unscoped
     # RFQ fills contribute to global mechanism share only — see
     # docs/DEFERRED_ISSUES.md RFQ fill enrichment).
     rfq = [f for f in rfq_fills if f.pair_id == pair_id]
+    rfq = filter_rfq_session(rfq, session)
 
     profiles = label_takers(
-        amm, config, contract_flags=contract_flags, roles=roles
+        amm,
+        config,
+        contract_flags=contract_flags,
+        roles=roles,
+        session_scoped=(session != "all"),
     )
     labels = {p.address: p.label for p in profiles}
     counts = label_trade_counts(amm, labels)

@@ -9,7 +9,9 @@ version: 1
 # How many top AMM takers (by trade count) to surface for M5 detail pages.
 top_takers_n: 10
 
-# Batch size for eth_getCode contract-vs-EOA probes.
+# Batch size for eth_getCode (contract-vs-EOA) and eth_getTransactionByHash
+# (entrypoint-vs-internal) probes. Pass via classify_addresses_from_config /
+# probe_roles_from_config (or batch_size=config.address_code_batch_size).
 address_code_batch_size: 50
 
 # --- arb-bot candidate (DESIGN §2.5 product rule of thumb) ---

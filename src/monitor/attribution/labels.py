@@ -8,6 +8,7 @@ from dataclasses import dataclass, replace
 from decimal import Decimal
 from enum import StrEnum
 
+from monitor.attribution.addresses import AddressRole
 from monitor.attribution.config import AttributionConfig
 from monitor.attribution.convergence import bybit_move_aligned, convergence_share
 from monitor.attribution.events import AmmTradeEvent
@@ -49,7 +50,7 @@ class AddressFeatures:
     n_bybit_align_scored: int
     is_contract: bool | None
     # tx.to == address → entrypoint (router); else internal (when probed).
-    role: str | None
+    role: AddressRole | None
 
 
 @dataclass(frozen=True, slots=True)
@@ -75,7 +76,16 @@ def activity_regime(
     n_trades: int,
     closed_share: float,
     config: AttributionConfig,
+    session_scoped: bool = False,
 ) -> ActivityRegime:
+    """Classify 24/7 vs RTH-only.
+
+    When the trade set was already filtered to a single session
+    (``session_scoped=True``), closed/open share is not informative — return
+    UNKNOWN rather than a degenerate ``rth_only`` for every open-only window.
+    """
+    if session_scoped:
+        return ActivityRegime.UNKNOWN
     act = config.activity
     if n_trades < act.min_trades_for_regime:
         return ActivityRegime.UNKNOWN
@@ -130,6 +140,7 @@ def compute_address_features(
     address: str,
     config: AttributionConfig,
     is_contract: bool | None = None,
+    session_scoped: bool = False,
 ) -> AddressFeatures:
     """Aggregate features for one taker from their AMM trades."""
     addr = address.lower()
@@ -167,7 +178,12 @@ def compute_address_features(
     n_closed = sum(1 for t in rows if t.session is SessionKind.CLOSED)
     open_share = n_open / n
     closed_share = n_closed / n
-    regime = activity_regime(n_trades=n, closed_share=closed_share, config=config)
+    regime = activity_regime(
+        n_trades=n,
+        closed_share=closed_share,
+        config=config,
+        session_scoped=session_scoped,
+    )
     tpd = _trades_per_day(rows)
 
     conv_ratio, conv_scored = convergence_share(rows)
@@ -238,11 +254,14 @@ def label_takers(
     config: AttributionConfig,
     *,
     contract_flags: Mapping[str, bool] | None = None,
-    roles: Mapping[str, str] | None = None,
+    roles: Mapping[str, AddressRole | str] | None = None,
+    session_scoped: bool = False,
 ) -> list[TakerProfile]:
     """Build sorted taker profiles (trade count desc, then address) for a trade set."""
     flags = {k.lower(): v for k, v in (contract_flags or {}).items()}
-    role_map = {k.lower(): v for k, v in (roles or {}).items()}
+    role_map: dict[str, AddressRole] = {}
+    for k, v in (roles or {}).items():
+        role_map[k.lower()] = v if isinstance(v, AddressRole) else AddressRole(v)
     by_addr: dict[str, list[AmmTradeEvent]] = defaultdict(list)
     for t in trades:
         by_addr[t.taker.lower()].append(t)
@@ -254,6 +273,7 @@ def label_takers(
             address=addr,
             config=config,
             is_contract=flags.get(addr),
+            session_scoped=session_scoped,
         )
         role = role_map.get(addr)
         if role is not None:

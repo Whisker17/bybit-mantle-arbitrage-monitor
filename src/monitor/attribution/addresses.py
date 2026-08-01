@@ -1,19 +1,37 @@
-"""Contract vs EOA classification via eth_getCode."""
+"""Contract vs EOA classification via eth_getCode; entrypoint role probe."""
 
 from __future__ import annotations
 
 from collections.abc import Sequence
-from typing import Protocol
+from enum import StrEnum
+from typing import TYPE_CHECKING, Protocol
+
+from monitor.attribution.config import AttributionConfig
+
+if TYPE_CHECKING:
+    from monitor.attribution.events import AmmTradeEvent
 
 
-class CodeLookup(Protocol):
-    """Minimal RPC surface for tests (avoid live Mantle).
+class BatchRpc(Protocol):
+    """Minimal JSON-RPC batch surface (eth_getCode / eth_getTransactionByHash).
 
     Production callers pass ``monitor.fluxion.rpc.Rpc``; attribution does not
     import the concrete client (DESIGN §4.3 — no WS/RPC client coupling).
     """
 
     def batch(self, calls: list[tuple[str, list[object]]]) -> list[object]: ...
+
+
+# Back-compat aliases for type checkers / call sites.
+CodeLookup = BatchRpc
+TxLookup = BatchRpc
+
+
+class AddressRole(StrEnum):
+    """Entrypoint vs internal (phase-1 m6 ``probe_roles``)."""
+
+    ENTRYPOINT = "entrypoint"
+    INTERNAL = "internal"
 
 
 def _rpc_address(addr: str) -> str:
@@ -36,13 +54,14 @@ def is_contract_code(code: object) -> bool:
 
 def classify_addresses(
     addrs: Sequence[str],
-    rpc: CodeLookup,
+    rpc: BatchRpc,
     *,
-    batch_size: int = 50,
+    batch_size: int,
 ) -> dict[str, bool]:
     """Map lowercased address → True if contract, False if EOA.
 
     Batches ``eth_getCode`` calls. Empty input returns {}.
+    Pass ``batch_size=config.address_code_batch_size`` (no silent default).
     """
     if batch_size < 1:
         raise ValueError("batch_size must be >= 1")
@@ -73,23 +92,29 @@ def classify_addresses(
     return out
 
 
-class TxLookup(Protocol):
-    """Minimal surface for entrypoint-vs-internal role probe."""
-
-    def batch(self, calls: list[tuple[str, list[object]]]) -> list[object]: ...
+def classify_addresses_from_config(
+    addrs: Sequence[str],
+    rpc: BatchRpc,
+    config: AttributionConfig,
+) -> dict[str, bool]:
+    """``classify_addresses`` with ``config.address_code_batch_size``."""
+    return classify_addresses(
+        addrs, rpc, batch_size=config.address_code_batch_size
+    )
 
 
 def probe_roles(
     samples: Sequence[tuple[str, str]],
-    rpc: TxLookup,
+    rpc: BatchRpc,
     *,
-    batch_size: int = 50,
-) -> dict[str, str]:
-    """Map address → ``entrypoint`` | ``internal`` from one sample tx each.
+    batch_size: int,
+) -> dict[str, AddressRole]:
+    """Map address → entrypoint | internal from one sample tx each.
 
     Phase-1 ``mba.m6_attribution.probe_roles`` heuristic: if ``tx.to`` equals the
     address, users call it directly (router/entrypoint); otherwise it is
     downstream of another entrypoint. ``samples`` is ``(address, tx_hash)``.
+    Pass ``batch_size=config.address_code_batch_size``.
     """
     if batch_size < 1:
         raise ValueError("batch_size must be >= 1")
@@ -101,7 +126,7 @@ def probe_roles(
             by_addr[key] = tx_hash
 
     addrs = list(by_addr.keys())
-    out: dict[str, str] = {}
+    out: dict[str, AddressRole] = {}
     for i in range(0, len(addrs), batch_size):
         part = addrs[i : i + batch_size]
         calls: list[tuple[str, list[object]]] = [
@@ -118,5 +143,35 @@ def probe_roles(
             if isinstance(tx, dict):
                 raw_to = tx.get("to") or ""
                 to = str(raw_to).lower()
-            out[addr] = "entrypoint" if to == addr else "internal"
+            out[addr] = (
+                AddressRole.ENTRYPOINT if to == addr else AddressRole.INTERNAL
+            )
+    return out
+
+
+def probe_roles_from_config(
+    samples: Sequence[tuple[str, str]],
+    rpc: BatchRpc,
+    config: AttributionConfig,
+) -> dict[str, AddressRole]:
+    """``probe_roles`` with ``config.address_code_batch_size``."""
+    return probe_roles(samples, rpc, batch_size=config.address_code_batch_size)
+
+
+def role_samples_from_trades(
+    trades: Sequence[AmmTradeEvent],
+) -> list[tuple[str, str]]:
+    """Build ``(taker, tx_hash)`` samples for ``probe_roles`` (first tx per taker).
+
+    Uses the taker (recipient) so router entrypoints are detected when
+    ``tx.to == taker``.
+    """
+    seen: set[str] = set()
+    out: list[tuple[str, str]] = []
+    for t in trades:
+        addr = t.taker.lower()
+        if addr in seen:
+            continue
+        seen.add(addr)
+        out.append((addr, t.tx_hash))
     return out
