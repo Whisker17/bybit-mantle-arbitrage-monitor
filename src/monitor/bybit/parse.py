@@ -1,20 +1,23 @@
-"""Parse Bybit v5 public spot WS payloads into normalized ticks."""
+"""Parse Bybit v5 public spot WS payloads into normalized ticks.
+
+Pure functions only — mutable L1 merge state lives in ``l1.L1BookTracker``.
+"""
 
 from __future__ import annotations
 
 from collections.abc import Mapping
 from dataclasses import dataclass
 from decimal import Decimal, InvalidOperation
-from typing import Any, Literal
+from typing import Any
 
-from monitor.quotes import BybitBookTick, BybitTradeTick, now_ms
+from monitor.quotes import BybitTradeTick, now_ms
 from monitor.symbols.multipliers import de_multiplied_price
 
-# Spot public stream: tickers has no bid1/ask1; L1 is orderbook.1 (WHI-743 / WHI-630).
+# Mirrors config/collector.yaml bybit.book_topic_prefix (spot L1; WHI-743).
+# Used only as code-level defaults for tests / unconfigured callers; the daemon
+# always injects the YAML value.
 DEFAULT_BOOK_PREFIX = "orderbook.1"
 DEFAULT_TRADE_PREFIX = "publicTrade"
-
-SideAction = Literal["set", "clear", "unchanged"]
 
 
 def _dec(value: object) -> Decimal:
@@ -24,40 +27,10 @@ def _dec(value: object) -> Decimal:
 
 
 def _symbol_from_topic(topic: str) -> str:
-    """Extract symbol from ``orderbook.1.SYMBOL`` / ``tickers.SYMBOL`` / ``publicTrade.SYMBOL``."""
+    """Extract symbol from the last dotted segment (e.g. ``orderbook.1.SYMBOL``)."""
     if not topic or "." not in topic:
         return ""
     return topic.rsplit(".", 1)[-1].upper()
-
-
-def _side_from_levels(
-    levels: object,
-    *,
-    key_present: bool,
-    is_snapshot: bool,
-) -> tuple[SideAction, Decimal | None]:
-    """Interpret one side of Bybit orderbook.1 ``b`` / ``a``.
-
-    Snapshot replaces the local book; empty ladder clears the side.
-    Delta empty ladder means no change; size ``0`` deletes the level (clear L1).
-    """
-    if not key_present:
-        return ("clear", None) if is_snapshot else ("unchanged", None)
-    if not isinstance(levels, list) or not levels:
-        return ("clear", None) if is_snapshot else ("unchanged", None)
-    top = levels[0]
-    if not isinstance(top, (list, tuple)) or len(top) < 2:
-        return ("unchanged", None)
-    try:
-        price = _dec(top[0])
-        size = _dec(top[1])
-    except (InvalidOperation, TypeError):
-        return ("unchanged", None)
-    if size <= 0:
-        return ("clear", None)
-    if price <= 0:
-        return ("unchanged", None)
-    return ("set", price)
 
 
 def _optional_int(value: object) -> int | None:
@@ -69,23 +42,39 @@ def _optional_int(value: object) -> int | None:
         return None
 
 
+def parse_level_ops(levels: object) -> list[tuple[Decimal, Decimal]]:
+    """Parse Bybit ``b``/``a`` entries into ``(price, size)`` ops (size 0 = delete)."""
+    if not isinstance(levels, list):
+        return []
+    out: list[tuple[Decimal, Decimal]] = []
+    for top in levels:
+        if not isinstance(top, (list, tuple)) or len(top) < 2:
+            continue
+        try:
+            price = _dec(top[0])
+            size = _dec(top[1])
+        except (InvalidOperation, TypeError):
+            continue
+        out.append((price, size))
+    return out
+
+
 @dataclass(frozen=True, slots=True)
 class OrderbookL1Update:
     """One orderbook.1 push after pure parse (before per-symbol L1 merge)."""
 
     symbol: str
     msg_type: str  # "snapshot" | "delta" | ""
-    bid_action: SideAction
-    ask_action: SideAction
-    bid: Decimal | None
-    ask: Decimal | None
+    # None = side key absent from ``data``; empty list = key present, no ops.
+    bid_ops: list[tuple[Decimal, Decimal]] | None
+    ask_ops: list[tuple[Decimal, Decimal]] | None
     u: int | None
     seq: int | None
     exchange_ts_ms: int | None
 
 
 def parse_orderbook_l1_update(payload: dict[str, Any]) -> OrderbookL1Update | None:
-    """Parse Bybit v5 ``orderbook.1.{symbol}`` into a typed L1 side update."""
+    """Parse Bybit v5 ``orderbook.1.{symbol}`` into a typed L1 update (no merge)."""
     data = payload.get("data", payload)
     if not isinstance(data, dict):
         return None
@@ -96,143 +85,74 @@ def parse_orderbook_l1_update(payload: dict[str, Any]) -> OrderbookL1Update | No
         return None
 
     msg_type = str(payload.get("type") or "").lower()
-    is_snapshot = msg_type == "snapshot"
-    bid_action, bid = _side_from_levels(
-        data.get("b"),
-        key_present="b" in data,
-        is_snapshot=is_snapshot,
-    )
-    ask_action, ask = _side_from_levels(
-        data.get("a"),
-        key_present="a" in data,
-        is_snapshot=is_snapshot,
-    )
+    bid_ops = parse_level_ops(data["b"]) if "b" in data else None
+    ask_ops = parse_level_ops(data["a"]) if "a" in data else None
+
     exchange_ts = data.get("ts") or payload.get("ts") or payload.get("cts")
+    exchange_ts_ms: int | None
+    if exchange_ts is None:
+        exchange_ts_ms = None
+    else:
+        try:
+            exchange_ts_ms = int(exchange_ts)
+        except (TypeError, ValueError):
+            exchange_ts_ms = None
+
     return OrderbookL1Update(
         symbol=symbol,
         msg_type=msg_type,
-        bid_action=bid_action,
-        ask_action=ask_action,
-        bid=bid,
-        ask=ask,
+        bid_ops=bid_ops,
+        ask_ops=ask_ops,
         u=_optional_int(data.get("u")),
         seq=_optional_int(data.get("seq")),
-        exchange_ts_ms=int(exchange_ts) if exchange_ts is not None else None,
+        exchange_ts_ms=exchange_ts_ms,
     )
 
 
-@dataclass(slots=True)
-class _L1State:
-    bid: Decimal | None = None
-    ask: Decimal | None = None
-    last_u: int | None = None
-    last_seq: int | None = None
-
-
-class L1BookTracker:
-    """Per-symbol L1 book: merge snapshot/delta, drop non-increasing ``u``/``seq``."""
-
-    def __init__(
-        self,
-        *,
-        pair_id_by_symbol: Mapping[str, str],
-        multiplier_by_symbol: Mapping[str, Decimal],
-    ) -> None:
-        self._pair_id_by_symbol = dict(pair_id_by_symbol)
-        self._multiplier_by_symbol = dict(multiplier_by_symbol)
-        self._states: dict[str, _L1State] = {}
-
-    def apply(
-        self,
-        payload: dict[str, Any],
-        *,
-        recv_ts_ms: int | None = None,
-        gap: bool = False,
-    ) -> BybitBookTick | None:
-        update = parse_orderbook_l1_update(payload)
-        if update is None:
-            return None
-        pair_id = self._pair_id_by_symbol.get(update.symbol)
-        mult = self._multiplier_by_symbol.get(update.symbol)
-        if pair_id is None or mult is None:
-            return None
-
-        state = self._states.get(update.symbol)
-        if state is None:
-            state = _L1State()
-            self._states[update.symbol] = state
-
-        is_snapshot = update.msg_type == "snapshot"
-        if not is_snapshot and not self._is_in_order(state, update):
-            return None
-
-        if is_snapshot:
-            state.bid = None
-            state.ask = None
-
-        if update.bid_action == "set":
-            state.bid = update.bid
-        elif update.bid_action == "clear":
-            state.bid = None
-
-        if update.ask_action == "set":
-            state.ask = update.ask
-        elif update.ask_action == "clear":
-            state.ask = None
-
-        if update.u is not None:
-            state.last_u = update.u
-        if update.seq is not None:
-            state.last_seq = update.seq
-
-        if state.bid is None or state.ask is None:
-            return None
-        if state.bid <= 0 or state.ask <= 0:
-            return None
-
-        recv = recv_ts_ms if recv_ts_ms is not None else now_ms()
-        exchange_ts = update.exchange_ts_ms if update.exchange_ts_ms is not None else recv
-        return BybitBookTick(
-            pair_id=pair_id,
-            symbol=update.symbol,
-            exchange_ts_ms=exchange_ts,
-            recv_ts_ms=recv,
-            bid=state.bid,
-            ask=state.ask,
-            bid_de_multiplied=de_multiplied_price(state.bid, mult),
-            ask_de_multiplied=de_multiplied_price(state.ask, mult),
-            multiplier=mult,
-            gap=gap,
-        )
-
-    @staticmethod
-    def _is_in_order(state: _L1State, update: OrderbookL1Update) -> bool:
-        """Accept delta only when ``u`` (prefer) or ``seq`` is strictly increasing."""
-        if update.u is not None and state.last_u is not None:
-            return update.u > state.last_u
-        if update.seq is not None and state.last_seq is not None:
-            return update.seq > state.last_seq
-        return True
-
-
-def parse_ticker_message(
-    payload: dict[str, Any],
+def apply_l1_side(
+    current: Decimal | None,
+    ops: list[tuple[Decimal, Decimal]] | None,
     *,
-    pair_id_by_symbol: Mapping[str, str],
-    multiplier_by_symbol: Mapping[str, Decimal],
-    recv_ts_ms: int | None = None,
-    gap: bool = False,
-    tracker: L1BookTracker | None = None,
-) -> BybitBookTick | None:
-    """Parse orderbook.1 into a book tick (optional shared ``L1BookTracker`` for merge).
+    is_snapshot: bool,
+    prefer_high: bool,
+) -> Decimal | None:
+    """Fold orderbook side ops onto L1 price.
 
-    Without a tracker, uses a fresh one so a single complete push still works in unit tests.
+    Snapshot replaces the side from the ops list (best of positive sizes).
+    Delta applies every entry in order: size 0 deletes that price, size > 0
+    sets/updates it — multi-entry moves like ``[[old,0],[new,sz]]`` work.
     """
-    book = tracker or L1BookTracker(
-        pair_id_by_symbol=pair_id_by_symbol,
-        multiplier_by_symbol=multiplier_by_symbol,
-    )
-    return book.apply(payload, recv_ts_ms=recv_ts_ms, gap=gap)
+    if ops is None:
+        return None if is_snapshot else current
+
+    if is_snapshot:
+        best: Decimal | None = None
+        for price, size in ops:
+            if size <= 0 or price <= 0:
+                continue
+            if best is None:
+                best = price
+            elif prefer_high:
+                best = max(best, price)
+            else:
+                best = min(best, price)
+        return best
+
+    # delta
+    if not ops:
+        return current
+    price = current
+    for p, s in ops:
+        if p <= 0:
+            # Malformed price: drop current if we cannot trust it
+            price = None
+            continue
+        if s <= 0:
+            if price == p:
+                price = None
+        else:
+            price = p
+    return price
 
 
 def parse_public_trade_message(

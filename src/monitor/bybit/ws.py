@@ -10,10 +10,10 @@ from collections.abc import Awaitable, Callable, Mapping
 from decimal import Decimal
 from typing import Any
 
+from monitor.bybit.l1 import L1BookTracker
 from monitor.bybit.parse import (
     DEFAULT_BOOK_PREFIX,
     DEFAULT_TRADE_PREFIX,
-    L1BookTracker,
     build_subscribe_args,
     parse_public_trade_message,
 )
@@ -131,6 +131,11 @@ class BybitWsCollector:
 
         async with connect(self.ws_url) as ws:
             self._ever_connected = True
+            # Fresh L1 after (re)connect — Bybit re-sends snapshots on subscribe.
+            self._l1 = L1BookTracker(
+                pair_id_by_symbol=self.pair_id_by_symbol,
+                multiplier_by_symbol=self.multiplier_by_symbol,
+            )
             if self._disconnect_at_ms is not None:
                 await self._emit_reconnect_gap()
             args = build_subscribe_args(
