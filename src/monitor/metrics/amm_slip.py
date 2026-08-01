@@ -217,3 +217,177 @@ def gas_bps(gas_usd: Decimal, size_usd: Decimal) -> Decimal:
     if gas_usd < 0:
         raise ValueError("gas_usd must be >= 0")
     return gas_usd / size_usd * BPS
+
+
+def _swap_quote_in_for_base_out(
+    pool: AmmPoolState,
+    quote_in: Decimal,
+    *,
+    pool_fee: int,
+) -> Decimal | None:
+    """Exact-in quote → base (human units). None if unfillable."""
+    if quote_in <= 0:
+        return None
+    amount_in_raw = quote_in * (Decimal(10) ** pool.quote_decimals)
+    if pool.token0_is_quote:
+        out = swap_exact_in_zero_for_one(
+            sqrt_price_x96=pool.sqrt_price_x96,
+            liquidity=pool.liquidity,
+            amount_in=amount_in_raw,
+            pool_fee=pool_fee,
+        )
+    else:
+        out = swap_exact_in_one_for_zero(
+            sqrt_price_x96=pool.sqrt_price_x96,
+            liquidity=pool.liquidity,
+            amount_in=amount_in_raw,
+            pool_fee=pool_fee,
+        )
+    if out is None:
+        return None
+    amount_out_raw, _ = out
+    amount_out = amount_out_raw / (Decimal(10) ** pool.base_decimals)
+    return amount_out if amount_out > 0 else None
+
+
+def _swap_base_in_for_quote_out(
+    pool: AmmPoolState,
+    base_in: Decimal,
+    *,
+    pool_fee: int,
+) -> Decimal | None:
+    """Exact-in base → quote (human units). None if unfillable."""
+    if base_in <= 0:
+        return None
+    amount_in_raw = base_in * (Decimal(10) ** pool.base_decimals)
+    if pool.token0_is_quote:
+        out = swap_exact_in_one_for_zero(
+            sqrt_price_x96=pool.sqrt_price_x96,
+            liquidity=pool.liquidity,
+            amount_in=amount_in_raw,
+            pool_fee=pool_fee,
+        )
+    else:
+        out = swap_exact_in_zero_for_one(
+            sqrt_price_x96=pool.sqrt_price_x96,
+            liquidity=pool.liquidity,
+            amount_in=amount_in_raw,
+            pool_fee=pool_fee,
+        )
+    if out is None:
+        return None
+    amount_out_raw, _ = out
+    amount_out = amount_out_raw / (Decimal(10) ** pool.quote_decimals)
+    return amount_out if amount_out > 0 else None
+
+
+def amm_quote_out_for_base_in(
+    pool: AmmPoolState,
+    base_in: Decimal,
+    *,
+    apply_pool_fee: bool = True,
+) -> Decimal | None:
+    """Sell ``base_in`` on the AMM; return fee-inclusive USDC out (or None)."""
+    fee = pool.pool_fee if apply_pool_fee else 0
+    return _swap_base_in_for_quote_out(pool, base_in, pool_fee=fee)
+
+
+def amm_base_out_for_quote_in(
+    pool: AmmPoolState,
+    quote_in: Decimal,
+    *,
+    apply_pool_fee: bool = True,
+) -> Decimal | None:
+    """Buy base with ``quote_in`` USDC; return base out (or None)."""
+    fee = pool.pool_fee if apply_pool_fee else 0
+    return _swap_quote_in_for_base_out(pool, quote_in, pool_fee=fee)
+
+
+def amm_quote_in_for_base_out(
+    pool: AmmPoolState,
+    base_out: Decimal,
+    *,
+    q_tol_rel: Decimal = Decimal("1e-6"),
+    max_iters: int = 64,
+    apply_pool_fee: bool = True,
+) -> Decimal | None:
+    """Binary-search exact-in quote needed so base out equals ``base_out``.
+
+    Normative PnL v2 buy-Fluxion path (hummingbot-pnl §4.3.1). Returns None on
+    range exhaustion or solver failure.
+    """
+    if base_out <= 0:
+        raise ValueError("base_out must be positive")
+    if q_tol_rel <= 0:
+        raise ValueError("q_tol_rel must be positive")
+    if max_iters < 1:
+        raise ValueError("max_iters must be >= 1")
+
+    mid = pool.mid_quote_per_base()
+    if mid <= 0:
+        return None
+
+    fee = pool.pool_fee if apply_pool_fee else 0
+    # Seed bounds: fee-adjusted mid cost, expand hi until base_out is covered.
+    fee_factor = Decimal(1_000_000 - fee) / Decimal(1_000_000) if fee else Decimal(1)
+    if fee_factor <= 0:
+        return None
+    lo = base_out * mid * Decimal("0.5")
+    hi = base_out * mid / fee_factor * Decimal("1.5")
+    if lo <= 0:
+        lo = Decimal("1e-12")
+
+    def _base_at(quote_in: Decimal) -> Decimal | None:
+        return _swap_quote_in_for_base_out(pool, quote_in, pool_fee=fee)
+
+    # Expand hi until fillable and base_out_at(hi) >= target (or give up).
+    expanded = 0
+    while expanded < 48:
+        got = _base_at(hi)
+        if got is not None and got >= base_out:
+            break
+        if got is None and hi > base_out * mid * Decimal(1000):
+            return None
+        hi *= 2
+        expanded += 1
+    else:
+        return None
+
+    # Ensure lo is below target (may already overshoot on tiny pools).
+    got_lo = _base_at(lo)
+    if got_lo is not None and got_lo >= base_out:
+        # Even lo fills — shrink lo toward 0.
+        lo = lo / 2 if lo > 0 else Decimal("1e-18")
+        for _ in range(32):
+            got_lo = _base_at(lo)
+            if got_lo is None or got_lo < base_out:
+                break
+            lo = lo / 2
+
+    best_quote: Decimal | None = None
+    for _ in range(max_iters):
+        mid_q = (lo + hi) / 2
+        got = _base_at(mid_q)
+        if got is None:
+            # Too large / range break — search lower.
+            hi = mid_q
+            continue
+        err = abs(got - base_out) / base_out
+        if err <= q_tol_rel:
+            return mid_q
+        if got < base_out:
+            lo = mid_q
+        else:
+            best_quote = mid_q
+            hi = mid_q
+
+    # Accept last overshooting quote if within a looser band, else fail.
+    if best_quote is not None:
+        got = _base_at(best_quote)
+        if got is not None and abs(got - base_out) / base_out <= q_tol_rel * 10:
+            return best_quote
+    # Final check at hi (should be the first covering quote).
+    got_hi = _base_at(hi)
+    if got_hi is not None and abs(got_hi - base_out) / base_out <= q_tol_rel * 10:
+        return hi
+    return None

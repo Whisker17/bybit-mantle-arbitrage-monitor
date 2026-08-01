@@ -188,9 +188,9 @@ not a proven continuous global max.
 | Piece | Issue |
 |-------|-------|
 | This research + DESIGN §2.6 | **WHI-754** (landed with the research note) |
-| Pure metrics engine + tests + bucket/optimal API | **WHI-756** |
+| Pure metrics engine + tests + bucket/optimal API | **WHI-756** (landed: `monitor/metrics/pnl_v2.py`, `config/metrics.yaml` `pnl_v2:`, CLI `python -m monitor.metrics`) |
 | Live Bybit multi-level depth journal | **WHI-755** (`bybit_depth` precomputed VWAPs @ PnL buckets; L1 still `bybit_book`) |
-| Engine consumes depth / L1 fallback | **WHI-756**; until then M3 edge stays L1 (see `docs/DEFERRED_ISSUES.md`) |
+| Engine consumes depth / L1 fallback | **WHI-756** (landed on the pure path: optional `bybit_bids`/`bybit_asks` → base-sized VWAP; L1 when omitted). M3 `compute_edge` TUI path remains L1 until a panel/API wiring issue (see `docs/DEFERRED_ISSUES.md`) |
 
 ## 3. Cross-cutting Policies
 

@@ -13,10 +13,14 @@ from __future__ import annotations
 
 from dataclasses import dataclass, field
 from decimal import Decimal
+from typing import TYPE_CHECKING
 
 from monitor.metrics.config import MetricsConfig
 from monitor.metrics.edge import EdgeResult
 from monitor.metrics.session import SessionKind
+
+if TYPE_CHECKING:
+    from monitor.metrics.pnl_v2 import OptimalSizeResult
 
 
 @dataclass(frozen=True, slots=True)
@@ -251,3 +255,85 @@ class SessionBuckets:
             breach_open=stats.breach_stats(SessionKind.OPEN),
             breach_closed=stats.breach_stats(SessionKind.CLOSED),
         )
+
+
+@dataclass
+class OptimalPnlStats:
+    """Running cumulative distribution of optimal-size PnL (USD), session-split.
+
+    Same time-weight / gap-cap rules as ``EdgeStats`` (DESIGN §2.4). One instance
+    is one series (pair × direction). Unfillable / missing optimal samples are
+    skipped (not recorded as zero).
+    """
+
+    max_gap_ms: int
+    _all: _SeriesState = field(default_factory=_SeriesState)
+    _open: _SeriesState = field(default_factory=_SeriesState)
+    _closed: _SeriesState = field(default_factory=_SeriesState)
+
+    @classmethod
+    def from_config(cls, config: MetricsConfig) -> OptimalPnlStats:
+        return cls(max_gap_ms=config.max_breach_gap_ms)
+
+    def observe(
+        self,
+        *,
+        pnl_usd: Decimal,
+        ts_ms: int,
+        session: SessionKind,
+    ) -> None:
+        for state in (self._all, self._bucket(session)):
+            self._observe_one(state, value=pnl_usd, ts_ms=ts_ms)
+
+    def observe_optimal(
+        self,
+        optimal: OptimalSizeResult | None,
+        *,
+        ts_ms: int,
+        session: SessionKind,
+    ) -> None:
+        """Record ``OptimalSizeResult.pnl_usd`` when present."""
+        if optimal is None:
+            return
+        self.observe(pnl_usd=optimal.pnl_usd, ts_ms=ts_ms, session=session)
+
+    def _bucket(self, session: SessionKind) -> _SeriesState:
+        return self._open if session is SessionKind.OPEN else self._closed
+
+    def _observe_one(
+        self,
+        state: _SeriesState,
+        *,
+        value: Decimal,
+        ts_ms: int,
+    ) -> None:
+        if state.last_ts_ms is not None:
+            if ts_ms < state.last_ts_ms:
+                state.samples.append((value, Decimal(0)))
+                return
+            raw = ts_ms - state.last_ts_ms
+            gap_ms = raw if 0 < raw <= self.max_gap_ms else 0
+            if state.samples:
+                prev_val, _ = state.samples[-1]
+                state.samples[-1] = (prev_val, Decimal(gap_ms))
+
+        state.samples.append((value, Decimal(0)))
+        state.last_ts_ms = ts_ms
+
+    def distribution(self, session: SessionKind | None = None) -> Distribution:
+        st = self._state(session)
+        if not st.samples:
+            return Distribution.empty()
+        values = [v for v, _ in st.samples]
+        weights = [w for _, w in st.samples]
+        if weights and weights[-1] == 0 and any(w > 0 for w in weights[:-1]):
+            weights = list(weights)
+            weights[-1] = Decimal(1)
+        elif all(w == 0 for w in weights):
+            weights = [Decimal(1)] * len(weights)
+        return Distribution.from_weighted(values, weights)
+
+    def _state(self, session: SessionKind | None) -> _SeriesState:
+        if session is None:
+            return self._all
+        return self._open if session is SessionKind.OPEN else self._closed

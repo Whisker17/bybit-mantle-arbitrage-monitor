@@ -7,6 +7,8 @@ from decimal import Decimal
 from monitor.bybit.depth import DepthBookTracker
 from monitor.bybit.depth_math import (
     apply_side_ops,
+    book_notional_depth,
+    book_vwap_for_base,
     book_vwap_for_notional,
     de_multiplied_levels,
     de_multiplied_size,
@@ -66,6 +68,15 @@ def test_book_vwap_hand_example() -> None:
 def test_book_vwap_unfillable() -> None:
     levels = [(Decimal("100"), Decimal("0.1"))]  # $10 depth
     assert book_vwap_for_notional(levels, Decimal("50")) is None
+
+
+def test_book_vwap_for_base_and_notional_depth() -> None:
+    levels = [(Decimal("100"), Decimal("1")), (Decimal("99"), Decimal("2"))]
+    vwap = book_vwap_for_base(levels, Decimal("2"))
+    assert vwap is not None
+    # 1@100 + 1@99 → notional 199 / 2
+    assert abs(vwap - Decimal("199") / Decimal("2")) < Decimal("1e-12")
+    assert book_notional_depth(levels) == Decimal("100") + Decimal("198")
 
 
 def test_depth_snapshot_multi_level_vwap() -> None:

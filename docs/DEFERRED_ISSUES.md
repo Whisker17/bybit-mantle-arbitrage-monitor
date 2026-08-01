@@ -76,11 +76,12 @@ soon — anything touching key handling, RPC credentials defaults to at least Hi
   magnitude depth growth. After deploy, run collector ≥30m with MemoryMax=300M and
   `python -m monitor.retention --growth-only` to pin real `bybit_depth` rows/day.
 
-- **Live Bybit depth not wired into M3 edge path** (Medium, WHI-732 → WHI-756 / panel).
-  Collector now journals precomputed bucket VWAPs in `bybit_depth` (WHI-755,
-  `orderbook.50`). `BybitBookTick` remains L1-only for the TUI; `compute_edge(...,
-  bybit_depth=)` still has no live consumer that loads `JournalReader.latest_bybit_depth`.
-  Wire PnL v2 / edge consumers to the depth table (or REST) when the engine lands.
+- **Live Bybit depth not wired into M3 edge / Web panel** (Medium, WHI-732 → panel / API).
+  Collector journals precomputed bucket VWAPs in `bybit_depth` (WHI-755). PnL v2
+  engine (WHI-756) accepts multi-level `bybit_bids`/`bybit_asks` with L1 fallback,
+  but the TUI/Web still build edges from L1 `BybitBookTick` only — no live consumer
+  loads `JournalReader.latest_bybit_depth` into `compute_edge` or `pnl_bucket_table`.
+  Wire API/Web (and optionally M3 edge) when overview bucket-PnL column lands.
 
 - **RFQ poll notional ≠ edge ladder sizes** (Medium, WHI-732 → M5 / collector).
   `config/collector.yaml` polls ~100 USDC / 0.1 native while `metrics.yaml` ladder

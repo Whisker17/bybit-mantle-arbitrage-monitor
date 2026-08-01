@@ -129,6 +129,42 @@ def book_vwap_for_notional(
     return spent / qty
 
 
+def book_vwap_for_base(
+    levels: list[tuple[Decimal, Decimal]],
+    base_qty: Decimal,
+) -> Decimal | None:
+    """Average fill price walking ``levels`` for ``base_qty`` base units.
+
+    PnL v2 normative walk (hummingbot-pnl §4.2 / Hummingbot ``get_vwap_for_volume``).
+    Levels are ``(price, size)`` in de-multiplied units. Returns None if the book
+    cannot fully fill (no silent partials).
+    """
+    if base_qty <= 0:
+        raise ValueError("base_qty must be positive")
+    remaining = base_qty
+    notional = Decimal(0)
+    for px, sz in levels:
+        if px <= 0 or sz <= 0:
+            continue
+        take = min(sz, remaining)
+        notional += take * px
+        remaining -= take
+        if remaining <= 0:
+            break
+    if remaining > 0:
+        return None
+    return notional / base_qty
+
+
+def book_notional_depth(levels: list[tuple[Decimal, Decimal]]) -> Decimal:
+    """Total USD notional available on ``levels`` (de-multiplied)."""
+    total = Decimal(0)
+    for px, sz in levels:
+        if px > 0 and sz > 0:
+            total += px * sz
+    return total
+
+
 def vwap_curve(
     levels_dm: list[tuple[Decimal, Decimal]],
     buckets_usd: list[Decimal],

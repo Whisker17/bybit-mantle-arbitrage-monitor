@@ -51,20 +51,27 @@ placeholders. Agents must not assume a module exists until its issue lands. -->
     in `docs/references/m4-closed-session-rfq.md` + DESIGN / M4 rule updates.
   - **PnL v2 research (WHI-754) landed:** Hummingbot CEX⇄AMM methodology →
     cash-flow PnL spec; note `docs/references/hummingbot-pnl.md`, DESIGN §2.6.
-    Engine (optimal size + bucket table) is **WHI-756** — not landed.
   - **PnL v2 depth collector (WHI-755) landed:** Bybit `orderbook.50` →
     stateful N-level book; L1 still `bybit_book`; precomputed bucket VWAP curve
     in `bybit_depth` (throttled). Config `bybit.depth` in `config/collector.yaml`.
+  - **PnL v2 engine (WHI-756) landed:** pure cash-flow PnL under
+    `monitor/metrics/pnl_v2.py` — `compute_pnl_usd`, `pnl_bucket_table`
+    ($10/$50/$100/$500/$1K/$10K), `optimal_size` (log grid + peak refine),
+    RFQ poll-keyed rows, `OptimalPnlStats` session distributions. Config
+    `pnl_v2:` in `config/metrics.yaml`. CLI: `python -m monitor.metrics`.
+    Does not change M3 TUI ladder / `OverviewModel`; Web column wiring is a
+    follow-on.
   - **Web skeleton (WHI-757) landed:** `monitor/api` (FastAPI read-only over
     SQLite; reuses TUI builders), `web/` (Next.js static export), `deploy/` +
     `scripts/deploy-web.sh` (systemd + nginx). Tunables in `config/api.yaml`.
     TUI frozen for new features — Web is the surface for new metrics.
   - **Web overview (WHI-758) landed:** dark Tailwind overview table (TUI-parity
     columns + status bar + stale yellow banner + sort/filter + 2s poll + row
-    → `/pair/{id}/`). Bucket PnL column placeholder until WHI-756. Pair detail
-    route is a stub (full detail = WHI-759).
-  - **Not landed yet:** pair detail Web (WHI-759), PnL v2 engine (WHI-756).
-    Do not assume those modules exist until their issues land.
+    → `/pair/{id}/`). Bucket PnL column still placeholder until API/Web
+    consume WHI-756 models. Pair detail route is a stub (full detail = WHI-759).
+  - **Not landed yet:** pair detail Web (WHI-759); Web/API consumption of PnL
+    v2 bucket table + optimal size. Do not assume those routes exist until
+    their issues land.
 ## Build, test, run
 
 ```bash
@@ -87,6 +94,9 @@ uv run python -m monitor.collector.latency_probe --duration-s 600
 # Phase-2 read-only Web API (WHI-757); needs collector journal:
 uv run python -m monitor.api
 # Optional: uv run python -m monitor.api --host 127.0.0.1 --port 8000
+# PnL v2 cash-flow engine demo (WHI-756); pure synthetic mids, no journal:
+uv run python -m monitor.metrics
+uv run python -m monitor.metrics --fluxion-mid 99.5 --json
 # Web static export (build on laptop/CI — never on the 1GB VPS):
 #   cd web && npm ci && npm run build   # → web/out
 # Web pure-helper unit tests (format/sort):
@@ -113,14 +123,15 @@ Module layout is fixed by `docs/DESIGN.md` §4.2. Short mirror:
   - **`monitor/symbols`** (M1) — fixed pair list + Bybit multiplier helpers.
   - **`monitor/bybit`**, **`monitor/fluxion`**, **`monitor/storage`**,
     **`monitor/collector`** (M2) — live feeds → SQLite.
-  - **`monitor/metrics`** (M3) — edge, wear, session stats from quote ticks.
+  - **`monitor/metrics`** (M3 + WHI-756) — edge/wear (M3 ladder), session stats,
+    and PnL v2 cash-flow engine (`pnl_v2.py`: buckets + optimal size).
   - **`monitor/attribution`** (M4) — mechanism + behavior labels / aggregates.
   - **`monitor/tui`** (M5) — Textual overview + detail panel over SQLite
     (**frozen** for new features).
   - **`monitor/api`** (WHI-757) — FastAPI read-only JSON over the journal.
   - **`web/`** (WHI-757+) — Next.js static export; overview (WHI-758);
     deploy via `scripts/deploy-web.sh` + `deploy/`.
-  - Still to land: pair detail Web (WHI-759), PnL v2 (WHI-756).
+  - Still to land: pair detail Web (WHI-759); Web/API PnL v2 column wiring.
   Reuse pieces from `mba` per DESIGN §4.2 table; do not import whole stages.
 
 ## Git workflow (mandatory)

@@ -39,3 +39,21 @@ breach_size_usd: 1000
 # Inter-sample gaps larger than this (ms) do not add to breach duration —
 # overnight / reconnect / gap=1 windows must not inflate open-session totals.
 max_breach_gap_ms: 300000
+
+# PnL v2 cash-flow engine (WHI-756 / DESIGN §2.6). Separate from M3 TUI ladder.
+pnl_v2:
+  # Fixed AMM bucket table (USD notional at de-multiplied Bybit mid).
+  buckets_usd: [10, 50, 100, 500, 1000, 10000]
+  q_min_usd: 10
+  config_cap_usd: 10000
+  coarse_points: 24
+  refine_points: 16
+  q_tol_rel: "1e-6"
+  amm_solve_max_iters: 64
+  amm_cap_max_iters: 24
+  # Highlight thresholds only — raw PnL is never clamped.
+  min_profit_usd: null
+  min_profit_bps: null
+  gas_on_rfq: true
+  # Optional soft L1 depth cap; null = infinite (L1 never size-unfillable).
+  l1_assumed_size_usd: null

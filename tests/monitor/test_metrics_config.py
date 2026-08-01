@@ -31,6 +31,10 @@ def test_load_checked_in_metrics_config() -> None:
     assert cfg.session.open == "09:30"
     assert cfg.session.close == "16:00"
     assert cfg.session.early_close == "13:00"
+    assert cfg.pnl_v2 is not None
+    assert cfg.pnl_v2.buckets_usd[0] == Decimal(10)
+    assert cfg.pnl_v2.buckets_usd[-1] == Decimal(10000)
+    assert cfg.pnl_v2.coarse_points == 24
 
 
 def test_reject_breach_size_not_on_ladder(tmp_path: Path) -> None:
