@@ -29,7 +29,11 @@ placeholders. Agents must not assume a module exists until its issue lands. -->
     `monitor/fluxion` (per-block pool state, swaps, RFQ poll + LOP fills),
     `monitor/storage` (SQLite), `monitor/collector` daemon
     (`python -m monitor.collector`). Tunables in `config/collector.yaml`.
-  - **Not landed yet:** M3–M6 metrics / attribution / TUI / web plan.
+  - **M3 (WHI-732) landed:** `monitor/metrics` — spread bps (Bybit mid vs AMM /
+    RFQ), net paper edge with wear breakdown at $1K/$5K/$20K, NYSE open/closed
+    session segmentation, cumulative P50/P95/P99/max + cost-floor breach stats.
+    Tunables in `config/metrics.yaml`.
+  - **Not landed yet:** M4–M6 attribution / TUI / web plan.
     Do not assume those modules exist until their issues land.
 
 ## Build, test, run
@@ -64,7 +68,8 @@ Module layout is fixed by `docs/DESIGN.md` §4.2. Short mirror:
   - **`monitor/symbols`** (M1) — fixed pair list + Bybit multiplier helpers.
   - **`monitor/bybit`**, **`monitor/fluxion`**, **`monitor/storage`**,
     **`monitor/collector`** (M2) — live feeds → SQLite.
-  - Still to land: `metrics`, `attribution`, `tui` (M3–M5).
+  - **`monitor/metrics`** (M3) — edge, wear, session stats from quote ticks.
+  - Still to land: `attribution`, `tui` (M4–M5).
   Reuse pieces from `mba` per DESIGN §4.2 table; do not import whole stages.
 
 ## Git workflow (mandatory)

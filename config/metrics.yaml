@@ -1,0 +1,36 @@
+# Metrics / paper-edge tunables — M3 / WHI-732.
+# Secrets stay in .env; this file is checked-in non-secret config.
+# Values trace to docs/DESIGN.md §2.3–2.4 and Linear WHI-732.
+
+version: 1
+
+# Notional ladder for wear + net edge (USD). Issue WHI-732: $1K / $5K / $20K.
+size_ladder_usd:
+  - 1000
+  - 5000
+  - 20000
+
+# Bybit spot taker, undiscounted (DESIGN §1.2 / §2.3). 0.10% = 10 bps.
+bybit_taker_fee_bps: 10
+
+# Bybit USDT vs Fluxion USDC basis. Positive = Bybit quote richer by this many
+# bps (applied as an additive wear term on both directions). Default 0 = treat
+# 1:1 until a measured series lands (DESIGN §8 open risk, owned by M3).
+usdt_usdc_basis_bps: 0
+
+# Mantle gas for one V3 swap, USD (gasUsed * baseFee + OP-Stack L1 data fee).
+# Phase-1 measured ~$0.004–0.007; pad slightly for quiet xStock pools.
+gas_usd_per_swap: 0.01
+
+# US equity regular session (America/New_York). Holidays + early closes are
+# encoded in monitor.metrics.session (NYSE calendar, not exchange_calendars dep).
+session:
+  timezone: America/New_York
+  open: "09:30"
+  close: "16:00"
+  # NYSE early-close days end at 13:00 ET.
+  early_close: "13:00"
+
+# Cost floor for "breach" stats: net edge > 0 after full wear at this ladder size.
+# Using the smallest rung keeps the floor conservative for duration counting.
+breach_size_usd: 1000
