@@ -128,6 +128,11 @@ export function PairsTable({ rows, sortKey, sortDesc, onSort }: Props) {
                     dim && "opacity-50",
                   )}
                   onClick={() => {
+                    // Don't navigate when the operator is drag-selecting a price to copy.
+                    const sel = window.getSelection();
+                    if (sel && !sel.isCollapsed && sel.toString().length > 0) {
+                      return;
+                    }
                     router.push(href);
                   }}
                   onKeyDown={(e) => {

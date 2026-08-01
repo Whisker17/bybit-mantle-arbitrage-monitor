@@ -110,6 +110,11 @@ soon — anything touching key handling, RPC credentials defaults to at least Hi
   no Radix). Fine for a dense ops table; run `shadcn init` only if later pages
   need the full component catalog (risk: name collisions with these files).
 
+- **`web` `npm run lint` is a no-op** (Low, WHI-757 → later).
+  `package.json` script is `next lint` but no eslint config / eslint-config-next
+  is installed. Typecheck still runs inside `next build`. Wire eslint or drop
+  the script when the front-end lint surface is real.
+
 - **API `uv sync` installs full phase-1 stack on VPS** (Low, WHI-757 → later).
   `pyproject.toml` still pulls polars/pyarrow/duckdb/matplotlib/textual for the
   archive + TUI. An `api` optional extra would slim the 1GB box; not required

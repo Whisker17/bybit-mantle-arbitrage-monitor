@@ -7,7 +7,7 @@
     "build": "next build",
     "start": "next start",
     "lint": "next lint",
-    "test": "tsx --test lib/format.test.ts lib/sort.test.ts"
+    "test": "tsx --test lib/format.test.ts lib/sort.test.ts lib/pair-ids.test.ts"
   },
   "dependencies": {
     "clsx": "^2.1.1",
