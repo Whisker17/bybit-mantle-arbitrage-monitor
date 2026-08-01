@@ -64,10 +64,11 @@ percentiles.
 Combined keyed lag=1 @ 0.25 s: **~30 min**, **901 samples**, latency P95 stays
 ~11–13 s (no multi-10s tail). Not-found is **not guaranteed zero** on the keyed
 LB even at lag=1 — run B saw ~18 unique transient misses — but every block was
-still ingested (zero holes in the block-number series); misses only flag
-`gap=1` on the retry path. **lag=2** zeroed not-found in a 10 min window at
-~+2 s extra P50; leave as operator override if gap noise matters more than
-freshness.
+still ingested: offline check of the per-block JSON sample streams for runs A/B
+(and lag=0) had **`max_block_number_gap = 0`** (contiguous `block_number`
+series; the probe now prints this field). Misses only flag `gap=1` on the retry
+path. **lag=2** zeroed not-found in a 10 min window at ~+2 s extra P50; leave as
+operator override if gap noise matters more than freshness.
 
 ### Startup vs steady
 

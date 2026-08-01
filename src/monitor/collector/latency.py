@@ -157,13 +157,20 @@ class ProbeResult:
         waits = [s.poll_wait_ms for s in samples if s.poll_wait_ms is not None]
         works = [s.rpc_work_ms for s in samples if s.rpc_work_ms is not None]
         # Gaps are global to the session; attribute by time range if possible.
+        # First sample window (and "all") include gaps that start before the first
+        # successful recv (startup not-found before any block lands).
         if samples:
             t0 = min(s.recv_ts_ms for s in samples)
             t1 = max(s.recv_ts_ms for s in samples)
+            lower = (
+                0
+                if label in ("all", "startup") or not samples
+                else t0
+            )
             window_gaps = [
                 g
                 for g in self.gaps
-                if t0 <= g.gap_start_ms <= t1 + _GAP_WINDOW_SLACK_MS
+                if lower <= g.gap_start_ms <= t1 + _GAP_WINDOW_SLACK_MS
             ]
         else:
             window_gaps = list(self.gaps)
@@ -277,7 +284,7 @@ class LatencyTracker:
     full probe. Not time-weighted — one sample per successfully ingested block.
     """
 
-    def __init__(self, window: int = 256) -> None:
+    def __init__(self, window: int) -> None:
         if window < 1:
             raise ValueError("window must be >= 1")
         self.window = window
