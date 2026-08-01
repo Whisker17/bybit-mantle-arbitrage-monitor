@@ -41,6 +41,9 @@ class ChainPoller:
         on_swaps: Callable[[list[FluxionSwapTick]], None] | None = None,
         on_rfq_fills: Callable[[list[FluxionRfqFillTick]], None] | None = None,
         on_gap: Callable[[CollectorGap], None] | None = None,
+        # Optional: (block_number, block_ts, discovered_ms, recv_ts_ms) after success.
+        # discovered_ms is wall clock just before getBlock; recv after all RPC.
+        on_block_done: Callable[[int, int, int, int], None] | None = None,
     ) -> None:
         self.rpc = rpc
         self.pools = list(pools)
@@ -53,6 +56,7 @@ class ChainPoller:
         self.on_swaps = on_swaps
         self.on_rfq_fills = on_rfq_fills
         self.on_gap = on_gap
+        self.on_block_done = on_block_done
         self._last_block: int | None = None
         self._token_order: dict[str, tuple[str, str]] = {}
         self._gap_pending = False
@@ -228,6 +232,9 @@ class ChainPoller:
             self.on_swaps([replace(t, recv_ts_ms=recv) for t in swaps])
         if fills and self.on_rfq_fills:
             self.on_rfq_fills([replace(f, recv_ts_ms=recv) for f in fills])
+        if self.on_block_done:
+            # miss_ts = discovery wall clock (pre-getBlock); see latency probe WHI-749.
+            self.on_block_done(block, block_ts, miss_ts, recv)
         return True
 
     def _resolve_tokens(self, meta: PoolMeta, block: int) -> tuple[str, str]:

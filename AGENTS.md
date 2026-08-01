@@ -29,6 +29,8 @@ placeholders. Agents must not assume a module exists until its issue lands. -->
     `monitor/fluxion` (per-block pool state, swaps, RFQ poll + LOP fills),
     `monitor/storage` (SQLite), `monitor/collector` daemon
     (`python -m monitor.collector`). Tunables in `config/collector.yaml`.
+    Block ingest SLO / `head_lag_blocks: 1` measured WHI-749
+    (`docs/references/m2-block-ingest-latency.md`, DESIGN §5.2).
   - **M3 (WHI-732) landed:** `monitor/metrics` — spread bps (Bybit mid vs AMM /
     RFQ), net paper edge with wear breakdown at $1K/$5K/$20K, NYSE open/closed
     session segmentation, cumulative P50/P95/P99/max + cost-floor breach stats.
@@ -67,6 +69,8 @@ uv run python -m monitor.tui
 # Journal retention (WHI-751); one-shot prune / growth report:
 uv run python -m monitor.retention --growth-only
 uv run python -m monitor.retention
+# Block ingest latency probe (WHI-749); chain-only, no Bybit/RFQ:
+uv run python -m monitor.collector.latency_probe --duration-s 600
 ```
 
 ## Runtime configuration

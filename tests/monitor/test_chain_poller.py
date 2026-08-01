@@ -50,6 +50,27 @@ def test_chain_poller_starts_at_head_no_backfill() -> None:
     assert poller.poll_once() == 0
 
 
+def test_chain_poller_block_not_found_emits_gap() -> None:
+    class MissingBlockRpc(FakeRpc):
+        def get_block(self, number: int, full_txs: bool = False) -> dict[str, Any] | None:
+            self.calls.append(f"block:{number}")
+            return None
+
+    gaps: list[CollectorGap] = []
+    rpc = MissingBlockRpc(head=10)
+    poller = ChainPoller(
+        rpc,  # type: ignore[arg-type]
+        pools=[],
+        lop_address="0x" + "11" * 20,
+        head_lag_blocks=0,
+        on_gap=gaps.append,
+    )
+    n = poller.poll_once()
+    assert n == 0
+    assert poller.last_block == 9  # primed to head-1, failed to advance
+    assert any("not found" in g.detail for g in gaps)
+
+
 def test_chain_poller_records_gap_on_long_lag() -> None:
     rpc = FakeRpc(head=10)
     gaps: list[CollectorGap] = []

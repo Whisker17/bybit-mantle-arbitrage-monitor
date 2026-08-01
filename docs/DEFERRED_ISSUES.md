@@ -37,14 +37,6 @@ soon — anything touching key handling, RPC credentials defaults to at least Hi
   re-analysis of `fluxion_rfq_quotes` (+ Bybit) for open/closed contrast and
   multi-hour lag. Tracked as WHI-760.
 
-- **Mantle block ingest P95 / head_lag not re-measured** (Medium, WHI-743).
-  `config/collector.yaml` `mantle.head_lag_blocks` stays `0`. Smoke saw
-  `last_block_ingest_latency_ms ≈ 7s` and `collector_gaps` "block N not found"
-  (LB read-your-writes). WHI-743 fixed Bybit L1 only; confirm transient vs steady
-  under a longer collector run and raise `head_lag_blocks` to 1 only if gaps
-  persist after warm-up. Latency vs gap trade-off is operational, not part of
-  the orderbook.1 switch.
-
 - **Address clustering not in M4** (Low, WHI-733 → later if needed).
   DESIGN §2.5 / §4.2 mention phase-1 clustering / top-beneficiary breakout;
   M4 ships contract/EOA + entrypoint/internal role probe + behavior labels.
@@ -96,6 +88,11 @@ soon — anything touching key handling, RPC credentials defaults to at least Hi
 ---
 
 ## Resolved
+
+- **Mantle block ingest P95 / head_lag not re-measured** (Medium, WHI-743 → WHI-749).
+  Measured with `monitor.collector.latency_probe`; default
+  `mantle.head_lag_blocks: 1`; M2 SLO revised in DESIGN §5.2; note
+  `docs/references/m2-block-ingest-latency.md`.
 
 - **Wrapper→native share conversion not in inventory** (Medium, WHI-730 → M2 / WHI-731).
   `monitor.fluxion.pools.fetch_pool_states` — each block Multicall3 includes
