@@ -12,8 +12,10 @@ analysis time). Open vs closed contrast + multi-hour lag deferred to follow-up
 
 **Reproducible artifact:** one later same-day slim pass is checked in as
 `docs/references/m4-closed-session-rfq-sample.json` (statuses, prices, Bybit
-mids, endpoint parity). Multi-round tables below are from the earlier 3-round
-pass (~11:08 UTC); coverage pattern re-confirmed by the slim sample.
+mids, endpoint parity). **Multi-round mean tables in §1–§3 are from the earlier
+3-round pass (~11:08 UTC)** and are not recomputed from the JSON (a later slim
+pass will differ by a few bps); the sample re-confirms the same coverage
+pattern and endpoint parity.
 
 ## Executive conclusion
 
@@ -187,7 +189,7 @@ Railway. Do **not** treat proxy as a second independent MM.
 | Fill-verified firmness this weekend? | **Not measured** — no closed-session LOP fill in sample. |
 | TUI “indicative” badge needed? | **Not opened** (vendor-asserted executable). Revisit if fills never appear while quotes stay 200. |
 | Quote TTL field? | Only `createdAt`. Staleness = collector poll age (already in ticks). |
-| Live column gate | Match collector: `available = (http_status == 200 and price is not None)`. |
+| Live column gate | Match `FluxionRfqQuoteTick.available` (HTTP 200 and price present). |
 
 ## 6. Implications for DESIGN / M4
 

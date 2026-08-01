@@ -20,13 +20,14 @@ Config mirror: `config/pairs.yaml` → `rfq.mode: pollable_quote`.
 | Upstream public proxy | `POST https://fluxion-proxy-api-production.up.railway.app/quote` |
 
 No API key required on either path. Upstream is rate-limited to **60 req/min**.
+`config/pairs.yaml` sets `min_poll_interval_s: 11` so that polling all **11** inventory
+pairs once each stays under that global budget (`11 * (60/11) ≈ 60`). Do not tighten
+the interval without shrinking the polled set or raising the budget.
+
 **Endpoint parity (WHI-753):** both URLs return the same HTTP status and
 near-identical `price`/`amountOut` (shared MM book); `requestId` differs per
 URL. Prefer primary; Railway is a failover, not a second venue. Closed-session
 availability: see `docs/references/m4-closed-session-rfq.md`.
-`config/pairs.yaml` sets `min_poll_interval_s: 11` so that polling all **11** inventory
-pairs once each stays under that global budget (`11 * (60/11) ≈ 60`). Do not tighten
-the interval without shrinking the polled set or raising the budget.
 
 ### Request
 
