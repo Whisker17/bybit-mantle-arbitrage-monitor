@@ -53,6 +53,9 @@ class MantleCollectorConfig(BaseModel):
     rpc_timeout_s: float = Field(gt=0)
     rpc_retries: int = Field(ge=1)
     fetch_swap_receipts: bool
+    # Rolling window for block_ingest_latency_{p50,p95,p99}_ms meta (WHI-749).
+    # Required in collector.yaml (no silent default — fail-fast like sibling fields).
+    latency_window_blocks: int = Field(ge=1, le=10_000)
 
     @model_validator(mode="after")
     def _gap_bounds(self) -> MantleCollectorConfig:

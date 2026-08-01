@@ -20,7 +20,7 @@ loaded into a typed, validated model at startup.
 | File | Loader | Purpose |
 |------|--------|---------|
 | `pairs.yaml` | `monitor.symbols.load_pairs_config` | Fixed Bybit ⇄ Fluxion xStock inventory + RFQ mode (M1 / WHI-730). Cross-validates `low_liquidity` vs threshold/AMM and `quote_token_address` vs `contracts`. |
-| `collector.yaml` | `monitor.collector.load_collector_config` | Live collector tunables (Bybit WS, Mantle poll, RFQ notional, SQLite path, **retention / disk waterline** — WHI-751) — M2 / WHI-731. |
+| `collector.yaml` | `monitor.collector.load_collector_config` | Live collector tunables (Bybit WS, Mantle poll / `head_lag_blocks` / **latency_window_blocks** — WHI-749, RFQ notional, SQLite path, **retention / disk waterline** — WHI-751) — M2 / WHI-731. |
 | `metrics.yaml` | `monitor.metrics.load_metrics_config` | Paper-edge size ladder, Bybit taker / gas / USDT–USDC basis, session hours, breach size — M3 / WHI-732. |
 | `attribution.yaml` | `monitor.attribution.load_attribution_config` | Taker-label thresholds (arb-bot convergence, price-keeper size, activity regime, Bybit lead-lag) — M4 / WHI-733. Rules: `docs/references/m4-attribution-labels.md`. |
 | `tui.yaml` | `monitor.tui.load_tui_config` | Panel refresh interval, SQLite path, reference edge size, sort defaults, history windows — M5 / WHI-734. |

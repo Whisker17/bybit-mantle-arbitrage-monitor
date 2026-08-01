@@ -17,6 +17,7 @@ from monitor.collector.config import (
     resolve_mantle_rpc_url,
     rpc_url_kind,
 )
+from monitor.collector.latency import LatencyTracker, block_ingest_latency_ms
 from monitor.fluxion.chain import ChainPoller
 from monitor.fluxion.pools import PoolMeta
 from monitor.fluxion.rfq import RfqPoller
@@ -187,12 +188,13 @@ class CollectorDaemon:
             retries=self.cfg.mantle.rpc_retries,
         )
 
+        # Rolling block_ts→recv latency (one sample per block via on_block_done).
+        latency_tracker = LatencyTracker(
+            window=self.cfg.mantle.latency_window_blocks
+        )
+
         def on_state(ticks: list[FluxionPoolStateTick]) -> None:
             self.store.insert_pool_state(ticks)
-            if ticks:
-                latencies = [max(0, t.recv_ts_ms - t.block_ts * 1000) for t in ticks]
-                self.store.set_meta("last_block_ingest_latency_ms", str(max(latencies)))
-                self.store.set_meta("last_block", str(ticks[0].block_number))
 
         def on_swaps(ticks: list[FluxionSwapTick]) -> None:
             self.store.insert_swaps(ticks)
@@ -203,6 +205,26 @@ class CollectorDaemon:
         def on_gap(gap: CollectorGap) -> None:
             self.store.insert_gap(gap)
             logger.warning("chain gap: %s", gap.detail)
+
+        def on_block_done(
+            block_number: int, block_ts: int, _discovered_ms: int, recv_ts_ms: int
+        ) -> None:
+            latency_ms = block_ingest_latency_ms(block_ts, recv_ts_ms)
+            report = latency_tracker.add(latency_ms)
+            self.store.set_meta("last_block_ingest_latency_ms", str(latency_ms))
+            self.store.set_meta("last_block", str(block_number))
+            # Distribution meta — WHI-749; do not treat last_* as P95.
+            # LatencyTracker.add always leaves count >= 1, so p50/p95/p99 are set.
+            self.store.set_meta(
+                "block_ingest_latency_p50_ms", str(int(report.p50 or 0))
+            )
+            self.store.set_meta(
+                "block_ingest_latency_p95_ms", str(int(report.p95 or 0))
+            )
+            self.store.set_meta(
+                "block_ingest_latency_p99_ms", str(int(report.p99 or 0))
+            )
+            self.store.set_meta("block_ingest_latency_n", str(report.count))
 
         poller = ChainPoller(
             rpc,
@@ -216,6 +238,7 @@ class CollectorDaemon:
             on_swaps=on_swaps,
             on_rfq_fills=on_fills,
             on_gap=on_gap,
+            on_block_done=on_block_done,
         )
         try:
             while not self._stop.is_set():

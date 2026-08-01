@@ -183,11 +183,18 @@ the next ticks. Local journal: `data/monitor.db` via `monitor.storage.SqliteStor
 (M2 / WHI-731). TUI (M5) may still keep an in-memory view derived from the same
 ticks.
 
+Mantle settled head uses `head_lag_blocks: 1` by default (WHI-749): process
+`eth_blockNumber() - 1` so load-balanced RPC read-your-writes does not emit
+recurring `"block N not found"` gaps. See §5.2.
+
 ## 5. Data & Observability
 
 - TUI is the primary observability surface in v1.
 - Structured logs for feed disconnects / RPC errors on stderr from
   `python -m monitor.collector`; gap rows in SQLite `collector_gaps`.
+- Collector SQLite `meta` exposes `last_block_ingest_latency_ms` plus rolling
+  `block_ingest_latency_{p50,p95,p99}_ms` (WHI-749). Prefer percentiles over a
+  single smoke `last_*` sample.
 - No production PagerDuty-style alerting in v1.
 
 ### 5.1 Journal retention (WHI-751)
@@ -270,13 +277,48 @@ Steady-state bound (order of magnitude, ~10 pairs):
 `fluxion_swaps` / `fluxion_rfq_fills` TTLs are **never accelerated** (only an
 explicit non-null TTL in config would prune them).
 
+### 5.2 Mantle block ingest latency (WHI-749)
+
+**Metric** (matches collector meta and probe):
+
+```
+latency_ms = max(0, recv_ts_ms - block_ts * 1000)
+```
+
+`block_ts` is the on-chain block timestamp; `recv_ts_ms` is local wall clock
+**after** all per-block RPC (getBlock + Multicall3 + logs + optional receipts).
+The value therefore includes host clock skew vs chain time, tip visibility on
+the RPC LB, and processing — not “RPC RTT alone.”
+
+**Defaults** (`config/collector.yaml`):
+
+| Knob | Default | Why |
+|------|---------|-----|
+| `mantle.head_lag_blocks` | **1** | Cut lag=0 catch-up P95 tails; +~2 s systematic lag (transient not-found still possible) |
+| `mantle.block_poll_interval_s` | **0.25** | Measured sweet spot; 0.10 s increases not-found retries |
+
+**Acceptance (keyed Mantle RPC, steady state after warmup):**
+
+| Criterion | Target |
+|-----------|--------|
+| `block_ts → recv` P95 | **&lt; 15 s** (keyed, steady) |
+| Per-block RPC work (`rpc_work`) P95 | **&lt; 3 s** |
+| Continuity | No `skipping to tip` under steady poll; block series contiguous |
+| `"block N not found"` | May be transient on LB even at lag=1; retries same N, sets `gap=1`; **not** a hard 30 min zero — see research note annotation strategy |
+
+Public `https://rpc.mantle.xyz` is degrade-mode only (worse freshness; no hard
+P95). Original WHI-731 wording “P95 &lt; 2 s” is **superseded** — unreachable
+once skew + `head_lag=1` + 8-pool Multicall are included in the metric.
+Full measurement tables: `docs/references/m2-block-ingest-latency.md`.
+Probe: `python -m monitor.collector.latency_probe`.
+
 ## 6. Milestones
 
 | ID | Linear | Success criterion |
 |----|--------|-------------------|
 | **M0** | WHI-736 | Three-commit history (phase1 tag → template → monitor skeleton); phase-1 pipeline still runs; DESIGN has reuse map |
 | **M1** | WHI-730 | Symbol list + Fluxion/Bybit inventory + RFQ API feasibility + multiplier map |
-| **M2** | WHI-731 | Live collectors for Bybit + Fluxion AMM (+ RFQ or degraded) |
+| **M2** | WHI-731 | Live collectors for Bybit + Fluxion AMM (+ RFQ or degraded); block ingest SLO in §5.2 (WHI-749 revised) |
 | **M3** | WHI-732 | Edge/wear metrics + session segmentation |
 | **M4** | WHI-733 | Attribution (mechanism + heuristics) |
 | **M5** | WHI-734 | TUI panel |
@@ -305,5 +347,6 @@ Dependency chain: M0 → M1 → M2 → (M3 ∥ M4) → M5 → M6.
 | Fluxion pool ABI / fork lineage unknown until M1 (phase-1 Agni topic0 trap) | **Resolved M1:** UniV3-lineage factory/quoter; liquid xStock pools fee=3000 USDC. M2 still re-verifies topic0 on live swaps |
 | Bybit quote is **USDT** while Fluxion AMM/RFQ quote is **USDC** — basis not modeled in M1 | M3 |
 | Live book depth quality vs phase-1 single snapshot approximation | M2/M3 |
+| Mantle block ingest P95 / head_lag (LB not-found) | **Resolved WHI-749:** default `head_lag_blocks: 1`; SLO in §5.2; note `docs/references/m2-block-ingest-latency.md` |
 | Heuristic thresholds (80% / 20 trades) unvalidated on xStocks | M4 |
 | TUI library choice (textual vs rich) | **Resolved M5:** Textual |
