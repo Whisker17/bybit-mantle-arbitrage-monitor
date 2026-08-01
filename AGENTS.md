@@ -41,6 +41,9 @@ placeholders. Agents must not assume a module exists until its issue lands. -->
   - **M5 (WHI-734) landed:** `monitor/tui` — Textual live panel (overview table
     + pair detail). Reads collector SQLite; spreads/edge via M3, attribution via
     M4. Tunables in `config/tui.yaml`. Entry: `python -m monitor.tui`.
+  - **Retention (WHI-751) landed:** SQLite prune + `bybit_book` → 1m downsample,
+    disk waterline (warn/critical), in-collector loop + `python -m monitor.retention`.
+    Policy in `config/collector.yaml` `retention:`; design math in DESIGN §5.1.
   - **Not landed yet:** M6 Web plan doc only.
     Do not assume that module exists until its issue lands.
 
@@ -58,6 +61,9 @@ uv run python -m monitor.collector
 # Phase-2 TUI (M5 / WHI-734); reads collector SQLite (default data/monitor.db):
 uv run python -m monitor.tui
 # Optional: uv run python -m monitor.tui --db /path/to/monitor.db
+# Journal retention (WHI-751); one-shot prune / growth report:
+uv run python -m monitor.retention --growth-only
+uv run python -m monitor.retention
 ```
 
 ## Runtime configuration

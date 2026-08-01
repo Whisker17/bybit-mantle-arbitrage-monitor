@@ -6,6 +6,7 @@ import sqlite3
 import threading
 from collections.abc import Iterable, Sequence
 from pathlib import Path
+from typing import TYPE_CHECKING
 
 from monitor.quotes import (
     BybitBookTick,
@@ -17,6 +18,10 @@ from monitor.quotes import (
     FluxionSwapTick,
 )
 from monitor.storage.schema import DDL, SCHEMA_VERSION
+
+if TYPE_CHECKING:
+    from monitor.collector.config import RetentionConfig
+    from monitor.storage.retention import RetentionReport
 
 
 class SqliteStore:
@@ -275,6 +280,7 @@ class SqliteStore:
     def count(self, table: str) -> int:
         if table not in {
             "bybit_book",
+            "bybit_book_1m",
             "bybit_trades",
             "fluxion_pool_state",
             "fluxion_swaps",
@@ -286,3 +292,23 @@ class SqliteStore:
         with self._lock:
             row = self._conn.execute(f"SELECT COUNT(*) AS n FROM {table}").fetchone()
         return int(row["n"])
+
+    def run_retention(
+        self,
+        cfg: RetentionConfig,
+        *,
+        now_ms: int,
+        free_bytes: int | None = None,
+    ) -> RetentionReport:
+        """Apply retention under the store write lock (safe vs live inserts)."""
+        # Local import avoids a hard cycle: retention → collector.config, store → retention.
+        from monitor.storage.retention import run_retention as _run
+
+        with self._lock:
+            return _run(
+                self._conn,
+                cfg,
+                now_ms=now_ms,
+                free_bytes=free_bytes,
+                db_path=self.path,
+            )

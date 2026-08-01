@@ -186,6 +186,79 @@ ticks.
   `python -m monitor.collector`; gap rows in SQLite `collector_gaps`.
 - No production PagerDuty-style alerting in v1.
 
+### 5.1 Journal retention (WHI-751)
+
+The live collector appends to `data/monitor.db` indefinitely unless pruned.
+On the deploy VPS (shared ~disk with other bots; free space observed ~5.2 GiB
+at ticket open), **unbounded growth exhausts the disk in weeks**.
+
+#### Growth model (ungoverned)
+
+| Regime | Observed / assumed write rate | Dominant table | Approx size |
+|--------|-------------------------------|----------------|-------------|
+| US closed / weekend quiet | ~7 rows/s all pairs | `bybit_book` (orderbook.1) | ~150 MiB/day |
+| US open (orderbook.1 hot) | 3–5× weekend (order-of-magnitude) | `bybit_book` | ~0.5–0.8 GiB/day |
+
+Derivation (weekend): \(7 \times 86400 \approx 6.0 \times 10^5\) rows/day; ~250 B/row
+payload+index overhead → ~150 MiB/day. At 0.5 GiB/day open + shared free 5.2 GiB
+→ **disk full in ~1–2 weeks** without retention. Measure live with:
+
+```bash
+python -m monitor.retention --growth-only
+```
+
+#### Policy (config: `collector.yaml` → `retention`)
+
+| Table | Default TTL | Rationale |
+|-------|-------------|-----------|
+| `bybit_book` raw | **2 days** | Bulk of bytes. TUI cold-start uses ≤`edge_history_max_samples` (2k) recent books; sparklines use ≤240 points. |
+| `bybit_book_1m` | **14 days** | Before deleting raw books older than the raw TTL, last-in-minute L1 is upserted here (downsample). Compact series for forensics / future cold-start. |
+| `bybit_trades` | **7 days** | ≥ TUI 24h volume window (`volume_window_ms`). |
+| `fluxion_pool_state` | **7 days** | Edge rebuild + sparklines. |
+| `fluxion_rfq_quotes` | **3 days** | Poll tape; RFQ notional is small vs book. |
+| `fluxion_swaps` | **permanent** | M4 attribution feedstock (low volume). |
+| `fluxion_rfq_fills` | **permanent** | M4 attribution feedstock (low volume). |
+| `collector_gaps` | **30 days** | Ops history. |
+
+**M3 cumulative P50/P95/P99/max + breach stats** live in process memory
+(`EdgeStats` / `RunningEdgeState`), not in SQLite. TUI cold-start rebuilds from
+at most `edge_history_max_samples` recent journal books (documented in
+`config/tui.yaml`). Pruning raw books older than the raw TTL therefore **does
+not change the live aggregate口径** once the process is warm; after restart,
+cold-start still sees the same capped sample budget as before. Attribution
+reads swaps/fills, which are never pruned by default.
+
+Steady-state bound (order of magnitude, ~10 pairs):
+
+- raw book ≈ 2 × 150 MiB–0.8 GiB ≈ **0.3–1.6 GiB**
+- 1m bars ≈ 10 pairs × 14 d × 1440 min × ~120 B ≈ **~25 MiB**
+- trades + pool + RFQ quotes (TTL windows) + permanent swaps/fills ≪ book
+
+→ **steady-state journal ≪ free disk** when TTLs hold.
+
+#### Runtime
+
+1. **In-process loop** in `monitor.collector` (`retention.interval_s`, default 1h);
+   first pass runs shortly after boot.
+2. **One-shot CLI** (systemd timer / manual): `python -m monitor.retention`.
+3. **DELETE** in id/rowid batches (`delete_batch_size`) under the store lock so
+   it interleaves with inserts without long exclusive stalls.
+4. **Space reclaim:** `PRAGMA wal_checkpoint(TRUNCATE)` + optional
+   `incremental_vacuum(N)`. SQLite freelist reuse means file size **plateaus**
+   after the first full cycle even without a full `VACUUM`. `full_vacuum: true`
+   or disk-**critical** path may run `VACUUM` (brief writer block — prefer off-peak).
+
+#### Disk waterline (`retention.disk`)
+
+| Level | Free space | Behavior |
+|-------|------------|----------|
+| ok | ≥ `warn_free_bytes` (2 GiB) | Config TTLs |
+| warn | < warn, ≥ critical | Multiply pruneable TTLs by `warn_ttl_factor` (0.25) |
+| critical | < `critical_free_bytes` (1 GiB) | Multiply by `critical_ttl_factor` (0.05); pause **new** `bybit_book` inserts until a later run clears critical; force `VACUUM` attempt |
+
+`fluxion_swaps` / `fluxion_rfq_fills` TTLs are **never accelerated** (only an
+explicit non-null TTL in config would prune them).
+
 ## 6. Milestones
 
 | ID | Linear | Success criterion |
