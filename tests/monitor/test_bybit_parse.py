@@ -7,16 +7,21 @@ from __future__ import annotations
 
 from decimal import Decimal
 
+import pytest
+
 from monitor.bybit.parse import (
+    L1BookTracker,
     build_subscribe_args,
     parse_public_trade_message,
     parse_ticker_message,
 )
 
+PAIR_IDS = {"AAPLXUSDT": "AAPLx", "TSLAXUSDT": "TSLAx"}
+MULTIPLIERS = {"AAPLXUSDT": Decimal("2"), "TSLAXUSDT": Decimal("1")}
+
 
 def test_parse_orderbook_snapshot_applies_multiplier() -> None:
     """orderbook.1 snapshot: data.b/a are [[price, size], ...]; apply multiplier."""
-    mult = Decimal("2")
     payload = {
         "topic": "orderbook.1.AAPLXUSDT",
         "type": "snapshot",
@@ -32,7 +37,7 @@ def test_parse_orderbook_snapshot_applies_multiplier() -> None:
     tick = parse_ticker_message(
         payload,
         pair_id_by_symbol={"AAPLXUSDT": "AAPLx"},
-        multiplier_by_symbol={"AAPLXUSDT": mult},
+        multiplier_by_symbol={"AAPLXUSDT": Decimal("2")},
         recv_ts_ms=1_700_000_000_010,
     )
     assert tick is not None
@@ -47,7 +52,7 @@ def test_parse_orderbook_snapshot_applies_multiplier() -> None:
 
 
 def test_parse_orderbook_delta_l1_full_level() -> None:
-    """At depth=1, delta carries the full top-of-book level (not a partial patch)."""
+    """At depth=1, a complete delta can carry both top-of-book levels."""
     payload = {
         "topic": "orderbook.1.TSLAXUSDT",
         "type": "delta",
@@ -74,33 +79,158 @@ def test_parse_orderbook_delta_l1_full_level() -> None:
     assert tick.gap is True
 
 
-def test_parse_orderbook_empty_levels_returns_none() -> None:
-    """Empty bid or ask ladder → drop (cannot form L1)."""
-    base = {
+def test_l1_tracker_merges_one_sided_delta() -> None:
+    """Delta with only ask updated keeps prior bid (Bybit empty side = no change)."""
+    tracker = L1BookTracker(
+        pair_id_by_symbol=PAIR_IDS,
+        multiplier_by_symbol=MULTIPLIERS,
+    )
+    snap = {
         "topic": "orderbook.1.AAPLXUSDT",
-        "type": "delta",
+        "type": "snapshot",
         "ts": 1_700_000_000_000,
         "data": {
             "s": "AAPLXUSDT",
             "b": [["200.0", "1.0"]],
             "a": [["201.0", "1.0"]],
+            "u": 10,
+            "seq": 1,
+        },
+    }
+    assert tracker.apply(snap) is not None
+    delta = {
+        "topic": "orderbook.1.AAPLXUSDT",
+        "type": "delta",
+        "ts": 1_700_000_000_100,
+        "data": {
+            "s": "AAPLXUSDT",
+            "b": [],
+            "a": [["202.0", "3.0"]],
+            "u": 11,
+            "seq": 2,
+        },
+    }
+    tick = tracker.apply(delta)
+    assert tick is not None
+    assert tick.bid == Decimal("200.0")
+    assert tick.ask == Decimal("202.0")
+
+
+def test_l1_tracker_drops_stale_u() -> None:
+    tracker = L1BookTracker(
+        pair_id_by_symbol=PAIR_IDS,
+        multiplier_by_symbol=MULTIPLIERS,
+    )
+    snap = {
+        "type": "snapshot",
+        "ts": 1,
+        "data": {
+            "s": "TSLAXUSDT",
+            "b": [["100", "1"]],
+            "a": [["101", "1"]],
+            "u": 5,
+            "seq": 1,
+        },
+    }
+    assert tracker.apply(snap) is not None
+    stale = {
+        "type": "delta",
+        "ts": 2,
+        "data": {
+            "s": "TSLAXUSDT",
+            "b": [["99", "1"]],
+            "a": [["101", "1"]],
+            "u": 4,
+            "seq": 2,
+        },
+    }
+    assert tracker.apply(stale) is None
+    # Prior book unchanged: next good delta still sees last bid 100.
+    good = {
+        "type": "delta",
+        "ts": 3,
+        "data": {
+            "s": "TSLAXUSDT",
+            "b": [],
+            "a": [["102", "1"]],
+            "u": 6,
+            "seq": 3,
+        },
+    }
+    tick = tracker.apply(good)
+    assert tick is not None
+    assert tick.bid == Decimal("100")
+    assert tick.ask == Decimal("102")
+
+
+def test_l1_tracker_snapshot_resets_even_if_u_regresses() -> None:
+    tracker = L1BookTracker(
+        pair_id_by_symbol=PAIR_IDS,
+        multiplier_by_symbol=MULTIPLIERS,
+    )
+    first = {
+        "type": "snapshot",
+        "ts": 1,
+        "data": {
+            "s": "TSLAXUSDT",
+            "b": [["100", "1"]],
+            "a": [["101", "1"]],
+            "u": 50,
+            "seq": 10,
+        },
+    }
+    assert tracker.apply(first) is not None
+    resync = {
+        "type": "snapshot",
+        "ts": 2,
+        "data": {
+            "s": "TSLAXUSDT",
+            "b": [["90", "1"]],
+            "a": [["91", "1"]],
             "u": 1,
             "seq": 1,
         },
     }
-    maps = {
-        "pair_id_by_symbol": {"AAPLXUSDT": "AAPLx"},
-        "multiplier_by_symbol": {"AAPLXUSDT": Decimal("1")},
+    tick = tracker.apply(resync)
+    assert tick is not None
+    assert tick.bid == Decimal("90")
+    assert tick.ask == Decimal("91")
+
+
+@pytest.mark.parametrize(
+    ("bid", "ask"),
+    [
+        pytest.param([], [["201.0", "1.0"]], id="empty_bid"),
+        pytest.param([["200.0", "1.0"]], [], id="empty_ask"),
+        pytest.param([["200.0", "0"]], [["201.0", "1.0"]], id="zero_size_bid"),
+        pytest.param([["200.0", "1.0"]], [["201.0", "0"]], id="zero_size_ask"),
+    ],
+)
+def test_parse_orderbook_snapshot_incomplete_l1_returns_none(
+    bid: list[list[str]],
+    ask: list[list[str]],
+) -> None:
+    """Snapshot missing a live top-of-book side cannot emit a tick."""
+    payload = {
+        "topic": "orderbook.1.AAPLXUSDT",
+        "type": "snapshot",
+        "ts": 1_700_000_000_000,
+        "data": {
+            "s": "AAPLXUSDT",
+            "b": bid,
+            "a": ask,
+            "u": 1,
+            "seq": 1,
+        },
     }
-    empty_bid = {**base, "data": {**base["data"], "b": []}}
-    empty_ask = {**base, "data": {**base["data"], "a": []}}
-    zero_size = {
-        **base,
-        "data": {**base["data"], "b": [["200.0", "0"]], "a": [["201.0", "1.0"]]},
-    }
-    assert parse_ticker_message(empty_bid, **maps) is None
-    assert parse_ticker_message(empty_ask, **maps) is None
-    assert parse_ticker_message(zero_size, **maps) is None
+    assert (
+        parse_ticker_message(
+            payload,
+            pair_id_by_symbol={"AAPLXUSDT": "AAPLx"},
+            multiplier_by_symbol={"AAPLXUSDT": Decimal("1")},
+        )
+        is None
+    )
 
 
 def test_parse_orderbook_symbol_from_topic_when_data_s_missing() -> None:
