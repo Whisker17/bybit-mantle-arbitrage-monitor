@@ -9,7 +9,7 @@
 #   DEPLOY_HOST=user@whi715-vps ./scripts/deploy-web.sh
 #   DEPLOY_HOST=user@host ./scripts/deploy-web.sh --api-only
 #   ./scripts/deploy-web.sh user@host --skip-build
-#   ./scripts/deploy-web.sh user@host --api-only
+#   ./scripts/deploy-web.sh user@host --www-only
 #
 # Layout expected on the remote (override with env):
 #   REMOTE_WWW=/opt/xstocks/www          # nginx root
@@ -99,7 +99,8 @@ if [[ "${SKIP_API}" != "1" ]]; then
     --exclude '.mypy_cache/' \
     --exclude '.ruff_cache/' \
     "${ROOT}/src/" "${HOST}:${REMOTE_APP}/src/"
-  # config: never --delete — preserves operator-tuned *.local.yaml / path edits.
+  # config: never --delete (keeps remote-only files). Checked-in YAML is still
+  # overwritten; put operator path overrides in untracked *.local.yaml later.
   "${RSYNC_SRC[@]}" \
     "${ROOT}/config/" "${HOST}:${REMOTE_APP}/config/"
   "${RSYNC_SRC[@]}" \

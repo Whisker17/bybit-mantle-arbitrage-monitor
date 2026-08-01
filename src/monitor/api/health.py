@@ -107,6 +107,8 @@ def build_health(
 
     since = ts - gap_window_ms
     gaps = reader.recent_gaps(since_ms=since, limit=20)
+    # ``ok`` is the UI banner aggregate (alive today). Wider criteria (e.g.
+    # !gap_recent) can fold in later without renaming the wire field.
     return HealthStatus(
         ok=alive,
         generated_ts_ms=ts,
