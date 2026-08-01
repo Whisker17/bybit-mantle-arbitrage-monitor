@@ -65,10 +65,10 @@ be de-multiplied before comparison).
 | Fluxion AMM | on-chain pool quote (V2/V3) | contract quote preferred over reimplemented math |
 | Fluxion RFQ | xChange Atomic RFQ public API (`pollable_quote`) | Live when HTTP 200 **and** `price` present (`FluxionRfqQuoteTick.available`); 204 / missing price = unavailable. Quotes can be two-sided on weekends (WHI-753). |
 
-### 2.3 Paper edge
+### 2.3 Paper edge (M3, live TUI path)
 
-For size ladder \(Q\) (USD notionals; ladder TBD in M3, phase-1 used
-1k–100k as a starting reference):
+For size ladder \(Q\) (USD notionals; M3 ships $1K / $5K / $20K in
+`config/metrics.yaml`):
 
 ```
 edge_bps = direction_aware_spread_bps
@@ -77,10 +77,16 @@ edge_bps = direction_aware_spread_bps
          - bybit_slip_bps(Q)
          - fluxion_slip_bps(Q)
          - gas_bps(Q)
+         - usdt_usdc_basis_bps   # optional; default 0
 ```
 
 Inventory is pre-positioned on both sides (same model as phase-1); carry is an
-aggregate cost, not per-fill amortization, unless M3 revises with evidence.
+aggregate cost, not per-fill amortization, unless revised with evidence.
+
+**PnL v2** (below) is the cash-flow form of the same paper arb. It does **not**
+replace the TUI’s M3 `edge_bps` path until a later issue wires it; implementers
+must not assume `PnL_USD ≈ edge_bps/1e4 * Q` once multi-level VWAP / exact AMM
+are on.
 
 ### 2.4 Session segmentation
 
@@ -93,6 +99,80 @@ in M3; default America/New_York RTH 09:30–16:00).
 2. **Behavior:** address heuristics imported from phase-1 M6 (contract vs EOA,
    entrypoint vs internal, clustering). Convergence-ratio rule of thumb from
    product discussion: ≥80% with ≥20 trades → arb-bot candidate (validate in M4).
+
+### 2.6 PnL v2 (cash-flow paper arb — WHI-754 research, WHI-756 engine)
+
+Spec of record for **USD PnL at size**, optimal-size search, and the fixed
+bucket table. Methodology derivation and Hummingbot对照:
+`docs/references/hummingbot-pnl.md`.
+
+#### 2.6.1 Product invariants
+
+- **Two-sided inventory paper arb** (same as §1.2 / §2.3): no transfer cost,
+  no wallet budget checker. Thin book / AMM range exhaust → `fillable=false`.
+- **Size variable \(Q\)** = single-trade USD notional at **de-multiplied** Bybit mid.
+  Base amount \(q = Q / P_b^{\mathrm{mid}}\) is identical on both legs.
+- **Directions:** `buy_fluxion_sell_bybit` (BFSB), `buy_bybit_sell_fluxion` (BBSF).
+- **Fluxion venues:** AMM (full size continuum) and RFQ (**reference poll sizes
+  only** — rate limit; not a dense RFQ ladder).
+- **Negative PnL is first-class** (gas-dominated micro buckets); never clamp to 0.
+
+#### 2.6.2 Cash-flow formulas
+
+Bybit taker fee \(f_b = 10\,\mathrm{bps}\) (config). Levels for VWAP are
+**de-multiplied prices** with base sizes; multiplier is applied at tick ingest,
+not inside PnL.
+
+| Direction | Buy leg | Sell leg | PnL (USD) |
+|-----------|---------|----------|-----------|
+| BFSB | Fluxion: USDC in to buy \(q\) (fee-inclusive AMM or RFQ) | Bybit: sell \(q\) at bid VWAP, net \(\times(1-f_b)\) | \(\mathrm{usd}(\mathrm{USDT_{in}}) - \mathrm{usd}(\mathrm{USDC_{out}}) - G\) |
+| BBSF | Bybit: buy \(q\) at ask VWAP, net \(\times(1+f_b)\) | Fluxion: sell \(q\) for USDC (fee-inclusive) | \(\mathrm{usd}(\mathrm{USDC_{in}}) - \mathrm{usd}(\mathrm{USDT_{out}}) - G\) |
+
+- \(G =\) `gas_usd_per_swap` (default $0.01), charged **once** per Fluxion leg
+  (AMM and RFQ; config `gas_on_rfq`, default true).
+- USDT/USDC: default 1:1 (\(\beta=0\)); optional basis via existing
+  `usdt_usdc_basis_bps` — error declaration: untreated basis is typically
+  sub-5 bps and remains DESIGN §8 open until measured.
+- AMM fee: fee-inclusive amounts in cash-flow; UI wear breakdown may split fee
+  vs impact **without** double-subtracting in \(\mathrm{PnL}\).
+- RFQ: no separate pool-fee line; size ≠ poll notional → `n/a` or
+  `rfq_size_mismatch` flag (no invented impact curve).
+
+#### 2.6.3 Fixed buckets and optimal size
+
+Display / engine buckets (USD): **10 / 50 / 100 / 500 / 1 000 / 10 000**.
+
+For AMM (each direction), also compute
+
+\[
+Q^\star = \arg\max_Q \mathrm{PnL}(Q)
+\quad Q \in [Q_{\min}, Q_{\max}]
+\]
+
+with \(Q_{\max} = \min(\mathrm{config\_cap}, \mathrm{depth\_cap}, \mathrm{amm\_cap})\).
+
+**Search (normative):** log-spaced coarse grid → local peak brackets → linear
+refine → force-evaluate endpoints. **Do not assume concavity**; multi-peak
+piecewise books are possible (Bybit steps + V3 range). Defaults and termination
+in `docs/references/hummingbot-pnl.md` §5. Claim: best among evaluated samples,
+not a proven continuous global max.
+
+#### 2.6.4 Guardrails (from Hummingbot, panel-shaped)
+
+| Guard | Rule |
+|-------|------|
+| Freshness | Bybit / pool / RFQ age caps; stale → unfillable + reason |
+| Align | Dual-leg snapshot skew ≤ `align_skew_ms` |
+| Min profit | Config threshold for **highlight / breach only** — raw PnL always emitted |
+| Thin book | Partial depth fill ⇒ unfillable (no silent partial) |
+
+#### 2.6.5 Engine ownership
+
+| Piece | Issue |
+|-------|-------|
+| This research + DESIGN §2.6 | **WHI-754** (landed with the research note) |
+| Pure metrics engine + tests + bucket/optimal API | **WHI-756** |
+| Live Bybit multi-level depth on the quote path | Deferred depth work (see `docs/DEFERRED_ISSUES.md`); engine accepts depth when present, L1 otherwise |
 
 ## 3. Cross-cutting Policies
 
@@ -345,8 +425,9 @@ Dependency chain: M0 → M1 → M2 → (M3 ∥ M4) → M5 → M6.
 | Closed hours assumed RFQ-dark / AMM-only pricing | **Resolved WHI-753:** liquid pairs still quote two-sided RFQ on weekends and track Bybit mid; see `docs/references/m4-closed-session-rfq.md`. Open-vs-closed *fill* rates still open. |
 | Bybit xStocks **multiplier** must be applied or edges are nonsense | **Resolved M1:** `instruments-info.xstockMultiplier` + `de_multiplied_price`; snapshots in `config/pairs.yaml` |
 | Fluxion pool ABI / fork lineage unknown until M1 (phase-1 Agni topic0 trap) | **Resolved M1:** UniV3-lineage factory/quoter; liquid xStock pools fee=3000 USDC. M2 still re-verifies topic0 on live swaps |
-| Bybit quote is **USDT** while Fluxion AMM/RFQ quote is **USDC** — basis not modeled in M1 | M3 |
-| Live book depth quality vs phase-1 single snapshot approximation | M2/M3 |
+| Bybit quote is **USDT** while Fluxion AMM/RFQ quote is **USDC** — basis not modeled in M1 | M3 (knob `usdt_usdc_basis_bps`, default 0); PnL v2 same default — measure before production accuracy claims |
+| Live book depth quality vs phase-1 single snapshot approximation | M2/M3; PnL v2 VWAP needs depth (L1 degrade until wired) |
+| PnL v2 optimal search is sample-best, not continuous global max | WHI-756; acceptable for panel buckets $10–$10k |
 | Mantle block ingest P95 / head_lag (LB not-found) | **Resolved WHI-749:** default `head_lag_blocks: 1`; SLO in §5.2; note `docs/references/m2-block-ingest-latency.md` |
 | Heuristic thresholds (80% / 20 trades) unvalidated on xStocks | M4 |
 | TUI library choice (textual vs rich) | **Resolved M5:** Textual |

@@ -49,7 +49,10 @@ placeholders. Agents must not assume a module exists until its issue lands. -->
   - **Closed-session RFQ research (WHI-753) landed:** weekend RFQ still
     two-sided on liquid pairs and tracks Bybit mid — session ≠ mechanism; note
     in `docs/references/m4-closed-session-rfq.md` + DESIGN / M4 rule updates.
-  - **Not landed yet:** M6 Web plan doc only.
+  - **PnL v2 research (WHI-754) landed:** Hummingbot CEX⇄AMM methodology →
+    cash-flow PnL spec; note `docs/references/hummingbot-pnl.md`, DESIGN §2.6.
+    Engine (optimal size + bucket table) is **WHI-756** — not landed.
+  - **Not landed yet:** M6 Web plan doc only; PnL v2 engine (WHI-756).
     Do not assume that module exists until its issue lands.
 
 ## Build, test, run
