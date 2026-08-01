@@ -103,46 +103,59 @@ in M3; default America/New_York RTH 09:30–16:00).
 ### 2.6 PnL v2 (cash-flow paper arb — WHI-754 research, WHI-756 engine)
 
 Spec of record for **USD PnL at size**, optimal-size search, and the fixed
-bucket table. Methodology derivation and Hummingbot对照:
+bucket table. Methodology derivation and Hummingbot comparison:
 `docs/references/hummingbot-pnl.md`.
 
 #### 2.6.1 Product invariants
 
 - **Two-sided inventory paper arb** (same as §1.2 / §2.3): no transfer cost,
   no wallet budget checker. Thin book / AMM range exhaust → `fillable=false`.
-- **Size variable \(Q\)** = single-trade USD notional at **de-multiplied** Bybit mid.
-  Base amount \(q = Q / P_b^{\mathrm{mid}}\) is identical on both legs.
-- **Directions:** `buy_fluxion_sell_bybit` (BFSB), `buy_bybit_sell_fluxion` (BBSF).
-- **Fluxion venues:** AMM (full size continuum) and RFQ (**reference poll sizes
-  only** — rate limit; not a dense RFQ ladder).
+- **Size variable \(Q\)** (AMM path) = single-trade USD notional at
+  **de-multiplied** Bybit mid. Matched base \(q\) is identical on both legs
+  **after** Bybit fee rules (§2.6.2); see research note §4.2–4.4.
+- **Directions** (same tokens as M3 `edge.py`):
+  `buy_fluxion_sell_bybit`, `buy_bybit_sell_fluxion`.
+- **Fluxion venues:** AMM (full size continuum + optimal search) and RFQ
+  (**poll-native rows only** — not the AMM bucket ladder; rate limit).
 - **Negative PnL is first-class** (gas-dominated micro buckets); never clamp to 0.
 
 #### 2.6.2 Cash-flow formulas
 
-Bybit taker fee \(f_b = 10\,\mathrm{bps}\) (config). Levels for VWAP are
-**de-multiplied prices** with base sizes; multiplier is applied at tick ingest,
-not inside PnL.
+Bybit taker fee \(f_b = 10\,\mathrm{bps}\) (config). Spot fees are charged in the
+**received** asset (Bybit help center): buy → fee in base; sell → fee in quote.
+Levels for VWAP are **de-multiplied prices** with base sizes; multiplier is
+applied at tick ingest, not inside PnL. Full algebra in research note §4.2.
 
-| Direction | Buy leg | Sell leg | PnL (USD) |
-|-----------|---------|----------|-----------|
-| BFSB | Fluxion: USDC in to buy \(q\) (fee-inclusive AMM or RFQ) | Bybit: sell \(q\) at bid VWAP, net \(\times(1-f_b)\) | \(\mathrm{usd}(\mathrm{USDT_{in}}) - \mathrm{usd}(\mathrm{USDC_{out}}) - G\) |
-| BBSF | Bybit: buy \(q\) at ask VWAP, net \(\times(1+f_b)\) | Fluxion: sell \(q\) for USDC (fee-inclusive) | \(\mathrm{usd}(\mathrm{USDC_{in}}) - \mathrm{usd}(\mathrm{USDT_{out}}) - G\) |
+| Direction | Buy leg (trader pays) | Sell leg (trader receives) | PnL (USD) |
+|-----------|----------------------|----------------------------|-----------|
+| `buy_fluxion_sell_bybit` | Fluxion: USDC spent to acquire net base \(q\) (fee-inclusive AMM; or RFQ `amountIn`) | Bybit: sell \(q\) at bid VWAP; USDT received after fee | \(\mathrm{usd}(\mathrm{USDT_{recv}}) - \mathrm{usd}(\mathrm{USDC_{spent}}) - G\) |
+| `buy_bybit_sell_fluxion` | Bybit: buy gross base so **net** base \(= q\) after fee; USDT spent | Fluxion: sell \(q\) for USDC received (fee-inclusive AMM; or RFQ `amountOut`) | \(\mathrm{usd}(\mathrm{USDC_{recv}}) - \mathrm{usd}(\mathrm{USDT_{spent}}) - G\) |
 
 - \(G =\) `gas_usd_per_swap` (default $0.01), charged **once** per Fluxion leg
-  (AMM and RFQ; config `gas_on_rfq`, default true).
+  (AMM and RFQ; default charge gas on RFQ too — conservative).
 - USDT/USDC: default 1:1 (\(\beta=0\)); optional basis via existing
   `usdt_usdc_basis_bps` — error declaration: untreated basis is typically
   sub-5 bps and remains DESIGN §8 open until measured.
 - AMM fee: fee-inclusive amounts in cash-flow; UI wear breakdown may split fee
   vs impact **without** double-subtracting in \(\mathrm{PnL}\).
-- RFQ: no separate pool-fee line; size ≠ poll notional → `n/a` or
-  `rfq_size_mismatch` flag (no invented impact curve).
+- RFQ: no separate pool-fee line. Rows are keyed by **poll size** (USDC
+  EXACT_INPUT for buys; native base EXACT_INPUT for sells — matches
+  `config/collector.yaml` today). Do not invent an RFQ impact curve for
+  off-poll sizes; do not force RFQ onto the AMM \(Q\) grid (research note §4.3.2).
 
-#### 2.6.3 Fixed buckets and optimal size
+#### 2.6.3 Size ladders: M3 vs PnL v2
 
-Display / engine buckets (USD): **10 / 50 / 100 / 500 / 1 000 / 10 000**.
+| Path | Sizes | Owner |
+|------|-------|-------|
+| M3 TUI `edge_bps` (§2.3) | **$1 000 / $5 000 / $20 000** (`config/metrics.yaml`) | Live panel today |
+| PnL v2 AMM buckets + search (this section) | **$10 / $50 / $100 / $500 / $1 000 / $10 000** | WHI-756 engine / future consumers |
+| PnL v2 RFQ | Collector poll notionals only (not the AMM bucket list) | WHI-756 |
 
-For AMM (each direction), also compute
+PnL v2 **does not** change the M3 TUI ladder. The v2 bucket list is for the
+cash-flow engine (WHI-756) and any new serializable models — keep
+`OverviewModel` / M3 path on $1K/$5K/$20K until a later wiring issue.
+
+#### 2.6.4 Optimal size (AMM only)
 
 \[
 Q^\star = \arg\max_Q \mathrm{PnL}(Q)
@@ -157,7 +170,7 @@ piecewise books are possible (Bybit steps + V3 range). Defaults and termination
 in `docs/references/hummingbot-pnl.md` §5. Claim: best among evaluated samples,
 not a proven continuous global max.
 
-#### 2.6.4 Guardrails (from Hummingbot, panel-shaped)
+#### 2.6.5 Guardrails (from Hummingbot, panel-shaped)
 
 | Guard | Rule |
 |-------|------|
@@ -166,7 +179,7 @@ not a proven continuous global max.
 | Min profit | Config threshold for **highlight / breach only** — raw PnL always emitted |
 | Thin book | Partial depth fill ⇒ unfillable (no silent partial) |
 
-#### 2.6.5 Engine ownership
+#### 2.6.6 Engine ownership
 
 | Piece | Issue |
 |-------|-------|

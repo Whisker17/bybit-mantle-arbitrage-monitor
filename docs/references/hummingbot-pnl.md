@@ -5,8 +5,8 @@ map it onto Bybit ⇄ Fluxion xStocks, and pin formulas implementable by WHI-756
 without re-opening product decisions.
 
 **Normative product section:** `docs/DESIGN.md` §2.6 (PnL v2). This file is the
-derivation and Hummingbot对照; when they disagree, DESIGN wins for product, and
-this note must be patched.
+derivation and Hummingbot comparison; when they disagree, DESIGN wins for
+product, and this note must be patched.
 
 **Hummingbot revision read:** `github.com/hummingbot/hummingbot` @
 `2bfaccc48dd49e71a5b6d9b3011808e127dd00cd` (master, 2026-07-30). Paths below
@@ -150,7 +150,7 @@ current_profitability = (trade_pnl_pct * order_amount - tx_cost) / order_amount
 
 Gate: `current_profitability > min_profitability`.
 
-**v1 vs v2口径对照:**
+**v1 vs v2 accounting comparison:**
 
 | | amm_arb (v1) | arbitrage_executor (v2) |
 |--|--------------|-------------------------|
@@ -194,10 +194,10 @@ searches for optimal size; the operator picks `order_amount`.
 | \(f_p\) | fraction | AMM pool fee (e.g. 3000 → 0.003); RFQ: **0** (embedded in quote) |
 | \(G\) | USD | Mantle gas for **one** Fluxion leg (`gas_usd_per_swap`, default 0.01) |
 | \(\beta\) | fraction | Optional USDT/USDC basis wear (`usdt_usdc_basis_bps` / 1e4); default 0 |
-| \(D\) | enum | `buy_fluxion_sell_bybit` (BFSB) or `buy_bybit_sell_fluxion` (BBSF) |
+| \(D\) | enum | `buy_fluxion_sell_bybit` or `buy_bybit_sell_fluxion` (M3 names) |
 | \(V\) | enum | Venue on Fluxion: `amm` or `rfq` |
 
-**Sign convention:** \(\mathrm{PnL}(Q) > 0\) means paper profit in USD after fees and gas.
+**Sign convention:** \(\mathrm{PnL} > 0\) means paper profit in USD after fees and gas.
 
 **No truncation:** if gas or fees dominate, \(\mathrm{PnL}\) is **negative** and reported as-is (WHI-756).
 
@@ -206,11 +206,11 @@ searches for optimal size; the operator picks `order_amount`.
 Inputs: ordered book side levels \(\{(p_i, s_i)\}\) with **de-multiplied** price
 \(p_i\) (USDT per base) and size \(s_i\) in **base** units consistent with \(q\).
 
-Walk (Hummingbot `get_vwap_for_volume` style; equivalent to M3
-`book_vwap_slip_bps` when sizing by notional \(Q \approx \sum p\cdot\Delta s\)):
+**Walk base amount** (Hummingbot `get_vwap_for_volume` style — sized in **base**,
+not USD):
 
 ```text
-remaining = q
+remaining = q_walk
 cost_or_proceeds = 0
 for (p, s) in levels:           # asks if buying, bids if selling
     take = min(s, remaining)
@@ -218,21 +218,34 @@ for (p, s) in levels:           # asks if buying, bids if selling
     remaining -= take
     if remaining <= 0: break
 if remaining > 0: UNFILLABLE
-P_vwap = cost_or_proceeds / q
+P_vwap = cost_or_proceeds / q_walk
 ```
 
-**Cash after taker fee** (fee in quote, Bybit spot default):
+M3 `book_vwap_slip_bps` walks by **USD notional** instead (`spent` until
+`size_usd`). That yields a different base fill \(Q / P_{\mathrm{vwap}}\) rather
+than \(Q / P_b^{\mathrm{mid}}\). **PnL v2 normative walk is base-sized** (this
+section). An engine may adapt the M3 helper by converting \(q \mapsto\) notional
+with care, but must not claim the two walks are identical.
 
-| Leg | Gross quote | Net quote (USDT) |
-|-----|-------------|------------------|
-| Buy base | \(q \cdot P_{\mathrm{ask}}^{\mathrm{vwap}}\) | \(\mathrm{USDT_{out}} = q \cdot P_{\mathrm{ask}}^{\mathrm{vwap}} \cdot (1 + f_b)\) |
-| Sell base | \(q \cdot P_{\mathrm{bid}}^{\mathrm{vwap}}\) | \(\mathrm{USDT_{in}} = q \cdot P_{\mathrm{bid}}^{\mathrm{vwap}} \cdot (1 - f_b)\) |
+#### Fee currency (Bybit spot, received-asset rule)
+
+Bybit spot charges the taker fee in the **received** coin (official Spot Fees
+examples: buy BTC → fee in BTC; sell BTC → fee in USDT). With rate \(f_b\):
+
+| Leg | Gross trade | Net cash / inventory |
+|-----|-------------|----------------------|
+| **Buy** base (want **net** base \(q\)) | Walk asks for gross base \(q_{\mathrm{g}} = q / (1 - f_b)\); pay \(q_{\mathrm{g}} \cdot P_{\mathrm{ask}}^{\mathrm{vwap}}\) USDT | Receive \(q\) base after fee |
+| **Sell** base \(q\) | Walk bids for base \(q\); gross USDT \(= q \cdot P_{\mathrm{bid}}^{\mathrm{vwap}}\) | Receive \(q \cdot P_{\mathrm{bid}}^{\mathrm{vwap}} \cdot (1 - f_b)\) USDT |
+
+First-order, \(1/(1-f_b) \approx 1+f_b\) (error \(\sim f_b^2\), ~0.01 bps at
+10 bps). **Implement the exact received-asset form** so the matched-base
+invariant stays honest; do not bill buy fees as pure quote markup without
+adjusting gross base.
 
 Notes:
 
 1. Fee is **not** double-counted with half-spread: VWAP already sits on the
-   trade side of mid; fee is a separate percent of that notional (Hummingbot
-   `fee_amount_in_token` on quote).
+   trade side of mid; fee is separate.
 2. Without depth, degrade to L1: \(P_{\mathrm{ask}}^{\mathrm{vwap}} = \mathrm{ask}_1\),
    \(P_{\mathrm{bid}}^{\mathrm{vwap}} = \mathrm{bid}_1\) (M3 today). Mark
    `bybit_depth_source = l1` vs `book`.
@@ -241,38 +254,55 @@ Notes:
 
 ### 4.3 Fluxion leg — AMM vs RFQ
 
-#### 4.3.1 AMM (V3, exact)
+#### 4.3.1 AMM (V3)
 
-Reuse `monitor.metrics.amm_slip` pure math (fee separated from impact):
+Repo reality (`monitor.metrics.amm_slip`): **exact-in only**
+(`swap_exact_in_zero_for_one` / `swap_exact_in_one_for_zero`). There is no
+on-path exact-out helper today.
 
-- **Buy base (exact-in quote):** choose quote input so that base out \(= q\), **or**
-  (engine convenience) exact-in with `size_usd = Q` then set \(q_{\mathrm{eff}} = \mathrm{amount\_out}\)
-  and use **the same** \(q_{\mathrm{eff}}\) on Bybit.  
-  **Normative for v2 buckets:** fix \(q = Q / P_b^{\mathrm{mid}}\), solve AMM for
-  quote needed to buy \(q\) (exact-out) when available; if only exact-in is
-  implemented, binary-search quote_in until base_out matches \(q\) within
-  `q_tol` (e.g. \(10^{-12}\) relative), failing → unfillable.
-- **Sell base:** exact-in base \(q\) → quote out.
+**Normative sizing for AMM buckets:**
 
-Pool fee: either folded into AMM amounts (UniV3 applies fee on input) **or**
-reported as a wear line. **PnL cash-flow uses fee-inclusive amounts** (what you
-actually pay/receive). Wear breakdown for the UI may still split
-`fluxion_fee_usd` vs `fluxion_impact_usd` like M3’s bps split — but
-\(\mathrm{PnL}\) must use one consistent fee-inclusive path (do not subtract
-pool fee twice).
+1. Fix \(q = Q / P_b^{\mathrm{mid}}\) (target net base on both legs).
+2. **Sell base on Fluxion:** exact-in base \(q\) → `USDC_recv` (fee on input is
+   inside the UniV3 formula when `pool_fee` is applied; for cash-flow use
+   fee-inclusive swap — see below).
+3. **Buy base on Fluxion:** binary-search quote_in (USDC) such that exact-in
+   base_out equals \(q\) within relative tolerance `q_tol_rel` (default
+   **`1e-6`**). Cap iterations at `amm_solve_max_iters` (default **64**).
+   Fail → `fillable=false`, reason `amm_size_solve_failed` or
+   `unfillable_or_range_exhausted`.
 
-Gas: subtract \(G\) USD once per Fluxion leg (one swap).
+Optional future: true exact-out math or Quoter contract; until then the
+binary search **is** the implementable path, not a fallback.
 
-#### 4.3.2 RFQ (reference sizes only)
+Pool fee vs impact in the UI: wear breakdown may split lines, but
+\(\mathrm{PnL}\) uses **one** fee-inclusive cash amount (do not subtract pool
+fee twice). Gas: subtract \(G\) USD once per Fluxion leg.
 
-- Poll EXACT_INPUT at 1–2 configured notionals (e.g. $100 / $1 000 USDC) per
-  side; global budget 60 req/min (see `m1-rfq-feasibility.md`).
+#### 4.3.2 RFQ (poll-native rows — not the AMM bucket ladder)
+
+RFQ is EXACT_INPUT only (`docs/references/m1-rfq-feasibility.md`). Collector
+today (`config/collector.yaml`):
+
+| Side | Poll input | Typical config |
+|------|------------|----------------|
+| Buy base (USDC → native) | USDC raw amount | `amount_usdc_raw` ≈ 100 USDC |
+| Sell base (native → USDC) | Native base raw amount | `amount_native_raw` ≈ 0.1 token |
+
+**Relaxation of the AMM same-\(Q\) grid:**
+
+- RFQ PnL rows are **keyed by the poll**, not by the $10…$10k AMM buckets.
+- **Buy Fluxion / sell Bybit:** `USDC_spent = amountIn` from the poll;
+  \(q = \mathrm{amountOut}\) (base). Bybit sell walks that **same** \(q\).
+  Label row with `rfq_input_usdc` and display notional \(Q_{\mathrm{label}} = q \cdot P_b^{\mathrm{mid}}\) if needed.
+- **Buy Bybit / sell Fluxion:** poll sells base `amount_native`;
+  \(q = \mathrm{amountIn}\) (base). Bybit buy acquires **net** \(q\) after fee
+  (§4.2). `USDC_recv = amountOut`.
+- No RFQ impact curve for off-poll sizes. Do not invent $1k RFQ from a $100
+  poll. Expanding polls is a **collector** change outside WHI-754; WHI-756
+  consumes whatever polls exist.
 - Executable price is the poll response; **no extra pool fee line**.
-- For bucket \(Q\) ≠ poll notional: **do not invent RFQ impact**. Either:
-  - mark RFQ cell `n/a` / `stale_size`, or
-  - show **indicative** PnL using the nearest poll price with flag
-    `rfq_size_mismatch=true` (M3 status quo for ladder).  
-  WHI-756: RFQ is a **对照列** at reference sizes, not a full 6-bucket table.
+- Gas: charge \(G\) by default (on-chain LOP settlement).
 
 ### 4.4 Direction cash-flows (USD)
 
@@ -288,26 +318,44 @@ wear applied by shrinking USDC value of Fluxion cash — same spirit as M3
 additive basis bps; implementers may equivalently add \(\beta\cdot Q\) as a
 wear term. Document the chosen encoding in code comments; tests lock one.)
 
-#### Direction BFSB — buy Fluxion, sell Bybit
+All names below are from the **trader** perspective: `*_spent` leaves the wallet,
+`*_recv` enters it.
+
+#### Direction `buy_fluxion_sell_bybit` (AMM)
 
 ```text
-USDC_spent  = quote_in_to_buy_q_on_fluxion(q)     # fee-inclusive
-USDT_recv   = q * P_bid_vwap * (1 - f_b)
+q           = Q / P_b_mid                         # net base
+USDC_spent  = amm_quote_in_for_base_out(q)        # binary-search exact-in; fee-inclusive
+USDT_recv   = q * P_bid_vwap * (1 - f_b)          # sell net q; fee in quote
 PnL_USD     = usd(USDT_recv) - usd(USDC_spent) - G
 ```
 
-#### Direction BBSF — buy Bybit, sell Fluxion
+#### Direction `buy_bybit_sell_fluxion` (AMM)
 
 ```text
-USDT_spent  = q * P_ask_vwap * (1 + f_b)
-USDC_recv   = quote_out_from_sell_q_on_fluxion(q) # fee-inclusive
+q           = Q / P_b_mid                         # net base
+q_gross     = q / (1 - f_b)                       # Bybit buy fee in base
+USDT_spent  = q_gross * P_ask_vwap                # walk asks for q_gross
+USDC_recv   = amm_quote_out_for_base_in(q)        # exact-in base q; fee-inclusive
 PnL_USD     = usd(USDC_recv) - usd(USDT_spent) - G
 ```
 
-**RFQ variants:** replace Fluxion quote_in/out with RFQ `amountIn`/`amountOut`
-at the matched reference size; \(G\) still applies if settlement is on-chain
-(LOP fill burns gas). Panel default: charge \(G\) for both AMM and RFQ
-Fluxion legs (conservative). Config `gas_on_rfq: true` (default true).
+#### RFQ variants (poll-keyed)
+
+```text
+# buy_fluxion_sell_bybit @ RFQ buy poll
+USDC_spent = rfq.amountIn
+q          = rfq.amountOut
+USDT_recv  = q * P_bid_vwap * (1 - f_b)
+PnL_USD    = usd(USDT_recv) - usd(USDC_spent) - G
+
+# buy_bybit_sell_fluxion @ RFQ sell poll
+q          = rfq.amountIn          # base sold on Fluxion
+USDC_recv  = rfq.amountOut
+q_gross    = q / (1 - f_b)
+USDT_spent = q_gross * P_ask_vwap
+PnL_USD    = usd(USDC_recv) - usd(USDT_spent) - G
+```
 
 ### 4.5 Relation to M3 `edge_bps`
 
@@ -382,28 +430,30 @@ RFQ venue: evaluate only at configured reference notionals (no continuous search
 - AMM impact is convex in size → marginal edge declines.
 - Bybit book is a step function → \(\mathrm{PnL}(Q)\) can be **piecewise** with
   kinks at level boundaries; **not guaranteed unimodal**, not guaranteed concave.
-- Therefore: **no pure ternary / gradient ascent alone** (same motivation as
-  WHI-540 multi-peak search in the arbitrage-bots project).
+- Therefore: **no pure ternary / gradient ascent alone**. (Precedent: multi-peak
+  optimal-input search in the separate *Mantle Arbitrage bots v2* project —
+  Linear WHI-540 there — same “don’t assume concavity” motivation.)
 
 ### 5.3 Recommended algorithm (normative)
 
-Constants (config; defaults below):
+Defaults (WHI-756 may put these under `config/metrics.yaml` or a sibling file;
+values below are the research defaults, not a reserved schema):
 
 | Param | Default | Role |
 |-------|---------|------|
-| `q_min_usd` | `10` | Search floor (also smallest display bucket) |
-| `q_max_usd` | `min(config_cap, depth_cap, amm_cap)` | See caps |
-| `config_cap_usd` | `10000` | Global ceiling (top bucket) |
+| `q_min_usd` | `10` | Search floor (also smallest AMM display bucket) |
+| `config_cap_usd` | `10000` | Global ceiling (top AMM bucket) |
 | `coarse_points` | `24` | Log-grid samples in \([Q_{\min}, Q_{\max}]\) |
 | `refine_points` | `16` | Linear samples in each peak bracket |
-| `peak_neighborhood` | 1 bracket on each side of coarse local max | |
-| `q_tol_rel` | `1e-6` | Relative size merge / exact-out solve |
+| `q_tol_rel` | `1e-6` | AMM buy size-solve relative tolerance (§4.3.1) |
+| `amm_solve_max_iters` | `64` | Cap binary-search iterations |
 
 **Caps:**
 
 ```text
 depth_cap  = max USD notional fillable on the Bybit side used by D
-             (full walk of bids for BFSB sell / asks for BBSF buy)
+             (full walk of bids for sell-Bybit / asks for buy-Bybit,
+              using the gross base when the Bybit leg is a buy)
 amm_cap    = max Q such that V3 in-range math remains fillable
              (existing unfillable_or_range_exhausted)
 Q_max      = min(config_cap_usd, depth_cap, amm_cap)
@@ -416,7 +466,7 @@ If \(Q_{\max} < Q_{\min}\): no fillable size → `optimal = null`.
 1. **Coarse log grid:**  
    \(Q_i = \exp\bigl(\ln Q_{\min} + \frac{i}{n-1}(\ln Q_{\max}-\ln Q_{\min})\bigr)\),
    \(i=0..n-1\), \(n=\) `coarse_points`. Always include endpoints.
-2. Evaluate \(\mathrm{PnL}(Q_i)\) (unfillable → \(-\infty\) / skip).
+2. Evaluate \(\mathrm{PnL}(Q_i)\) (unfillable → skip).
 3. **Local peaks:** any \(i\) with \(\mathrm{PnL}(Q_i) \ge \mathrm{PnL}(Q_{i-1})\) and
    \(\ge \mathrm{PnL}(Q_{i+1})\) (endpoints: one-sided). Also retain the global
    coarse argmax if not already a peak (plateau guard).
@@ -425,23 +475,30 @@ If \(Q_{\max} < Q_{\min}\): no fillable size → `optimal = null`.
 5. **Endpoint check:** re-evaluate \(Q_{\min}\), \(Q_{\max}\).
 6. **Winner:** max PnL among all evaluated fillable points. Ties → smaller \(Q\).
 
-**Termination:** finite sample set; no iterative tolerance loop required beyond
-AMM exact-out solve. Wall-clock budget: O(`coarse_points` + `peaks * refine_points`)
-AMM+book evaluations — keep defaults so a full pair×direction pass stays
-well under tens of ms on CPython for liquid books.
+**Termination:**
+
+- Outer search: finite sample set (no open-ended optimizer).
+- Inner AMM buy solve: stop when relative base error \(\le\) `q_tol_rel` or
+  iterations hit `amm_solve_max_iters` (then unfillable).
+
+Wall-clock: O(`coarse_points` + `peaks * refine_points`) AMM+book evaluations —
+defaults should stay comfortable for live snapshot use on liquid books.
 
 **Not claimed:** global continuous optimum. Claimed: best among the evaluated
 set, which is dense enough for panel decisions at $10–$10k.
 
-### 5.4 Fixed bucket table (WHI-756)
+### 5.4 Fixed bucket table (WHI-756) — AMM path only
 
-Normative buckets (USD):
+Normative AMM buckets (USD) — **not** the M3 TUI ladder ($1k/$5k/$20k; DESIGN
+§2.6.3):
 
 ```text
 [10, 50, 100, 500, 1000, 10000]
 ```
 
 For each bucket: `{pnl_usd, fillable, reason?, costs: {bybit_fee, bybit_slip, fluxion_fee, fluxion_slip, gas, basis}, q_base, ...}`.
+
+RFQ: separate poll-keyed rows (§4.3.2), not this list.
 
 ---
 
@@ -457,59 +514,48 @@ For each bucket: `{pnl_usd, fillable, reason?, costs: {bybit_fee, bybit_slip, fl
 | Fee double-count | Single fee_amount path | Cash-flow §4; wear breakdown is reporting-only |
 | Stable basis | USD* interchangeable | Default β=0; document error: typically sub-5 bps, owned as DESIGN §8 open risk until measured |
 
-Recommended config keys (WHI-756 may add under `config/metrics.yaml` or
-`config/pnl_v2.yaml` — choice left to implementer, but names are reserved):
+Suggested knobs for WHI-756 (illustrative — not a frozen schema; implementer
+chooses file layout and exact names):
 
-```yaml
-pnl_v2:
-  buckets_usd: [10, 50, 100, 500, 1000, 10000]
-  search:
-    q_min_usd: 10
-    config_cap_usd: 10000
-    coarse_points: 24
-    refine_points: 16
-  guards:
-    bybit_stale_ms: 5000
-    pool_stale_blocks: 3
-    rfq_stale_ms: 30000
-    align_skew_ms: 2000
-    min_profit_bps: 0          # highlight only
-  gas_on_rfq: true
-  rfq_reference_usd: [100, 1000]
-```
+- AMM `buckets_usd`, search defaults from §5.3
+- Freshness / align thresholds from the guard table above
+- `min_profit_bps` (highlight only), `gas_on_rfq` (default true)
+- RFQ rows follow **collector poll config**, not a second hard-coded USD list
 
 ---
 
 ## 7. Worked micro-example (fee algebra check)
 
 Assume mid-aligned venues, zero slip, zero gas, \(\beta=0\), \(f_b=10\) bps,
-AMM fee already inside prices as 0 for clarity, \(Q=1000\), \(P=100\), \(q=10\).
+AMM fee 0 for clarity, \(Q=1000\), \(P=100\), net \(q=10\).
 
-**BFSB** with Bybit bid = Fluxion buy = 100:
+**`buy_fluxion_sell_bybit`** with Bybit bid = Fluxion mid = 100:
 
 ```text
-USDT_recv = 10 * 100 * (1 - 0.001) = 999.0
-USDC_spent = 10 * 100 = 1000.0
+USDT_recv  = 10 * 100 * (1 - 0.001) = 999.0   # fee in quote on sell
+USDC_spent = 10 * 100 = 1000.0                # fee-free AMM buy of net 10
 PnL = 999 - 1000 = -1.0 USD   (= −10 bps of Q)
 ```
 
-Matches “pay taker once on the CEX sell.” If Fluxion also charges 30 bps pool fee
-on the buy input:
+Matches “pay taker once on the CEX sell.” If the UniV3 pool fee is 30 bps on
+input and we binary-search quote_in for base_out = 10:
 
 ```text
-USDC_spent ≈ 1000 / (1 - 0.003)   # exact-out style
-           ≈ 1003.01
+USDC_spent ≈ 1000 / (1 - 0.003) ≈ 1003.01
 PnL ≈ 999 - 1003.01 = -4.01 USD
 ```
 
-Hummingbot-style % of buy notional:
+**`buy_bybit_sell_fluxion`** same mids:
 
 ```text
-profit_pct = (999 - 1003.01) / 1003.01 ≈ -0.40%
+q_gross    = 10 / (1 - 0.001) ≈ 10.01001      # fee in base on buy
+USDT_spent = 10.01001 * 100 ≈ 1001.001
+USDC_recv  = 10 * 100 = 1000.0
+PnL ≈ 1000 - 1001.001 = -1.001 USD
 ```
 
-Our panel prefers **USD PnL** and **bps of \(Q\)** for operators; both are
-derivable from the same cash-flows.
+Hummingbot-style % of buy notional remains available from the same cash-flows;
+the panel prefers **USD PnL** and optional `pnl_bps = PnL/Q * 1e4`.
 
 ---
 
