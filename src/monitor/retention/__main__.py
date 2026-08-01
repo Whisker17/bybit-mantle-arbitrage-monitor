@@ -80,13 +80,36 @@ def main(argv: list[str] | None = None) -> int:
             return 0
 
         cfg = collector.retention
-        if args.full_vacuum:
-            cfg = cfg.model_copy(update={"full_vacuum": True})
-        if not cfg.enabled and not args.full_vacuum:
+        wall_ms = args.now_ms if args.now_ms is not None else now_ms()
+
+        if not cfg.enabled:
+            if args.full_vacuum:
+                # Vacuum only — do not prune when retention is disabled.
+                vac_cfg = cfg.model_copy(
+                    update={
+                        "full_vacuum": True,
+                        "bybit_book_raw_ms": None,
+                        "bybit_book_1m_ms": None,
+                        "bybit_trades_ms": None,
+                        "fluxion_pool_state_ms": None,
+                        "fluxion_rfq_quotes_ms": None,
+                        "fluxion_swaps_ms": None,
+                        "fluxion_rfq_fills_ms": None,
+                        "collector_gaps_ms": None,
+                        "incremental_vacuum_pages": 0,
+                    }
+                )
+                report = store.run_retention(vac_cfg, now_ms=wall_ms)
+                print(
+                    f"vacuum-only: full_vacuum={report.full_vacuum} "
+                    f"deleted={report.deleted}"
+                )
+                return 0
             print("retention.enabled=false; use --full-vacuum or enable in config")
             return 0
 
-        wall_ms = args.now_ms if args.now_ms is not None else now_ms()
+        if args.full_vacuum:
+            cfg = cfg.model_copy(update={"full_vacuum": True})
         report = store.run_retention(cfg, now_ms=wall_ms)
         print(
             f"retention: level={report.disk_level} free={report.free_bytes} "

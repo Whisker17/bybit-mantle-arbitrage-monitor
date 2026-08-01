@@ -47,15 +47,16 @@ def _policy(**overrides: object) -> RetentionConfig:
     base = RetentionConfig(
         enabled=True,
         interval_s=60,
-        bybit_book_raw_ms=1_000,
+        # >1 minute so minute-aligned book delete still drops seeds a few min old.
+        bybit_book_raw_ms=120_000,
         # Keep bars long enough that seeds at now-90s still survive prune.
         bybit_book_1m_ms=86_400_000,
-        bybit_trades_ms=1_000,
-        fluxion_pool_state_ms=1_000,
-        fluxion_rfq_quotes_ms=1_000,
+        bybit_trades_ms=120_000,
+        fluxion_pool_state_ms=120_000,
+        fluxion_rfq_quotes_ms=120_000,
         fluxion_swaps_ms=None,
         fluxion_rfq_fills_ms=None,
-        collector_gaps_ms=1_000,
+        collector_gaps_ms=120_000,
         delete_batch_size=100,
         incremental_vacuum_pages=0,
         full_vacuum=False,
@@ -111,9 +112,9 @@ def test_prune_books_materializes_1m_and_keeps_swaps(tmp_path: Path) -> None:
     assert store.get_meta("schema_version") == str(SCHEMA_VERSION)
 
     now = 1_700_000_100_000
-    # Two minutes of books older than raw TTL (1000 ms) — will be pruned.
-    old_a = now - 60_000
-    old_b = now - 90_000
+    # Books older than raw TTL (2 min) — will be pruned; recent kept.
+    old_a = now - 180_000  # 3 min ago
+    old_b = now - 240_000  # 4 min ago
     store.insert_bybit_book(
         [
             _book("TSLAx", old_b, "10"),
@@ -337,11 +338,11 @@ def test_batch_delete_respects_batch_size(tmp_path: Path) -> None:
     db = tmp_path / "b.db"
     store = SqliteStore(db)
     now = 2_000_000_000_000
-    ticks = [_book("NVTSx", now - 10_000 - i) for i in range(250)]
+    ticks = [_book("NVTSx", now - 300_000 - i) for i in range(250)]
     ticks.append(_book("NVTSx", now - 10))  # keep
     store.insert_bybit_book(ticks)
     report = store.run_retention(
-        _policy(delete_batch_size=50, bybit_book_raw_ms=1_000),
+        _policy(delete_batch_size=50, bybit_book_raw_ms=120_000),
         now_ms=now,
         free_bytes=10**12,
     )
@@ -470,7 +471,7 @@ def test_permanent_swaps_survive_prune_for_m4_feedstock(tmp_path: Path) -> None:
     with JournalReader(db) as reader:
         swaps_before = reader.swaps("METAx", since_ms=0, limit=100)
     store.run_retention(
-        _policy(bybit_book_raw_ms=1_000, bybit_trades_ms=1_000),
+        _policy(bybit_book_raw_ms=120_000, bybit_trades_ms=120_000),
         now_ms=now,
         free_bytes=10**12,
     )

@@ -60,7 +60,9 @@ class CollectorDaemon:
         self._book_writes_paused = False
         self._book_pause_logged = False
         self._book_pause_started_ms: int | None = None
-        self._next_book_gap = False
+        # After resume, mark all pairs' books gap=1 until this wall-clock ms
+        # (mirrors BybitWsCollector post-reconnect gap window).
+        self._book_gap_until_ms: int = 0
 
     def request_stop(self) -> None:
         self._stop.set()
@@ -112,6 +114,17 @@ class CollectorDaemon:
             for t in tasks:
                 t.cancel()
             await asyncio.gather(*tasks, return_exceptions=True)
+            # If we shut down while disk-critical, still record the pause window.
+            if self._book_writes_paused and self._book_pause_started_ms is not None:
+                end = now_ms()
+                self.store.insert_gap(
+                    CollectorGap(
+                        source="disk_critical",
+                        gap_start_ms=self._book_pause_started_ms,
+                        gap_end_ms=end,
+                        detail="collector stopped while bybit_book writes paused",
+                    )
+                )
             self.store.set_meta("collector_stopped_ms", str(now_ms()))
             logger.info("collector stopped")
 
@@ -124,7 +137,9 @@ class CollectorDaemon:
                 )
                 self._book_pause_logged = True
             return
-        if self._next_book_gap:
+        if tick.recv_ts_ms < self._book_gap_until_ms or (
+            not tick.gap and now_ms() < self._book_gap_until_ms
+        ):
             tick = BybitBookTick(
                 pair_id=tick.pair_id,
                 symbol=tick.symbol,
@@ -137,7 +152,6 @@ class CollectorDaemon:
                 multiplier=tick.multiplier,
                 gap=True,
             )
-            self._next_book_gap = False
         await asyncio.to_thread(self.store.insert_bybit_book, [tick])
 
     async def _on_trade(self, tick: BybitTradeTick) -> None:
@@ -300,7 +314,8 @@ class CollectorDaemon:
                     start = self._book_pause_started_ms or report.now_ms
                     self._book_pause_logged = False
                     self._book_pause_started_ms = None
-                    self._next_book_gap = True
+                    # Cover all pairs for a few seconds (same idea as WS reconnect).
+                    self._book_gap_until_ms = report.now_ms + 5_000
                     await asyncio.to_thread(
                         self.store.insert_gap,
                         CollectorGap(

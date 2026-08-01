@@ -308,16 +308,20 @@ def run_retention(
         return fn(conn)
 
     # Materialize 1m bars in time chunks before deleting raw books (lock-friendly).
+    # Floor the raw-book delete cutoff to a minute boundary so ticks that belong
+    # to a still-incomplete straddle minute are not deleted before materialize.
     raw_ttl = ttls.bybit_book_raw_ms
+    book_delete_cutoff: int | None = None
     if raw_ttl is not None:
         cutoff = now_ms - raw_ttl
+        book_delete_cutoff = (cutoff // 60_000) * 60_000
         # Chunk size: 6h of raw tape per write() — bounds lock hold vs round-trips.
         chunk_ms = 6 * 3_600_000
 
         def _min_ts(c: sqlite3.Connection) -> int | None:
             row = c.execute(
                 "SELECT MIN(exchange_ts_ms) FROM bybit_book WHERE exchange_ts_ms < ?",
-                (cutoff,),
+                (book_delete_cutoff,),
             ).fetchone()
             if row is None or row[0] is None:
                 return None
@@ -325,14 +329,14 @@ def run_retention(
 
         min_ts = _run(_min_ts)
         if min_ts is not None:
-            lo = int(min_ts)
-            while lo < cutoff:
+            lo = (int(min_ts) // 60_000) * 60_000
+            while lo < book_delete_cutoff:
 
                 def _mat(
                     c: sqlite3.Connection,
                     *,
                     _lo: int = lo,
-                    _hi: int = min(lo + chunk_ms, cutoff),
+                    _hi: int = min(lo + chunk_ms, book_delete_cutoff),
                 ) -> int:
                     return _materialize_book_1m_range(
                         c, range_lo_ms=_lo, range_hi_ms=_hi
@@ -345,7 +349,10 @@ def run_retention(
         ttl = ttls.get(ttl_attr)
         if ttl is None:
             continue
-        cutoff = now_ms - ttl
+        if table == "bybit_book" and book_delete_cutoff is not None:
+            cutoff = book_delete_cutoff
+        else:
+            cutoff = now_ms - ttl
         total = 0
         while True:
 
