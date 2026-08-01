@@ -16,6 +16,8 @@ dependencies = [
     "pyyaml>=6.0.3",
     "websockets>=17.0.1",
     "textual>=8.2.8",
+    "fastapi>=0.141.1",
+    "uvicorn[standard]>=0.52.0",
 ]
 
 [dependency-groups]

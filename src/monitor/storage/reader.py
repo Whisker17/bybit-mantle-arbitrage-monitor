@@ -19,6 +19,7 @@ from monitor.quotes import (
     RFQ_BUY_SIDES,
     RFQ_SELL_SIDES,
     BybitBookTick,
+    CollectorGap,
     FluxionPoolStateTick,
     FluxionRfqQuoteTick,
     FluxionSwapTick,
@@ -225,6 +226,63 @@ class JournalReader:
             bybit_notional=Decimal(str(bt["notional"])),
             fluxion_swap_count=int(sw["n"]),
         )
+
+    # --- health / meta (WHI-757 web API) ------------------------------------
+
+    def get_meta(self, key: str) -> str | None:
+        """Read a ``meta`` key written by the collector (e.g. last_block)."""
+        row = self._conn.execute(
+            "SELECT value FROM meta WHERE key = ?",
+            (key,),
+        ).fetchone()
+        return None if row is None else str(row["value"])
+
+    def freshest_recv_ts_ms(self) -> int | None:
+        """Max wall-clock recv timestamp across live tick tables.
+
+        Used by /api/health as a collector-alive proxy (any feed progressing).
+        """
+        # Each sub-select is cheap with indexes on recv / poll / exchange ts.
+        row = self._conn.execute(
+            """
+            SELECT MAX(ts) AS ts FROM (
+                SELECT MAX(recv_ts_ms) AS ts FROM bybit_book
+                UNION ALL
+                SELECT MAX(recv_ts_ms) AS ts FROM bybit_trades
+                UNION ALL
+                SELECT MAX(recv_ts_ms) AS ts FROM fluxion_pool_state
+                UNION ALL
+                SELECT MAX(recv_ts_ms) AS ts FROM fluxion_swaps
+                UNION ALL
+                SELECT MAX(recv_ts_ms) AS ts FROM fluxion_rfq_quotes
+            )
+            """
+        ).fetchone()
+        if row is None or row["ts"] is None:
+            return None
+        return int(row["ts"])
+
+    def recent_gaps(self, *, since_ms: int, limit: int = 20) -> list[CollectorGap]:
+        """Gaps whose end falls on or after ``since_ms``, newest first."""
+        rows = self._conn.execute(
+            """
+            SELECT source, gap_start_ms, gap_end_ms, detail
+            FROM collector_gaps
+            WHERE gap_end_ms >= ?
+            ORDER BY gap_end_ms DESC, id DESC
+            LIMIT ?
+            """,
+            (since_ms, limit),
+        ).fetchall()
+        return [
+            CollectorGap(
+                source=str(r["source"]),
+                gap_start_ms=int(r["gap_start_ms"]),
+                gap_end_ms=int(r["gap_end_ms"]),
+                detail=str(r["detail"]),
+            )
+            for r in rows
+        ]
 
 
 # --- row mappers ----------------------------------------------------------

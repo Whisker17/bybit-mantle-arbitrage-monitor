@@ -1,0 +1,29 @@
+# Read-only web API tunables — WHI-757.
+# Secrets stay in .env; this file is checked-in non-secret config.
+# FastAPI reads the collector SQLite journal (same path as TUI / collector).
+
+version: 1
+
+# Bind address for uvicorn (systemd / local). Nginx reverse-proxies /api here.
+host: 127.0.0.1
+port: 8000
+
+# SQLite journal written by `python -m monitor.collector` (M2).
+# Relative paths resolve against the process cwd (repo root / deploy root).
+sqlite_path: data/monitor.db
+
+# Health: freshest recv_ts older than this → collector_alive=false.
+# 30s covers Bybit L1 (~1s) and RFQ poll stalls; chain can be quieter.
+collector_stale_ms: 30000
+
+# Health: list gaps whose gap_end_ms falls inside this trailing window.
+recent_gap_window_ms: 300000
+
+# Recommended client poll interval (seconds). Documented in OpenAPI / frontend;
+# the API itself is request/response only (no SSE in v1).
+poll_interval_s: 2.0
+
+# CORS origins for local static-export dogfood. Production nginx serves UI +
+# /api same-origin, so empty list is correct on the VPS.
+# Example local: ["http://127.0.0.1:3000", "http://localhost:3000"]
+cors_origins: []
