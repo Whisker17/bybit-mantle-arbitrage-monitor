@@ -18,14 +18,20 @@ export function loadPairIdsFromConfig(): string[] {
     );
   }
   const text = fs.readFileSync(yamlPath, "utf8");
-  // Restrict to the `pairs:` list body so future top-level keys with `id:`
-  // fields cannot pollute generateStaticParams.
-  const pairsBlock = text.match(/^pairs:\s*\n([\s\S]*?)(?=\n[a-zA-Z_]|\n*$)/m);
-  const body = pairsBlock?.[1] ?? text;
+  // Walk only the `pairs:` list body so other top-level keys cannot contribute.
   const ids: string[] = [];
-  for (const line of body.split("\n")) {
-    const m = /^\s+- id:\s+(\S+)\s*$/.exec(line);
-    if (m) ids.push(m[1]);
+  let inPairs = false;
+  for (const line of text.split("\n")) {
+    if (/^pairs:\s*$/.test(line)) {
+      inPairs = true;
+      continue;
+    }
+    if (inPairs) {
+      // Next top-level key ends the pairs block.
+      if (/^[a-zA-Z_]/.test(line)) break;
+      const m = /^\s+- id:\s+(\S+)\s*$/.exec(line);
+      if (m) ids.push(m[1]);
+    }
   }
   if (ids.length === 0) {
     throw new Error(`no pair ids parsed from ${yamlPath}`);
