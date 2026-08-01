@@ -8,7 +8,7 @@ from pathlib import Path
 from zoneinfo import ZoneInfo
 
 from monitor.attribution import load_attribution_config
-from monitor.metrics import best_net_edge, build_edge_snapshot, load_metrics_config
+from monitor.metrics import build_edge_snapshot, load_metrics_config
 from monitor.metrics.session import SessionKind
 from monitor.quotes import BybitBookTick, FluxionPoolStateTick, FluxionRfqQuoteTick
 from monitor.storage import SqliteStore
@@ -107,9 +107,12 @@ def test_overview_row_matches_m3_edge() -> None:
         rfq_sell=rfq_sell,
         ts_ms=_open_ts_ms(),
     )
-    combined = list(snap.amm_edges) + list(snap.rfq_edges)
     ref = tui.reference_size_usd
-    expected = best_net_edge([e for e in combined if e.size_usd == ref])
+    # Overview Net is AMM-only at reference size (RFQ poll notional ≠ ladder).
+    amm_at_ref = [
+        e for e in snap.amm_edges if e.size_usd == ref and e.fillable
+    ]
+    expected = max(amm_at_ref, key=lambda e: e.net_edge_bps)
 
     row = build_pair_overview_row(
         pair,
@@ -126,9 +129,8 @@ def test_overview_row_matches_m3_edge() -> None:
     assert row.session is SessionKind.OPEN
     assert row.bybit_mid == snap.spreads.bybit_mid
     assert row.amm_spread_bps == snap.spreads.amm_spread_bps
-    assert expected is not None
     assert row.net_edge_bps == expected.net_edge_bps
-    assert row.net_edge_venue == expected.venue
+    assert row.net_edge_venue == "amm"
     assert row.net_edge_direction == expected.direction
     assert not row.low_liquidity
 

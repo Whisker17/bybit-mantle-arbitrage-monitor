@@ -70,6 +70,9 @@ soon — anything touching key handling, RPC credentials defaults to at least Hi
   `config/collector.yaml` polls ~100 USDC / 0.1 native while `metrics.yaml` ladder
   is $1K/$5K/$20K; RFQ edges reuse the polled price with zero size slip. Prefer
   ladder-matched RFQ polls or flag `EdgeResult` with the quoted notional.
+  M5 (WHI-734) mitigates on the overview **Net** column by selecting AMM-only
+  fillable edges at `reference_size_usd`; detail RFQ edge panels still show the
+  unslipped ladder extrapolation — do not treat those as size-accurate.
 
 - **NYSE holiday table years 2025–2027 only** (Low, WHI-732 → annual).
   `monitor.metrics.session._CALENDAR_YEARS` — `session_kind` raises outside the

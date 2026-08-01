@@ -70,10 +70,24 @@ def _session_at(ts_ms: int, metrics: MetricsConfig) -> SessionKind:
 
 
 def _pick_reference_edge(
-    edges: Sequence[EdgeResult], *, size: Decimal
+    edges: Sequence[EdgeResult],
+    *,
+    size: Decimal,
+    venues: frozenset[VenueKind] | None = None,
 ) -> EdgeResult | None:
-    """Best *fillable* edge at the reference size; None if nothing fillable."""
-    at_size = [e for e in edges if e.size_usd == size and e.fillable]
+    """Best *fillable* edge at the reference size; None if nothing fillable.
+
+    Overview net-edge prefers AMM only: RFQ is polled at ~$100 (collector) while
+    the ladder starts at $1K, and M3 RFQ slip is forced to 0 at every rung
+    (DEFERRED_ISSUES / metrics.edge). Detail panels may pass venues=None.
+    """
+    at_size = [
+        e
+        for e in edges
+        if e.size_usd == size
+        and e.fillable
+        and (venues is None or e.venue in venues)
+    ]
     if not at_size:
         return None
     return max(at_size, key=lambda e: e.net_edge_bps)
@@ -141,9 +155,8 @@ def build_pair_overview_row(
         ts_ms=ts_ms,
     )
     spreads = edge_snap.spreads
-    combined = list(edge_snap.amm_edges) + list(edge_snap.rfq_edges)
-    # Overview net-edge column is always at reference size and fillable-only.
-    chosen = _pick_reference_edge(combined, size=ref)
+    # Overview Net column: AMM-only at reference size (see _pick_reference_edge).
+    chosen = _pick_reference_edge(edge_snap.amm_edges, size=ref, venues=frozenset({"amm"}))
 
     return PairOverviewRow(
         pair_id=pair.id,
@@ -437,21 +450,26 @@ def build_amm_trade_events(
     bybit_mids: Sequence[tuple[int, Decimal]],
     metrics: MetricsConfig,
     attribution: AttributionConfig,
-) -> list[AmmTradeEvent]:
+) -> tuple[list[AmmTradeEvent], dict[tuple[str, int], Decimal | None]]:
+    """Return (events, fill_price_by_tx_log) for the trade stream.
+
+    Fill price is the swap's ``price_usdc_per_wrapper`` (execution print), not
+    the pre-trade mid used for convergence.
+    """
     pool_sorted = sorted(pools, key=lambda p: p.recv_ts_ms)
     mid_sorted = sorted(bybit_mids, key=lambda x: x[0])
     events: list[AmmTradeEvent] = []
-    # Use latest pool tick for token order (stable per pair).
+    fill_px: dict[tuple[str, int], Decimal | None] = {}
     latest_pool = pool_sorted[-1] if pool_sorted else None
     q0: bool | None = None
     if latest_pool is not None:
         q0 = quote_is_token0(pair, latest_pool)
     for swap in swaps:
         if q0 is None:
-            # Infer from swap's pool tokens when possible via latest pool.
-            notional = max(abs(swap.amount_token0), abs(swap.amount_token1))
-        else:
-            notional = swap_notional_usd(swap, quote_is_token0=q0)
+            # Cannot size the USDC leg without token order — skip rather than
+            # invent a max(|amt0|,|amt1|) pseudo-USD notional.
+            continue
+        notional = swap_notional_usd(swap, quote_is_token0=q0)
         ts = swap.recv_ts_ms
         bybit_mid = _bybit_mid_at(mid_sorted, ts)
         flux_pre = _pool_mid_pre(pool_sorted, ts)
@@ -471,22 +489,21 @@ def build_amm_trade_events(
         )
         if ev is not None:
             events.append(ev)
-    return events
+            fill_px[(swap.tx_hash.lower(), swap.log_index)] = (
+                swap.price_usdc_per_wrapper
+            )
+    return events, fill_px
 
 
 def build_trade_stream(
     *,
     amm_events: Sequence[AmmTradeEvent],
     labels: Mapping[str, BehaviorLabel],
-    rfq_fills: Sequence[RfqFillEvent],
+    fill_prices: Mapping[tuple[str, int], Decimal | None],
+    rfq_fills: Sequence[RfqFillEvent] = (),
     limit: int,
 ) -> list[TradeStreamRow]:
-    """Build the detail-page trade scroll.
-
-    Only RFQ fills that already carry ``pair_id`` appear here (M4 DEFERRED:
-    unscoped LOP fills lack pair identity). Mechanism label for those is
-    ``mechanism_for_rfq_fill`` — not a fake behavior label.
-    """
+    """Build the detail-page trade scroll (AMM fills + pair-scoped RFQ only)."""
     rows: list[TradeStreamRow] = []
     for ev in amm_events:
         conv = None
@@ -497,13 +514,14 @@ def build_trade_stream(
                 bybit_mid=ev.bybit_mid,
             )
         lab = labels.get(ev.taker.lower())
+        px = fill_prices.get((ev.tx_hash.lower(), ev.log_index))
         rows.append(
             TradeStreamRow(
                 ts_ms=ev.ts_ms,
                 mechanism=mechanism_for_swap(ev).value,
                 direction=ev.direction,
                 notional_usd=ev.notional_usd,
-                price=ev.fluxion_mid_pre,
+                price=px,
                 bybit_mid=ev.bybit_mid,
                 converging=conv,
                 taker=ev.taker,
@@ -513,7 +531,7 @@ def build_trade_stream(
         )
     for fill in rfq_fills:
         if fill.pair_id is None:
-            continue  # unscoped — do not attach to a pair page
+            continue
         rows.append(
             TradeStreamRow(
                 ts_ms=fill.ts_ms,
@@ -524,7 +542,7 @@ def build_trade_stream(
                 bybit_mid=None,
                 converging=None,
                 taker=None,
-                taker_label=None,  # behavior labels are AMM-only
+                taker_label=None,
                 tx_hash=fill.tx_hash,
             )
         )
@@ -650,7 +668,7 @@ def build_pair_detail(
     mid_series = reader.bybit_mid_series(
         pair.id, limit=tui.edge_history_max_samples
     )
-    amm_events = build_amm_trade_events(
+    amm_events, fill_prices = build_amm_trade_events(
         pair=pair,
         swaps=swaps,
         pools=pools,
@@ -659,8 +677,6 @@ def build_pair_detail(
         attribution=attribution_cfg,
     )
     # RFQ fills lack pair_id in storage (DEFERRED_ISSUES) — do not invent one.
-    # Pair-scoped RFQ share stays empty until enrichment lands; global fills are
-    # not attached to this pair's trade stream (see build_trade_stream).
     rfq_events: list[RfqFillEvent] = []
     attr = build_pair_attribution(
         pair_id=pair.id,
@@ -673,6 +689,7 @@ def build_pair_detail(
     trades = build_trade_stream(
         amm_events=amm_events,
         labels=labels,
+        fill_prices=fill_prices,
         rfq_fills=rfq_events,
         limit=tui.trade_stream_limit,
     )

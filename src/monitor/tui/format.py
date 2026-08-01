@@ -134,9 +134,11 @@ def sort_rows(
 
     def sort_key(row: PairOverviewRow) -> tuple[float | str | int]:
         val = raw(row)
-        assert val is not None
+        # present list below only includes non-None values
         if isinstance(val, Decimal):
             return (float(val),)
+        if val is None:
+            return (0,)
         return (val,)
 
     present = [r for r in rows if raw(r) is not None]
