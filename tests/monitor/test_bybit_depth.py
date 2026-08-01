@@ -172,7 +172,7 @@ def test_orphan_delta_dropped() -> None:
     assert tracker.apply(delta) is None
 
 
-def test_u_gap_marks_pending_gap_on_next_emit() -> None:
+def test_u_gap_sticky_until_snapshot() -> None:
     tracker = _tracker()
     snap = {
         "topic": "orderbook.50.TSLAXUSDT",
@@ -195,13 +195,44 @@ def test_u_gap_marks_pending_gap_on_next_emit() -> None:
             "s": "TSLAXUSDT",
             "b": [["100.1", "1"]],
             "a": [["101", "1"]],
-            "u": 5,
+            "u": 5,  # skipped 2,3,4
             "seq": 2,
         },
     }
     book = tracker.apply(jump)
     assert book is not None
     assert book.gap is True
+    # Further deltas stay gapped until a snapshot re-establishes the full book.
+    cont = {
+        "topic": "orderbook.50.TSLAXUSDT",
+        "type": "delta",
+        "ts": 3,
+        "data": {
+            "s": "TSLAXUSDT",
+            "b": [["100.2", "1"]],
+            "a": [["101", "1"]],
+            "u": 6,
+            "seq": 3,
+        },
+    }
+    book2 = tracker.apply(cont)
+    assert book2 is not None
+    assert book2.gap is True
+    heal = {
+        "topic": "orderbook.50.TSLAXUSDT",
+        "type": "snapshot",
+        "ts": 4,
+        "data": {
+            "s": "TSLAXUSDT",
+            "b": [["100", "2"]],
+            "a": [["101", "2"]],
+            "u": 10,
+            "seq": 10,
+        },
+    }
+    book3 = tracker.apply(heal)
+    assert book3 is not None
+    assert book3.gap is False
 
 
 def test_vwap_curve_parallel_buckets() -> None:
@@ -252,3 +283,20 @@ def test_depth_emit_throttle_mid_move() -> None:
     assert thr.should_emit(_book(recv=1_100, bid="100.05", ask="100.05")) is False
     # 20 bps move
     assert thr.should_emit(_book(recv=1_200, bid="100.20", ask="100.20")) is True
+
+
+def test_l1_dedupe_logic() -> None:
+    """Mirror daemon._on_book skip: only write when bid/ask change or gap."""
+    last: dict[str, tuple[Decimal, Decimal]] = {}
+
+    def should_write(pair: str, bid: Decimal, ask: Decimal, *, gap: bool) -> bool:
+        key = (bid, ask)
+        if not gap and last.get(pair) == key:
+            return False
+        last[pair] = key
+        return True
+
+    assert should_write("TSLAx", Decimal("1"), Decimal("2"), gap=False)
+    assert should_write("TSLAx", Decimal("1"), Decimal("2"), gap=False) is False
+    assert should_write("TSLAx", Decimal("1"), Decimal("2"), gap=True) is True
+    assert should_write("TSLAx", Decimal("1"), Decimal("3"), gap=False) is True

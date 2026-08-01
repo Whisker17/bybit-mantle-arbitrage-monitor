@@ -16,7 +16,6 @@ def now_ms() -> int:
     """Wall-clock milliseconds for recv timestamps and gap windows."""
     return int(time.time() * 1000)
 
-
 @dataclass(frozen=True, slots=True)
 class BybitBookTick:
     """Best bid/ask from Bybit public WS, with multiplier already applied."""
@@ -31,9 +30,6 @@ class BybitBookTick:
     ask_de_multiplied: Decimal
     multiplier: Decimal
     gap: bool = False
-
-
-
 
 @dataclass(frozen=True, slots=True)
 class BybitDepthTick:
@@ -75,7 +71,6 @@ class BybitTradeTick:
     multiplier: Decimal
     gap: bool = False
 
-
 @dataclass(frozen=True, slots=True)
 class FluxionPoolStateTick:
     """Per-block Fluxion V3 pool snapshot after Multicall3."""
@@ -97,7 +92,6 @@ class FluxionPoolStateTick:
     # Native assets per 1 wrapper share (human units).
     wrapper_assets_per_share: Decimal
     gap: bool = False
-
 
 @dataclass(frozen=True, slots=True)
 class FluxionSwapTick:
@@ -128,7 +122,6 @@ class FluxionSwapTick:
     effective_gas_price: int | None = None
     gap: bool = False
 
-
 @dataclass(frozen=True, slots=True)
 class FluxionRfqQuoteTick:
     """One RFQ EXACT_INPUT poll result (including unavailable / HTTP 204)."""
@@ -147,14 +140,12 @@ class FluxionRfqQuoteTick:
     available: bool
     gap: bool = False
 
-
 # Single source of truth for the collector's RFQ ``side`` vocabulary. Writers use
 # ``monitor.fluxion.rfq.RfqLeg`` (``buy_native`` / ``sell_native``); the bare
 # ``buy`` / ``sell`` spellings are accepted for vendor payloads and fixtures.
 RfqSideLeg = Literal["buy", "sell"]
 RFQ_BUY_SIDES: frozenset[str] = frozenset({"buy_native", "buy"})
 RFQ_SELL_SIDES: frozenset[str] = frozenset({"sell_native", "sell"})
-
 
 def rfq_side_leg(side: str | None) -> RfqSideLeg | None:
     """Normalize a stored RFQ ``side`` to its Fluxion leg; None if absent/unknown."""
@@ -164,7 +155,6 @@ def rfq_side_leg(side: str | None) -> RfqSideLeg | None:
     if normalized in RFQ_SELL_SIDES:
         return "sell"
     return None
-
 
 @dataclass(frozen=True, slots=True)
 class FluxionRfqFillTick:
@@ -178,7 +168,6 @@ class FluxionRfqFillTick:
     order_hash: str
     remaining_making_amount: int
     gap: bool = False
-
 
 @dataclass(frozen=True, slots=True)
 class CollectorGap:

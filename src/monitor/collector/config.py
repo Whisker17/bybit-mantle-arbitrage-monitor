@@ -27,14 +27,12 @@ class BybitDepthConfig(BaseModel):
 
     enabled: bool = True
     # Min wall-clock gap between depth rows per symbol (ms).
+    # 1s balances DB growth vs PnL freshness (DESIGN §5.1 depth growth model).
     emit_interval_ms: int = Field(default=1000, ge=50)
     # Also emit when mid moves by ≥ this many bps since last depth row (0 = off).
-    # YAML may supply a number or string; stored as Decimal for consumers.
     mid_change_bps: Decimal = Field(default=Decimal("1"), ge=0)
-    # USD notional ladder for precomputed bid/ask VWAP (PnL v2 buckets / DESIGN §2.6.3).
-    buckets_usd: list[str] = Field(
-        default_factory=lambda: ["10", "50", "100", "500", "1000", "10000"]
-    )
+    # USD notional ladder (DESIGN §2.6.3 PnL v2 AMM buckets).
+    buckets_usd: list[Decimal] = Field(default_factory=lambda: [])
 
     @field_validator("mid_change_bps", mode="before")
     @classmethod
@@ -44,18 +42,27 @@ class BybitDepthConfig(BaseModel):
         except (InvalidOperation, ValueError) as exc:
             raise ValueError(f"mid_change_bps must be a number, got {v!r}") from exc
 
-    @model_validator(mode="after")
-    def _buckets(self) -> BybitDepthConfig:
-        if not self.buckets_usd:
-            raise ValueError("bybit.depth.buckets_usd must be non-empty")
-        for raw in self.buckets_usd:
+    @field_validator("buckets_usd", mode="before")
+    @classmethod
+    def _buckets_as_decimals(cls, v: object) -> list[Decimal]:
+        if v is None or v == []:
+            from monitor.bybit.depth import DEFAULT_DEPTH_BUCKETS_USD
+
+            return list(DEFAULT_DEPTH_BUCKETS_USD)
+        if not isinstance(v, list):
+            raise ValueError("buckets_usd must be a list")
+        out: list[Decimal] = []
+        for raw in v:
             try:
                 q = Decimal(str(raw))
             except (InvalidOperation, ValueError) as exc:
                 raise ValueError(f"invalid bucket {raw!r}") from exc
             if q <= 0:
                 raise ValueError(f"bucket must be > 0, got {raw!r}")
-        return self
+            out.append(q)
+        if not out:
+            raise ValueError("bybit.depth.buckets_usd must be non-empty")
+        return out
 
 
 class BybitCollectorConfig(BaseModel):

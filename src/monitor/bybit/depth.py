@@ -135,6 +135,8 @@ class DepthBookTracker:
             state.last_u = update.u
             state.last_seq = update.seq
             state.established = True
+            # Only a full snapshot re-heals multi-level state after a u-gap
+            # (orderbook.50 deltas are partial; a missed level stays wrong).
             state.pending_gap = False
         else:
             if update.u is not None:
@@ -159,8 +161,8 @@ class DepthBookTracker:
 
         recv = recv_ts_ms if recv_ts_ms is not None else now_ms()
         exchange_ts = update.exchange_ts_ms if update.exchange_ts_ms is not None else recv
+        # Sticky gap until snapshot (do not clear pending_gap here).
         tick_gap = gap or state.pending_gap
-        state.pending_gap = False
 
         book = BybitBookTick(
             pair_id=pair_id,

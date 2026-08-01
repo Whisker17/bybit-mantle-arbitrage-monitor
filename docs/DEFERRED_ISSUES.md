@@ -66,6 +66,16 @@ soon — anything touching key handling, RPC credentials defaults to at least Hi
   knob but ships 0 (1:1). Populate from a measured Bybit USDT vs Fluxion USDC
   series before treating net edge as production-accurate.
 
+- **L1BookTracker parallel to DepthBookTracker** (Low, WHI-755 → cleanup).
+  Production WS uses `DepthBookTracker` only; `L1BookTracker` + `apply_l1_side`
+  remain for orderbook.1 unit tests. Port those fixtures onto depth=1 payloads
+  and delete the L1-only tracker when convenient.
+
+- **WHI-755 30-minute VPS growth/memory AC not measured in CI** (Low, WHI-755 → deploy).
+  Unit + 45s live orderbook.50 smoke confirmed wiring; DESIGN §5.1 has order-of-
+  magnitude depth growth. After deploy, run collector ≥30m with MemoryMax=300M and
+  `python -m monitor.retention --growth-only` to pin real `bybit_depth` rows/day.
+
 - **Live Bybit depth not wired into M3 edge path** (Medium, WHI-732 → WHI-756 / panel).
   Collector now journals precomputed bucket VWAPs in `bybit_depth` (WHI-755,
   `orderbook.50`). `BybitBookTick` remains L1-only for the TUI; `compute_edge(...,

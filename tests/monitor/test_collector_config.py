@@ -2,6 +2,7 @@
 
 from __future__ import annotations
 
+from decimal import Decimal
 from pathlib import Path
 from textwrap import dedent
 
@@ -23,7 +24,7 @@ def test_load_checked_in_collector_config() -> None:
     assert cfg.version == 1
     assert cfg.bybit.book_topic_prefix == "orderbook.50"
     assert cfg.bybit.depth.enabled is True
-    assert cfg.bybit.depth.buckets_usd[0] == "10"
+    assert cfg.bybit.depth.buckets_usd[0] == Decimal("10")
     assert cfg.retention.bybit_depth_ms == 172_800_000
     assert cfg.mantle.multicall3.lower().startswith("0xca11")
     assert cfg.mantle.head_lag_blocks == 1

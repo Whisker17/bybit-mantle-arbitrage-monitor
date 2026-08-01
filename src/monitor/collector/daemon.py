@@ -80,7 +80,6 @@ class CollectorDaemon:
         }
         symbols = list(pair_id_by_symbol.keys())
         depth_cfg = self.cfg.bybit.depth
-        depth_buckets = [Decimal(q) for q in depth_cfg.buckets_usd]
 
         bybit = BybitWsCollector(
             ws_url=self.cfg.bybit.ws_url,
@@ -90,6 +89,7 @@ class CollectorDaemon:
             on_book=self._on_book,
             on_trade=self._on_trade,
             on_gap=self._on_gap,
+            # on_depth None disables VWAP path in the WS collector.
             on_depth=self._on_depth if depth_cfg.enabled else None,
             book_topic_prefix=self.cfg.bybit.book_topic_prefix,
             trade_topic_prefix=self.cfg.bybit.trade_topic_prefix,
@@ -98,7 +98,7 @@ class CollectorDaemon:
             post_reconnect_gap_s=self.cfg.bybit.post_reconnect_gap_s,
             ping_interval_s=self.cfg.bybit.ping_interval_s,
             depth_enabled=depth_cfg.enabled,
-            depth_buckets_usd=depth_buckets,
+            depth_buckets_usd=depth_cfg.buckets_usd,
             depth_emit_interval_ms=depth_cfg.emit_interval_ms,
             depth_mid_change_bps=depth_cfg.mid_change_bps,
         )
@@ -166,8 +166,6 @@ class CollectorDaemon:
 
     async def _on_depth(self, tick: BybitDepthTick) -> None:
         """Persist a precomputed VWAP curve (already throttled in BybitWsCollector)."""
-        if not self.cfg.bybit.depth.enabled:
-            return
         if self._book_writes_paused:
             return
         if tick.recv_ts_ms < self._book_gap_until_ms or (
