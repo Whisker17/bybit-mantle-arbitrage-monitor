@@ -97,10 +97,12 @@ soon — anything touching key handling, RPC credentials defaults to at least Hi
   match the detail page. Under 2s poll this is the expensive path. Split a
   trades-only builder when measured latency or MemoryMax pressure requires it.
 
-- **OpenAPI lacks response schemas** (Low, WHI-757 → WHI-758).
-  Routes return `dict[str, Any]` after `to_json_dict`; `/docs` lists paths but
-  not field shapes. Hand-written TS types in `web/app/page.tsx` can drift.
-  Add Pydantic response models (or generate TS) when the overview page hardens.
+- **OpenAPI lacks response schemas** (Low, WHI-757 → later).
+  Routes still return `dict[str, Any]` after `to_json_dict`; `/docs` lists paths
+  but not field shapes. WHI-758 moved hand-written wire types to
+  `web/lib/types.ts` (shared by overview + pair stub) — still not generated
+  from OpenAPI. Add Pydantic response models (or generate TS) when a consumer
+  needs compile-time parity.
 
 - **API `uv sync` installs full phase-1 stack on VPS** (Low, WHI-757 → later).
   `pyproject.toml` still pulls polars/pyarrow/duckdb/matplotlib/textual for the
