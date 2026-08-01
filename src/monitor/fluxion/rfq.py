@@ -3,16 +3,17 @@
 from __future__ import annotations
 
 import logging
-import time
 from decimal import Decimal, InvalidOperation
-from typing import Any
+from typing import Any, Literal
 
 import httpx
 
-from monitor.quotes import FluxionRfqQuoteTick
+from monitor.quotes import FluxionRfqQuoteTick, now_ms
 from monitor.symbols.models import Pair, RfqConfig
 
 logger = logging.getLogger(__name__)
+
+RfqLeg = Literal["buy_native", "sell_native"]
 
 
 def parse_rfq_response(
@@ -70,7 +71,14 @@ def parse_rfq_response(
 
 
 class RfqPoller:
-    """Round-robin EXACT_INPUT quote polls respecting global rate limit."""
+    """Round-robin EXACT_INPUT quote polls respecting global rate limit.
+
+    Each ``poll_next`` issues **one** HTTP quote. With ``poll_both_sides``, the
+    schedule interleaves buy_native and sell_native legs so a full pair cycle is
+    2N polls. Sleep between polls should be ``60 / rate_limit_per_minute`` so the
+    global budget is filled (pairs.yaml: N=11 → 11s/pair/side at 60/min when
+    both sides are on).
+    """
 
     def __init__(
         self,
@@ -78,15 +86,20 @@ class RfqPoller:
         pairs: list[Pair],
         rfq: RfqConfig,
         amount_usdc_raw: str,
+        amount_native_raw: str,
         prefer_primary_url: bool = True,
+        poll_both_sides: bool = True,
+        http_timeout_s: float = 20.0,
         client: httpx.Client | None = None,
     ) -> None:
         self.pairs = list(pairs)
         self.rfq = rfq
         self.amount_usdc_raw = amount_usdc_raw
+        self.amount_native_raw = amount_native_raw
         self.prefer_primary_url = prefer_primary_url
+        self.poll_both_sides = poll_both_sides
         self._client = client or httpx.Client(
-            timeout=20.0,
+            timeout=http_timeout_s,
             headers={"user-agent": "monitor/0.1 (bybit-mantle-arbitrage-monitor)"},
         )
         self._owns_client = client is None
@@ -96,21 +109,49 @@ class RfqPoller:
         if self._owns_client:
             self._client.close()
 
-    def poll_one(self, pair: Pair, *, gap: bool = False) -> FluxionRfqQuoteTick:
-        """Buy native xStock with USDC (tokenIn=USDC, tokenOut=native)."""
-        token_in = pair.fluxion.quote_token_address
-        token_out = pair.fluxion.native_token
+    def poll_interval_s(self) -> float:
+        """Seconds between successive HTTP polls to fill rate_limit_per_minute."""
+        return 60.0 / float(self.rfq.rate_limit_per_minute)
+
+    def _schedule_len(self) -> int:
+        sides = 2 if self.poll_both_sides else 1
+        return max(1, len(self.pairs) * sides)
+
+    def next_job(self) -> tuple[Pair, RfqLeg]:
+        if not self.pairs:
+            raise RuntimeError("no pairs to poll")
+        i = self._idx % self._schedule_len()
+        self._idx += 1
+        if self.poll_both_sides:
+            pair = self.pairs[i // 2]
+            leg: RfqLeg = "buy_native" if i % 2 == 0 else "sell_native"
+        else:
+            pair = self.pairs[i]
+            leg = "buy_native"
+        return pair, leg
+
+    def poll_one(
+        self, pair: Pair, leg: RfqLeg = "buy_native", *, gap: bool = False
+    ) -> FluxionRfqQuoteTick:
+        if leg == "buy_native":
+            token_in = pair.fluxion.quote_token_address
+            token_out = pair.fluxion.native_token
+            amount = self.amount_usdc_raw
+        else:
+            token_in = pair.fluxion.native_token
+            token_out = pair.fluxion.quote_token_address
+            amount = self.amount_native_raw
         payload = {
             "tokenIn": token_in,
             "tokenOut": token_out,
-            "amount": self.amount_usdc_raw,
+            "amount": amount,
             "type": self.rfq.request_type,
         }
         urls = [str(self.rfq.quote_url), str(self.rfq.proxy_quote_url)]
         if not self.prefer_primary_url:
             urls = list(reversed(urls))
 
-        poll_ts = _now_ms()
+        poll_ts = now_ms()
         last_status = 0
         last_body: dict[str, Any] | None = None
         for url in urls:
@@ -127,17 +168,23 @@ class RfqPoller:
                         last_body = None
                     break
                 logger.warning(
-                    "rfq quote HTTP %s from %s for %s", r.status_code, url, pair.id
+                    "rfq quote HTTP %s from %s for %s/%s",
+                    r.status_code,
+                    url,
+                    pair.id,
+                    leg,
                 )
             except Exception as exc:  # noqa: BLE001
-                logger.warning("rfq quote transport error %s for %s: %s", url, pair.id, exc)
+                logger.warning(
+                    "rfq quote transport error %s for %s/%s: %s", url, pair.id, leg, exc
+                )
                 last_status = 0
-        recv = _now_ms()
+        recv = now_ms()
         return parse_rfq_response(
             pair_id=pair.id,
             token_in=token_in,
             token_out=token_out,
-            amount_in=self.amount_usdc_raw,
+            amount_in=amount,
             poll_ts_ms=poll_ts,
             recv_ts_ms=recv,
             http_status=last_status or 0,
@@ -145,16 +192,6 @@ class RfqPoller:
             gap=gap,
         )
 
-    def next_pair(self) -> Pair:
-        if not self.pairs:
-            raise RuntimeError("no pairs to poll")
-        pair = self.pairs[self._idx % len(self.pairs)]
-        self._idx += 1
-        return pair
-
     def poll_next(self, *, gap: bool = False) -> FluxionRfqQuoteTick:
-        return self.poll_one(self.next_pair(), gap=gap)
-
-
-def _now_ms() -> int:
-    return int(time.time() * 1000)
+        pair, leg = self.next_job()
+        return self.poll_one(pair, leg, gap=gap)

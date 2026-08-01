@@ -3,7 +3,6 @@
 from __future__ import annotations
 
 import logging
-import time
 from collections.abc import Callable
 
 from monitor.fluxion.abi import TOPIC0_ORDER_FILLED
@@ -15,13 +14,12 @@ from monitor.quotes import (
     FluxionPoolStateTick,
     FluxionRfqFillTick,
     FluxionSwapTick,
+    now_ms,
 )
 
 logger = logging.getLogger(__name__)
 
-# Soft cap of blocks processed per poll_once. Brief stalls catch up; larger
-# lag jumps to the tip and records a gap (no historical backfill).
-_MAX_CATCHUP_BLOCKS = 30
+_MAX_CATCHUP_BLOCKS = 15
 
 
 class ChainPoller:
@@ -33,7 +31,7 @@ class ChainPoller:
         *,
         pools: list[PoolMeta],
         lop_address: str,
-        head_lag_blocks: int = 2,
+        head_lag_blocks: int = 0,
         max_block_gap: int = 1,
         fetch_swap_receipts: bool = True,
         max_catchup_blocks: int = _MAX_CATCHUP_BLOCKS,
@@ -74,13 +72,11 @@ class ChainPoller:
         if lag <= 0:
             return 0
 
-        # Any multi-block skip beyond max_block_gap flags subsequent rows as gap.
         if lag > self.max_block_gap:
             self._gap_pending = True
 
-        # Far behind (disconnect / long stall): jump to a recent window and gap.
         if lag > self.max_catchup_blocks:
-            now = int(time.time() * 1000)
+            now = now_ms()
             if self.on_gap:
                 self.on_gap(
                     CollectorGap(
@@ -100,14 +96,20 @@ class ChainPoller:
         end = head
         handled = 0
         for block in range(start, end + 1):
-            self._process_block(block, gap=self._gap_pending)
-            self._last_block = block
-            self._gap_pending = False
-            handled += 1
+            ok = self._process_block(block, gap=self._gap_pending)
+            if ok:
+                self._last_block = block
+                # Only clear gap after a successfully processed block.
+                self._gap_pending = False
+                handled += 1
+            else:
+                # Missing block: do not advance past it; retry next poll.
+                break
         return handled
 
-    def _process_block(self, block: int, *, gap: bool) -> None:
-        recv = int(time.time() * 1000)
+    def _process_block(self, block: int, *, gap: bool) -> bool:
+        """Return True if the block was fully handled."""
+        recv = now_ms()
         blk = self.rpc.get_block(block, full_txs=False)
         if blk is None:
             logger.warning("block %s not found; marking gap", block)
@@ -121,7 +123,7 @@ class ChainPoller:
                     )
                 )
             self._gap_pending = True
-            return
+            return False
         block_ts = int(blk["timestamp"], 16)
 
         if self.pools:
@@ -137,13 +139,18 @@ class ChainPoller:
                 self._token_order[s.pool.lower()] = (s.token0, s.token1)
             if states and self.on_pool_state:
                 self.on_pool_state(states)
+            elif self.pools and not states:
+                logger.warning(
+                    "block %s: all %d pool state decodes failed", block, len(self.pools)
+                )
 
         pool_by_addr = {p.pool.lower(): p for p in self.pools}
         addresses = list(pool_by_addr.keys())
         swaps: list[FluxionSwapTick] = []
         if addresses:
             logs = self.rpc.get_logs(addresses, block, block)
-            gas_by_tx: dict[str, int] = {}
+            gas_used_by_tx: dict[str, int] = {}
+            gas_price_by_tx: dict[str, int] = {}
             if self.fetch_swap_receipts:
                 tx_hashes = {
                     str(lg.get("transactionHash") or "").lower()
@@ -158,8 +165,13 @@ class ChainPoller:
                     except Exception as exc:  # noqa: BLE001
                         logger.debug("receipt %s failed: %s", txh, exc)
                         continue
-                    if rcpt and "gasUsed" in rcpt:
-                        gas_by_tx[txh] = int(rcpt["gasUsed"], 16)
+                    if not rcpt:
+                        continue
+                    if "gasUsed" in rcpt:
+                        gas_used_by_tx[txh] = int(rcpt["gasUsed"], 16)
+                    egp = rcpt.get("effectiveGasPrice") or rcpt.get("gasPrice")
+                    if egp is not None:
+                        gas_price_by_tx[txh] = int(egp, 16) if isinstance(egp, str) else int(egp)
 
             for lg in logs:
                 addr = str(lg.get("address") or "").lower()
@@ -178,7 +190,8 @@ class ChainPoller:
                     token1=token1,
                     block_ts=block_ts,
                     recv_ts_ms=recv,
-                    gas_used=gas_by_tx.get(txh),
+                    gas_used=gas_used_by_tx.get(txh),
+                    effective_gas_price=gas_price_by_tx.get(txh),
                     gap=gap,
                 )
                 if tick is not None:
@@ -203,6 +216,7 @@ class ChainPoller:
                 fills.append(fill)
         if fills and self.on_rfq_fills:
             self.on_rfq_fills(fills)
+        return True
 
     def _resolve_tokens(self, meta: PoolMeta, block: int) -> tuple[str, str]:
         from monitor.fluxion.abi import SEL_TOKEN0, SEL_TOKEN1

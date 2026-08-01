@@ -2,12 +2,11 @@
 
 from __future__ import annotations
 
-import time
 from collections.abc import Mapping
 from decimal import Decimal, InvalidOperation
 from typing import Any
 
-from monitor.quotes import BybitBookTick, BybitTradeTick
+from monitor.quotes import BybitBookTick, BybitTradeTick, now_ms
 from monitor.symbols.multipliers import de_multiplied_price
 
 
@@ -22,7 +21,7 @@ def _dec(value: object) -> Decimal:
     return Decimal(str(value))
 
 
-def parse_orderbook_message(
+def parse_ticker_message(
     payload: dict[str, Any],
     *,
     pair_id_by_symbol: Mapping[str, str],
@@ -30,48 +29,41 @@ def parse_orderbook_message(
     recv_ts_ms: int | None = None,
     gap: bool = False,
 ) -> BybitBookTick | None:
-    """Parse orderbook.1 snapshot/delta that carries best bid/ask.
-
-    Bybit orderbook.1 data shape::
-        {"s": "TSLAXUSDT", "b": [["price", "size"], ...], "a": [...], "ts": ...}
-    Topic messages wrap data under ``data`` with optional ``ts`` / ``cts``.
-    """
+    """Parse Bybit v5 ``tickers.{symbol}`` (bookTicker-equivalent bid1/ask1)."""
     data = payload.get("data", payload)
     if not isinstance(data, dict):
         return None
-    symbol = str(data.get("s") or data.get("symbol") or "").upper()
+    symbol = str(data.get("symbol") or data.get("s") or "").upper()
     if not symbol:
-        # topic form: orderbook.1.TSLAXUSDT
         topic = str(payload.get("topic") or "")
-        if topic.startswith("orderbook."):
+        if topic.startswith("tickers."):
             symbol = topic.rsplit(".", 1)[-1].upper()
     pair_id = pair_id_by_symbol.get(symbol)
     mult = multiplier_by_symbol.get(symbol)
     if pair_id is None or mult is None:
         return None
 
-    bids = data.get("b") or data.get("bids") or []
-    asks = data.get("a") or data.get("asks") or []
-    if not bids or not asks:
+    bid_raw = data.get("bid1Price")
+    ask_raw = data.get("ask1Price")
+    if bid_raw is None or ask_raw is None or bid_raw == "" or ask_raw == "":
         return None
     try:
-        bid = _dec(bids[0][0])
-        ask = _dec(asks[0][0])
-    except (IndexError, TypeError, InvalidOperation, KeyError):
+        bid = _dec(bid_raw)
+        ask = _dec(ask_raw)
+    except (InvalidOperation, TypeError):
         return None
     if bid <= 0 or ask <= 0:
         return None
 
     exchange_ts = data.get("ts") or payload.get("ts") or payload.get("cts")
+    recv = recv_ts_ms if recv_ts_ms is not None else now_ms()
     if exchange_ts is None:
-        exchange_ts = recv_ts_ms if recv_ts_ms is not None else _now_ms()
-    exchange_ts_ms = int(exchange_ts)
-    recv = recv_ts_ms if recv_ts_ms is not None else _now_ms()
+        exchange_ts = recv
 
     return BybitBookTick(
         pair_id=pair_id,
         symbol=symbol,
-        exchange_ts_ms=exchange_ts_ms,
+        exchange_ts_ms=int(exchange_ts),
         recv_ts_ms=recv,
         bid=bid,
         ask=ask,
@@ -80,6 +72,10 @@ def parse_orderbook_message(
         multiplier=mult,
         gap=gap,
     )
+
+
+# Back-compat alias used by older call sites / tests naming.
+parse_orderbook_message = parse_ticker_message
 
 
 def parse_public_trade_message(
@@ -99,7 +95,7 @@ def parse_public_trade_message(
     else:
         return []
 
-    recv = recv_ts_ms if recv_ts_ms is not None else _now_ms()
+    recv = recv_ts_ms if recv_ts_ms is not None else now_ms()
     out: list[BybitTradeTick] = []
     for item in items:
         if not isinstance(item, dict):
@@ -125,7 +121,6 @@ def parse_public_trade_message(
             continue
         trade_id = str(item.get("i") or item.get("tradeId") or item.get("execId") or "")
         if not trade_id:
-            # Fall back to ts+price+size so UNIQUE still dedupes within a process.
             trade_id = f"{item.get('T') or item.get('ts')}:{price}:{size}:{side_raw}"
         exchange_ts = item.get("T") or item.get("ts") or payload.get("ts") or recv
         out.append(
@@ -149,17 +144,13 @@ def parse_public_trade_message(
 def build_subscribe_args(
     symbols: list[str],
     *,
-    book_prefix: str = "orderbook.1",
+    book_prefix: str = "tickers",
     trade_prefix: str = "publicTrade",
 ) -> list[str]:
-    """Bybit v5 subscribe topic list for L1 book + public trades."""
+    """Bybit v5 subscribe topic list for tickers (L1) + public trades."""
     args: list[str] = []
     for sym in symbols:
         s = sym.upper()
         args.append(f"{book_prefix}.{s}")
         args.append(f"{trade_prefix}.{s}")
     return args
-
-
-def _now_ms() -> int:
-    return int(time.time() * 1000)

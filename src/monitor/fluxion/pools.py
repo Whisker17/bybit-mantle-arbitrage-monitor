@@ -30,9 +30,6 @@ class PoolMeta:
     native_decimals: int = NATIVE_DECIMALS_DEFAULT
     wrapper_decimals: int = WRAPPER_DECIMALS_DEFAULT
     quote_decimals: int = USDC_DECIMALS
-    # Filled once via eth_call; token0/token1 ordering of the pool.
-    token0: str | None = None
-    token1: str | None = None
 
 
 def mid_from_sqrt_price_x96(

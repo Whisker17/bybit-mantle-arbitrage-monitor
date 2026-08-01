@@ -7,7 +7,6 @@ import asyncio
 import logging
 import signal
 import sys
-import time
 from pathlib import Path
 
 from monitor.bybit.ws import BybitWsCollector
@@ -16,6 +15,7 @@ from monitor.collector.config import (
     load_collector_config,
     load_dotenv,
     resolve_mantle_rpc_url,
+    rpc_url_kind,
 )
 from monitor.fluxion.chain import ChainPoller
 from monitor.fluxion.pools import PoolMeta
@@ -28,6 +28,7 @@ from monitor.quotes import (
     FluxionPoolStateTick,
     FluxionRfqFillTick,
     FluxionSwapTick,
+    now_ms,
 )
 from monitor.storage import SqliteStore
 from monitor.symbols import load_pairs_config
@@ -78,7 +79,7 @@ class CollectorDaemon:
             trade_topic_prefix=self.cfg.bybit.trade_topic_prefix,
             reconnect_min_s=self.cfg.bybit.reconnect_min_s,
             reconnect_max_s=self.cfg.bybit.reconnect_max_s,
-            post_reconnect_gap_messages=self.cfg.bybit.post_reconnect_gap_messages,
+            post_reconnect_gap_s=self.cfg.bybit.post_reconnect_gap_s,
             ping_interval_s=self.cfg.bybit.ping_interval_s,
         )
 
@@ -87,13 +88,14 @@ class CollectorDaemon:
             asyncio.create_task(self._chain_loop(), name="mantle_chain"),
             asyncio.create_task(self._rfq_loop(), name="rfq_poll"),
         ]
-        self.store.set_meta("collector_started_ms", str(int(time.time() * 1000)))
-        self.store.set_meta("rpc_url_kind", "keyed" if "tob" in self.rpc_url else "public")
+        self.store.set_meta("collector_started_ms", str(now_ms()))
+        self.store.set_meta("rpc_url_kind", rpc_url_kind(self.rpc_url))
         logger.info(
-            "collector started pairs=%d amm_pools=%d sqlite=%s",
+            "collector started pairs=%d amm_pools=%d sqlite=%s rpc_kind=%s",
             len(self.pairs.pairs),
             len(self.pairs.pairs_with_amm()),
             self.store.path,
+            rpc_url_kind(self.rpc_url),
         )
         try:
             await self._stop.wait()
@@ -102,7 +104,7 @@ class CollectorDaemon:
             for t in tasks:
                 t.cancel()
             await asyncio.gather(*tasks, return_exceptions=True)
-            self.store.set_meta("collector_stopped_ms", str(int(time.time() * 1000)))
+            self.store.set_meta("collector_stopped_ms", str(now_ms()))
             logger.info("collector stopped")
 
     async def _on_book(self, tick: BybitBookTick) -> None:
@@ -144,14 +146,8 @@ class CollectorDaemon:
         def on_state(ticks: list[FluxionPoolStateTick]) -> None:
             self.store.insert_pool_state(ticks)
             if ticks:
-                # Latency diagnostic: block_ts → recv.
-                latencies = [
-                    max(0, t.recv_ts_ms - t.block_ts * 1000) for t in ticks
-                ]
-                self.store.set_meta(
-                    "last_block_ingest_latency_ms",
-                    str(max(latencies)),
-                )
+                latencies = [max(0, t.recv_ts_ms - t.block_ts * 1000) for t in ticks]
+                self.store.set_meta("last_block_ingest_latency_ms", str(max(latencies)))
                 self.store.set_meta("last_block", str(ticks[0].block_number))
 
         def on_swaps(ticks: list[FluxionSwapTick]) -> None:
@@ -170,6 +166,7 @@ class CollectorDaemon:
             lop_address=self.pairs.contracts.limit_order_protocol,
             head_lag_blocks=self.cfg.mantle.head_lag_blocks,
             max_block_gap=self.cfg.mantle.max_block_gap,
+            max_catchup_blocks=self.cfg.mantle.max_catchup_blocks,
             fetch_swap_receipts=self.cfg.mantle.fetch_swap_receipts,
             on_pool_state=on_state,
             on_swaps=on_swaps,
@@ -182,13 +179,14 @@ class CollectorDaemon:
                     await asyncio.to_thread(poller.poll_once)
                 except Exception as exc:  # noqa: BLE001
                     logger.exception("chain poll error: %s", exc)
-                    self.store.insert_gap(
+                    await asyncio.to_thread(
+                        self.store.insert_gap,
                         CollectorGap(
                             source="mantle_blocks",
-                            gap_start_ms=int(time.time() * 1000),
-                            gap_end_ms=int(time.time() * 1000),
+                            gap_start_ms=now_ms(),
+                            gap_end_ms=now_ms(),
                             detail=f"poll error: {exc}",
-                        )
+                        ),
                     )
                 try:
                     await asyncio.wait_for(
@@ -205,27 +203,30 @@ class CollectorDaemon:
             pairs=list(self.pairs.pairs),
             rfq=self.pairs.rfq,
             amount_usdc_raw=self.cfg.rfq.amount_usdc_raw,
+            amount_native_raw=self.cfg.rfq.amount_native_raw,
             prefer_primary_url=self.cfg.rfq.prefer_primary_url,
+            poll_both_sides=self.cfg.rfq.poll_both_sides,
+            http_timeout_s=self.cfg.rfq.http_timeout_s,
         )
-        interval = self.pairs.rfq.min_poll_interval_s
+        # Fill the global budget: one HTTP call every 60/rate_limit seconds.
+        interval = poller.poll_interval_s()
         try:
             while not self._stop.is_set():
                 try:
-                    tick = await asyncio.to_thread(
-                        poller.poll_next, gap=self._rfq_gap
-                    )
+                    tick = await asyncio.to_thread(poller.poll_next, gap=self._rfq_gap)
                     self._rfq_gap = False
                     await asyncio.to_thread(self.store.insert_rfq_quotes, [tick])
                 except Exception as exc:  # noqa: BLE001
                     logger.exception("rfq poll error: %s", exc)
                     self._rfq_gap = True
-                    self.store.insert_gap(
+                    await asyncio.to_thread(
+                        self.store.insert_gap,
                         CollectorGap(
                             source="rfq_poll",
-                            gap_start_ms=int(time.time() * 1000),
-                            gap_end_ms=int(time.time() * 1000),
+                            gap_start_ms=now_ms(),
+                            gap_end_ms=now_ms(),
                             detail=f"poll error: {exc}",
-                        )
+                        ),
                     )
                 try:
                     await asyncio.wait_for(self._stop.wait(), timeout=interval)

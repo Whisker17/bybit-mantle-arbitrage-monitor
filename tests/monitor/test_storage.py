@@ -102,6 +102,7 @@ def test_insert_pool_state_swaps_rfq_and_gap(tmp_path: Path) -> None:
         direction="buy_native",
         price_usdc_per_wrapper=Decimal("250"),
         gas_used=150_000,
+        effective_gas_price=75_000_000_000,
         gap=False,
     )
     quote = FluxionRfqQuoteTick(

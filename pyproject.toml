@@ -24,7 +24,6 @@ dev = [
     "ruff>=0.6",
     "mypy>=1.11",
     "types-pyyaml>=6.0.12.20260724",
-    "aiosqlite>=0.22.1",
 ]
 
 [build-system]

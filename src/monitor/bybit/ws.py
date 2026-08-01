@@ -6,17 +6,16 @@ import asyncio
 import contextlib
 import json
 import logging
-import time
 from collections.abc import Awaitable, Callable, Mapping
 from decimal import Decimal
 from typing import Any
 
 from monitor.bybit.parse import (
     build_subscribe_args,
-    parse_orderbook_message,
     parse_public_trade_message,
+    parse_ticker_message,
 )
-from monitor.quotes import BybitBookTick, BybitTradeTick, CollectorGap
+from monitor.quotes import BybitBookTick, BybitTradeTick, CollectorGap, now_ms
 
 logger = logging.getLogger(__name__)
 
@@ -43,11 +42,11 @@ class BybitWsCollector:
         on_book: OnBook,
         on_trade: OnTrade,
         on_gap: OnGap | None = None,
-        book_topic_prefix: str = "orderbook.1",
+        book_topic_prefix: str = "tickers",
         trade_topic_prefix: str = "publicTrade",
         reconnect_min_s: float = 1.0,
         reconnect_max_s: float = 60.0,
-        post_reconnect_gap_messages: int = 1,
+        post_reconnect_gap_s: float = 5.0,
         ping_interval_s: float = 20.0,
         connect: Callable[[str], Any] | None = None,
     ) -> None:
@@ -62,22 +61,28 @@ class BybitWsCollector:
         self.trade_topic_prefix = trade_topic_prefix
         self.reconnect_min_s = reconnect_min_s
         self.reconnect_max_s = reconnect_max_s
-        self.post_reconnect_gap_messages = post_reconnect_gap_messages
+        self.post_reconnect_gap_s = post_reconnect_gap_s
         self.ping_interval_s = ping_interval_s
         self._connect = connect
         self._stop = asyncio.Event()
-        self._gap_remaining = 0
+        self._gap_until_ms: int = 0
         self._disconnect_at_ms: int | None = None
         self._ever_connected = False
 
     def request_stop(self) -> None:
         self._stop.set()
 
+    def _in_gap_window(self) -> bool:
+        return now_ms() < self._gap_until_ms
+
     async def run(self) -> None:
         delay = self.reconnect_min_s
         while not self._stop.is_set():
             try:
                 await self._session()
+                # Clean close (server force-close without exception) still counts
+                # as a disconnect for gap marking when we reconnect.
+                self._note_disconnect("session ended")
                 delay = self.reconnect_min_s
             except asyncio.CancelledError:
                 raise
@@ -93,20 +98,22 @@ class BybitWsCollector:
     def _note_disconnect(self, detail: str) -> None:
         if not self._ever_connected:
             return
-        self._disconnect_at_ms = _now_ms()
-        self._gap_remaining = self.post_reconnect_gap_messages
+        self._disconnect_at_ms = now_ms()
         logger.info("bybit ws disconnect noted: %s", detail)
 
     async def _emit_reconnect_gap(self) -> None:
-        if self._disconnect_at_ms is None or self.on_gap is None:
+        if self._disconnect_at_ms is None:
             return
-        gap = CollectorGap(
-            source="bybit_ws",
-            gap_start_ms=self._disconnect_at_ms,
-            gap_end_ms=_now_ms(),
-            detail="websocket reconnect",
-        )
-        await _maybe_await(self.on_gap(gap))
+        end = now_ms()
+        self._gap_until_ms = end + int(self.post_reconnect_gap_s * 1000)
+        if self.on_gap is not None:
+            gap = CollectorGap(
+                source="bybit_ws",
+                gap_start_ms=self._disconnect_at_ms,
+                gap_end_ms=end,
+                detail="websocket reconnect",
+            )
+            await _maybe_await(self.on_gap(gap))
         self._disconnect_at_ms = None
 
     async def _session(self) -> None:
@@ -117,15 +124,15 @@ class BybitWsCollector:
             connect = websockets.connect
 
         async with connect(self.ws_url) as ws:
+            was_reconnect = self._ever_connected and self._disconnect_at_ms is not None
             self._ever_connected = True
-            if self._disconnect_at_ms is not None:
+            if was_reconnect or self._disconnect_at_ms is not None:
                 await self._emit_reconnect_gap()
             args = build_subscribe_args(
                 self.symbols,
                 book_prefix=self.book_topic_prefix,
                 trade_prefix=self.trade_topic_prefix,
             )
-            # Bybit allows up to 10 args per subscribe; chunk to be safe.
             for i in range(0, len(args), 10):
                 chunk = args[i : i + 10]
                 await ws.send(json.dumps({"op": "subscribe", "args": chunk}))
@@ -162,10 +169,10 @@ class BybitWsCollector:
         if op in ("pong", "ping", "subscribe"):
             return
         topic = str(payload.get("topic") or "")
-        recv = _now_ms()
-        use_gap = self._gap_remaining > 0
-        if topic.startswith(self.book_topic_prefix) or "orderbook" in topic:
-            tick = parse_orderbook_message(
+        recv = now_ms()
+        use_gap = self._in_gap_window()
+        if topic.startswith(f"{self.book_topic_prefix}."):
+            tick = parse_ticker_message(
                 payload,
                 pair_id_by_symbol=self.pair_id_by_symbol,
                 multiplier_by_symbol=self.multiplier_by_symbol,
@@ -173,11 +180,9 @@ class BybitWsCollector:
                 gap=use_gap,
             )
             if tick is not None:
-                if use_gap:
-                    self._gap_remaining = max(0, self._gap_remaining - 1)
                 await _maybe_await(self.on_book(tick))
             return
-        if topic.startswith(self.trade_topic_prefix) or "publicTrade" in topic:
+        if topic.startswith(f"{self.trade_topic_prefix}."):
             trades = parse_public_trade_message(
                 payload,
                 pair_id_by_symbol=self.pair_id_by_symbol,
@@ -185,11 +190,5 @@ class BybitWsCollector:
                 recv_ts_ms=recv,
                 gap=use_gap,
             )
-            if trades and use_gap:
-                self._gap_remaining = max(0, self._gap_remaining - 1)
             for t in trades:
                 await _maybe_await(self.on_trade(t))
-
-
-def _now_ms() -> int:
-    return int(time.time() * 1000)

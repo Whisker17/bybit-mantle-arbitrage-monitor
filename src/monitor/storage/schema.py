@@ -102,6 +102,7 @@ DDL: tuple[str, ...] = (
         direction               TEXT    NOT NULL,
         price_usdc_per_wrapper  TEXT,
         gas_used                INTEGER,
+        effective_gas_price     INTEGER,
         gap                     INTEGER NOT NULL DEFAULT 0,
         UNIQUE (tx_hash, log_index)
     )

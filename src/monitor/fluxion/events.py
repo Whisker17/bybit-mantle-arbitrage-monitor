@@ -42,6 +42,7 @@ def decode_v3_swap_log(
     block_ts: int,
     recv_ts_ms: int,
     gas_used: int | None = None,
+    effective_gas_price: int | None = None,
     gap: bool = False,
 ) -> FluxionSwapTick | None:
     """Decode a UniV3/PCS-style Swap log for a known pool."""
@@ -138,6 +139,7 @@ def decode_v3_swap_log(
         direction=direction,  # type: ignore[arg-type]
         price_usdc_per_wrapper=price,
         gas_used=gas_used,
+        effective_gas_price=effective_gas_price,
         gap=gap,
     )
 

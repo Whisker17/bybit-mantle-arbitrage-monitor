@@ -92,10 +92,12 @@ def test_decode_v3_swap_log() -> None:
         block_ts=1_700_000_000,
         recv_ts_ms=1_700_000_000_100,
         gas_used=140_000,
+        effective_gas_price=75_000_000_000,
     )
     assert tick is not None
     assert tick.direction == "buy_native"
     assert tick.gas_used == 140_000
+    assert tick.effective_gas_price == 75_000_000_000
     assert tick.log_index == 3
     assert tick.sender == sender
 

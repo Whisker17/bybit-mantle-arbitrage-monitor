@@ -7,7 +7,7 @@ from pathlib import Path
 from typing import Any, Literal
 
 import yaml
-from pydantic import BaseModel, ConfigDict, Field, field_validator
+from pydantic import BaseModel, ConfigDict, Field, model_validator
 
 # repo root = collector -> monitor -> src -> repo
 _REPO_ROOT = Path(__file__).resolve().parents[3]
@@ -27,14 +27,17 @@ class BybitCollectorConfig(BaseModel):
     trade_topic_prefix: str = Field(min_length=1)
     reconnect_min_s: float = Field(gt=0)
     reconnect_max_s: float = Field(gt=0)
-    post_reconnect_gap_messages: int = Field(ge=0)
+    post_reconnect_gap_s: float = Field(ge=0)
     ping_interval_s: float = Field(gt=0)
 
-    @field_validator("reconnect_max_s")
-    @classmethod
-    def _max_ge_min(cls, v: float, info: object) -> float:
-        # cross-field validated on parent if needed; keep local sanity
-        return v
+    @model_validator(mode="after")
+    def _reconnect_bounds(self) -> BybitCollectorConfig:
+        if self.reconnect_max_s < self.reconnect_min_s:
+            raise ValueError(
+                f"reconnect_max_s={self.reconnect_max_s} must be >= "
+                f"reconnect_min_s={self.reconnect_min_s}"
+            )
+        return self
 
 
 class MantleCollectorConfig(BaseModel):
@@ -45,6 +48,7 @@ class MantleCollectorConfig(BaseModel):
     block_poll_interval_s: float = Field(gt=0)
     head_lag_blocks: int = Field(ge=0)
     max_block_gap: int = Field(ge=1)
+    max_catchup_blocks: int = Field(ge=1)
     rpc_min_interval_s: float = Field(ge=0)
     rpc_timeout_s: float = Field(gt=0)
     rpc_retries: int = Field(ge=1)
@@ -55,7 +59,10 @@ class RfqCollectorConfig(BaseModel):
     model_config = ConfigDict(extra="forbid", frozen=True)
 
     amount_usdc_raw: str = Field(min_length=1, pattern=r"^[0-9]+$")
+    amount_native_raw: str = Field(min_length=1, pattern=r"^[0-9]+$")
     prefer_primary_url: bool
+    poll_both_sides: bool
+    http_timeout_s: float = Field(gt=0)
 
 
 class LoggingConfig(BaseModel):
@@ -110,9 +117,18 @@ def resolve_mantle_rpc_url(public_fallback: str = PUBLIC_RPC_URL) -> str:
     if raw.startswith("ws://ws-"):
         return raw.replace("ws://ws-", "http://rpc-", 1)
     if raw.startswith("wss://") or raw.startswith("ws://"):
-        # Generic WS URL: prefer https rewrite of scheme only.
         return "https://" + raw.split("://", 1)[1]
     return raw
+
+
+def rpc_url_kind(url: str) -> Literal["keyed", "public"]:
+    """Classify endpoint for meta/logging without hardcoding host fragments elsewhere."""
+    # Mantle keyed tob endpoints rewrite to https://rpc-tob... (see resolve_mantle_rpc_url).
+    if "rpc-tob." in url or "wss-tob." in url:
+        return "keyed"
+    if url.rstrip("/") == PUBLIC_RPC_URL.rstrip("/"):
+        return "public"
+    return "keyed" if "/v1/" in url else "public"
 
 
 def load_collector_config(path: Path | None = None) -> CollectorConfig:

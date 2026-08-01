@@ -6,9 +6,15 @@ not on Bybit WS or Fluxion RPC client internals (DESIGN §4.3).
 
 from __future__ import annotations
 
+import time
 from dataclasses import dataclass
 from decimal import Decimal
 from typing import Literal
+
+
+def now_ms() -> int:
+    """Wall-clock milliseconds for recv timestamps and gap windows."""
+    return int(time.time() * 1000)
 
 
 @dataclass(frozen=True, slots=True)
@@ -93,6 +99,7 @@ class FluxionSwapTick:
     direction: Literal["buy_native", "sell_native", "unknown"]
     price_usdc_per_wrapper: Decimal | None
     gas_used: int | None = None
+    effective_gas_price: int | None = None
     gap: bool = False
 
 

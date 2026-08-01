@@ -6,24 +6,23 @@ from decimal import Decimal
 
 from monitor.bybit.parse import (
     build_subscribe_args,
-    parse_orderbook_message,
     parse_public_trade_message,
+    parse_ticker_message,
 )
 
 
-def test_parse_orderbook_applies_multiplier() -> None:
+def test_parse_ticker_applies_multiplier() -> None:
     mult = Decimal("2")
     payload = {
-        "topic": "orderbook.1.AAPLXUSDT",
+        "topic": "tickers.AAPLXUSDT",
         "ts": 1_700_000_000_000,
         "data": {
-            "s": "AAPLXUSDT",
-            "b": [["200.0", "1"]],
-            "a": [["201.0", "2"]],
-            "ts": 1_700_000_000_000,
+            "symbol": "AAPLXUSDT",
+            "bid1Price": "200.0",
+            "ask1Price": "201.0",
         },
     }
-    tick = parse_orderbook_message(
+    tick = parse_ticker_message(
         payload,
         pair_id_by_symbol={"AAPLXUSDT": "AAPLx"},
         multiplier_by_symbol={"AAPLXUSDT": mult},
@@ -38,13 +37,13 @@ def test_parse_orderbook_applies_multiplier() -> None:
     assert tick.gap is False
 
 
-def test_parse_orderbook_unknown_symbol_returns_none() -> None:
+def test_parse_ticker_unknown_symbol_returns_none() -> None:
     payload = {
-        "topic": "orderbook.1.BTCUSDT",
-        "data": {"s": "BTCUSDT", "b": [["1", "1"]], "a": [["2", "1"]]},
+        "topic": "tickers.BTCUSDT",
+        "data": {"symbol": "BTCUSDT", "bid1Price": "1", "ask1Price": "2"},
     }
     assert (
-        parse_orderbook_message(
+        parse_ticker_message(
             payload,
             pair_id_by_symbol={"TSLAXUSDT": "TSLAx"},
             multiplier_by_symbol={"TSLAXUSDT": Decimal("1")},
@@ -83,7 +82,7 @@ def test_parse_public_trades() -> None:
 
 def test_build_subscribe_args() -> None:
     args = build_subscribe_args(["TSLAXUSDT", "AAPLXUSDT"])
-    assert "orderbook.1.TSLAXUSDT" in args
+    assert "tickers.TSLAXUSDT" in args
     assert "publicTrade.TSLAXUSDT" in args
-    assert "orderbook.1.AAPLXUSDT" in args
+    assert "tickers.AAPLXUSDT" in args
     assert len(args) == 4
