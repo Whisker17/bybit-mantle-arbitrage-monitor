@@ -55,7 +55,7 @@ native, Bybit de-multiplied):
 
 Applied after features; first match wins:
 
-1. **`arb_bot`** — `n_convergence_scored ≥ arb_bot.min_trades` **and**
+1. **`arb_bot`** — `n_convergence_scored ≥ arb_bot.min_scored_trades` **and**
    `convergence_ratio ≥ arb_bot.min_convergence_ratio` **and**
    (`bybit_align_ratio` is null **or** `≥ arb_bot.min_bybit_align_ratio`).
    Default gate: ≥80% convergence on ≥20 **scorable** trades (DESIGN §2.5).

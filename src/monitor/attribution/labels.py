@@ -106,7 +106,7 @@ def assign_behavior_label(
     # Gate on convergence sample size (not raw trade count): trades missing both
     # mids must not inflate the ratio toward arb_bot (spec: ≥20 scorable trades).
     if (
-        features.n_convergence_scored >= arb.min_trades
+        features.n_convergence_scored >= arb.min_scored_trades
         and features.convergence_ratio is not None
         and features.convergence_ratio >= arb.min_convergence_ratio
     ):

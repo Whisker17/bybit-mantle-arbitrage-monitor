@@ -25,8 +25,8 @@ def test_load_checked_in_attribution_config() -> None:
     cfg = load_attribution_config()
     assert cfg.version == 1
     assert cfg.top_takers_n == 10
-    assert cfg.address_code_batch_size == 50
-    assert cfg.arb_bot.min_trades == 20
+    assert cfg.rpc_probe_batch_size == 50
+    assert cfg.arb_bot.min_scored_trades == 20
     assert cfg.arb_bot.min_convergence_ratio == 0.80
     assert cfg.arb_bot.min_bybit_align_ratio == 0.0
     assert cfg.price_keeper.min_trades == 10
@@ -47,9 +47,9 @@ def test_reject_median_above_max_trade(tmp_path: Path) -> None:
             """\
             version: 1
             top_takers_n: 10
-            address_code_batch_size: 50
+            rpc_probe_batch_size: 50
             arb_bot:
-              min_trades: 20
+              min_scored_trades: 20
               min_convergence_ratio: 0.8
             price_keeper:
               min_trades: 10
@@ -79,9 +79,9 @@ def test_reject_convergence_ratio_out_of_range(tmp_path: Path) -> None:
             """\
             version: 1
             top_takers_n: 10
-            address_code_batch_size: 50
+            rpc_probe_batch_size: 50
             arb_bot:
-              min_trades: 20
+              min_scored_trades: 20
               min_convergence_ratio: 1.5
             price_keeper:
               min_trades: 10

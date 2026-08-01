@@ -56,7 +56,7 @@ def classify_addresses(
     """Map lowercased address → True if contract, False if EOA.
 
     Batches ``eth_getCode`` calls. Empty input returns {}.
-    Pass ``batch_size=config.address_code_batch_size`` (no silent default).
+    Pass ``batch_size=config.rpc_probe_batch_size`` (no silent default).
     """
     if batch_size < 1:
         raise ValueError("batch_size must be >= 1")
@@ -92,9 +92,9 @@ def classify_addresses_from_config(
     rpc: BatchRpc,
     config: AttributionConfig,
 ) -> dict[str, bool]:
-    """``classify_addresses`` with ``config.address_code_batch_size``."""
+    """``classify_addresses`` with ``config.rpc_probe_batch_size``."""
     return classify_addresses(
-        addrs, rpc, batch_size=config.address_code_batch_size
+        addrs, rpc, batch_size=config.rpc_probe_batch_size
     )
 
 
@@ -109,7 +109,7 @@ def probe_roles(
     Phase-1 ``mba.m6_attribution.probe_roles`` heuristic: if ``tx.to`` equals the
     address, users call it directly (router/entrypoint); otherwise it is
     downstream of another entrypoint. ``samples`` is ``(address, tx_hash)``.
-    Pass ``batch_size=config.address_code_batch_size``.
+    Pass ``batch_size=config.rpc_probe_batch_size``.
     """
     if batch_size < 1:
         raise ValueError("batch_size must be >= 1")
@@ -153,8 +153,8 @@ def probe_roles_from_config(
     rpc: BatchRpc,
     config: AttributionConfig,
 ) -> dict[str, AddressRole]:
-    """``probe_roles`` with ``config.address_code_batch_size``."""
-    return probe_roles(samples, rpc, batch_size=config.address_code_batch_size)
+    """``probe_roles`` with ``config.rpc_probe_batch_size``."""
+    return probe_roles(samples, rpc, batch_size=config.rpc_probe_batch_size)
 
 
 def role_samples_from_trades(

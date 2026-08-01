@@ -20,7 +20,8 @@ class AttributionConfigError(Exception):
 class ArbBotConfig(BaseModel):
     model_config = ConfigDict(extra="forbid", frozen=True)
 
-    min_trades: int = Field(ge=1)
+    # Minimum trades with a defined convergence flag (not raw n_trades).
+    min_scored_trades: int = Field(ge=1)
     min_convergence_ratio: float = Field(ge=0.0, le=1.0)
     min_bybit_align_ratio: float = Field(default=0.0, ge=0.0, le=1.0)
 
@@ -86,7 +87,7 @@ class AttributionConfig(BaseModel):
 
     version: int = Field(ge=1)
     top_takers_n: int = Field(ge=1)
-    address_code_batch_size: int = Field(ge=1, le=200)
+    rpc_probe_batch_size: int = Field(ge=1, le=200)
     arb_bot: ArbBotConfig
     price_keeper: PriceKeeperConfig
     retail: RetailConfig

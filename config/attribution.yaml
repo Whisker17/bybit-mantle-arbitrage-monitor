@@ -11,14 +11,16 @@ top_takers_n: 10
 
 # Batch size for eth_getCode (contract-vs-EOA) and eth_getTransactionByHash
 # (entrypoint-vs-internal) probes. Pass via classify_addresses_from_config /
-# probe_roles_from_config (or batch_size=config.address_code_batch_size).
-address_code_batch_size: 50
+# probe_roles_from_config (or batch_size=config.rpc_probe_batch_size).
+rpc_probe_batch_size: 50
 
 # --- arb-bot candidate (DESIGN §2.5 product rule of thumb) ---
 # Convergence-ratio = share of AMM trades whose direction moves Fluxion mid
 # toward contemporaneous Bybit mid. Requires both mids present.
+# min_scored_trades counts only trades with both mids (n_convergence_scored),
+# not raw n_trades — missing mids must not pad the sample.
 arb_bot:
-  min_trades: 20
+  min_scored_trades: 20
   min_convergence_ratio: 0.80
   # Optional secondary gate: share of trades whose direction aligns with a
   # recent Bybit mid move (lead-lag). 0.0 = do not gate on this feature.
