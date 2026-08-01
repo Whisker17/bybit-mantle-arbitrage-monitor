@@ -2,6 +2,7 @@
 
 from __future__ import annotations
 
+from decimal import Decimal
 from pathlib import Path
 from typing import Any
 
@@ -48,16 +49,35 @@ class MetricsConfig(BaseModel):
     model_config = ConfigDict(extra="forbid", frozen=True)
 
     version: int = Field(ge=1)
-    size_ladder_usd: list[float] = Field(min_length=1)
-    bybit_taker_fee_bps: float = Field(ge=0)
-    usdt_usdc_basis_bps: float = 0.0
-    gas_usd_per_swap: float = Field(ge=0)
+    size_ladder_usd: list[Decimal] = Field(min_length=1)
+    bybit_taker_fee_bps: Decimal = Field(ge=0)
+    usdt_usdc_basis_bps: Decimal = Decimal(0)
+    gas_usd_per_swap: Decimal = Field(ge=0)
     session: SessionConfig
-    breach_size_usd: float = Field(gt=0)
+    breach_size_usd: Decimal = Field(gt=0)
+    # Max inter-sample gap counted toward breach duration (ms). Larger gaps
+    # (overnight, collector restart) do not inflate session-segmented duration.
+    max_breach_gap_ms: int = Field(default=300_000, ge=1)
+
+    @field_validator(
+        "size_ladder_usd",
+        "bybit_taker_fee_bps",
+        "usdt_usdc_basis_bps",
+        "gas_usd_per_swap",
+        "breach_size_usd",
+        mode="before",
+    )
+    @classmethod
+    def _to_decimal(cls, value: object) -> object:
+        if isinstance(value, list):
+            return [Decimal(str(v)) for v in value]
+        if isinstance(value, (int, float, str)):
+            return Decimal(str(value))
+        return value
 
     @field_validator("size_ladder_usd")
     @classmethod
-    def _positive_sizes(cls, value: list[float]) -> list[float]:
+    def _positive_sizes(cls, value: list[Decimal]) -> list[Decimal]:
         if any(s <= 0 for s in value):
             raise ValueError("size_ladder_usd entries must be > 0")
         if list(value) != sorted(value):

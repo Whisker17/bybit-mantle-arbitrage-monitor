@@ -33,4 +33,9 @@ session:
 
 # Cost floor for "breach" stats: net edge > 0 after full wear at this ladder size.
 # Using the smallest rung keeps the floor conservative for duration counting.
+# EdgeStats.observe_edge only counts breaches for results at this size.
 breach_size_usd: 1000
+
+# Inter-sample gaps larger than this (ms) do not add to breach duration —
+# overnight / reconnect / gap=1 windows must not inflate open-session totals.
+max_breach_gap_ms: 300000

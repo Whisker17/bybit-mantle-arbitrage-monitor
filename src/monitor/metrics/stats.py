@@ -1,8 +1,9 @@
 """Cumulative distributions and cost-floor breach accounting (WHI-732).
 
-All samples are optionally tagged with session open/closed so aggregates can be
-segmented (DESIGN §2.4). Time-weighted breach duration uses the wall-clock gap
-between successive samples of the same series key.
+Percentiles are **time-weighted**: each sample carries weight equal to the
+forward gap until the next sample (capped by ``max_breach_gap_ms``), matching
+DESIGN §2.4 "time-weighted stats". Breach duration uses the same gap rule so
+overnight / reconnect windows do not inflate open-session totals.
 """
 
 from __future__ import annotations
@@ -10,12 +11,14 @@ from __future__ import annotations
 from dataclasses import dataclass, field
 from decimal import Decimal
 
+from monitor.metrics.config import MetricsConfig
+from monitor.metrics.edge import EdgeResult
 from monitor.metrics.session import SessionKind
 
 
 @dataclass(frozen=True, slots=True)
 class Distribution:
-    """Percentiles over a numeric series (bps or similar)."""
+    """Time-weighted percentiles over a numeric series (bps or similar)."""
 
     count: int
     p50: Decimal | None
@@ -29,32 +32,53 @@ class Distribution:
 
     @classmethod
     def from_values(cls, values: list[Decimal]) -> Distribution:
+        """Equal-weight convenience (tests / ad-hoc). Prefer weighted path."""
         if not values:
             return cls.empty()
-        ordered = sorted(values)
-        n = len(ordered)
+        weights = [Decimal(1)] * len(values)
+        return cls.from_weighted(values, weights)
+
+    @classmethod
+    def from_weighted(
+        cls, values: list[Decimal], weights: list[Decimal]
+    ) -> Distribution:
+        if not values:
+            return cls.empty()
+        if len(values) != len(weights):
+            raise ValueError("values/weights length mismatch")
+        pairs = sorted(zip(values, weights, strict=True), key=lambda p: p[0])
+        total_w = sum((w for _, w in pairs), Decimal(0))
+        if total_w <= 0:
+            # fall back to equal weight
+            return cls.from_values(values)
         return cls(
-            count=n,
-            p50=_percentile(ordered, 50),
-            p95=_percentile(ordered, 95),
-            p99=_percentile(ordered, 99),
-            max=ordered[-1],
+            count=len(values),
+            p50=_weighted_percentile(pairs, total_w, 50),
+            p95=_weighted_percentile(pairs, total_w, 95),
+            p99=_weighted_percentile(pairs, total_w, 99),
+            max=pairs[-1][0],
         )
 
 
-def _percentile(sorted_vals: list[Decimal], pct: int) -> Decimal:
-    """Nearest-rank percentile on a non-empty sorted list."""
-    if not sorted_vals:
+def _weighted_percentile(
+    sorted_pairs: list[tuple[Decimal, Decimal]],
+    total_w: Decimal,
+    pct: int,
+) -> Decimal:
+    """First value where cumulative weight reaches pct% of total."""
+    if not sorted_pairs:
         raise ValueError("empty")
     if pct <= 0:
-        return sorted_vals[0]
+        return sorted_pairs[0][0]
     if pct >= 100:
-        return sorted_vals[-1]
-    # nearest rank: ceil(p/100 * n), 1-indexed
-    n = len(sorted_vals)
-    rank = (pct * n + 99) // 100  # ceil(pct/100 * n)
-    rank = max(1, min(n, rank))
-    return sorted_vals[rank - 1]
+        return sorted_pairs[-1][0]
+    target = total_w * Decimal(pct) / Decimal(100)
+    cum = Decimal(0)
+    for value, weight in sorted_pairs:
+        cum += weight
+        if cum >= target:
+            return value
+    return sorted_pairs[-1][0]
 
 
 @dataclass(frozen=True, slots=True)
@@ -62,8 +86,8 @@ class BreachStats:
     """Cost-floor breach episodes for one series.
 
     A breach is a contiguous run of samples where ``net_edge_bps > 0`` (and
-    fillable). Duration is the sum of inter-sample gaps (ms) while breached;
-    the final open episode uses time through the last sample only.
+    fillable) at ``config.breach_size_usd``. Duration sums inter-sample gaps
+    while breaching, each gap capped by ``max_breach_gap_ms``.
     """
 
     episode_count: int
@@ -73,8 +97,10 @@ class BreachStats:
 
 @dataclass
 class _SeriesState:
-    values: list[Decimal] = field(default_factory=list)
+    # (value, weight_ms) — weight is the *forward* gap to the next sample.
+    samples: list[tuple[Decimal, Decimal]] = field(default_factory=list)
     last_ts_ms: int | None = None
+    last_value: Decimal | None = None
     last_breaching: bool = False
     episode_count: int = 0
     total_duration_ms: int = 0
@@ -84,9 +110,14 @@ class _SeriesState:
 class EdgeStats:
     """Running cumulative stats, optionally split by session."""
 
+    max_gap_ms: int = 300_000
     _all: _SeriesState = field(default_factory=_SeriesState)
     _open: _SeriesState = field(default_factory=_SeriesState)
     _closed: _SeriesState = field(default_factory=_SeriesState)
+
+    @classmethod
+    def from_config(cls, config: MetricsConfig) -> EdgeStats:
+        return cls(max_gap_ms=config.max_breach_gap_ms)
 
     def observe(
         self,
@@ -96,8 +127,6 @@ class EdgeStats:
         session: SessionKind,
         fillable: bool = True,
     ) -> None:
-        """Record one sample. Non-fillable samples skip breach accounting but
-        still enter the distribution (as the observed net after wear)."""
         for state in (self._all, self._bucket(session)):
             self._observe_one(
                 state,
@@ -106,30 +135,69 @@ class EdgeStats:
                 fillable=fillable,
             )
 
+    def observe_edge(
+        self,
+        edge: EdgeResult,
+        *,
+        ts_ms: int,
+        session: SessionKind,
+        config: MetricsConfig,
+    ) -> None:
+        """Record only when ``edge.size_usd`` matches ``config.breach_size_usd``.
+
+        Other ladder sizes are ignored so the configured cost floor is the one
+        that drives breach episode accounting.
+        """
+        if edge.size_usd != config.breach_size_usd:
+            return
+        self.observe(
+            net_edge_bps=edge.net_edge_bps,
+            ts_ms=ts_ms,
+            session=session,
+            fillable=edge.fillable,
+        )
+
     def _bucket(self, session: SessionKind) -> _SeriesState:
         return self._open if session is SessionKind.OPEN else self._closed
 
-    @staticmethod
     def _observe_one(
+        self,
         state: _SeriesState,
         *,
         net_edge_bps: Decimal,
         ts_ms: int,
         fillable: bool,
     ) -> None:
-        state.values.append(net_edge_bps)
-        breaching = fillable and net_edge_bps > 0
+        gap_ms = 0
         if state.last_ts_ms is not None and ts_ms >= state.last_ts_ms:
-            dt = ts_ms - state.last_ts_ms
-            if state.last_breaching:
-                state.total_duration_ms += dt
+            raw = ts_ms - state.last_ts_ms
+            # Cap: overnight / reconnect must not inflate duration or weights.
+            gap_ms = raw if raw <= self.max_gap_ms else 0
+            if state.last_breaching and gap_ms > 0:
+                state.total_duration_ms += gap_ms
+            # Assign the forward weight to the *previous* sample.
+            if state.samples and state.last_value is not None:
+                prev_val, _ = state.samples[-1]
+                # Replace last sample's weight with the realized forward gap
+                # (0 if gap was capped out — sample stays for max, not Pxx).
+                weight = Decimal(gap_ms) if gap_ms > 0 else Decimal(0)
+                state.samples[-1] = (prev_val, weight)
+
+        state.samples.append((net_edge_bps, Decimal(0)))  # weight filled later
+        breaching = fillable and net_edge_bps > 0
         if breaching and not state.last_breaching:
             state.episode_count += 1
         state.last_breaching = breaching
         state.last_ts_ms = ts_ms
+        state.last_value = net_edge_bps
 
     def distribution(self, session: SessionKind | None = None) -> Distribution:
-        return Distribution.from_values(self._state(session).values)
+        st = self._state(session)
+        if not st.samples:
+            return Distribution.empty()
+        values = [v for v, _ in st.samples]
+        weights = [w if w > 0 else Decimal(1) for _, w in st.samples]
+        return Distribution.from_weighted(values, weights)
 
     def breach_stats(self, session: SessionKind | None = None) -> BreachStats:
         st = self._state(session)

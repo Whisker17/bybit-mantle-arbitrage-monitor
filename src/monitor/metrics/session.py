@@ -2,19 +2,23 @@
 
 DESIGN §2.4: all aggregates split by open vs closed. Includes full holidays and
 early-close days so closed-hour stats do not leak half-day afternoons.
+
+Session hours come from ``MetricsConfig.session`` / ``config/metrics.yaml`` —
+callers must pass a loaded config (no silent hardcoded defaults).
 """
 
 from __future__ import annotations
 
 from datetime import UTC, date, datetime
 from enum import StrEnum
-from typing import Literal
 from zoneinfo import ZoneInfo
 
 from monitor.metrics.config import MetricsConfig, SessionConfig
 
 # Fixed NYSE full holidays (no session). Observed Monday/Friday shifts included.
 # Extend annually when the year approaches; tests pin representative days.
+# Years covered: 2025–2027. Dates outside this range still get weekday RTH
+# hours but no holiday table — log/extend before use in production.
 _NYSE_FULL_HOLIDAYS: frozenset[date] = frozenset(
     {
         # 2025
@@ -73,27 +77,10 @@ class SessionKind(StrEnum):
     CLOSED = "closed"
 
 
-def _tz(cfg: SessionConfig | MetricsConfig | str | None) -> ZoneInfo:
-    if cfg is None:
-        return ZoneInfo("America/New_York")
-    if isinstance(cfg, str):
-        return ZoneInfo(cfg)
-    if isinstance(cfg, MetricsConfig):
-        return ZoneInfo(cfg.session.timezone)
-    return ZoneInfo(cfg.timezone)
-
-
-def _session_cfg(cfg: SessionConfig | MetricsConfig | None) -> SessionConfig:
-    if cfg is None:
-        return SessionConfig(
-            timezone="America/New_York",
-            open="09:30",
-            close="16:00",
-            early_close="13:00",
-        )
-    if isinstance(cfg, MetricsConfig):
-        return cfg.session
-    return cfg
+def _as_session_config(config: SessionConfig | MetricsConfig) -> SessionConfig:
+    if isinstance(config, MetricsConfig):
+        return config.session
+    return config
 
 
 def _as_et(ts: datetime, tz: ZoneInfo) -> datetime:
@@ -114,13 +101,16 @@ def nyse_is_early_close(d: date) -> bool:
 def session_kind(
     ts: datetime,
     *,
-    config: SessionConfig | MetricsConfig | None = None,
+    config: SessionConfig | MetricsConfig,
 ) -> SessionKind:
-    """Return OPEN during NYSE RTH (incl. early-close mornings), else CLOSED."""
-    sc = _session_cfg(config)
-    et = _as_et(ts, _tz(sc))
+    """Return OPEN during NYSE RTH (incl. early-close mornings), else CLOSED.
+
+    ``config`` is required so hours always come from ``config/metrics.yaml``
+    (or an explicit ``SessionConfig``), never a silent hardcode.
+    """
+    sc = _as_session_config(config)
+    et = _as_et(ts, ZoneInfo(sc.timezone))
     d = et.date()
-    # Weekend
     if et.weekday() >= 5:
         return SessionKind.CLOSED
     if nyse_is_full_holiday(d):
@@ -143,15 +133,6 @@ def session_kind(
 def is_us_rth_open(
     ts: datetime,
     *,
-    config: SessionConfig | MetricsConfig | None = None,
+    config: SessionConfig | MetricsConfig,
 ) -> bool:
     return session_kind(ts, config=config) is SessionKind.OPEN
-
-
-def session_label(
-    ts: datetime,
-    *,
-    config: SessionConfig | MetricsConfig | None = None,
-) -> Literal["open", "closed"]:
-    kind = session_kind(ts, config=config)
-    return "open" if kind is SessionKind.OPEN else "closed"

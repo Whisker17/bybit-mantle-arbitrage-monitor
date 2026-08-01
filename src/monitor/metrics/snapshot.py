@@ -1,6 +1,7 @@
 """Build edge snapshots from live quote ticks (M3 glue for M5 TUI).
 
-Pure functions over ``monitor.quotes`` shapes — no I/O.
+Pure functions over ``monitor.quotes`` shapes — no I/O. The TUI (M5) is the
+producer that feeds successive snapshots into ``EdgeStats``.
 """
 
 from __future__ import annotations
@@ -9,8 +10,10 @@ from dataclasses import dataclass
 from datetime import UTC, datetime
 from decimal import Decimal
 
+from monitor.metrics.amm_pool import AmmPoolState
 from monitor.metrics.config import MetricsConfig
 from monitor.metrics.edge import (
+    Direction,
     EdgeResult,
     VenueKind,
     compute_edge_ladder,
@@ -29,9 +32,11 @@ class SpreadSnapshot:
     ts_ms: int
     bybit_mid: Decimal
     amm_mid: Decimal | None
-    rfq_mid: Decimal | None
-    amm_spread_bps: Decimal | None  # (amm - bybit) / bybit * 1e4
-    rfq_spread_bps: Decimal | None
+    rfq_buy_mid: Decimal | None  # USDC→native executable (buy base on Fluxion)
+    rfq_sell_mid: Decimal | None  # native→USDC executable (sell base on Fluxion)
+    amm_spread_bps: Decimal | None
+    rfq_buy_spread_bps: Decimal | None
+    rfq_sell_spread_bps: Decimal | None
     session: SessionKind
 
 
@@ -45,39 +50,43 @@ class EdgeSnapshot:
     rfq_edges: list[EdgeResult]
 
 
-def rfq_mid_from_tick(tick: FluxionRfqQuoteTick) -> Decimal | None:
-    """Prefer explicit price; else amount_out/amount_in when both present."""
-    if not tick.available:
+def rfq_price(tick: FluxionRfqQuoteTick | None) -> Decimal | None:
+    if tick is None or not tick.available:
         return None
     if tick.price is not None and tick.price > 0:
         return tick.price
-    if tick.amount_out is None:
-        return None
-    try:
-        ain = Decimal(tick.amount_in)
-        aout = Decimal(tick.amount_out)
-    except Exception:
-        return None
-    if ain <= 0 or aout <= 0:
-        return None
-    # EXACT_INPUT: if token_in is quote (USDC 6 dec) buying native, price ≈
-    # amount_in_human / amount_out_human. Without decimals here we only use
-    # tick.price; raw ratio is not human mid. Require price field.
     return None
+
+
+def _rfq_side_matches(tick: FluxionRfqQuoteTick, direction: Direction) -> bool:
+    """Map RFQ poll side to paper-arb direction.
+
+    Collector ``side`` is the *Fluxion* leg: buy_native / sell_native (see
+    ``monitor.fluxion.rfq``). Missing side → accept (legacy / tests).
+    """
+    side = (tick.side or "").lower()
+    if not side:
+        return True
+    if direction == "buy_fluxion_sell_bybit":
+        return side in ("buy", "buy_native", "exact_input_quote")
+    return side in ("sell", "sell_native")
 
 
 def build_spread_snapshot(
     *,
     bybit: BybitBookTick,
     amm: FluxionPoolStateTick | None,
-    rfq: FluxionRfqQuoteTick | None,
     config: MetricsConfig,
+    rfq_buy: FluxionRfqQuoteTick | None = None,
+    rfq_sell: FluxionRfqQuoteTick | None = None,
     ts_ms: int | None = None,
 ) -> SpreadSnapshot:
+    """Build dual spread series: Bybit mid vs AMM, vs RFQ buy, vs RFQ sell."""
     ts = ts_ms if ts_ms is not None else bybit.recv_ts_ms
     bybit_mid = mid_from_bid_ask(bybit.bid_de_multiplied, bybit.ask_de_multiplied)
     amm_mid = amm.mid_usdc_per_native if amm is not None else None
-    rfq_mid = rfq_mid_from_tick(rfq) if rfq is not None else None
+    buy_mid = rfq_price(rfq_buy)
+    sell_mid = rfq_price(rfq_sell)
     dt = datetime.fromtimestamp(ts / 1000, tz=UTC)
     sk = session_kind(dt, config=config)
     return SpreadSnapshot(
@@ -85,9 +94,15 @@ def build_spread_snapshot(
         ts_ms=ts,
         bybit_mid=bybit_mid,
         amm_mid=amm_mid,
-        rfq_mid=rfq_mid,
+        rfq_buy_mid=buy_mid,
+        rfq_sell_mid=sell_mid,
         amm_spread_bps=spread_bps(bybit_mid, amm_mid) if amm_mid is not None else None,
-        rfq_spread_bps=spread_bps(bybit_mid, rfq_mid) if rfq_mid is not None else None,
+        rfq_buy_spread_bps=(
+            spread_bps(bybit_mid, buy_mid) if buy_mid is not None else None
+        ),
+        rfq_sell_spread_bps=(
+            spread_bps(bybit_mid, sell_mid) if sell_mid is not None else None
+        ),
         session=sk,
     )
 
@@ -95,20 +110,23 @@ def build_spread_snapshot(
 def build_edge_snapshot(
     *,
     bybit: BybitBookTick,
-    amm: FluxionPoolStateTick | None,
-    rfq: FluxionRfqQuoteTick | None,
     config: MetricsConfig,
-    pool_fee: int | None = None,
-    token0_is_quote: bool = True,
-    token0_decimals: int = 6,
-    token1_decimals: int = 18,
+    amm: FluxionPoolStateTick | None = None,
+    amm_pool: AmmPoolState | None = None,
+    rfq_buy: FluxionRfqQuoteTick | None = None,
+    rfq_sell: FluxionRfqQuoteTick | None = None,
     ts_ms: int | None = None,
 ) -> EdgeSnapshot:
     spreads = build_spread_snapshot(
-        bybit=bybit, amm=amm, rfq=rfq, config=config, ts_ms=ts_ms
+        bybit=bybit,
+        amm=amm,
+        config=config,
+        rfq_buy=rfq_buy,
+        rfq_sell=rfq_sell,
+        ts_ms=ts_ms,
     )
     amm_edges: list[EdgeResult] = []
-    if amm is not None and pool_fee is not None:
+    if amm is not None and amm_pool is not None:
         amm_edges = compute_edge_ladder(
             pair_id=bybit.pair_id,
             bybit_bid=bybit.bid_de_multiplied,
@@ -116,23 +134,37 @@ def build_edge_snapshot(
             fluxion_mid=amm.mid_usdc_per_native,
             venue="amm",
             config=config,
-            pool_fee=pool_fee,
-            sqrt_price_x96=amm.sqrt_price_x96,
-            liquidity=amm.liquidity,
-            token0_is_quote=token0_is_quote,
-            token0_decimals=token0_decimals,
-            token1_decimals=token1_decimals,
+            amm=amm_pool,
         )
+
     rfq_edges: list[EdgeResult] = []
-    if spreads.rfq_mid is not None:
-        rfq_edges = compute_edge_ladder(
-            pair_id=bybit.pair_id,
-            bybit_bid=bybit.bid_de_multiplied,
-            bybit_ask=bybit.ask_de_multiplied,
-            fluxion_mid=spreads.rfq_mid,
-            venue="rfq",
-            config=config,
-        )
+    # Side-aware: each RFQ quote only feeds its matching direction.
+    rfq_legs: list[tuple[FluxionRfqQuoteTick | None, Direction]] = [
+        (rfq_buy, "buy_fluxion_sell_bybit"),
+        (rfq_sell, "buy_bybit_sell_fluxion"),
+    ]
+    for tick, direction in rfq_legs:
+        price = rfq_price(tick)
+        if price is None or tick is None:
+            continue
+        if not _rfq_side_matches(tick, direction):
+            continue
+        for size in config.size_ladder_usd:
+            from monitor.metrics.edge import compute_edge
+
+            rfq_edges.append(
+                compute_edge(
+                    pair_id=bybit.pair_id,
+                    bybit_bid=bybit.bid_de_multiplied,
+                    bybit_ask=bybit.ask_de_multiplied,
+                    fluxion_mid=price,
+                    size_usd=size,
+                    direction=direction,
+                    venue="rfq",
+                    config=config,
+                )
+            )
+
     return EdgeSnapshot(
         pair_id=bybit.pair_id,
         ts_ms=spreads.ts_ms,

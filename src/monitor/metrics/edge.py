@@ -13,12 +13,9 @@ Two-sided inventory paper arb:
 Directions (relative to base xStock):
 
 - ``buy_fluxion_sell_bybit``: buy cheap on Fluxion, sell rich on Bybit
-  (gross = (bybit_mid - fluxion_mid) / bybit_mid * 1e4)
 - ``buy_bybit_sell_fluxion``: buy on Bybit, sell on Fluxion
-  (gross = (fluxion_mid - bybit_mid) / bybit_mid * 1e4)
 
-Reference mid for bps is always the de-multiplied Bybit mid so series are
-comparable across venues.
+Reference mid for bps is always the de-multiplied Bybit mid.
 """
 
 from __future__ import annotations
@@ -27,11 +24,8 @@ from dataclasses import dataclass
 from decimal import Decimal
 from typing import Literal
 
-from monitor.metrics.amm_slip import (
-    fee_bps_from_pool_fee,
-    fluxion_amm_slip_bps,
-    gas_bps,
-)
+from monitor.metrics.amm_pool import AmmPoolState
+from monitor.metrics.amm_slip import fee_bps_from_pool_fee, fluxion_amm_slip_bps, gas_bps
 from monitor.metrics.bybit_slip import bybit_slip_bps
 from monitor.metrics.config import MetricsConfig
 
@@ -101,6 +95,24 @@ def direction_aware_gross_bps(
     return (fluxion_mid - bybit_mid) / bybit_mid * Decimal(10_000)
 
 
+def _costs(
+    config: MetricsConfig,
+    *,
+    size_usd: Decimal,
+    bybit_slip: Decimal,
+    fluxion_fee: Decimal,
+    fluxion_slip: Decimal,
+) -> CostBreakdown:
+    return CostBreakdown(
+        bybit_taker_bps=config.bybit_taker_fee_bps,
+        fluxion_fee_bps=fluxion_fee,
+        bybit_slip_bps=bybit_slip,
+        fluxion_slip_bps=fluxion_slip,
+        gas_bps=gas_bps(config.gas_usd_per_swap, size_usd),
+        basis_bps=config.usdt_usdc_basis_bps,
+    )
+
+
 def compute_edge(
     *,
     pair_id: str,
@@ -111,21 +123,17 @@ def compute_edge(
     direction: Direction,
     venue: VenueKind,
     config: MetricsConfig,
-    # AMM-only (ignored for RFQ):
-    pool_fee: int | None = None,
-    sqrt_price_x96: int | None = None,
-    liquidity: int | None = None,
-    token0_is_quote: bool = True,
-    token0_decimals: int = 6,
-    token1_decimals: int = 18,
-    # Optional Bybit depth for VWAP; L1 half-spread when None.
+    amm: AmmPoolState | None = None,
     bybit_depth: list[tuple[Decimal, Decimal]] | None = None,
 ) -> EdgeResult:
-    """Compute net paper edge for one pair × venue × direction × size."""
+    """Compute net paper edge for one pair × venue × direction × size.
+
+    AMM venue requires ``amm``. RFQ venue ignores AMM geometry; ``fluxion_mid``
+    must be the side-matching executable quote for ``direction``.
+    """
     bybit_mid = mid_from_bid_ask(bybit_bid, bybit_ask)
     gross = direction_aware_gross_bps(bybit_mid, fluxion_mid, direction)
 
-    # Bybit leg is the opposite of Fluxion leg.
     if direction == "buy_fluxion_sell_bybit":
         bybit_dir = "sell"
         fluxion_dir = "buy"
@@ -141,13 +149,12 @@ def compute_edge(
         depth=bybit_depth,
     )
     if b_slip is None:
-        costs = CostBreakdown(
-            bybit_taker_bps=Decimal(str(config.bybit_taker_fee_bps)),
-            fluxion_fee_bps=Decimal(0),
-            bybit_slip_bps=Decimal(0),
-            fluxion_slip_bps=Decimal(0),
-            gas_bps=gas_bps(Decimal(str(config.gas_usd_per_swap)), size_usd),
-            basis_bps=Decimal(str(config.usdt_usdc_basis_bps)),
+        costs = _costs(
+            config,
+            size_usd=size_usd,
+            bybit_slip=Decimal(0),
+            fluxion_fee=Decimal(0),
+            fluxion_slip=Decimal(0),
         )
         return EdgeResult(
             pair_id=pair_id,
@@ -164,39 +171,29 @@ def compute_edge(
         )
 
     if venue == "amm":
-        if pool_fee is None or sqrt_price_x96 is None or liquidity is None:
-            raise ValueError("amm venue requires pool_fee, sqrt_price_x96, liquidity")
-        fee = fee_bps_from_pool_fee(pool_fee)
-        amm = fluxion_amm_slip_bps(
-            sqrt_price_x96=sqrt_price_x96,
-            liquidity=liquidity,
-            pool_fee=pool_fee,
-            size_usd=size_usd,
-            direction=fluxion_dir,
-            token0_is_quote=token0_is_quote,
-            token0_decimals=token0_decimals,
-            token1_decimals=token1_decimals,
-        )
-        f_slip = amm.slip_bps_vs_mid
-        fillable = amm.fillable
-        reason = amm.reason
+        if amm is None:
+            raise ValueError("amm venue requires AmmPoolState")
+        fee = fee_bps_from_pool_fee(amm.pool_fee)
+        swap = fluxion_amm_slip_bps(amm, size_usd=size_usd, direction=fluxion_dir)
+        f_slip = swap.slip_bps_vs_mid
+        fillable = swap.fillable
+        reason = swap.reason
     else:
-        # RFQ quote is already an executable mid at the polled notional; no
-        # separate pool fee / AMM impact line (MM embeds costs in the quote).
+        # RFQ: MM embeds fee/impact in the quote. Ladder sizes other than the
+        # polled notional still use this price with zero extra slip — the TUI
+        # should prefer the size nearest the RFQ poll notional.
         fee = Decimal(0)
         f_slip = Decimal(0)
         fillable = True
         reason = None
 
-    costs = CostBreakdown(
-        bybit_taker_bps=Decimal(str(config.bybit_taker_fee_bps)),
-        fluxion_fee_bps=fee,
-        bybit_slip_bps=b_slip,
-        fluxion_slip_bps=f_slip,
-        gas_bps=gas_bps(Decimal(str(config.gas_usd_per_swap)), size_usd),
-        basis_bps=Decimal(str(config.usdt_usdc_basis_bps)),
+    costs = _costs(
+        config,
+        size_usd=size_usd,
+        bybit_slip=b_slip,
+        fluxion_fee=fee,
+        fluxion_slip=f_slip,
     )
-    net = gross - costs.total_wear_bps
     return EdgeResult(
         pair_id=pair_id,
         venue=venue,
@@ -206,7 +203,7 @@ def compute_edge(
         fluxion_mid=fluxion_mid,
         gross_spread_bps=gross,
         costs=costs,
-        net_edge_bps=net,
+        net_edge_bps=gross - costs.total_wear_bps,
         fillable=fillable,
         reason=reason,
     )
@@ -220,12 +217,7 @@ def compute_edge_ladder(
     fluxion_mid: Decimal,
     venue: VenueKind,
     config: MetricsConfig,
-    pool_fee: int | None = None,
-    sqrt_price_x96: int | None = None,
-    liquidity: int | None = None,
-    token0_is_quote: bool = True,
-    token0_decimals: int = 6,
-    token1_decimals: int = 18,
+    amm: AmmPoolState | None = None,
     bybit_depth: list[tuple[Decimal, Decimal]] | None = None,
     directions: tuple[Direction, ...] = (
         "buy_fluxion_sell_bybit",
@@ -242,16 +234,11 @@ def compute_edge_ladder(
                     bybit_bid=bybit_bid,
                     bybit_ask=bybit_ask,
                     fluxion_mid=fluxion_mid,
-                    size_usd=Decimal(str(size)),
+                    size_usd=size,
                     direction=direction,
                     venue=venue,
                     config=config,
-                    pool_fee=pool_fee,
-                    sqrt_price_x96=sqrt_price_x96,
-                    liquidity=liquidity,
-                    token0_is_quote=token0_is_quote,
-                    token0_decimals=token0_decimals,
-                    token1_decimals=token1_decimals,
+                    amm=amm,
                     bybit_depth=bybit_depth,
                 )
             )
