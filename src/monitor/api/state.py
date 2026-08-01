@@ -21,8 +21,10 @@ from monitor.tui.model import RunningEdgeState
 class AppState:
     """Loaded configs + optional reader + running edge stats.
 
-    Sync FastAPI handlers run on Starlette's threadpool, so mutations of
-    ``edge_state`` and reader open/reopen take ``lock``.
+    Sync FastAPI handlers run on Starlette's threadpool. ``lock`` serializes
+    builder calls that mutate ``edge_state`` *and* reader open/reopen — so
+    concurrent polls queue rather than interleave EdgeStats updates. Acceptable
+    for the 2s client poll + single-operator VPS; split later if latency shows.
     """
 
     api: ApiConfig

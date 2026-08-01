@@ -123,7 +123,3 @@ def build_health(
         recent_gaps=gaps,
         poll_interval_s=poll_interval_s,
     )
-
-
-# Back-compat alias used by early tests / callers.
-missing_db_health = HealthStatus.unavailable
