@@ -21,6 +21,8 @@ loaded into a typed, validated model at startup.
 |------|--------|---------|
 | `pairs.yaml` | `monitor.symbols.load_pairs_config` | Fixed Bybit ⇄ Fluxion xStock inventory + RFQ mode (M1 / WHI-730). Cross-validates `low_liquidity` vs threshold/AMM and `quote_token_address` vs `contracts`. |
 | `collector.yaml` | `monitor.collector.load_collector_config` | Live collector tunables (Bybit WS, Mantle poll, RFQ notional, SQLite path) — M2 / WHI-731. |
+| `metrics.yaml` | `monitor.metrics.load_metrics_config` | Paper-edge size ladder, Bybit taker / gas / USDT–USDC basis, session hours, breach size — M3 / WHI-732. |
 
 Optional per-deployment override: untracked `pairs.local.yaml` / `collector.local.yaml`
-are reserved for later milestones if needed; v1 loads the checked-in YAML only.
+/ `metrics.local.yaml` are reserved for later milestones if needed; v1 loads the
+checked-in YAML only.
