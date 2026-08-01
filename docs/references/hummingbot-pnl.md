@@ -482,18 +482,46 @@ values below are the research defaults, not a reserved schema):
 | `q_tol_rel` | `1e-6` | AMM buy size-solve relative tolerance (§4.3.1) |
 | `amm_solve_max_iters` | `64` | Cap binary-search iterations |
 
-**Caps:**
+**Caps (computable from today’s inputs):**
 
 ```text
-depth_cap  = max USD notional fillable on the Bybit side used by D
-             (full walk of bids for sell-Bybit / asks for buy-Bybit,
-              using the gross base when the Bybit leg is a buy)
-amm_cap    = max Q such that V3 in-range math remains fillable
-             (existing unfillable_or_range_exhausted)
-Q_max      = min(config_cap_usd, depth_cap, amm_cap)
+# Bybit depth_cap (USD notional of the side we hit)
+if bybit_depth_source == "book" and levels non-empty:
+    depth_cap = sum(p_i * s_i for levels on the traded side)
+                # sell-Bybit → bids; buy-Bybit → asks
+                # levels already multiplier-adjusted (§4.2)
+                # for buy-Bybit, compare against q_gross·P later; cap is still
+                # total ask notional available
+else:
+    # L1-only path (BybitBookTick today has bid/ask, no sizes):
+    # cannot prove thin-book unfillable on Bybit — assume L1 size is
+    # infinite for search bounds; Bybit unfillable only if bid/ask invalid.
+    depth_cap = +∞
+    # Optional soft cap (config, default off): l1_assumed_size_usd
+    # If set, depth_cap = that value instead of ∞.
+
+# AMM amm_cap: first Q where in-range exact-in becomes unfillable.
+# Probe (finite, non-circular):
+#   1. Geometric ramp: Q = q_min_usd, 2·Q, 4·Q, … until unfillable or
+#      Q >= config_cap_usd (evaluate fillable at each via the same PnL
+#      path’s AMM leg only).
+#   2. If the ramp never fails: amm_cap = config_cap_usd.
+#   3. If it fails at Q_hi and previous fillable Q_lo: binary-search the
+#      boundary in log-space for amm_cap_max_iters (default 24) steps;
+#      amm_cap = last fillable mid.
+# Direction matters: buy-Fluxion uses quote-in solve; sell-Fluxion uses
+# exact-in base. Either leg unfillable ⇒ that Q fails the probe.
+
+Q_max = min(config_cap_usd, depth_cap, amm_cap)
+# with the convention min(x, +∞) = x
 ```
 
 If \(Q_{\max} < Q_{\min}\): no fillable size → `optimal = null`.
+
+**L1 and the thin-book guard:** with `depth_cap = ∞`, the Bybit “partial depth
+⇒ unfillable” rule only applies when real levels exist. L1 degrade never
+marks Bybit unfillable for size; only invalid/zero bid-ask does. That is
+intentional until multi-level depth is wired (`docs/DEFERRED_ISSUES.md`).
 
 **Procedure:**
 

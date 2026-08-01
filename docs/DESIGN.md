@@ -129,15 +129,15 @@ invariant; matched base \(q\) shares that unit). Full algebra in research note
 
 | Direction | Buy leg (trader pays) | Sell leg (trader receives) | PnL (USD) |
 |-----------|----------------------|----------------------------|-----------|
-| `buy_fluxion_sell_bybit` | Fluxion: USDC spent to acquire net base \(q\) (fee-inclusive AMM; or RFQ `amountIn`) | Bybit: sell \(q\) at bid VWAP; USDT received after fee | \(\mathrm{usd}(\mathrm{USDT_{recv}}) - \mathrm{usd}(\mathrm{USDC_{spent}}) - G\) |
-| `buy_bybit_sell_fluxion` | Bybit: buy gross base so **net** base \(= q\) after fee; USDT spent | Fluxion: sell \(q\) for USDC received (fee-inclusive AMM; or RFQ `amountOut`) | \(\mathrm{usd}(\mathrm{USDC_{recv}}) - \mathrm{usd}(\mathrm{USDT_{spent}}) - G\) |
+| `buy_fluxion_sell_bybit` | Fluxion: USDC spent to acquire net base \(q\) (fee-inclusive AMM; or RFQ `amountIn`) | Bybit: sell \(q\) at bid VWAP; USDT received after fee | \(\mathrm{USDT_{recv}} - \mathrm{USDC_{spent}} - G - \beta Q\) |
+| `buy_bybit_sell_fluxion` | Bybit: buy gross base so **net** base \(= q\) after fee; USDT spent | Fluxion: sell \(q\) for USDC received (fee-inclusive AMM; or RFQ `amountOut`) | \(\mathrm{USDC_{recv}} - \mathrm{USDT_{spent}} - G - \beta Q\) |
 
 - \(G =\) `gas_usd_per_swap` (default $0.01), charged **once** per Fluxion leg
   (AMM and RFQ; default charge gas on RFQ too — conservative).
-- USDT/USDC: cash legs 1:1; optional **additive** basis wear
-  \(\beta\cdot Q\) on both directions via `usdt_usdc_basis_bps` (same contract
-  as M3 `edge.py`, default 0) — error if left at 0 while true basis ≠ 0 is
-  typically sub-5 bps (DESIGN §8).
+- USDT/USDC cash legs 1:1; \(\beta = \texttt{usdt\_usdc\_basis\_bps}/10^4\)
+  (default 0) is **additive wear on both directions** (same contract as M3
+  `edge.py`). Error if left at 0 while true basis ≠ 0 is typically sub-5 bps
+  (DESIGN §8).
 - AMM fee: fee-inclusive amounts in cash-flow; UI wear breakdown may split fee
   vs impact **without** double-subtracting in \(\mathrm{PnL}\).
 - RFQ: no separate pool-fee line. Rows are keyed by **poll size** (USDC
