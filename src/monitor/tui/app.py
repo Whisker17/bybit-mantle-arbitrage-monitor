@@ -16,9 +16,15 @@ from monitor.attribution.config import load_attribution_config
 from monitor.metrics.config import load_metrics_config
 from monitor.metrics.session import SessionKind
 from monitor.metrics.stats import Distribution
+from monitor.storage import JournalReader
 from monitor.symbols import load_pairs_config
 from monitor.tui.builder import build_overview, build_pair_detail
-from monitor.tui.config import SortKey, TuiConfig, TuiConfigError, load_tui_config
+from monitor.tui.config import (
+    SortKey,
+    TuiConfig,
+    load_tui_config,
+    validate_tui_against_metrics,
+)
 from monitor.tui.format import (
     fmt_bps,
     fmt_direction,
@@ -34,7 +40,6 @@ from monitor.tui.model import (
     PairDetailModel,
     RunningEdgeState,
 )
-from monitor.tui.reader import JournalReader
 
 _SORT_CYCLE: list[SortKey] = [
     "net_edge",
@@ -256,7 +261,11 @@ class DetailScreen(Screen[None]):
         )
         self.query_one("#spark", Static).update(spark_text)
 
-        self.query_one("#edge_panel", Static).update(_format_edge_panels(model))
+        self.query_one("#edge_panel", Static).update(
+            _format_edge_panels(
+                model, sample_cap=self._app_state.tui.edge_history_max_samples
+            )
+        )
         self.query_one("#attr_panel", Static).update(_format_attr_panel(model))
         self.query_one("#trades_title", Static).update(
             f"Fluxion fills (latest {len(model.trades)})"
@@ -308,8 +317,13 @@ def _dist_line(label: str, dist: Distribution) -> str:
     )
 
 
-def _format_edge_panels(model: PairDetailModel) -> str:
-    lines = ["[bold]Net paper edge[/] (M3)", ""]
+def _format_edge_panels(model: PairDetailModel, *, sample_cap: int) -> str:
+    # Cumulative rows are over the last `sample_cap` journal book samples for
+    # this pair, not the whole journal (tui.edge_history_max_samples).
+    lines = [
+        f"[bold]Net paper edge[/] (M3) — cumulative over last ≤{sample_cap} samples",
+        "",
+    ]
     for title, panel in (("AMM", model.edge_amm), ("RFQ", model.edge_rfq)):
         cur = panel.current
         if cur is None:
@@ -422,19 +436,7 @@ class TuiApp(App[None]):
         self.metrics = load_metrics_config(metrics_path)
         self.attribution = load_attribution_config(attribution_path)
         self.db_path = db_path if db_path is not None else tui.resolved_sqlite_path()
-        # EdgeStats.observe_edge only records the metrics breach size; the
-        # overview "net edge" column uses reference_size_usd — they must match.
-        if self.tui.reference_size_usd not in self.metrics.size_ladder_usd:
-            raise TuiConfigError(
-                f"tui.reference_size_usd={self.tui.reference_size_usd} must be one of "
-                f"metrics.size_ladder_usd={self.metrics.size_ladder_usd}"
-            )
-        if self.tui.reference_size_usd != self.metrics.breach_size_usd:
-            raise TuiConfigError(
-                f"tui.reference_size_usd={self.tui.reference_size_usd} must equal "
-                f"metrics.breach_size_usd={self.metrics.breach_size_usd} "
-                "(EdgeStats only accumulates the breach ladder rung)"
-            )
+        validate_tui_against_metrics(self.tui, self.metrics)
         self.sort_key: SortKey = tui.default_sort
         self.sort_desc: bool = tui.default_sort_desc
         self.edge_state = RunningEdgeState()

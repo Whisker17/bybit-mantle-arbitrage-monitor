@@ -5,7 +5,13 @@ from __future__ import annotations
 from decimal import Decimal
 
 from monitor.metrics.session import SessionKind
-from monitor.tui.format import fmt_direction, fmt_signed_bps, short_addr, sparkline
+from monitor.tui.format import (
+    downsample,
+    fmt_direction,
+    fmt_signed_bps,
+    short_addr,
+    sparkline,
+)
 from monitor.tui.model import SpreadPoint
 
 
@@ -25,6 +31,14 @@ def test_short_addr() -> None:
     addr = "0x" + "ab" * 20
     assert short_addr(addr).startswith("0xababab")
     assert short_addr(addr).endswith("abab")
+
+
+def test_downsample_keeps_endpoints() -> None:
+    pts = [(i, Decimal(i)) for i in range(100)]
+    out = downsample(pts, max_points=10)
+    assert len(out) == 10
+    assert out[0] == pts[0]
+    assert out[-1] == pts[-1]
 
 
 def test_sparkline_session_preserved() -> None:

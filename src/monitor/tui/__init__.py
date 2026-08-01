@@ -2,11 +2,13 @@
 
 Public seams (tests depend on these, not Textual widgets):
 
-- ``load_tui_config`` — typed ``config/tui.yaml``
-- ``JournalReader`` — SQLite → ``monitor.quotes`` ticks
+- ``load_tui_config`` / ``validate_tui_against_metrics`` — typed ``config/tui.yaml``
 - ``build_overview`` / ``build_pair_detail`` / ``build_pair_overview_row``
 - ``amm_pool_from_tick`` — pool geometry for M3 edge
 - ``RunningEdgeState`` — process-lifetime EdgeStats accumulation
+
+Journal reads go through ``monitor.storage.JournalReader`` — SQLite schema
+knowledge stays in ``monitor.storage`` (DESIGN §4.2).
 
 Entry point: ``python -m monitor.tui`` (optional ``--db path``).
 
@@ -27,6 +29,7 @@ from monitor.tui.config import (
     TuiConfigError,
     default_tui_path,
     load_tui_config,
+    validate_tui_against_metrics,
 )
 from monitor.tui.model import (
     EdgePanel,
@@ -38,11 +41,9 @@ from monitor.tui.model import (
     TradeStreamRow,
 )
 from monitor.tui.pool import amm_pool_from_tick
-from monitor.tui.reader import JournalReader, VolumeStats
 
 __all__ = [
     "EdgePanel",
-    "JournalReader",
     "OverviewModel",
     "PairDetailModel",
     "PairOverviewRow",
@@ -52,7 +53,6 @@ __all__ = [
     "TradeStreamRow",
     "TuiConfig",
     "TuiConfigError",
-    "VolumeStats",
     "amm_pool_from_tick",
     "build_overview",
     "build_pair_detail",
@@ -60,4 +60,5 @@ __all__ = [
     "default_tui_path",
     "load_tui_config",
     "observe_edges",
+    "validate_tui_against_metrics",
 ]

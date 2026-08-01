@@ -39,17 +39,19 @@ from monitor.metrics import (
     build_spread_snapshot,
     session_kind,
 )
-from monitor.metrics.edge import Direction, EdgeResult, VenueKind
+from monitor.metrics.edge import Direction, EdgeResult, VenueKind, mid_from_bid_ask
 from monitor.quotes import (
     BybitBookTick,
     FluxionPoolStateTick,
     FluxionRfqQuoteTick,
     FluxionSwapTick,
     now_ms,
+    rfq_side_leg,
 )
+from monitor.storage import JournalReader
 from monitor.symbols.models import Pair, PairsConfig
 from monitor.tui.config import SortKey, TuiConfig
-from monitor.tui.format import sort_rows
+from monitor.tui.format import downsample, sort_rows
 from monitor.tui.model import (
     EdgePanel,
     OverviewModel,
@@ -60,7 +62,6 @@ from monitor.tui.model import (
     TradeStreamRow,
 )
 from monitor.tui.pool import amm_pool_from_tick, quote_is_token0
-from monitor.tui.reader import JournalReader, downsample
 
 _T = TypeVar("_T")
 
@@ -347,12 +348,13 @@ def rebuild_edge_history(
 ) -> None:
     """Cold-start: walk historical ticks into EdgeStats (once per series)."""
     pool_by_ts = sorted(pools, key=lambda p: p.recv_ts_ms)
+    # Side vocabulary comes from monitor.quotes so reader / metrics / TUI agree.
     rfq_buy_hist = sorted(
-        [q for q in rfq_quotes if (q.side or "").lower() in ("buy_native", "buy")],
+        [q for q in rfq_quotes if rfq_side_leg(q.side) == "buy"],
         key=lambda q: q.poll_ts_ms,
     )
     rfq_sell_hist = sorted(
-        [q for q in rfq_quotes if (q.side or "").lower() in ("sell_native", "sell")],
+        [q for q in rfq_quotes if rfq_side_leg(q.side) == "sell"],
         key=lambda q: q.poll_ts_ms,
     )
 
@@ -424,6 +426,21 @@ def build_spread_series(
         kept_ts = {t for t, _ in downsample(series, max_points=max_points)}
         points = [p for p in points if p.ts_ms in kept_ts]
     return points
+
+
+def bybit_mid_series(
+    books: Sequence[BybitBookTick],
+) -> list[tuple[int, Decimal]]:
+    """(exchange_ts_ms, mid) ascending for lead-lag joins, via the M3 mid formula.
+
+    Derived here rather than in ``monitor.storage`` so the journal reader stays
+    free of metrics math.
+    """
+    return [
+        (b.exchange_ts_ms, mid_from_bid_ask(b.bid_de_multiplied, b.ask_de_multiplied))
+        for b in books
+        if b.bid_de_multiplied > 0 and b.ask_de_multiplied > 0
+    ]
 
 
 def _bybit_mid_at(
@@ -665,9 +682,8 @@ def build_pair_detail(
     )
 
     swaps = reader.swaps(pair.id, limit=tui.trade_stream_limit * 2)
-    mid_series = reader.bybit_mid_series(
-        pair.id, limit=tui.edge_history_max_samples
-    )
+    # Reuse the books already read above instead of a second query.
+    mid_series = bybit_mid_series(books)
     amm_events, fill_prices = build_amm_trade_events(
         pair=pair,
         swaps=swaps,

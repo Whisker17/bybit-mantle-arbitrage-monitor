@@ -13,8 +13,24 @@ from monitor.quotes import (
     FluxionRfqQuoteTick,
     FluxionSwapTick,
 )
-from monitor.storage import SqliteStore
-from monitor.tui.reader import JournalReader, downsample
+from monitor.storage import JournalReader, SqliteStore
+
+
+def _rfq(side: str | None, *, price: str, ts: int) -> FluxionRfqQuoteTick:
+    return FluxionRfqQuoteTick(
+        pair_id="TSLAx",
+        poll_ts_ms=ts,
+        recv_ts_ms=ts + 1,
+        token_in="0xusdc",
+        token_out="0xtsla",
+        amount_in="100000000",
+        amount_out="1",
+        price=Decimal(price),
+        side=side,
+        request_id="r1",
+        http_status=200,
+        available=True,
+    )
 
 
 def _seed(db: Path) -> None:
@@ -45,20 +61,6 @@ def _seed(db: Path) -> None:
         mid_usdc_per_native=Decimal("249.5"),
         wrapper_assets_per_share=Decimal(1),
     )
-    rfq = FluxionRfqQuoteTick(
-        pair_id="TSLAx",
-        poll_ts_ms=1_700_000_000_030,
-        recv_ts_ms=1_700_000_000_031,
-        token_in="0xusdc",
-        token_out="0xtsla",
-        amount_in="100000000",
-        amount_out="1",
-        price=Decimal("249.8"),
-        side="buy_native",
-        request_id="r1",
-        http_status=200,
-        available=True,
-    )
     swap = FluxionSwapTick(
         pair_id="TSLAx",
         pool=pool.pool,
@@ -81,7 +83,7 @@ def _seed(db: Path) -> None:
     )
     store.insert_bybit_book([book])
     store.insert_pool_state([pool])
-    store.insert_rfq_quotes([rfq])
+    store.insert_rfq_quotes([_rfq("buy_native", price="249.8", ts=1_700_000_000_030)])
     store.insert_swaps([swap])
     store.close()
 
@@ -104,17 +106,39 @@ def test_reader_latest_ticks(tmp_path: Path) -> None:
         assert swaps[0].direction == "buy_native"
         vol = r.volume_stats("TSLAx", since_ms=0)
         assert vol.fluxion_swap_count == 1
-        assert "TSLAx" in r.pair_ids_with_data()
+        assert vol.bybit_trade_count == 0
+
+
+def test_latest_rfq_leg_accepts_both_spellings(tmp_path: Path) -> None:
+    """``buy``/``sell`` and ``buy_native``/``sell_native`` map to the same leg."""
+    db = tmp_path / "m.db"
+    _seed(db)
+    store = SqliteStore(db)
+    store.insert_rfq_quotes(
+        [
+            _rfq("sell", price="249.1", ts=1_700_000_000_050),
+            _rfq("BUY_NATIVE", price="250.9", ts=1_700_000_000_060),
+        ]
+    )
+    store.close()
+    with JournalReader(db) as r:
+        buy, sell = r.latest_rfq_sides("TSLAx")
+        assert sell is not None and sell.price == Decimal("249.1")
+        # Case-insensitive match, and the newer buy row wins.
+        assert buy is not None and buy.price == Decimal("250.9")
+
+
+def test_reader_since_ms_filters_history(tmp_path: Path) -> None:
+    db = tmp_path / "m.db"
+    _seed(db)
+    with JournalReader(db) as r:
+        assert r.bybit_books("TSLAx", since_ms=0)
+        assert r.bybit_books("TSLAx", since_ms=1_700_000_000_001) == []
+        assert r.swaps("TSLAx", since_ms=1_800_000_000_000) == []
+        assert r.pool_states("TSLAx", since_ms=1_800_000_000_000) == []
+        assert r.rfq_quotes("TSLAx", since_ms=1_800_000_000_000) == []
 
 
 def test_reader_missing_db(tmp_path: Path) -> None:
     with pytest.raises(FileNotFoundError):
         JournalReader(tmp_path / "nope.db")
-
-
-def test_downsample_keeps_endpoints() -> None:
-    pts = [(i, Decimal(i)) for i in range(100)]
-    out = downsample(pts, max_points=10)
-    assert len(out) == 10
-    assert out[0] == pts[0]
-    assert out[-1] == pts[-1]

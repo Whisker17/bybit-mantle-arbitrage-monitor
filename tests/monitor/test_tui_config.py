@@ -7,7 +7,12 @@ from pathlib import Path
 
 import pytest
 
-from monitor.tui.config import TuiConfigError, load_tui_config
+from monitor.metrics import load_metrics_config
+from monitor.tui.config import (
+    TuiConfigError,
+    load_tui_config,
+    validate_tui_against_metrics,
+)
 
 
 def test_load_default_tui_config() -> None:
@@ -35,3 +40,26 @@ def test_resolved_sqlite_path_relative(tmp_path: Path) -> None:
     cfg = load_tui_config()
     resolved = cfg.resolved_sqlite_path(cwd=tmp_path)
     assert resolved == (tmp_path / "data" / "monitor.db").resolve()
+
+
+def test_shipped_configs_agree_on_reference_size() -> None:
+    validate_tui_against_metrics(load_tui_config(), load_metrics_config())
+
+
+def test_reference_size_off_ladder_rejected() -> None:
+    tui = load_tui_config()
+    metrics = load_metrics_config()
+    off_ladder = tui.model_copy(update={"reference_size_usd": Decimal(1234)})
+    with pytest.raises(TuiConfigError, match="size_ladder_usd"):
+        validate_tui_against_metrics(off_ladder, metrics)
+
+
+def test_reference_size_must_equal_breach_size() -> None:
+    tui = load_tui_config()
+    metrics = load_metrics_config()
+    other_rung = next(
+        s for s in metrics.size_ladder_usd if s != metrics.breach_size_usd
+    )
+    mismatched = tui.model_copy(update={"reference_size_usd": other_rung})
+    with pytest.raises(TuiConfigError, match="breach_size_usd"):
+        validate_tui_against_metrics(mismatched, metrics)

@@ -9,6 +9,8 @@ from typing import Any, Literal
 import yaml
 from pydantic import BaseModel, ConfigDict, Field, field_validator
 
+from monitor.metrics.config import MetricsConfig
+
 _REPO_ROOT = Path(__file__).resolve().parents[3]
 _DEFAULT_TUI_PATH = _REPO_ROOT / "config" / "tui.yaml"
 
@@ -79,3 +81,24 @@ def load_tui_config(path: Path | None = None) -> TuiConfig:
         return TuiConfig.model_validate(raw)
     except Exception as exc:  # pydantic ValidationError
         raise TuiConfigError(f"invalid TUI config {config_path}: {exc}") from exc
+
+
+def validate_tui_against_metrics(tui: TuiConfig, metrics: MetricsConfig) -> None:
+    """Fail fast when ``reference_size_usd`` cannot produce cumulative stats.
+
+    ``EdgeStats.observe_edge`` only records samples at ``metrics.breach_size_usd``
+    (M3), while the overview *Net* column and the detail edge panels both read
+    ``tui.reference_size_usd`` — a mismatch silently yields empty distributions.
+    Pure: raises ``TuiConfigError``, no I/O.
+    """
+    if tui.reference_size_usd not in metrics.size_ladder_usd:
+        raise TuiConfigError(
+            f"tui.reference_size_usd={tui.reference_size_usd} must be one of "
+            f"metrics.size_ladder_usd={metrics.size_ladder_usd}"
+        )
+    if tui.reference_size_usd != metrics.breach_size_usd:
+        raise TuiConfigError(
+            f"tui.reference_size_usd={tui.reference_size_usd} must equal "
+            f"metrics.breach_size_usd={metrics.breach_size_usd} "
+            "(EdgeStats only accumulates the breach ladder rung)"
+        )

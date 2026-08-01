@@ -29,5 +29,9 @@ volume_window_ms: 86400000
 # Unvalidated display caps (not in DESIGN §2) — retune after live dogfood:
 spread_history_max_points: 240
 trade_stream_limit: 80
+# Intentional cap, not a time window: detail-page cumulative P50/P95/P99/max are
+# rebuilt from at most this many of the pair's most recent journal book samples
+# (downsampled if more exist), so they are NOT a full 24h aggregate. The panel
+# header states the cap and each distribution row prints its own n=.
 edge_history_max_samples: 2000
 sparkline_width: 72

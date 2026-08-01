@@ -21,7 +21,12 @@ from monitor.metrics.edge import (
     spread_bps,
 )
 from monitor.metrics.session import SessionKind, session_kind
-from monitor.quotes import BybitBookTick, FluxionPoolStateTick, FluxionRfqQuoteTick
+from monitor.quotes import (
+    BybitBookTick,
+    FluxionPoolStateTick,
+    FluxionRfqQuoteTick,
+    rfq_side_leg,
+)
 
 
 @dataclass(frozen=True, slots=True)
@@ -61,17 +66,14 @@ def rfq_price(tick: FluxionRfqQuoteTick | None) -> Decimal | None:
 def _rfq_side_matches(tick: FluxionRfqQuoteTick, direction: Direction) -> bool:
     """Map RFQ poll side to paper-arb direction.
 
-    Collector ``side`` is the *Fluxion* leg: ``buy_native`` / ``sell_native``
-    (``monitor.fluxion.rfq.RfqLeg``). Missing/unknown side → accept so tests and
-    vendor payloads without side still produce edges; callers already route via
-    the ``rfq_buy`` / ``rfq_sell`` parameters.
+    Side vocabulary lives in ``monitor.quotes`` (``rfq_side_leg``). A missing side
+    is accepted so tests and vendor payloads without one still produce edges;
+    callers already route via the ``rfq_buy`` / ``rfq_sell`` parameters.
     """
-    side = (tick.side or "").lower()
-    if not side:
+    if not (tick.side or "").strip():
         return True
-    if direction == "buy_fluxion_sell_bybit":
-        return side in ("buy_native", "buy")
-    return side in ("sell_native", "sell")
+    expected = "buy" if direction == "buy_fluxion_sell_bybit" else "sell"
+    return rfq_side_leg(tick.side) == expected
 
 
 def build_spread_snapshot(

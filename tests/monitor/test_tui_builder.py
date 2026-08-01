@@ -11,7 +11,7 @@ from monitor.attribution import load_attribution_config
 from monitor.metrics import build_edge_snapshot, load_metrics_config
 from monitor.metrics.session import SessionKind
 from monitor.quotes import BybitBookTick, FluxionPoolStateTick, FluxionRfqQuoteTick
-from monitor.storage import SqliteStore
+from monitor.storage import JournalReader, SqliteStore
 from monitor.symbols import load_pairs_config
 from monitor.tui.builder import (
     build_overview,
@@ -22,7 +22,6 @@ from monitor.tui.config import load_tui_config
 from monitor.tui.format import sort_rows
 from monitor.tui.model import PairOverviewRow, RunningEdgeState
 from monitor.tui.pool import amm_pool_from_tick
-from monitor.tui.reader import JournalReader
 
 ET = ZoneInfo("America/New_York")
 USDC = "0x09Bc4E0D864854c6aFB6eB9A9cdF58aC190D0dF9"

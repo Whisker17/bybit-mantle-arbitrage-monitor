@@ -2,6 +2,7 @@
 
 from __future__ import annotations
 
+from collections.abc import Sequence
 from decimal import Decimal
 
 from monitor.metrics.edge import Direction
@@ -61,6 +62,20 @@ def short_addr(addr: str | None, *, head: int = 6, tail: int = 4) -> str:
     if len(addr) <= head + tail + 2:
         return addr
     return f"{addr[: head + 2]}…{addr[-tail:]}"
+
+
+def downsample(
+    points: Sequence[tuple[int, Decimal]], *, max_points: int
+) -> list[tuple[int, Decimal]]:
+    """Evenly subsample a time series for display, keeping first and last."""
+    if max_points < 2 or len(points) <= max_points:
+        return list(points)
+    n = len(points)
+    # Always include endpoints.
+    idxs = {0, n - 1}
+    for i in range(1, max_points - 1):
+        idxs.add(round(i * (n - 1) / (max_points - 1)))
+    return [points[i] for i in sorted(idxs)]
 
 
 def sparkline(
