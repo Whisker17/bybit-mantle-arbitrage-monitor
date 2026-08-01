@@ -49,14 +49,16 @@ placeholders. Agents must not assume a module exists until its issue lands. -->
   - **Closed-session RFQ research (WHI-753) landed:** weekend RFQ still
     two-sided on liquid pairs and tracks Bybit mid — session ≠ mechanism; note
     in `docs/references/m4-closed-session-rfq.md` + DESIGN / M4 rule updates.
+  - **PnL v2 research (WHI-754) landed:** Hummingbot CEX⇄AMM methodology →
+    cash-flow PnL spec; note `docs/references/hummingbot-pnl.md`, DESIGN §2.6.
+    Engine (optimal size + bucket table) is **WHI-756** — not landed.
   - **Web skeleton (WHI-757) landed:** `monitor/api` (FastAPI read-only over
     SQLite; reuses TUI builders), `web/` (Next.js static export, skeleton
     pairs table), `deploy/` + `scripts/deploy-web.sh` (systemd + nginx).
     Tunables in `config/api.yaml`. TUI frozen for new features — Web is the
     surface for new metrics.
   - **Not landed yet:** Web overview polish (WHI-758), pair detail Web, PnL v2
-    (WHI-756). Do not assume those modules exist until their issues land.
-
+    engine (WHI-756). Do not assume those modules exist until their issues land.
 ## Build, test, run
 
 ```bash
