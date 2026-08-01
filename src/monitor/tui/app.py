@@ -15,9 +15,10 @@ from textual.widgets import DataTable, Footer, Header, Static
 from monitor.attribution.config import load_attribution_config
 from monitor.metrics.config import load_metrics_config
 from monitor.metrics.session import SessionKind
+from monitor.metrics.stats import Distribution
 from monitor.symbols import load_pairs_config
 from monitor.tui.builder import build_overview, build_pair_detail
-from monitor.tui.config import SortKey, TuiConfig, load_tui_config
+from monitor.tui.config import SortKey, TuiConfig, TuiConfigError, load_tui_config
 from monitor.tui.format import (
     fmt_bps,
     fmt_direction,
@@ -52,6 +53,7 @@ class OverviewScreen(Screen[None]):
     BINDINGS = [
         Binding("enter", "open_detail", "Detail", show=True),
         Binding("s", "cycle_sort", "Sort", show=True),
+        Binding("d", "toggle_sort_dir", "Asc/Desc", show=True),
         Binding("r", "refresh", "Refresh", show=True),
         Binding("q", "quit", "Quit", show=True),
     ]
@@ -86,12 +88,12 @@ class OverviewScreen(Screen[None]):
             "N24h",
         )
         table.focus()
-        self._render_model(self._app_state.overview)
+        self.render_model(self._app_state.overview)
         self.set_interval(
             self._app_state.tui.refresh_interval_s, self._app_state.tick_overview
         )
 
-    def _render_model(self, model: OverviewModel | None) -> None:
+    def render_model(self, model: OverviewModel | None) -> None:
         status = self.query_one("#status", Static)
         table = self.query_one("#pairs", DataTable)
         if model is None:
@@ -112,33 +114,35 @@ class OverviewScreen(Screen[None]):
             try:
                 row_key = table.get_row_at(table.cursor_row)
                 if row_key:
-                    prev_pair = str(row_key[0]).strip().lstrip("·").strip()
+                    cell0 = row_key[0]
+                    prev_pair = str(cell0.plain if isinstance(cell0, Text) else cell0)
             except Exception:
                 prev_pair = None
         table.clear()
         target_index: int | None = None
         for i, row in enumerate(model.rows):
-            label = row.pair_id if not row.low_liquidity else f"·{row.pair_id}"
-            cells = (
-                label,
-                fmt_session(row.session),
-                fmt_price(row.bybit_bid),
-                fmt_price(row.bybit_ask),
-                fmt_price(row.bybit_mid),
-                fmt_price(row.amm_mid),
-                fmt_price(row.rfq_buy),
-                fmt_price(row.rfq_sell),
-                fmt_signed_bps(row.amm_spread_bps),
-                fmt_signed_bps(row.rfq_spread_bps),
-                fmt_signed_bps(row.net_edge_bps),
-                fmt_direction(row.net_edge_direction),
-                row.net_edge_venue or "—",
-                fmt_notional(row.volume_24h),
-                str(row.trades_24h),
+            style = "dim" if row.low_liquidity else ""
+            cells = tuple(
+                Text(str(c), style=style) if style else str(c)
+                for c in (
+                    row.pair_id,
+                    fmt_session(row.session),
+                    fmt_price(row.bybit_bid),
+                    fmt_price(row.bybit_ask),
+                    fmt_price(row.bybit_mid),
+                    fmt_price(row.amm_mid),
+                    fmt_price(row.rfq_buy),
+                    fmt_price(row.rfq_sell),
+                    fmt_signed_bps(row.amm_spread_bps),
+                    fmt_signed_bps(row.rfq_spread_bps),
+                    fmt_signed_bps(row.net_edge_bps),
+                    fmt_direction(row.net_edge_direction),
+                    row.net_edge_venue or "—",
+                    fmt_notional(row.volume_24h),
+                    str(row.trades_24h),
+                )
             )
-            key = table.add_row(*cells, key=row.pair_id)
-            if row.low_liquidity:
-                table.get_row(key)  # ensure materialised
+            table.add_row(*cells, key=row.pair_id)
             if prev_pair and row.pair_id == prev_pair:
                 target_index = i
         if target_index is not None:
@@ -154,6 +158,10 @@ class OverviewScreen(Screen[None]):
         except ValueError:
             idx = -1
         self._app_state.sort_key = _SORT_CYCLE[(idx + 1) % len(_SORT_CYCLE)]
+        self._app_state.tick_overview()
+
+    def action_toggle_sort_dir(self) -> None:
+        self._app_state.sort_desc = not self._app_state.sort_desc
         self._app_state.tick_overview()
 
     def action_open_detail(self) -> None:
@@ -288,10 +296,7 @@ def _fmt_ts(ts_ms: int) -> str:
     return datetime.fromtimestamp(ts_ms / 1000, tz=UTC).strftime("%H:%M:%S")
 
 
-def _dist_line(label: str, dist: object) -> str:
-    from monitor.metrics.stats import Distribution
-
-    assert isinstance(dist, Distribution)
+def _dist_line(label: str, dist: Distribution) -> str:
     if dist.count == 0:
         return f"{label}: n=0"
     return (
@@ -410,11 +415,18 @@ class TuiApp(App[None]):
         self.metrics = load_metrics_config(metrics_path)
         self.attribution = load_attribution_config(attribution_path)
         self.db_path = db_path if db_path is not None else tui.resolved_sqlite_path()
-        # Fail fast if reference size is not on the metrics ladder.
+        # EdgeStats.observe_edge only records the metrics breach size; the
+        # overview "net edge" column uses reference_size_usd — they must match.
         if self.tui.reference_size_usd not in self.metrics.size_ladder_usd:
-            raise SystemExit(
+            raise TuiConfigError(
                 f"tui.reference_size_usd={self.tui.reference_size_usd} must be one of "
                 f"metrics.size_ladder_usd={self.metrics.size_ladder_usd}"
+            )
+        if self.tui.reference_size_usd != self.metrics.breach_size_usd:
+            raise TuiConfigError(
+                f"tui.reference_size_usd={self.tui.reference_size_usd} must equal "
+                f"metrics.breach_size_usd={self.metrics.breach_size_usd} "
+                "(EdgeStats only accumulates the breach ladder rung)"
             )
         self.sort_key: SortKey = tui.default_sort
         self.sort_desc: bool = tui.default_sort_desc
@@ -452,6 +464,7 @@ class TuiApp(App[None]):
                         tui=self.tui,
                         sort_key=self.sort_key,
                         sort_desc=self.sort_desc,
+                        edge_state=self.edge_state,
                     )
         except Exception as exc:  # keep panel alive
             self.overview = OverviewModel(
@@ -467,7 +480,7 @@ class TuiApp(App[None]):
         # Refresh overview screen if active.
         screen = self.screen
         if isinstance(screen, OverviewScreen):
-            screen._render_model(self.overview)
+            screen.render_model(self.overview)
 
     def tick_detail(self, pair_id: str) -> None:
         screen = self.screen

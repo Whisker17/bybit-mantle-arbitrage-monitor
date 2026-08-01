@@ -58,10 +58,9 @@ def fmt_session(session: SessionKind | None) -> str:
 def short_addr(addr: str | None, *, head: int = 6, tail: int = 4) -> str:
     if not addr:
         return "—"
-    a = addr if addr.startswith("0x") else addr
-    if len(a) <= head + tail + 2:
-        return a
-    return f"{a[: head + 2]}…{a[-tail:]}"
+    if len(addr) <= head + tail + 2:
+        return addr
+    return f"{addr[: head + 2]}…{addr[-tail:]}"
 
 
 def sparkline(

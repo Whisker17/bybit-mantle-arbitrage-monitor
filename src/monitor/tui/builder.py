@@ -10,17 +10,18 @@ collector ticks and calls:
 
 from __future__ import annotations
 
-from collections.abc import Mapping, Sequence
+from collections.abc import Callable, Mapping, Sequence
 from datetime import UTC, datetime
 from decimal import Decimal
+from typing import TypeVar
 
 from monitor.attribution import (
     BehaviorLabel,
     build_pair_attribution,
     is_converging,
+    mechanism_for_rfq_fill,
     mechanism_for_swap,
     resolve_bybit_mid_prev,
-    rfq_fill_from_tick,
 )
 from monitor.attribution.config import AttributionConfig
 from monitor.attribution.events import (
@@ -63,6 +64,8 @@ from monitor.tui.model import (
 from monitor.tui.pool import amm_pool_from_tick, quote_is_token0
 from monitor.tui.reader import JournalReader, downsample
 
+_T = TypeVar("_T")
+
 
 def _session_at(ts_ms: int, metrics: MetricsConfig) -> SessionKind:
     return session_kind(datetime.fromtimestamp(ts_ms / 1000, tz=UTC), config=metrics)
@@ -80,8 +83,6 @@ def _pick_reference_edge(
 
 
 def _rfq_spread_for_overview(
-    buy: Decimal | None,
-    sell: Decimal | None,
     buy_bps: Decimal | None,
     sell_bps: Decimal | None,
 ) -> Decimal | None:
@@ -162,8 +163,6 @@ def build_pair_overview_row(
         rfq_sell=spreads.rfq_sell_mid,
         amm_spread_bps=spreads.amm_spread_bps,
         rfq_spread_bps=_rfq_spread_for_overview(
-            spreads.rfq_buy_mid,
-            spreads.rfq_sell_mid,
             spreads.rfq_buy_spread_bps,
             spreads.rfq_sell_spread_bps,
         ),
@@ -186,7 +185,13 @@ def build_overview(
     sort_key: SortKey | None = None,
     sort_desc: bool | None = None,
     now: int | None = None,
+    edge_state: RunningEdgeState | None = None,
 ) -> OverviewModel:
+    """Build the overview table; optionally feed running EdgeStats from latest ticks.
+
+    Passing ``edge_state`` keeps cumulative series warm while the operator stays
+    on the overview page (detail cold-start then has continuous history).
+    """
     ts = now if now is not None else now_ms()
     key = sort_key if sort_key is not None else tui.default_sort
     desc = tui.default_sort_desc if sort_desc is None else sort_desc
@@ -197,6 +202,26 @@ def build_overview(
         amm = reader.latest_pool_state(pair.id)
         rfq_buy, rfq_sell = reader.latest_rfq_sides(pair.id)
         vol = reader.volume_stats(pair.id, since_ms=since)
+        if edge_state is not None and bybit is not None:
+            pool = amm_pool_from_tick(pair, amm) if amm is not None else None
+            snap = build_edge_snapshot(
+                bybit=bybit,
+                config=metrics,
+                amm=amm,
+                amm_pool=pool,
+                rfq_buy=rfq_buy,
+                rfq_sell=rfq_sell,
+                ts_ms=ts,
+            )
+            observe_edges(
+                edge_state,
+                pair_id=pair.id,
+                edges=list(snap.amm_edges) + list(snap.rfq_edges),
+                ts_ms=ts,
+                session=snap.spreads.session,
+                metrics=metrics,
+                reference_size=tui.reference_size_usd,
+            )
         rows.append(
             build_pair_overview_row(
                 pair,
@@ -266,8 +291,22 @@ def _ensure_stats(
     if st is None:
         st = EdgeStats.from_config(metrics)
         state.stats[key] = st
-    assert isinstance(st, EdgeStats)
     return st
+
+
+def _as_of(
+    items: Sequence[_T],
+    ts_ms: int,
+    *,
+    get_ts: Callable[[_T], int],
+) -> _T | None:
+    """Latest item with get_ts(item) <= ts_ms (items sorted ascending by that key)."""
+    cur: _T | None = None
+    for item in items:
+        if get_ts(item) > ts_ms:
+            break
+        cur = item
+    return cur
 
 
 def observe_edges(
@@ -310,30 +349,15 @@ def rebuild_edge_history(
     tui: TuiConfig,
 ) -> None:
     """Cold-start: walk historical ticks into EdgeStats (once per series)."""
-    # Index pool / rfq by time for as-of joins.
     pool_by_ts = sorted(pools, key=lambda p: p.recv_ts_ms)
-    rfq_buy_hist = [q for q in rfq_quotes if (q.side or "").lower() in ("buy_native", "buy")]
-    rfq_sell_hist = [
-        q for q in rfq_quotes if (q.side or "").lower() in ("sell_native", "sell")
-    ]
-
-    def asof_pool(ts: int) -> FluxionPoolStateTick | None:
-        cur: FluxionPoolStateTick | None = None
-        for p in pool_by_ts:
-            if p.recv_ts_ms > ts:
-                break
-            cur = p
-        return cur
-
-    def asof_rfq(
-        series: Sequence[FluxionRfqQuoteTick], ts: int
-    ) -> FluxionRfqQuoteTick | None:
-        cur: FluxionRfqQuoteTick | None = None
-        for q in series:
-            if q.poll_ts_ms > ts:
-                break
-            cur = q
-        return cur
+    rfq_buy_hist = sorted(
+        [q for q in rfq_quotes if (q.side or "").lower() in ("buy_native", "buy")],
+        key=lambda q: q.poll_ts_ms,
+    )
+    rfq_sell_hist = sorted(
+        [q for q in rfq_quotes if (q.side or "").lower() in ("sell_native", "sell")],
+        key=lambda q: q.poll_ts_ms,
+    )
 
     # Downsample books for cost.
     if len(books) > tui.edge_history_max_samples:
@@ -343,9 +367,13 @@ def rebuild_edge_history(
     for book in books:
         if book.gap:
             continue
-        amm = asof_pool(book.exchange_ts_ms)
-        rfq_buy = asof_rfq(rfq_buy_hist, book.exchange_ts_ms)
-        rfq_sell = asof_rfq(rfq_sell_hist, book.exchange_ts_ms)
+        amm = _as_of(pool_by_ts, book.exchange_ts_ms, get_ts=lambda p: p.recv_ts_ms)
+        rfq_buy = _as_of(
+            rfq_buy_hist, book.exchange_ts_ms, get_ts=lambda q: q.poll_ts_ms
+        )
+        rfq_sell = _as_of(
+            rfq_sell_hist, book.exchange_ts_ms, get_ts=lambda q: q.poll_ts_ms
+        )
         pool = amm_pool_from_tick(pair, amm) if amm is not None else None
         snap = build_edge_snapshot(
             bybit=book,
@@ -375,20 +403,11 @@ def build_spread_series(
     max_points: int,
 ) -> list[SpreadPoint]:
     pool_by_ts = sorted(pools, key=lambda p: p.recv_ts_ms)
-
-    def asof(ts: int) -> FluxionPoolStateTick | None:
-        cur: FluxionPoolStateTick | None = None
-        for p in pool_by_ts:
-            if p.recv_ts_ms > ts:
-                break
-            cur = p
-        return cur
-
     points: list[SpreadPoint] = []
     for book in books:
         if book.bid_de_multiplied <= 0 or book.ask_de_multiplied <= 0:
             continue
-        amm = asof(book.exchange_ts_ms)
+        amm = _as_of(pool_by_ts, book.exchange_ts_ms, get_ts=lambda p: p.recv_ts_ms)
         snap = build_spread_snapshot(
             bybit=book, amm=amm, config=metrics, ts_ms=book.exchange_ts_ms
         )
@@ -413,24 +432,17 @@ def build_spread_series(
 def _bybit_mid_at(
     series: Sequence[tuple[int, Decimal]], ts_ms: int
 ) -> Decimal | None:
-    cur: Decimal | None = None
-    for t, mid in series:
-        if t > ts_ms:
-            break
-        cur = mid
-    return cur
+    hit = _as_of(series, ts_ms, get_ts=lambda p: p[0])
+    return None if hit is None else hit[1]
 
 
 def _pool_mid_pre(
     pools: Sequence[FluxionPoolStateTick], ts_ms: int
 ) -> Decimal | None:
     """Latest pool mid with recv_ts_ms strictly before the trade."""
-    cur: Decimal | None = None
-    for p in pools:
-        if p.recv_ts_ms >= ts_ms:
-            break
-        cur = p.mid_usdc_per_native
-    return cur
+    # Strictly before: use ts_ms - 1 as the inclusive ceiling.
+    hit = _as_of(pools, ts_ms - 1, get_ts=lambda p: p.recv_ts_ms)
+    return None if hit is None else hit.mid_usdc_per_native
 
 
 def build_amm_trade_events(
@@ -485,6 +497,12 @@ def build_trade_stream(
     rfq_fills: Sequence[RfqFillEvent],
     limit: int,
 ) -> list[TradeStreamRow]:
+    """Build the detail-page trade scroll.
+
+    Only RFQ fills that already carry ``pair_id`` appear here (M4 DEFERRED:
+    unscoped LOP fills lack pair identity). Mechanism label for those is
+    ``mechanism_for_rfq_fill`` — not a fake behavior label.
+    """
     rows: list[TradeStreamRow] = []
     for ev in amm_events:
         conv = None
@@ -510,17 +528,19 @@ def build_trade_stream(
             )
         )
     for fill in rfq_fills:
+        if fill.pair_id is None:
+            continue  # unscoped — do not attach to a pair page
         rows.append(
             TradeStreamRow(
                 ts_ms=fill.ts_ms,
-                mechanism="rfq",
-                direction="—",
+                mechanism=mechanism_for_rfq_fill(fill).value,
+                direction="unknown",
                 notional_usd=None,
                 price=None,
                 bybit_mid=None,
                 converging=None,
                 taker=None,
-                taker_label="mm",
+                taker_label=None,  # behavior labels are AMM-only
                 tx_hash=fill.tx_hash,
             )
         )
@@ -617,7 +637,9 @@ def build_pair_detail(
             metrics=metrics,
         )
 
-    # Prefer the direction of the current best edge for the panel series.
+    # Lock the cumulative series to the direction with the best *current*
+    # fillable edge when present; otherwise keep a stable default so the
+    # panel does not jump between EdgeStats series on every tick.
     amm_dir: Direction = (
         cur_amm.direction if cur_amm is not None else "buy_fluxion_sell_bybit"
     )
@@ -646,15 +668,10 @@ def build_pair_detail(
         metrics=metrics,
         attribution=attribution_cfg,
     )
-    rfq_fill_ticks = reader.rfq_fills(limit=tui.trade_stream_limit)
-    rfq_events = [
-        rfq_fill_from_tick(
-            t,
-            pair_id=None,  # unscoped until enrichment lands
-            session=_session_at(t.recv_ts_ms, metrics),
-        )
-        for t in rfq_fill_ticks
-    ]
+    # RFQ fills lack pair_id in storage (DEFERRED_ISSUES) — do not invent one.
+    # Pair-scoped RFQ share stays empty until enrichment lands; global fills are
+    # not attached to this pair's trade stream (see build_trade_stream).
+    rfq_events: list[RfqFillEvent] = []
     attr = build_pair_attribution(
         pair_id=pair.id,
         amm_trades=amm_events,

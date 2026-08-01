@@ -15,7 +15,6 @@ from pathlib import Path
 
 from monitor.quotes import (
     BybitBookTick,
-    BybitTradeTick,
     FluxionPoolStateTick,
     FluxionRfqFillTick,
     FluxionRfqQuoteTick,
@@ -290,6 +289,12 @@ class JournalReader:
         return out
 
     def volume_stats(self, pair_id: str, *, since_ms: int) -> VolumeStats:
+        """Overview 24h volume proxy — not M4 ``swap_notional_usd``.
+
+        Bybit notional = Σ(price_de_multiplied × size). Fluxion notional is a
+        coarse SQL max(|amount_token0|, |amount_token1|) count aid only; the
+        detail trade stream uses M4 ``swap_notional_usd`` with known token order.
+        """
         bt = self._conn.execute(
             """
             SELECT COUNT(*) AS n,
@@ -300,13 +305,6 @@ class JournalReader:
             """,
             (pair_id, since_ms),
         ).fetchone()
-        # amount_token0/1 are human units; for USDC/wrapper pools one side is ~USD.
-        # Prefer the smaller absolute leg when both present is wrong — use max of
-        # abs legs as a coarse USD proxy only when one side is quote-like.
-        # Storage does not mark which token is USDC; use abs(amount_token0) if
-        # it looks like quote (smaller decimals typical) is unreliable offline.
-        # M5 uses abs(amount_token0) + abs(amount_token1) is double-count — pick
-        # max(abs0, abs1) as conservative notional proxy for quiet pools.
         sw = self._conn.execute(
             """
             SELECT COUNT(*) AS n,
@@ -360,22 +358,6 @@ def _row_to_bybit_book(row: sqlite3.Row) -> BybitBookTick:
         ask=_d(row["ask"]),
         bid_de_multiplied=_d(row["bid_de_multiplied"]),
         ask_de_multiplied=_d(row["ask_de_multiplied"]),
-        multiplier=_d(row["multiplier"]),
-        gap=bool(row["gap"]),
-    )
-
-
-def _row_to_bybit_trade(row: sqlite3.Row) -> BybitTradeTick:
-    return BybitTradeTick(
-        pair_id=str(row["pair_id"]),
-        symbol=str(row["symbol"]),
-        exchange_ts_ms=int(row["exchange_ts_ms"]),
-        recv_ts_ms=int(row["recv_ts_ms"]),
-        trade_id=str(row["trade_id"]),
-        price=_d(row["price"]),
-        price_de_multiplied=_d(row["price_de_multiplied"]),
-        size=_d(row["size"]),
-        side=str(row["side"]),  # type: ignore[arg-type]
         multiplier=_d(row["multiplier"]),
         gap=bool(row["gap"]),
     )

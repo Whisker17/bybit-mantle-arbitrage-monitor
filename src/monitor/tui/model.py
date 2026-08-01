@@ -13,7 +13,7 @@ from decimal import Decimal
 from monitor.attribution.aggregate import PairAttribution
 from monitor.metrics.edge import CostBreakdown, Direction, EdgeResult, VenueKind
 from monitor.metrics.session import SessionKind
-from monitor.metrics.stats import BreachStats, Distribution
+from monitor.metrics.stats import BreachStats, Distribution, EdgeStats
 from monitor.tui.config import SortKey
 
 
@@ -112,21 +112,13 @@ class PairDetailModel:
 
 
 @dataclass
-class SeriesKey:
-    pair_id: str
-    venue: VenueKind
-    direction: Direction
-
-    def as_tuple(self) -> tuple[str, VenueKind, Direction]:
-        return (self.pair_id, self.venue, self.direction)
-
-
-@dataclass
 class RunningEdgeState:
     """In-memory EdgeStats accumulation across refreshes (process lifetime)."""
 
     # keyed by (pair_id, venue, direction)
-    stats: dict[tuple[str, VenueKind, Direction], object] = field(default_factory=dict)
+    stats: dict[tuple[str, VenueKind, Direction], EdgeStats] = field(
+        default_factory=dict
+    )
     last_sample_ts: dict[tuple[str, VenueKind, Direction], int] = field(
         default_factory=dict
     )
