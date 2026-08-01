@@ -225,9 +225,9 @@ python -m monitor.retention --growth-only
 (`EdgeStats` / `RunningEdgeState`), not in SQLite. TUI cold-start rebuilds from
 at most `edge_history_max_samples` recent journal books (documented in
 `config/tui.yaml`). Pruning raw books older than the raw TTL therefore **does
-not change the live aggregate口径** once the process is warm; after restart,
-cold-start still sees the same capped sample budget as before. Attribution
-reads swaps/fills, which are never pruned by default.
+not change the live aggregate definition** once the process is warm; after
+restart, cold-start still sees the same capped sample budget as before.
+Attribution reads swaps/fills, which are never pruned by default.
 
 Steady-state bound (order of magnitude, ~10 pairs):
 

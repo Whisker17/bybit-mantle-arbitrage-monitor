@@ -59,6 +59,8 @@ class CollectorDaemon:
         # Set by retention loop under disk-critical waterline (WHI-751).
         self._book_writes_paused = False
         self._book_pause_logged = False
+        self._book_pause_started_ms: int | None = None
+        self._next_book_gap = False
 
     def request_stop(self) -> None:
         self._stop.set()
@@ -122,6 +124,20 @@ class CollectorDaemon:
                 )
                 self._book_pause_logged = True
             return
+        if self._next_book_gap:
+            tick = BybitBookTick(
+                pair_id=tick.pair_id,
+                symbol=tick.symbol,
+                exchange_ts_ms=tick.exchange_ts_ms,
+                recv_ts_ms=tick.recv_ts_ms,
+                bid=tick.bid,
+                ask=tick.ask,
+                bid_de_multiplied=tick.bid_de_multiplied,
+                ask_de_multiplied=tick.ask_de_multiplied,
+                multiplier=tick.multiplier,
+                gap=True,
+            )
+            self._next_book_gap = False
         await asyncio.to_thread(self.store.insert_bybit_book, [tick])
 
     async def _on_trade(self, tick: BybitTradeTick) -> None:
@@ -274,24 +290,28 @@ class CollectorDaemon:
                 self._book_writes_paused = report.book_writes_paused
                 if report.book_writes_paused and not was_paused:
                     self._book_pause_logged = False
-                    await asyncio.to_thread(
-                        self.store.insert_gap,
-                        CollectorGap(
-                            source="disk_critical",
-                            gap_start_ms=report.now_ms,
-                            gap_end_ms=report.now_ms,
-                            detail=(
-                                f"bybit_book writes paused free={report.free_bytes}"
-                            ),
-                        ),
-                    )
+                    self._book_pause_started_ms = report.now_ms
                     logger.error(
                         "disk critical free=%s — bybit_book writes paused until "
                         "retention frees space",
                         report.free_bytes,
                     )
                 elif not report.book_writes_paused and was_paused:
+                    start = self._book_pause_started_ms or report.now_ms
                     self._book_pause_logged = False
+                    self._book_pause_started_ms = None
+                    self._next_book_gap = True
+                    await asyncio.to_thread(
+                        self.store.insert_gap,
+                        CollectorGap(
+                            source="disk_critical",
+                            gap_start_ms=start,
+                            gap_end_ms=report.now_ms,
+                            detail=(
+                                f"bybit_book writes resumed free={report.free_bytes}"
+                            ),
+                        ),
+                    )
                     logger.info("disk recovered — bybit_book writes resumed")
                 elif report.disk_level != "ok":
                     logger.warning(

@@ -174,12 +174,18 @@ def _delete_batch(
     return n
 
 
-def _materialize_book_1m(
+def _materialize_book_1m_range(
     conn: sqlite3.Connection,
     *,
-    cutoff_raw_ms: int,
+    range_lo_ms: int,
+    range_hi_ms: int,
 ) -> int:
-    """Upsert last-in-minute L1 for every raw book row older than the raw cutoff."""
+    """Upsert last-in-minute L1 for raw books in ``[range_lo_ms, range_hi_ms)``.
+
+    Only complete minute buckets with ``bucket_end <= range_hi_ms`` are written,
+    so a minute that straddles the prune cutoff is left for a later pass (avoids
+    undercounting ``n`` when the same minute is re-materialized).
+    """
     cur = conn.execute(
         """
         INSERT INTO bybit_book_1m (
@@ -203,7 +209,9 @@ def _materialize_book_1m(
                 MAX(id) AS max_id,
                 COUNT(*) AS n
             FROM bybit_book
-            WHERE exchange_ts_ms < ?
+            WHERE exchange_ts_ms >= ?
+              AND exchange_ts_ms < ?
+              AND (exchange_ts_ms / 60000) * 60000 + 60000 <= ?
             GROUP BY pair_id, (exchange_ts_ms / 60000) * 60000
         ) AS c
         JOIN bybit_book AS b ON b.id = c.max_id
@@ -216,7 +224,7 @@ def _materialize_book_1m(
             multiplier = excluded.multiplier,
             n = excluded.n
         """,
-        (cutoff_raw_ms,),
+        (range_lo_ms, range_hi_ms, range_hi_ms),
     )
     n = cur.rowcount if cur.rowcount is not None and cur.rowcount >= 0 else 0
     return n
@@ -279,10 +287,12 @@ def run_retention(
     ``reclaim`` must run outside an open transaction (VACUUM requirement).
     When omitted, reclaim runs on ``conn`` after an explicit commit.
     """
-    if free_bytes is None and db_path is not None:
-        free_bytes = disk_free_bytes(db_path)
-    elif free_bytes is None and cfg.disk.path:
-        free_bytes = disk_free_bytes(Path(cfg.disk.path))
+    # Prefer explicit free_bytes (tests); else config probe path; else sqlite parent.
+    if free_bytes is None:
+        if cfg.disk.path:
+            free_bytes = disk_free_bytes(Path(cfg.disk.path))
+        elif db_path is not None:
+            free_bytes = disk_free_bytes(db_path)
 
     level: DiskLevel = "ok"
     if free_bytes is not None:
@@ -297,15 +307,39 @@ def run_retention(
             return write(fn)
         return fn(conn)
 
-    # Materialize 1m bars before deleting raw books.
+    # Materialize 1m bars in time chunks before deleting raw books (lock-friendly).
     raw_ttl = ttls.bybit_book_raw_ms
     if raw_ttl is not None:
         cutoff = now_ms - raw_ttl
+        # Chunk size: 6h of raw tape per write() — bounds lock hold vs round-trips.
+        chunk_ms = 6 * 3_600_000
 
-        def _mat(c: sqlite3.Connection) -> int:
-            return _materialize_book_1m(c, cutoff_raw_ms=cutoff)
+        def _min_ts(c: sqlite3.Connection) -> int | None:
+            row = c.execute(
+                "SELECT MIN(exchange_ts_ms) FROM bybit_book WHERE exchange_ts_ms < ?",
+                (cutoff,),
+            ).fetchone()
+            if row is None or row[0] is None:
+                return None
+            return int(row[0])
 
-        bars = int(_run(_mat))
+        min_ts = _run(_min_ts)
+        if min_ts is not None:
+            lo = int(min_ts)
+            while lo < cutoff:
+
+                def _mat(
+                    c: sqlite3.Connection,
+                    *,
+                    _lo: int = lo,
+                    _hi: int = min(lo + chunk_ms, cutoff),
+                ) -> int:
+                    return _materialize_book_1m_range(
+                        c, range_lo_ms=_lo, range_hi_ms=_hi
+                    )
+
+                bars += int(_run(_mat))
+                lo += chunk_ms
 
     for table, ts_col, ttl_attr in _TABLE_POLICIES:
         ttl = ttls.get(ttl_attr)
@@ -477,7 +511,11 @@ def growth_snapshot(conn: sqlite3.Connection, *, db_path: Path | None = None) ->
     return GrowthSnapshot(tables=tuple(tables), db_bytes=db_bytes)
 
 
-def format_growth_report(snap: GrowthSnapshot) -> str:
+def format_growth_report(
+    snap: GrowthSnapshot,
+    *,
+    free_bytes: int | None = None,
+) -> str:
     lines = [
         "table | rows | approx_bytes | span_h | rows/day",
         "--- | ---: | ---: | ---: | ---:",
@@ -489,6 +527,10 @@ def format_growth_report(snap: GrowthSnapshot) -> str:
         lines.append(f"{t.table} | {t.rows} | {abytes} | {span_h} | {rate}")
     if snap.db_bytes is not None:
         lines.append(f"\ndb_bytes: {snap.db_bytes} ({snap.db_bytes / (1024**2):.1f} MiB)")
+    if free_bytes is not None:
+        lines.append(
+            f"disk_free: {free_bytes} ({free_bytes / (1024**2):.1f} MiB)"
+        )
     book = next((t for t in snap.tables if t.table == "bybit_book"), None)
     if book is not None and book.rows_per_day and book.rows > 0 and snap.db_bytes:
         total_rows = sum(t.rows for t in snap.tables) or 1
@@ -502,11 +544,12 @@ def format_growth_report(snap: GrowthSnapshot) -> str:
             f"approx bybit_book growth: {mb_per_day:.1f} MiB/day "
             f"(~{bytes_per_book_row:.0f} B/row × {book.rows_per_day:.0f} rows/day)"
         )
-        if mb_per_day > 0:
-            free_mib = 5.2 * 1024.0
+        if mb_per_day > 0 and free_bytes is not None and free_bytes > 0:
+            free_mib = free_bytes / (1024**2)
             days = free_mib / mb_per_day
             lines.append(
-                f"ungoverned: ~{days:.0f} days to fill 5.2 GiB at this book rate "
+                f"ungoverned: ~{days:.0f} days to fill current free disk "
+                f"({free_mib:.0f} MiB) at this book rate "
                 "(order-of-magnitude; open hours are faster — see DESIGN §5.1)"
             )
     return "\n".join(lines)

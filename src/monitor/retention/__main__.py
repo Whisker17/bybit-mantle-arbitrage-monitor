@@ -17,6 +17,7 @@ from pathlib import Path
 from monitor.collector.config import load_collector_config, load_dotenv
 from monitor.quotes import now_ms
 from monitor.storage import SqliteStore, format_growth_report
+from monitor.storage.retention import disk_free_bytes
 
 
 def main(argv: list[str] | None = None) -> int:
@@ -68,7 +69,13 @@ def main(argv: list[str] | None = None) -> int:
 
     store = SqliteStore(db_path)
     try:
-        print(format_growth_report(store.growth_snapshot()))
+        probe = (
+            Path(collector.retention.disk.path)
+            if collector.retention.disk.path
+            else db_path
+        )
+        free = disk_free_bytes(probe)
+        print(format_growth_report(store.growth_snapshot(), free_bytes=free))
         if args.growth_only:
             return 0
 
@@ -87,7 +94,7 @@ def main(argv: list[str] | None = None) -> int:
             f"pause_book={report.book_writes_paused}"
         )
         print("--- after ---")
-        print(format_growth_report(store.growth_snapshot()))
+        print(format_growth_report(store.growth_snapshot(), free_bytes=free))
         return 0
     finally:
         store.close()
