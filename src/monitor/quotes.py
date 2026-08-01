@@ -33,6 +33,33 @@ class BybitBookTick:
     gap: bool = False
 
 
+
+
+@dataclass(frozen=True, slots=True)
+class BybitDepthTick:
+    """Throttled Bybit depth snapshot with precomputed de-multiplied VWAPs (WHI-755).
+
+    ``bid_vwap_dm[i]`` / ``ask_vwap_dm[i]`` are effective fill prices at
+    ``buckets_usd[i]`` notional (None = unfillable). Prices and notionals use
+    de-multiplied units so consumers need no further multiplier math.
+    """
+
+    pair_id: str
+    symbol: str
+    exchange_ts_ms: int
+    recv_ts_ms: int
+    bid: Decimal
+    ask: Decimal
+    bid_de_multiplied: Decimal
+    ask_de_multiplied: Decimal
+    multiplier: Decimal
+    depth_levels: int
+    buckets_usd: tuple[Decimal, ...]
+    bid_vwap_dm: tuple[Decimal | None, ...]
+    ask_vwap_dm: tuple[Decimal | None, ...]
+    gap: bool = False
+
+
 @dataclass(frozen=True, slots=True)
 class BybitTradeTick:
     """Public trade print from Bybit, with multiplier already applied."""

@@ -7,6 +7,8 @@ import asyncio
 import logging
 import signal
 import sys
+from dataclasses import replace
+from decimal import Decimal
 from pathlib import Path
 
 from monitor.bybit.ws import BybitWsCollector
@@ -24,6 +26,7 @@ from monitor.fluxion.rfq import RfqPoller
 from monitor.fluxion.rpc import Rpc
 from monitor.quotes import (
     BybitBookTick,
+    BybitDepthTick,
     BybitTradeTick,
     CollectorGap,
     FluxionPoolStateTick,
@@ -64,6 +67,9 @@ class CollectorDaemon:
         # After resume, mark all pairs' books gap=1 until this wall-clock ms
         # (mirrors BybitWsCollector post-reconnect gap window).
         self._book_gap_until_ms: int = 0
+        # Last written L1 row fingerprint — skip duplicate rows under orderbook.50
+        # even while sticky gap=True (include gap so first gapped tick still lands).
+        self._last_book_l1: dict[str, tuple[Decimal, Decimal, bool]] = {}
 
     def request_stop(self) -> None:
         self._stop.set()
@@ -74,6 +80,7 @@ class CollectorDaemon:
             p.bybit.symbol.upper(): p.bybit.multiplier for p in self.pairs.pairs
         }
         symbols = list(pair_id_by_symbol.keys())
+        depth_cfg = self.cfg.bybit.depth
 
         bybit = BybitWsCollector(
             ws_url=self.cfg.bybit.ws_url,
@@ -83,12 +90,18 @@ class CollectorDaemon:
             on_book=self._on_book,
             on_trade=self._on_trade,
             on_gap=self._on_gap,
+            # on_depth None disables VWAP path in the WS collector.
+            on_depth=self._on_depth if depth_cfg.enabled else None,
             book_topic_prefix=self.cfg.bybit.book_topic_prefix,
             trade_topic_prefix=self.cfg.bybit.trade_topic_prefix,
             reconnect_min_s=self.cfg.bybit.reconnect_min_s,
             reconnect_max_s=self.cfg.bybit.reconnect_max_s,
             post_reconnect_gap_s=self.cfg.bybit.post_reconnect_gap_s,
             ping_interval_s=self.cfg.bybit.ping_interval_s,
+            depth_enabled=depth_cfg.enabled,
+            depth_buckets_usd=depth_cfg.buckets_usd,
+            depth_emit_interval_ms=depth_cfg.emit_interval_ms,
+            depth_mid_change_bps=depth_cfg.mid_change_bps,
         )
 
         tasks = [
@@ -101,12 +114,14 @@ class CollectorDaemon:
         self.store.set_meta("rpc_url_kind", rpc_url_kind(self.rpc_url))
         logger.info(
             "collector started pairs=%d amm_pools=%d sqlite=%s rpc_kind=%s "
-            "retention=%s",
+            "retention=%s bybit_book=%s depth=%s",
             len(self.pairs.pairs),
             len(self.pairs.pairs_with_amm()),
             self.store.path,
             rpc_url_kind(self.rpc_url),
             self.cfg.retention.enabled,
+            self.cfg.bybit.book_topic_prefix,
+            depth_cfg.enabled,
         )
         try:
             await self._stop.wait()
@@ -141,19 +156,24 @@ class CollectorDaemon:
         if tick.recv_ts_ms < self._book_gap_until_ms or (
             not tick.gap and now_ms() < self._book_gap_until_ms
         ):
-            tick = BybitBookTick(
-                pair_id=tick.pair_id,
-                symbol=tick.symbol,
-                exchange_ts_ms=tick.exchange_ts_ms,
-                recv_ts_ms=tick.recv_ts_ms,
-                bid=tick.bid,
-                ask=tick.ask,
-                bid_de_multiplied=tick.bid_de_multiplied,
-                ask_de_multiplied=tick.ask_de_multiplied,
-                multiplier=tick.multiplier,
-                gap=True,
-            )
+            tick = replace(tick, gap=True)
+        # orderbook.50 fires often for non-L1 levels; only journal when L1 or
+        # gap flag changes (sticky gap must not re-amplify full delta rate).
+        key = (tick.bid, tick.ask, tick.gap)
+        if self._last_book_l1.get(tick.pair_id) == key:
+            return
+        self._last_book_l1[tick.pair_id] = key
         await asyncio.to_thread(self.store.insert_bybit_book, [tick])
+
+    async def _on_depth(self, tick: BybitDepthTick) -> None:
+        """Persist a precomputed VWAP curve (already throttled in BybitWsCollector)."""
+        if self._book_writes_paused:
+            return
+        if tick.recv_ts_ms < self._book_gap_until_ms or (
+            not tick.gap and now_ms() < self._book_gap_until_ms
+        ):
+            tick = replace(tick, gap=True)
+        await asyncio.to_thread(self.store.insert_bybit_depth, [tick])
 
     async def _on_trade(self, tick: BybitTradeTick) -> None:
         await asyncio.to_thread(self.store.insert_bybit_trades, [tick])

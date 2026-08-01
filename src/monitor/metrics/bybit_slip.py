@@ -13,6 +13,8 @@ from __future__ import annotations
 from decimal import Decimal
 from typing import Literal
 
+from monitor.bybit.depth_math import book_vwap_for_notional
+
 BookSide = Literal["bid", "ask"]
 BybitLeg = Literal["buy", "sell"]
 
@@ -51,22 +53,9 @@ def book_vwap_slip_bps(
     if side not in ("bid", "ask"):
         raise ValueError(f"side must be bid|ask, got {side!r}")
 
-    spent = Decimal(0)
-    qty = Decimal(0)
-    for px, sz in levels:
-        if px <= 0 or sz <= 0:
-            continue
-        avail = px * sz
-        take = min(avail, size_usd - spent)
-        if take <= 0:
-            break
-        qty += take / px
-        spent += take
-        if spent >= size_usd:
-            break
-    if qty <= 0 or spent + Decimal("1e-9") < size_usd:
+    vwap = book_vwap_for_notional(levels, size_usd)
+    if vwap is None:
         return None
-    vwap = spent / qty
     if side == "bid":
         # Selling: worse (lower) than mid → positive slip fraction.
         slip = (mid - vwap) / mid

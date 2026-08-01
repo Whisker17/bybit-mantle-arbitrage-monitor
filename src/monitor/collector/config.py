@@ -3,11 +3,12 @@
 from __future__ import annotations
 
 import os
+from decimal import Decimal, InvalidOperation
 from pathlib import Path
 from typing import Any, Literal
 
 import yaml
-from pydantic import BaseModel, ConfigDict, Field, model_validator
+from pydantic import BaseModel, ConfigDict, Field, field_validator, model_validator
 
 # repo root = collector -> monitor -> src -> repo
 _REPO_ROOT = Path(__file__).resolve().parents[3]
@@ -17,6 +18,57 @@ PUBLIC_RPC_URL = "https://rpc.mantle.xyz"
 
 class CollectorConfigError(Exception):
     """Fail-fast error for missing or malformed collector config / env."""
+
+
+def _default_depth_buckets() -> list[Decimal]:
+    from monitor.bybit.depth import DEFAULT_DEPTH_BUCKETS_USD
+
+    return list(DEFAULT_DEPTH_BUCKETS_USD)
+
+
+class BybitDepthConfig(BaseModel):
+    """Throttled multi-level VWAP journal (WHI-755 / PnL v2 Bybit leg)."""
+
+    model_config = ConfigDict(extra="forbid", frozen=True)
+
+    enabled: bool = True
+    # Min wall-clock gap between depth rows per symbol (ms).
+    # 1s balances DB growth vs PnL freshness (DESIGN §5.1 depth growth model).
+    emit_interval_ms: int = Field(default=1000, ge=50)
+    # Also emit when mid moves by ≥ this many bps since last depth row (0 = off).
+    mid_change_bps: Decimal = Field(default=Decimal("1"), ge=0)
+    # USD notional ladder (DESIGN §2.6.3 PnL v2 AMM buckets).
+    buckets_usd: list[Decimal] = Field(default_factory=_default_depth_buckets)
+
+    @field_validator("mid_change_bps", mode="before")
+    @classmethod
+    def _mid_as_decimal(cls, v: object) -> Decimal:
+        try:
+            return Decimal(str(v))
+        except (InvalidOperation, ValueError) as exc:
+            raise ValueError(f"mid_change_bps must be a number, got {v!r}") from exc
+
+    @field_validator("buckets_usd", mode="before")
+    @classmethod
+    def _buckets_as_decimals(cls, v: object) -> list[Decimal]:
+        if v is None:
+            from monitor.bybit.depth import DEFAULT_DEPTH_BUCKETS_USD
+
+            return list(DEFAULT_DEPTH_BUCKETS_USD)
+        if not isinstance(v, list):
+            raise ValueError("buckets_usd must be a list")
+        if not v:
+            raise ValueError("bybit.depth.buckets_usd must be non-empty")
+        out: list[Decimal] = []
+        for raw in v:
+            try:
+                q = Decimal(str(raw))
+            except (InvalidOperation, ValueError) as exc:
+                raise ValueError(f"invalid bucket {raw!r}") from exc
+            if q <= 0:
+                raise ValueError(f"bucket must be > 0, got {raw!r}")
+            out.append(q)
+        return out
 
 
 class BybitCollectorConfig(BaseModel):
@@ -29,6 +81,7 @@ class BybitCollectorConfig(BaseModel):
     reconnect_max_s: float = Field(gt=0)
     post_reconnect_gap_s: float = Field(ge=0)
     ping_interval_s: float = Field(gt=0)
+    depth: BybitDepthConfig = Field(default_factory=BybitDepthConfig)
 
     @model_validator(mode="after")
     def _reconnect_bounds(self) -> BybitCollectorConfig:
@@ -120,6 +173,7 @@ class RetentionConfig(BaseModel):
     # None = never prune that table.
     bybit_book_raw_ms: int | None = Field(default=172_800_000, ge=1)  # 2d
     bybit_book_1m_ms: int | None = Field(default=1_209_600_000, ge=1)  # 14d
+    bybit_depth_ms: int | None = Field(default=172_800_000, ge=1)  # 2d VWAP curve
     bybit_trades_ms: int | None = Field(default=604_800_000, ge=1)  # 7d
     fluxion_pool_state_ms: int | None = Field(default=604_800_000, ge=1)
     fluxion_rfq_quotes_ms: int | None = Field(default=259_200_000, ge=1)  # 3d

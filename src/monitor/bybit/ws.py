@@ -6,22 +6,23 @@ import asyncio
 import contextlib
 import json
 import logging
-from collections.abc import Awaitable, Callable, Mapping
+from collections.abc import Awaitable, Callable, Mapping, Sequence
 from decimal import Decimal
 from typing import Any
 
-from monitor.bybit.l1 import L1BookTracker
+from monitor.bybit.depth import DEFAULT_DEPTH_BUCKETS_USD, DepthBookTracker
 from monitor.bybit.parse import (
     DEFAULT_BOOK_PREFIX,
     DEFAULT_TRADE_PREFIX,
     build_subscribe_args,
     parse_public_trade_message,
 )
-from monitor.quotes import BybitBookTick, BybitTradeTick, CollectorGap, now_ms
+from monitor.quotes import BybitBookTick, BybitDepthTick, BybitTradeTick, CollectorGap, now_ms
 
 logger = logging.getLogger(__name__)
 
 OnBook = Callable[[BybitBookTick], Awaitable[None] | None]
+OnDepth = Callable[[BybitDepthTick], Awaitable[None] | None]
 OnTrade = Callable[[BybitTradeTick], Awaitable[None] | None]
 OnGap = Callable[[CollectorGap], Awaitable[None] | None]
 
@@ -29,6 +30,44 @@ OnGap = Callable[[CollectorGap], Awaitable[None] | None]
 async def _maybe_await(result: Awaitable[None] | None) -> None:
     if result is not None:
         await result
+
+
+class DepthEmitThrottle:
+    """Gate depth VWAP builds / journal rows per symbol (interval + mid move)."""
+
+    def __init__(
+        self,
+        *,
+        emit_interval_ms: int = 1000,
+        mid_change_bps: Decimal = Decimal("1"),
+    ) -> None:
+        if emit_interval_ms < 1:
+            raise ValueError("emit_interval_ms must be >= 1")
+        if mid_change_bps < 0:
+            raise ValueError("mid_change_bps must be >= 0")
+        self.emit_interval_ms = emit_interval_ms
+        self.mid_change_bps = mid_change_bps
+        self._last_emit_ms: dict[str, int] = {}
+        self._last_mid_dm: dict[str, Decimal] = {}
+
+    def should_emit(self, book: BybitBookTick) -> bool:
+        mid = (book.bid_de_multiplied + book.ask_de_multiplied) / 2
+        last_ms = self._last_emit_ms.get(book.pair_id)
+        last_mid = self._last_mid_dm.get(book.pair_id)
+        if last_ms is None:
+            return True
+        if book.recv_ts_ms - last_ms >= self.emit_interval_ms:
+            return True
+        if self.mid_change_bps > 0 and last_mid is not None and last_mid > 0:
+            move_bps = abs(mid - last_mid) / last_mid * Decimal(10_000)
+            if move_bps >= self.mid_change_bps:
+                return True
+        return False
+
+    def mark_emitted(self, book: BybitBookTick) -> None:
+        mid = (book.bid_de_multiplied + book.ask_de_multiplied) / 2
+        self._last_emit_ms[book.pair_id] = book.recv_ts_ms
+        self._last_mid_dm[book.pair_id] = mid
 
 
 class BybitWsCollector:
@@ -44,12 +83,17 @@ class BybitWsCollector:
         on_book: OnBook,
         on_trade: OnTrade,
         on_gap: OnGap | None = None,
+        on_depth: OnDepth | None = None,
         book_topic_prefix: str = DEFAULT_BOOK_PREFIX,
         trade_topic_prefix: str = DEFAULT_TRADE_PREFIX,
         reconnect_min_s: float = 1.0,
         reconnect_max_s: float = 60.0,
         post_reconnect_gap_s: float = 5.0,
         ping_interval_s: float = 20.0,
+        depth_enabled: bool = True,
+        depth_buckets_usd: Sequence[Decimal] | None = None,
+        depth_emit_interval_ms: int = 1000,
+        depth_mid_change_bps: Decimal = Decimal("1"),
         connect: Callable[[str], Any] | None = None,
     ) -> None:
         self.ws_url = ws_url
@@ -59,20 +103,35 @@ class BybitWsCollector:
         self.on_book = on_book
         self.on_trade = on_trade
         self.on_gap = on_gap
+        self.on_depth = on_depth
         self.book_topic_prefix = book_topic_prefix
         self.trade_topic_prefix = trade_topic_prefix
         self.reconnect_min_s = reconnect_min_s
         self.reconnect_max_s = reconnect_max_s
         self.post_reconnect_gap_s = post_reconnect_gap_s
         self.ping_interval_s = ping_interval_s
+        self.depth_enabled = depth_enabled
+        self.depth_buckets_usd = (
+            tuple(depth_buckets_usd)
+            if depth_buckets_usd is not None
+            else DEFAULT_DEPTH_BUCKETS_USD
+        )
+        self._depth_throttle = DepthEmitThrottle(
+            emit_interval_ms=depth_emit_interval_ms,
+            mid_change_bps=depth_mid_change_bps,
+        )
         self._connect = connect
         self._stop = asyncio.Event()
         self._gap_until_ms: int = 0
         self._disconnect_at_ms: int | None = None
         self._ever_connected = False
-        self._l1 = L1BookTracker(
+        self._book = self._new_tracker()
+
+    def _new_tracker(self) -> DepthBookTracker:
+        return DepthBookTracker(
             pair_id_by_symbol=self.pair_id_by_symbol,
             multiplier_by_symbol=self.multiplier_by_symbol,
+            buckets_usd=self.depth_buckets_usd,
         )
 
     def request_stop(self) -> None:
@@ -131,10 +190,11 @@ class BybitWsCollector:
 
         async with connect(self.ws_url) as ws:
             self._ever_connected = True
-            # Fresh L1 after (re)connect — Bybit re-sends snapshots on subscribe.
-            self._l1 = L1BookTracker(
-                pair_id_by_symbol=self.pair_id_by_symbol,
-                multiplier_by_symbol=self.multiplier_by_symbol,
+            # Fresh book after (re)connect — Bybit re-sends snapshots on subscribe.
+            self._book = self._new_tracker()
+            self._depth_throttle = DepthEmitThrottle(
+                emit_interval_ms=self._depth_throttle.emit_interval_ms,
+                mid_change_bps=self._depth_throttle.mid_change_bps,
             )
             if self._disconnect_at_ms is not None:
                 await self._emit_reconnect_gap()
@@ -182,9 +242,21 @@ class BybitWsCollector:
         recv = now_ms()
         use_gap = self._in_gap_window()
         if topic.startswith(f"{self.book_topic_prefix}."):
-            tick = self._l1.apply(payload, recv_ts_ms=recv, gap=use_gap)
-            if tick is not None:
-                await _maybe_await(self.on_book(tick))
+            book = self._book.apply(payload, recv_ts_ms=recv, gap=use_gap)
+            if book is None:
+                return
+            await _maybe_await(self.on_book(book))
+            # Build VWAP only when depth is enabled, a consumer exists, and
+            # the throttle says this symbol should journal a row.
+            if (
+                self.depth_enabled
+                and self.on_depth is not None
+                and self._depth_throttle.should_emit(book)
+            ):
+                depth = self._book.depth_tick(book.symbol)
+                if depth is not None:
+                    self._depth_throttle.mark_emitted(book)
+                    await _maybe_await(self.on_depth(depth))
             return
         if topic.startswith(f"{self.trade_topic_prefix}."):
             trades = parse_public_trade_message(

@@ -13,10 +13,9 @@ from typing import Any
 from monitor.quotes import BybitTradeTick, now_ms
 from monitor.symbols.multipliers import de_multiplied_price
 
-# Mirrors config/collector.yaml bybit.book_topic_prefix (spot L1; WHI-743).
-# Used only as code-level defaults for tests / unconfigured callers; the daemon
-# always injects the YAML value.
-DEFAULT_BOOK_PREFIX = "orderbook.1"
+# Default for tests / unconfigured callers. Production injects YAML
+# (config/collector.yaml → orderbook.50 after WHI-755; L1 was orderbook.1 / WHI-743).
+DEFAULT_BOOK_PREFIX = "orderbook.50"
 DEFAULT_TRADE_PREFIX = "publicTrade"
 
 

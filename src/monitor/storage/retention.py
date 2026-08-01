@@ -36,6 +36,7 @@ _TABLE_POLICIES: tuple[tuple[str, str, str], ...] = (
     # table, ts_column, ttl_attr
     ("bybit_book", "exchange_ts_ms", "bybit_book_raw_ms"),
     ("bybit_book_1m", "bucket_ts_ms", "bybit_book_1m_ms"),
+    ("bybit_depth", "exchange_ts_ms", "bybit_depth_ms"),
     ("bybit_trades", "exchange_ts_ms", "bybit_trades_ms"),
     ("fluxion_pool_state", "recv_ts_ms", "fluxion_pool_state_ms"),
     ("fluxion_rfq_quotes", "poll_ts_ms", "fluxion_rfq_quotes_ms"),
@@ -55,6 +56,7 @@ class EffectiveTtls:
 
     bybit_book_raw_ms: int | None
     bybit_book_1m_ms: int | None
+    bybit_depth_ms: int | None
     bybit_trades_ms: int | None
     fluxion_pool_state_ms: int | None
     fluxion_rfq_quotes_ms: int | None
@@ -134,6 +136,7 @@ def effective_ttls(cfg: RetentionConfig, level: DiskLevel) -> EffectiveTtls:
     return EffectiveTtls(
         bybit_book_raw_ms=s(cfg.bybit_book_raw_ms),
         bybit_book_1m_ms=s(cfg.bybit_book_1m_ms),
+        bybit_depth_ms=s(cfg.bybit_depth_ms),
         bybit_trades_ms=s(cfg.bybit_trades_ms),
         fluxion_pool_state_ms=s(cfg.fluxion_pool_state_ms),
         fluxion_rfq_quotes_ms=s(cfg.fluxion_rfq_quotes_ms),

@@ -52,6 +52,9 @@ placeholders. Agents must not assume a module exists until its issue lands. -->
   - **PnL v2 research (WHI-754) landed:** Hummingbot CEX⇄AMM methodology →
     cash-flow PnL spec; note `docs/references/hummingbot-pnl.md`, DESIGN §2.6.
     Engine (optimal size + bucket table) is **WHI-756** — not landed.
+  - **PnL v2 depth collector (WHI-755) landed:** Bybit `orderbook.50` →
+    stateful N-level book; L1 still `bybit_book`; precomputed bucket VWAP curve
+    in `bybit_depth` (throttled). Config `bybit.depth` in `config/collector.yaml`.
   - **Web skeleton (WHI-757) landed:** `monitor/api` (FastAPI read-only over
     SQLite; reuses TUI builders), `web/` (Next.js static export), `deploy/` +
     `scripts/deploy-web.sh` (systemd + nginx). Tunables in `config/api.yaml`.

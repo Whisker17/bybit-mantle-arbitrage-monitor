@@ -66,11 +66,21 @@ soon — anything touching key handling, RPC credentials defaults to at least Hi
   knob but ships 0 (1:1). Populate from a measured Bybit USDT vs Fluxion USDC
   series before treating net edge as production-accurate.
 
-- **Live Bybit depth not on the quote tick** (Medium, WHI-732 → M2/M5).
-  `BybitBookTick` is L1-only; `compute_edge(..., bybit_depth=)` supports VWAP walk
-  but `build_edge_snapshot` has no depth source. Ladder rungs therefore share L1
-  half-spread slip (differ by gas only on RFQ). Wire orderbook depth when M2
-  streams it or M5 polls REST snapshots.
+- **L1BookTracker parallel to DepthBookTracker** (Low, WHI-755 → cleanup).
+  Production WS uses `DepthBookTracker` only; `L1BookTracker` + `apply_l1_side`
+  remain for orderbook.1 unit tests. Port those fixtures onto depth=1 payloads
+  and delete the L1-only tracker when convenient.
+
+- **WHI-755 30-minute VPS growth/memory AC not measured in CI** (Low, WHI-755 → deploy).
+  Unit + 45s live orderbook.50 smoke confirmed wiring; DESIGN §5.1 has order-of-
+  magnitude depth growth. After deploy, run collector ≥30m with MemoryMax=300M and
+  `python -m monitor.retention --growth-only` to pin real `bybit_depth` rows/day.
+
+- **Live Bybit depth not wired into M3 edge path** (Medium, WHI-732 → WHI-756 / panel).
+  Collector now journals precomputed bucket VWAPs in `bybit_depth` (WHI-755,
+  `orderbook.50`). `BybitBookTick` remains L1-only for the TUI; `compute_edge(...,
+  bybit_depth=)` still has no live consumer that loads `JournalReader.latest_bybit_depth`.
+  Wire PnL v2 / edge consumers to the depth table (or REST) when the engine lands.
 
 - **RFQ poll notional ≠ edge ladder sizes** (Medium, WHI-732 → M5 / collector).
   `config/collector.yaml` polls ~100 USDC / 0.1 native while `metrics.yaml` ladder

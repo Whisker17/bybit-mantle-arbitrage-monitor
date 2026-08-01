@@ -7,7 +7,7 @@ window so downstream metrics can exclude or weight them.
 
 from __future__ import annotations
 
-SCHEMA_VERSION = 2
+SCHEMA_VERSION = 3
 
 DDL: tuple[str, ...] = (
     """
@@ -56,6 +56,33 @@ DDL: tuple[str, ...] = (
     """
     CREATE INDEX IF NOT EXISTS idx_bybit_book_1m_ts
         ON bybit_book_1m (bucket_ts_ms)
+    """,
+    """
+    CREATE TABLE IF NOT EXISTS bybit_depth (
+        id                  INTEGER PRIMARY KEY AUTOINCREMENT,
+        pair_id             TEXT    NOT NULL,
+        symbol              TEXT    NOT NULL,
+        exchange_ts_ms      INTEGER NOT NULL,
+        recv_ts_ms          INTEGER NOT NULL,
+        bid                 TEXT    NOT NULL,
+        ask                 TEXT    NOT NULL,
+        bid_de_multiplied   TEXT    NOT NULL,
+        ask_de_multiplied   TEXT    NOT NULL,
+        multiplier          TEXT    NOT NULL,
+        depth_levels        INTEGER NOT NULL,
+        buckets_usd         TEXT    NOT NULL,
+        bid_vwap_dm         TEXT    NOT NULL,
+        ask_vwap_dm         TEXT    NOT NULL,
+        gap                 INTEGER NOT NULL DEFAULT 0
+    )
+    """,
+    """
+    CREATE INDEX IF NOT EXISTS idx_bybit_depth_pair_ts
+        ON bybit_depth (pair_id, exchange_ts_ms)
+    """,
+    """
+    CREATE INDEX IF NOT EXISTS idx_bybit_depth_ts
+        ON bybit_depth (exchange_ts_ms)
     """,
     """
     CREATE TABLE IF NOT EXISTS bybit_trades (
