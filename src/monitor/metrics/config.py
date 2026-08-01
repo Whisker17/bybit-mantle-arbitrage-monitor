@@ -166,6 +166,7 @@ class MetricsConfig(BaseModel):
             )
         return self
 
+
 def _hhmm_to_minutes(hhmm: str) -> int:
     hours, minutes = hhmm.split(":")
     h, m = int(hours), int(minutes)

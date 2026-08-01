@@ -371,7 +371,6 @@ def compute_pnl_usd(
             reason="missing_quote",
             depth_source="l1",
             config=config,
-            pnl_cfg=pnl_cfg,
         )
     bybit_mid = mid_from_bid_ask(bybit_bid, bybit_ask)
     gas = config.gas_usd_per_swap
@@ -446,13 +445,11 @@ def _unfillable_result(
     reason: str,
     depth_source: DepthSource,
     config: MetricsConfig,
-    pnl_cfg: PnlV2Config,
     gas: Decimal | None = None,
 ) -> PnlResult:
     g = config.gas_usd_per_swap if gas is None else gas
     basis = _basis_usd(config, size_usd) if size_usd > 0 else Decimal(0)
     costs = _zero_costs(gas=g, basis=basis)
-    pnl = Decimal(0)  # unfillable — not a tradeable number; keep 0 + reason
     return PnlResult(
         pair_id=pair_id,
         venue=venue,
@@ -462,7 +459,7 @@ def _unfillable_result(
         bybit_mid=bybit_mid,
         spent_usd=Decimal(0),
         recv_usd=Decimal(0),
-        pnl_usd=pnl,
+        pnl_usd=Decimal(0),
         fillable=False,
         costs=costs,
         bybit_depth_source=depth_source,
@@ -499,7 +496,6 @@ def _pnl_buy_fluxion_sell_bybit(
             reason="unfillable_or_range_exhausted",
             depth_source="book" if bybit_bids is not None else "l1",
             config=config,
-            pnl_cfg=pnl_cfg,
             gas=gas,
         )
     usdc_spent, flux_fee, flux_slip = amm_cash
@@ -523,7 +519,6 @@ def _pnl_buy_fluxion_sell_bybit(
             reason="bybit_book_unfillable",
             depth_source="book" if bybit_bids is not None else "l1",
             config=config,
-            pnl_cfg=pnl_cfg,
             gas=gas,
         )
 
@@ -592,7 +587,6 @@ def _pnl_buy_bybit_sell_fluxion(
             reason=reason,
             depth_source="book" if bybit_asks is not None else "l1",
             config=config,
-            pnl_cfg=pnl_cfg,
             gas=gas,
         )
 
@@ -608,7 +602,6 @@ def _pnl_buy_bybit_sell_fluxion(
             reason="unfillable_or_range_exhausted",
             depth_source=bybit.depth_source,
             config=config,
-            pnl_cfg=pnl_cfg,
             gas=gas,
         )
     usdc_recv, flux_fee, flux_slip = amm_cash
@@ -666,7 +659,6 @@ def _pnl_rfq(
             reason="missing_quote",
             depth_source="l1",
             config=config,
-            pnl_cfg=pnl_cfg,
             gas=gas,
         )
     f_b = _fee_fraction(config)
@@ -683,7 +675,6 @@ def _pnl_rfq(
                 reason="rfq_leg_mismatch",
                 depth_source="l1",
                 config=config,
-                pnl_cfg=pnl_cfg,
                 gas=gas,
             )
         usdc_spent = rfq.amount_in
@@ -709,7 +700,6 @@ def _pnl_rfq(
                 reason="bybit_book_unfillable",
                 depth_source="book" if bybit_bids is not None else "l1",
                 config=config,
-                pnl_cfg=pnl_cfg,
                 gas=gas,
             )
         pnl_usd = bybit.cash_usd - usdc_spent - gas - basis
@@ -751,7 +741,6 @@ def _pnl_rfq(
             reason="rfq_leg_mismatch",
             depth_source="l1",
             config=config,
-            pnl_cfg=pnl_cfg,
             gas=gas,
         )
     q = rfq.amount_in
@@ -778,7 +767,6 @@ def _pnl_rfq(
             reason=reason,
             depth_source="book" if bybit_asks is not None else "l1",
             config=config,
-            pnl_cfg=pnl_cfg,
             gas=gas,
         )
     pnl_usd = usdc_recv - bybit.cash_usd - gas - basis
@@ -899,7 +887,8 @@ def _depth_cap_usd(
         levels = bybit_bids
     else:
         levels = bybit_asks
-    if levels is not None:
+    # Empty list ≡ missing depth (L1 / +∞), per hummingbot-pnl §5.3.
+    if levels:
         return book_notional_depth(levels)
     return pnl_cfg.l1_assumed_size_usd
 
@@ -1111,9 +1100,12 @@ def optimal_size(
                 rq = left_q + (right_q - left_q) * Decimal(k) / Decimal(m - 1)
             samples.append(_eval(rq))
 
-    # 4. Endpoint check
-    samples.append(_eval(q_min))
-    samples.append(_eval(q_max))
+    # 4. Endpoint check — skip if coarse grid already evaluated them.
+    seen_sizes = {r.size_usd for r in samples}
+    if q_min not in seen_sizes:
+        samples.append(_eval(q_min))
+    if q_max not in seen_sizes:
+        samples.append(_eval(q_max))
 
     fillable_samples = [r for r in samples if r.fillable]
     if not fillable_samples:

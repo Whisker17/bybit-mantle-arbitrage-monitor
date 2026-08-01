@@ -83,6 +83,13 @@ soon — anything touching key handling, RPC credentials defaults to at least Hi
   loads `JournalReader.latest_bybit_depth` into `compute_edge` or `pnl_bucket_table`.
   Wire API/Web (and optionally M3 edge) when overview bucket-PnL column lands.
 
+- **PnL v2 freshness / align guards at consumer** (Medium, WHI-756 → panel / API).
+  DESIGN §2.6.5 and hummingbot-pnl §6 list `bybit_stale_ms` / `pool_stale_blocks` /
+  `rfq_stale_ms` / `align_skew_ms`. The pure engine takes a coherent snapshot (same
+  contract as M3 `compute_edge` — no timestamps) and does not emit `stale_*` / `skew`.
+  Callers that load from SQLite must apply age/skew before accepting a `PnlResult` as
+  live. Implement when Web/API wires `pnl_bucket_table`.
+
 - **RFQ poll notional ≠ edge ladder sizes** (Medium, WHI-732 → M5 / collector).
   `config/collector.yaml` polls ~100 USDC / 0.1 native while `metrics.yaml` ladder
   is $1K/$5K/$20K; RFQ edges reuse the polled price with zero size slip. Prefer

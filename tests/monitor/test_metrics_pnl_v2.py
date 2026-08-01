@@ -402,6 +402,12 @@ def test_amm_quote_in_solves_target_base() -> None:
     assert abs(got - q) / q < Decimal("1e-5")
 
 
+def test_amm_quote_in_fails_closed_on_impossible_tol() -> None:
+    """Range exhaust / unsolvable → None (no silent 10× tolerance band)."""
+    thin = _pool_at_mid(Decimal(100), pool_fee=3000, liquidity=10**10)
+    assert amm_quote_in_for_base_out(thin, Decimal("1e6"), q_tol_rel=Decimal("1e-6")) is None
+
+
 def test_pool_fee_increases_usdc_spent() -> None:
     cfg = _cfg(gas=Decimal(0), fee_bps=Decimal(0))
     mid = Decimal(100)
