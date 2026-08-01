@@ -16,7 +16,7 @@ from pathlib import Path
 
 from monitor.collector.config import load_collector_config, load_dotenv
 from monitor.quotes import now_ms
-from monitor.storage import SqliteStore, format_growth_report, growth_snapshot
+from monitor.storage import SqliteStore, format_growth_report
 
 
 def main(argv: list[str] | None = None) -> int:
@@ -68,8 +68,7 @@ def main(argv: list[str] | None = None) -> int:
 
     store = SqliteStore(db_path)
     try:
-        snap = growth_snapshot(store._conn, db_path=db_path)  # noqa: SLF001
-        print(format_growth_report(snap))
+        print(format_growth_report(store.growth_snapshot()))
         if args.growth_only:
             return 0
 
@@ -87,9 +86,8 @@ def main(argv: list[str] | None = None) -> int:
             f"deleted={report.deleted} bars={report.bars_upserted} "
             f"pause_book={report.book_writes_paused}"
         )
-        snap_after = growth_snapshot(store._conn, db_path=db_path)  # noqa: SLF001
         print("--- after ---")
-        print(format_growth_report(snap_after))
+        print(format_growth_report(store.growth_snapshot()))
         return 0
     finally:
         store.close()

@@ -21,7 +21,7 @@ from monitor.storage.schema import DDL, SCHEMA_VERSION
 
 if TYPE_CHECKING:
     from monitor.collector.config import RetentionConfig
-    from monitor.storage.retention import RetentionReport
+    from monitor.storage.retention import GrowthSnapshot, RetentionReport
 
 
 class SqliteStore:
@@ -34,8 +34,15 @@ class SqliteStore:
         self.path = Path(path)
         if self.path.parent != Path(".") and not self.path.parent.exists():
             self.path.parent.mkdir(parents=True, exist_ok=True)
+        # auto_vacuum=INCREMENTAL only takes effect on a brand-new file (before
+        # the first CREATE TABLE). Existing DBs keep their mode; freelist reuse
+        # still plateaus size, and `python -m monitor.retention --full-vacuum`
+        # can shrink once (DESIGN §5.1).
+        is_new = not self.path.exists() or self.path.stat().st_size == 0
         self._lock = threading.Lock()
         self._conn = sqlite3.connect(self.path, check_same_thread=False)
+        if is_new:
+            self._conn.execute("PRAGMA auto_vacuum=INCREMENTAL")
         self._conn.execute("PRAGMA journal_mode=WAL")
         self._conn.execute("PRAGMA synchronous=NORMAL")
         self._conn.row_factory = sqlite3.Row
@@ -293,6 +300,28 @@ class SqliteStore:
             row = self._conn.execute(f"SELECT COUNT(*) AS n FROM {table}").fetchone()
         return int(row["n"])
 
+    def _write(self, fn: object) -> object:
+        """Run ``fn(conn)`` under the store lock inside a short transaction.
+
+        Each call commits before releasing the lock so long retention loops can
+        interleave with collector inserts (WHI-751).
+        """
+        if not callable(fn):
+            raise TypeError("write fn must be callable")
+        cb = fn
+        with self._lock:
+            with self._conn:
+                return cb(self._conn)
+
+    def _reclaim(self, fn: object) -> object:
+        """Run reclaim (checkpoint / vacuum) under the lock, no open transaction."""
+        if not callable(fn):
+            raise TypeError("reclaim fn must be callable")
+        cb = fn
+        with self._lock:
+            self._conn.commit()
+            return cb(self._conn)
+
     def run_retention(
         self,
         cfg: RetentionConfig,
@@ -300,15 +329,23 @@ class SqliteStore:
         now_ms: int,
         free_bytes: int | None = None,
     ) -> RetentionReport:
-        """Apply retention under the store write lock (safe vs live inserts)."""
+        """Apply retention in short locked batches (safe vs live inserts)."""
         # Local import avoids a hard cycle: retention → collector.config, store → retention.
         from monitor.storage.retention import run_retention as _run
 
+        return _run(
+            self._conn,
+            cfg,
+            now_ms=now_ms,
+            free_bytes=free_bytes,
+            db_path=self.path,
+            write=self._write,
+            reclaim=self._reclaim,
+        )
+
+    def growth_snapshot(self) -> GrowthSnapshot:
+        """Per-table growth report (read under the store lock)."""
+        from monitor.storage.retention import growth_snapshot as _snap
+
         with self._lock:
-            return _run(
-                self._conn,
-                cfg,
-                now_ms=now_ms,
-                free_bytes=free_bytes,
-                db_path=self.path,
-            )
+            return _snap(self._conn, db_path=self.path)

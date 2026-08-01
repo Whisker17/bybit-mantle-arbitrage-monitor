@@ -8,7 +8,8 @@ Consumer windows that must remain intact after a prune (DESIGN §5.1):
 - M4 attribution → ``fluxion_swaps`` / ``fluxion_rfq_fills`` permanent
 
 Before deleting raw ``bybit_book`` rows older than the raw TTL, the last L1 of
-each minute is upserted into ``bybit_book_1m`` so a compact series survives.
+each minute is upserted into ``bybit_book_1m`` so a compact series survives
+(forensics / future cold-start; live JournalReader still uses raw ticks).
 """
 
 from __future__ import annotations
@@ -16,40 +17,36 @@ from __future__ import annotations
 import logging
 import shutil
 import sqlite3
+from collections.abc import Callable
 from dataclasses import dataclass, field
 from pathlib import Path
-from typing import Literal
+from typing import Any, Literal
 
 from monitor.collector.config import DiskGuardConfig, RetentionConfig
 
 logger = logging.getLogger(__name__)
 
 DiskLevel = Literal["ok", "warn", "critical"]
+# Short-transaction runner: store lock + commit around each batch.
+WriteFn = Callable[[Callable[[sqlite3.Connection], Any]], Any]
 
-# Tables retention may touch (whitelist for dynamic SQL).
-_PRUNE_TABLES = frozenset(
-    {
-        "bybit_book",
-        "bybit_book_1m",
-        "bybit_trades",
-        "fluxion_pool_state",
-        "fluxion_rfq_quotes",
-        "fluxion_swaps",
-        "fluxion_rfq_fills",
-        "collector_gaps",
-    }
+# One place to declare pruneable tables + their wall-clock column.
+# ``ttl_attr`` names the RetentionConfig / EffectiveTtls field (None policy = never).
+_TABLE_POLICIES: tuple[tuple[str, str, str], ...] = (
+    # table, ts_column, ttl_attr
+    ("bybit_book", "exchange_ts_ms", "bybit_book_raw_ms"),
+    ("bybit_book_1m", "bucket_ts_ms", "bybit_book_1m_ms"),
+    ("bybit_trades", "exchange_ts_ms", "bybit_trades_ms"),
+    ("fluxion_pool_state", "recv_ts_ms", "fluxion_pool_state_ms"),
+    ("fluxion_rfq_quotes", "poll_ts_ms", "fluxion_rfq_quotes_ms"),
+    ("fluxion_swaps", "recv_ts_ms", "fluxion_swaps_ms"),
+    ("fluxion_rfq_fills", "recv_ts_ms", "fluxion_rfq_fills_ms"),
+    ("collector_gaps", "gap_start_ms", "collector_gaps_ms"),
 )
 
-_GROWTH_TABLES: tuple[str, ...] = (
-    "bybit_book",
-    "bybit_book_1m",
-    "bybit_trades",
-    "fluxion_pool_state",
-    "fluxion_swaps",
-    "fluxion_rfq_quotes",
-    "fluxion_rfq_fills",
-    "collector_gaps",
-)
+_PRUNE_TABLES = frozenset(t for t, _, _ in _TABLE_POLICIES)
+_TS_COLUMNS = frozenset(c for _, c, _ in _TABLE_POLICIES)
+_GROWTH_TABLES: tuple[str, ...] = tuple(t for t, _, _ in _TABLE_POLICIES)
 
 
 @dataclass(frozen=True, slots=True)
@@ -65,6 +62,9 @@ class EffectiveTtls:
     fluxion_rfq_fills_ms: int | None
     collector_gaps_ms: int | None
 
+    def get(self, attr: str) -> int | None:
+        return getattr(self, attr)  # type: ignore[no-any-return]
+
 
 @dataclass(frozen=True, slots=True)
 class RetentionReport:
@@ -73,7 +73,7 @@ class RetentionReport:
     disk_level: DiskLevel
     deleted: dict[str, int] = field(default_factory=dict)
     bars_upserted: int = 0
-    vacuum_pages: int = 0
+    vacuum_pages_requested: int = 0
     full_vacuum: bool = False
     book_writes_paused: bool = False
 
@@ -86,11 +86,12 @@ class TableGrowth:
     max_ts_ms: int | None
     span_ms: int | None
     rows_per_day: float | None
+    approx_bytes: int | None = None
 
 
 @dataclass(frozen=True, slots=True)
 class GrowthSnapshot:
-    """Per-table row counts + crude rate from min/max timestamp span."""
+    """Per-table row counts + crude rows/day from each table's timestamp span."""
 
     tables: tuple[TableGrowth, ...]
     db_bytes: int | None
@@ -143,7 +144,7 @@ def effective_ttls(cfg: RetentionConfig, level: DiskLevel) -> EffectiveTtls:
     )
 
 
-def _delete_older_than(
+def _delete_batch(
     conn: sqlite3.Connection,
     *,
     table: str,
@@ -151,52 +152,26 @@ def _delete_older_than(
     cutoff_ms: int,
     batch_size: int,
 ) -> int:
+    """Delete up to ``batch_size`` oldest rows with ts < cutoff. Returns rows removed."""
     if table not in _PRUNE_TABLES:
         raise ValueError(f"refusing to prune unknown table: {table}")
-    if ts_column not in {
-        "exchange_ts_ms",
-        "recv_ts_ms",
-        "poll_ts_ms",
-        "gap_start_ms",
-        "bucket_ts_ms",
-    }:
+    if ts_column not in _TS_COLUMNS:
         raise ValueError(f"refusing unknown ts column: {ts_column}")
-
-    total = 0
-    # bybit_book_1m uses a composite PK (no surrogate id).
-    has_id = table != "bybit_book_1m"
-    while True:
-        if has_id:
-            cur = conn.execute(
-                f"""
-                DELETE FROM {table}
-                WHERE id IN (
-                    SELECT id FROM {table}
-                    WHERE {ts_column} < ?
-                    ORDER BY {ts_column} ASC
-                    LIMIT ?
-                )
-                """,
-                (cutoff_ms, batch_size),
-            )
-        else:
-            cur = conn.execute(
-                f"""
-                DELETE FROM {table}
-                WHERE rowid IN (
-                    SELECT rowid FROM {table}
-                    WHERE {ts_column} < ?
-                    ORDER BY {ts_column} ASC
-                    LIMIT ?
-                )
-                """,
-                (cutoff_ms, batch_size),
-            )
-        n = cur.rowcount if cur.rowcount is not None and cur.rowcount >= 0 else 0
-        total += n
-        if n < batch_size:
-            break
-    return total
+    # rowid works for both INTEGER PK tables and composite-PK bybit_book_1m.
+    cur = conn.execute(
+        f"""
+        DELETE FROM {table}
+        WHERE rowid IN (
+            SELECT rowid FROM {table}
+            WHERE {ts_column} < ?
+            ORDER BY {ts_column} ASC
+            LIMIT ?
+        )
+        """,
+        (cutoff_ms, batch_size),
+    )
+    n = cur.rowcount if cur.rowcount is not None and cur.rowcount >= 0 else 0
+    return n
 
 
 def _materialize_book_1m(
@@ -205,7 +180,6 @@ def _materialize_book_1m(
     cutoff_raw_ms: int,
 ) -> int:
     """Upsert last-in-minute L1 for every raw book row older than the raw cutoff."""
-    # One row per (pair, minute): pick MAX(id) as the last tick in that bucket.
     cur = conn.execute(
         """
         INSERT INTO bybit_book_1m (
@@ -248,22 +222,34 @@ def _materialize_book_1m(
     return n
 
 
+def _auto_vacuum_mode(conn: sqlite3.Connection) -> int:
+    row = conn.execute("PRAGMA auto_vacuum").fetchone()
+    return int(row[0]) if row is not None else 0
+
+
 def _reclaim_space(
     conn: sqlite3.Connection,
     *,
     incremental_pages: int,
     full_vacuum: bool,
 ) -> tuple[int, bool]:
-    """Return (incremental pages attempted, whether full VACUUM ran)."""
+    """Return (incremental pages requested if applicable, whether full VACUUM ran)."""
     conn.execute("PRAGMA wal_checkpoint(TRUNCATE)")
-    pages = 0
-    if incremental_pages > 0:
-        # No-op when auto_vacuum is not INCREMENTAL; still safe.
+    pages_req = 0
+    mode = _auto_vacuum_mode(conn)
+    # 2 = INCREMENTAL. NONE/FULL make incremental_vacuum a no-op.
+    if incremental_pages > 0 and mode == 2:
         try:
             conn.execute(f"PRAGMA incremental_vacuum({int(incremental_pages)})")
-            pages = incremental_pages
+            pages_req = incremental_pages
         except sqlite3.Error as exc:
             logger.warning("incremental_vacuum failed: %s", exc)
+    elif incremental_pages > 0 and mode != 2:
+        logger.info(
+            "skip incremental_vacuum: auto_vacuum mode=%s (need INCREMENTAL=2); "
+            "freelist pages are still reused for new inserts; use full_vacuum to shrink",
+            mode,
+        )
     did_full = False
     if full_vacuum:
         try:
@@ -271,7 +257,7 @@ def _reclaim_space(
             did_full = True
         except sqlite3.Error as exc:
             logger.warning("VACUUM failed (writer busy?): %s", exc)
-    return pages, did_full
+    return pages_req, did_full
 
 
 def run_retention(
@@ -281,8 +267,18 @@ def run_retention(
     now_ms: int,
     free_bytes: int | None = None,
     db_path: Path | None = None,
+    write: WriteFn | None = None,
+    reclaim: WriteFn | None = None,
 ) -> RetentionReport:
-    """Prune tables per policy. Caller holds the write lock if sharing a store."""
+    """Prune tables per policy.
+
+    When ``write`` is provided (store lock + short transaction), each batch
+    commits and releases so the collector can interleave inserts. Without
+    ``write``, work runs directly on ``conn``.
+
+    ``reclaim`` must run outside an open transaction (VACUUM requirement).
+    When omitted, reclaim runs on ``conn`` after an explicit commit.
+    """
     if free_bytes is None and db_path is not None:
         free_bytes = disk_free_bytes(db_path)
     elif free_bytes is None and cfg.disk.path:
@@ -296,69 +292,84 @@ def run_retention(
     deleted: dict[str, int] = {}
     bars = 0
 
-    with conn:  # transaction for materialize + deletes
-        if ttls.bybit_book_raw_ms is not None:
-            cutoff = now_ms - ttls.bybit_book_raw_ms
-            # Materialize before delete so the compact series survives.
-            bars = _materialize_book_1m(conn, cutoff_raw_ms=cutoff)
-            deleted["bybit_book"] = _delete_older_than(
-                conn,
-                table="bybit_book",
-                ts_column="exchange_ts_ms",
-                cutoff_ms=cutoff,
-                batch_size=cfg.delete_batch_size,
-            )
+    def _run(fn: Callable[[sqlite3.Connection], Any]) -> Any:
+        if write is not None:
+            return write(fn)
+        return fn(conn)
 
-        if ttls.bybit_book_1m_ms is not None:
-            deleted["bybit_book_1m"] = _delete_older_than(
-                conn,
-                table="bybit_book_1m",
-                ts_column="bucket_ts_ms",
-                cutoff_ms=now_ms - ttls.bybit_book_1m_ms,
-                batch_size=cfg.delete_batch_size,
-            )
+    # Materialize 1m bars before deleting raw books.
+    raw_ttl = ttls.bybit_book_raw_ms
+    if raw_ttl is not None:
+        cutoff = now_ms - raw_ttl
 
-        table_specs: list[tuple[str, str, int | None]] = [
-            ("bybit_trades", "exchange_ts_ms", ttls.bybit_trades_ms),
-            ("fluxion_pool_state", "recv_ts_ms", ttls.fluxion_pool_state_ms),
-            ("fluxion_rfq_quotes", "poll_ts_ms", ttls.fluxion_rfq_quotes_ms),
-            ("fluxion_swaps", "recv_ts_ms", ttls.fluxion_swaps_ms),
-            ("fluxion_rfq_fills", "recv_ts_ms", ttls.fluxion_rfq_fills_ms),
-            ("collector_gaps", "gap_start_ms", ttls.collector_gaps_ms),
-        ]
-        for table, col, ttl in table_specs:
-            if ttl is None:
-                continue
-            deleted[table] = _delete_older_than(
-                conn,
-                table=table,
-                ts_column=col,
-                cutoff_ms=now_ms - ttl,
-                batch_size=cfg.delete_batch_size,
-            )
+        def _mat(c: sqlite3.Connection) -> int:
+            return _materialize_book_1m(c, cutoff_raw_ms=cutoff)
 
-        conn.execute(
+        bars = int(_run(_mat))
+
+    for table, ts_col, ttl_attr in _TABLE_POLICIES:
+        ttl = ttls.get(ttl_attr)
+        if ttl is None:
+            continue
+        cutoff = now_ms - ttl
+        total = 0
+        while True:
+
+            def _batch(
+                c: sqlite3.Connection,
+                *,
+                _table: str = table,
+                _col: str = ts_col,
+                _cut: int = cutoff,
+            ) -> int:
+                return _delete_batch(
+                    c,
+                    table=_table,
+                    ts_column=_col,
+                    cutoff_ms=_cut,
+                    batch_size=cfg.delete_batch_size,
+                )
+
+            n = int(_run(_batch))
+            total += n
+            if n < cfg.delete_batch_size:
+                break
+        deleted[table] = total
+
+    def _meta(c: sqlite3.Connection) -> None:
+        c.execute(
             "INSERT INTO meta(key, value) VALUES(?, ?) "
             "ON CONFLICT(key) DO UPDATE SET value=excluded.value",
             ("retention_last_run_ms", str(now_ms)),
         )
-        conn.execute(
+        c.execute(
             "INSERT INTO meta(key, value) VALUES(?, ?) "
             "ON CONFLICT(key) DO UPDATE SET value=excluded.value",
             ("retention_last_disk_level", level),
         )
 
-    vacuum_pages, did_full = _reclaim_space(
-        conn,
-        incremental_pages=cfg.incremental_vacuum_pages,
-        full_vacuum=cfg.full_vacuum or level == "critical",
-    )
+    _run(_meta)
 
-    pause = (
-        level == "critical"
-        and cfg.disk.pause_book_writes_on_critical
-        and (free_bytes is None or free_bytes < cfg.disk.critical_free_bytes)
-    )
+    force_full = cfg.full_vacuum or level == "critical"
+
+    def _vac(c: sqlite3.Connection) -> tuple[int, bool]:
+        return _reclaim_space(
+            c,
+            incremental_pages=cfg.incremental_vacuum_pages,
+            full_vacuum=force_full,
+        )
+
+    # VACUUM cannot run inside an explicit transaction.
+    if reclaim is not None:
+        vac_result = reclaim(_vac)
+        assert isinstance(vac_result, tuple) and len(vac_result) == 2
+        vacuum_pages = int(vac_result[0])
+        did_full = bool(vac_result[1])
+    else:
+        conn.commit()
+        vacuum_pages, did_full = _vac(conn)
+
+    pause = level == "critical" and cfg.disk.pause_book_writes_on_critical
 
     report = RetentionReport(
         now_ms=now_ms,
@@ -366,36 +377,41 @@ def run_retention(
         disk_level=level,
         deleted=deleted,
         bars_upserted=bars,
-        vacuum_pages=vacuum_pages,
+        vacuum_pages_requested=vacuum_pages,
         full_vacuum=did_full,
         book_writes_paused=pause,
     )
     logger.info(
-        "retention done level=%s free=%s deleted=%s bars=%s pause_book=%s",
+        "retention done level=%s free=%s deleted=%s bars=%s pause_book=%s "
+        "vacuum_pages_req=%s full_vacuum=%s",
         report.disk_level,
         report.free_bytes,
         report.deleted,
         report.bars_upserted,
         report.book_writes_paused,
+        report.vacuum_pages_requested,
+        report.full_vacuum,
     )
     return report
 
 
 def _ts_column_for(table: str) -> str | None:
-    return {
-        "bybit_book": "exchange_ts_ms",
-        "bybit_book_1m": "bucket_ts_ms",
-        "bybit_trades": "exchange_ts_ms",
-        "fluxion_pool_state": "recv_ts_ms",
-        "fluxion_swaps": "recv_ts_ms",
-        "fluxion_rfq_quotes": "poll_ts_ms",
-        "fluxion_rfq_fills": "recv_ts_ms",
-        "collector_gaps": "gap_start_ms",
-    }.get(table)
+    for t, col, _ in _TABLE_POLICIES:
+        if t == table:
+            return col
+    return None
 
 
 def growth_snapshot(conn: sqlite3.Connection, *, db_path: Path | None = None) -> GrowthSnapshot:
-    """Quantify rows and crude rows/day from each table's timestamp span."""
+    """Quantify rows, optional dbstat bytes, and crude rows/day per table."""
+    # dbstat is available when SQLite is compiled with SQLITE_ENABLE_DBSTAT_VTAB.
+    has_dbstat = False
+    try:
+        conn.execute("SELECT 1 FROM dbstat LIMIT 1")
+        has_dbstat = True
+    except sqlite3.Error:
+        has_dbstat = False
+
     tables: list[TableGrowth] = []
     for table in _GROWTH_TABLES:
         exists = conn.execute(
@@ -421,6 +437,7 @@ def growth_snapshot(conn: sqlite3.Connection, *, db_path: Path | None = None) ->
         max_ts: int | None = None
         span: int | None = None
         rate: float | None = None
+        approx: int | None = None
         if col is not None and n > 0:
             bounds = conn.execute(
                 f"SELECT MIN({col}) AS lo, MAX({col}) AS hi FROM {table}"
@@ -430,6 +447,15 @@ def growth_snapshot(conn: sqlite3.Connection, *, db_path: Path | None = None) ->
             if min_ts is not None and max_ts is not None and max_ts > min_ts:
                 span = max_ts - min_ts
                 rate = n / (span / 86_400_000.0)
+        if has_dbstat and n > 0:
+            try:
+                b = conn.execute(
+                    "SELECT SUM(pgsize) FROM dbstat WHERE name = ?", (table,)
+                ).fetchone()
+                if b is not None and b[0] is not None:
+                    approx = int(b[0])
+            except sqlite3.Error:
+                approx = None
         tables.append(
             TableGrowth(
                 table=table,
@@ -438,6 +464,7 @@ def growth_snapshot(conn: sqlite3.Connection, *, db_path: Path | None = None) ->
                 max_ts_ms=max_ts,
                 span_ms=span,
                 rows_per_day=rate,
+                approx_bytes=approx,
             )
         )
     db_bytes: int | None = None
@@ -451,23 +478,35 @@ def growth_snapshot(conn: sqlite3.Connection, *, db_path: Path | None = None) ->
 
 
 def format_growth_report(snap: GrowthSnapshot) -> str:
-    lines = ["table | rows | span_h | rows/day", "--- | ---: | ---: | ---:"]
+    lines = [
+        "table | rows | approx_bytes | span_h | rows/day",
+        "--- | ---: | ---: | ---: | ---:",
+    ]
     for t in snap.tables:
         span_h = "" if t.span_ms is None else f"{t.span_ms / 3_600_000:.2f}"
         rate = "" if t.rows_per_day is None else f"{t.rows_per_day:.0f}"
-        lines.append(f"{t.table} | {t.rows} | {span_h} | {rate}")
+        abytes = "" if t.approx_bytes is None else str(t.approx_bytes)
+        lines.append(f"{t.table} | {t.rows} | {abytes} | {span_h} | {rate}")
     if snap.db_bytes is not None:
         lines.append(f"\ndb_bytes: {snap.db_bytes} ({snap.db_bytes / (1024**2):.1f} MiB)")
-    # Ungoverned exhaustion sketch using bybit_book rate if present.
     book = next((t for t in snap.tables if t.table == "bybit_book"), None)
     if book is not None and book.rows_per_day and book.rows > 0 and snap.db_bytes:
-        # Attribute all current size to book proportionally (conservative upper bound).
         total_rows = sum(t.rows for t in snap.tables) or 1
         book_share = book.rows / total_rows
-        bytes_per_book_row = (snap.db_bytes * book_share) / max(book.rows, 1)
+        if book.approx_bytes is not None:
+            bytes_per_book_row = book.approx_bytes / max(book.rows, 1)
+        else:
+            bytes_per_book_row = (snap.db_bytes * book_share) / max(book.rows, 1)
         mb_per_day = book.rows_per_day * bytes_per_book_row / (1024**2)
         lines.append(
             f"approx bybit_book growth: {mb_per_day:.1f} MiB/day "
             f"(~{bytes_per_book_row:.0f} B/row × {book.rows_per_day:.0f} rows/day)"
         )
+        if mb_per_day > 0:
+            free_mib = 5.2 * 1024.0
+            days = free_mib / mb_per_day
+            lines.append(
+                f"ungoverned: ~{days:.0f} days to fill 5.2 GiB at this book rate "
+                "(order-of-magnitude; open hours are faster — see DESIGN §5.1)"
+            )
     return "\n".join(lines)

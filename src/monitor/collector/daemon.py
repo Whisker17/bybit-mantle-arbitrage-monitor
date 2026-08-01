@@ -58,6 +58,7 @@ class CollectorDaemon:
         self._rfq_gap = False
         # Set by retention loop under disk-critical waterline (WHI-751).
         self._book_writes_paused = False
+        self._book_pause_logged = False
 
     def request_stop(self) -> None:
         self._stop.set()
@@ -114,9 +115,12 @@ class CollectorDaemon:
 
     async def _on_book(self, tick: BybitBookTick) -> None:
         if self._book_writes_paused:
-            logger.error(
-                "skip bybit_book write: disk critical (retention pause active)"
-            )
+            # One log line per pause episode — not per tick (~7+/s).
+            if not self._book_pause_logged:
+                logger.error(
+                    "skip bybit_book writes: disk critical (retention pause active)"
+                )
+                self._book_pause_logged = True
             return
         await asyncio.to_thread(self.store.insert_bybit_book, [tick])
 
@@ -263,16 +267,32 @@ class CollectorDaemon:
                     pass
             first = False
             try:
+                was_paused = self._book_writes_paused
                 report = await asyncio.to_thread(
                     self.store.run_retention, cfg, now_ms=now_ms()
                 )
                 self._book_writes_paused = report.book_writes_paused
-                if report.book_writes_paused:
+                if report.book_writes_paused and not was_paused:
+                    self._book_pause_logged = False
+                    await asyncio.to_thread(
+                        self.store.insert_gap,
+                        CollectorGap(
+                            source="disk_critical",
+                            gap_start_ms=report.now_ms,
+                            gap_end_ms=report.now_ms,
+                            detail=(
+                                f"bybit_book writes paused free={report.free_bytes}"
+                            ),
+                        ),
+                    )
                     logger.error(
                         "disk critical free=%s — bybit_book writes paused until "
                         "retention frees space",
                         report.free_bytes,
                     )
+                elif not report.book_writes_paused and was_paused:
+                    self._book_pause_logged = False
+                    logger.info("disk recovered — bybit_book writes resumed")
                 elif report.disk_level != "ok":
                     logger.warning(
                         "disk %s free=%s deleted=%s",

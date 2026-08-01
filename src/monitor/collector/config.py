@@ -150,7 +150,11 @@ class RetentionConfig(BaseModel):
 
 
 def default_retention_config() -> RetentionConfig:
-    """Checked-in defaults (matches config/collector.yaml retention block)."""
+    """Fallback when YAML omits ``retention:`` (tests / partial configs).
+
+    Production values are the checked-in ``config/collector.yaml`` block —
+    edit that file, not these Python field defaults, for deploy tuning.
+    """
     return RetentionConfig()
 
 

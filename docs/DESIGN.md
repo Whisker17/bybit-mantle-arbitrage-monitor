@@ -126,8 +126,9 @@ Planned `src/monitor/` packages (land with their issues; empty package until the
 | `monitor/symbols` | fixed xStock list, Bybit multiplier map | M1 |
 | `monitor/bybit` | live Bybit book/trades WS | M2 (landed WHI-731) |
 | `monitor/fluxion` | AMM state/quotes + RFQ feed | M2 (landed WHI-731) |
-| `monitor/storage` | SQLite journal for collector ticks | M2 (landed WHI-731) |
-| `monitor/collector` | daemon orchestrating feeds → SQLite | M2 (landed WHI-731) |
+| `monitor/storage` | SQLite journal for collector ticks + retention | M2 (landed WHI-731); retention WHI-751 |
+| `monitor/collector` | daemon orchestrating feeds → SQLite (+ retention loop) | M2 (landed WHI-731); retention WHI-751 |
+| `monitor/retention` | thin CLI over `storage.retention` (`python -m monitor.retention`) | WHI-751 |
 | `monitor/metrics` | edge, wear, session stats | M3 (landed WHI-732) |
 | `monitor/attribution` | mechanism + behavior labels | M4 (landed WHI-733) |
 | `monitor/tui` | live panel (Textual overview + detail) | M5 (landed WHI-734) |
@@ -239,14 +240,21 @@ Steady-state bound (order of magnitude, ~10 pairs):
 #### Runtime
 
 1. **In-process loop** in `monitor.collector` (`retention.interval_s`, default 1h);
-   first pass runs shortly after boot.
-2. **One-shot CLI** (systemd timer / manual): `python -m monitor.retention`.
-3. **DELETE** in id/rowid batches (`delete_batch_size`) under the store lock so
-   it interleaves with inserts without long exclusive stalls.
-4. **Space reclaim:** `PRAGMA wal_checkpoint(TRUNCATE)` + optional
-   `incremental_vacuum(N)`. SQLite freelist reuse means file size **plateaus**
-   after the first full cycle even without a full `VACUUM`. `full_vacuum: true`
-   or disk-**critical** path may run `VACUUM` (brief writer block — prefer off-peak).
+   first pass runs shortly after boot. No extra systemd unit required on the
+   VPS; optional timer can still call the CLI.
+2. **One-shot CLI** (manual / cron / timer): `python -m monitor.retention`
+   (`--growth-only` for quantification without prune).
+3. **DELETE** in rowid batches (`delete_batch_size`); each batch is its own
+   short store-lock transaction so collector inserts interleave.
+4. **Space reclaim:** `PRAGMA wal_checkpoint(TRUNCATE)` +
+   `incremental_vacuum(N)` when the DB was created with
+   `PRAGMA auto_vacuum=INCREMENTAL` (set automatically for **new** files in
+   `SqliteStore`). Existing DBs stay at their original mode — freelist pages are
+   still reused so size **plateaus** after the first full prune cycle; run once
+   with `--full-vacuum` (or critical waterline) to shrink the file on disk.
+5. **Schema:** `SCHEMA_VERSION=2` adds `bybit_book_1m` + prune indexes via
+   `CREATE IF NOT EXISTS` (no destructive migration). Meta key is updated for
+   operators; readers do not gate on the integer.
 
 #### Disk waterline (`retention.disk`)
 

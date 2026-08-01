@@ -346,3 +346,72 @@ def test_batch_delete_respects_batch_size(tmp_path: Path) -> None:
     assert report.deleted["bybit_book"] == 250
     assert store.count("bybit_book") == 1
     store.close()
+
+
+def test_prune_preserves_latest_for_tui_volume_path(tmp_path: Path) -> None:
+    """Before/after prune: latest books + 24h volume window still correct.
+
+    M3 EdgeStats is process-local; TUI cold-start uses recent books only.
+    This asserts the journal seams those layers read stay consistent.
+    """
+    db = tmp_path / "tui.db"
+    store = SqliteStore(db)
+    now = 1_800_000_000_000
+    # Mix of old (outside 1h raw TTL) and recent books + one trade inside 24h.
+    books = [
+        _book("GOOGLx", now - 10_800_000, "100"),  # 3h ago
+        _book("GOOGLx", now - 7_200_000, "110"),  # 2h ago
+        _book("GOOGLx", now - 1_800_000, "150"),  # 30m ago — keep
+        _book("GOOGLx", now - 100, "200"),  # latest — keep
+    ]
+    store.insert_bybit_book(books)
+    store.insert_bybit_trades(
+        [
+            BybitTradeTick(
+                pair_id="GOOGLx",
+                symbol="GOOGLXUSDT",
+                exchange_ts_ms=now - 1_000,
+                recv_ts_ms=now - 999,
+                trade_id="g1",
+                price=Decimal("200"),
+                price_de_multiplied=Decimal("200"),
+                size=Decimal("1.5"),
+                side="Buy",
+                multiplier=Decimal(1),
+            )
+        ]
+    )
+    with JournalReader(db) as reader:
+        before_latest = reader.latest_bybit_book("GOOGLx")
+        before_vol = reader.volume_stats("GOOGLx", since_ms=now - 86_400_000)
+        before_books = reader.bybit_books("GOOGLx", limit=10)
+    assert before_latest is not None
+    assert before_latest.bid_de_multiplied == Decimal("200")
+    assert before_vol.bybit_trade_count == 1
+    assert len(before_books) == 4
+
+    # Keep 1 hour of raw — drops the 3h-old seeds, keeps recent + mid window.
+    store.run_retention(
+        _policy(bybit_book_raw_ms=3_600_000, bybit_trades_ms=86_400_000),
+        now_ms=now,
+        free_bytes=10**12,
+    )
+    with JournalReader(db) as reader:
+        after_latest = reader.latest_bybit_book("GOOGLx")
+        after_vol = reader.volume_stats("GOOGLx", since_ms=now - 86_400_000)
+        after_books = reader.bybit_books("GOOGLx", limit=10)
+    assert after_latest is not None
+    assert after_latest.bid_de_multiplied == before_latest.bid_de_multiplied
+    assert after_vol.bybit_trade_count == before_vol.bybit_trade_count
+    assert after_vol.bybit_notional == before_vol.bybit_notional
+    assert len(after_books) < len(before_books)
+    assert all(b.exchange_ts_ms >= now - 3_600_000 for b in after_books)
+    store.close()
+
+
+def test_new_db_enables_incremental_auto_vacuum(tmp_path: Path) -> None:
+    db = tmp_path / "av.db"
+    store = SqliteStore(db)
+    mode = store._conn.execute("PRAGMA auto_vacuum").fetchone()  # noqa: SLF001
+    assert int(mode[0]) == 2  # INCREMENTAL
+    store.close()
