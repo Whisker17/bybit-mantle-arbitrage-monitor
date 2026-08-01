@@ -108,8 +108,12 @@ class ChainPoller:
         return handled
 
     def _process_block(self, block: int, *, gap: bool) -> bool:
-        """Return True if the block was fully handled."""
-        recv = now_ms()
+        """Return True if the block was fully handled.
+
+        ``recv_ts_ms`` is stamped **after** RPC work so block_ts→DB latency
+        matches the WHI-731 acceptance metric (not poll-start optimism).
+        """
+        miss_ts = now_ms()
         blk = self.rpc.get_block(block, full_txs=False)
         if blk is None:
             logger.warning("block %s not found; marking gap", block)
@@ -117,8 +121,8 @@ class ChainPoller:
                 self.on_gap(
                     CollectorGap(
                         source="mantle_blocks",
-                        gap_start_ms=recv,
-                        gap_end_ms=recv,
+                        gap_start_ms=miss_ts,
+                        gap_end_ms=now_ms(),
                         detail=f"block {block} not found",
                     )
                 )
@@ -126,20 +130,20 @@ class ChainPoller:
             return False
         block_ts = int(blk["timestamp"], 16)
 
+        states: list[FluxionPoolStateTick] = []
         if self.pools:
+            # Temporary recv; rewritten after all RPC for this block completes.
             states = fetch_pool_states(
                 self.rpc,
                 self.pools,
                 block_number=block,
                 block_ts=block_ts,
-                recv_ts_ms=recv,
+                recv_ts_ms=0,
                 gap=gap,
             )
             for s in states:
                 self._token_order[s.pool.lower()] = (s.token0, s.token1)
-            if states and self.on_pool_state:
-                self.on_pool_state(states)
-            elif self.pools and not states:
+            if self.pools and not states:
                 logger.warning(
                     "block %s: all %d pool state decodes failed", block, len(self.pools)
                 )
@@ -147,10 +151,10 @@ class ChainPoller:
         pool_by_addr = {p.pool.lower(): p for p in self.pools}
         addresses = list(pool_by_addr.keys())
         swaps: list[FluxionSwapTick] = []
+        gas_used_by_tx: dict[str, int] = {}
+        gas_price_by_tx: dict[str, int] = {}
         if addresses:
             logs = self.rpc.get_logs(addresses, block, block)
-            gas_used_by_tx: dict[str, int] = {}
-            gas_price_by_tx: dict[str, int] = {}
             if self.fetch_swap_receipts:
                 tx_hashes = {
                     str(lg.get("transactionHash") or "").lower()
@@ -189,15 +193,13 @@ class ChainPoller:
                     token0=token0,
                     token1=token1,
                     block_ts=block_ts,
-                    recv_ts_ms=recv,
+                    recv_ts_ms=0,
                     gas_used=gas_used_by_tx.get(txh),
                     effective_gas_price=gas_price_by_tx.get(txh),
                     gap=gap,
                 )
                 if tick is not None:
                     swaps.append(tick)
-        if swaps and self.on_swaps:
-            self.on_swaps(swaps)
 
         fills: list[FluxionRfqFillTick] = []
         try:
@@ -211,11 +213,92 @@ class ChainPoller:
             logger.warning("LOP getLogs failed at block %s: %s", block, exc)
             lop_logs = []
         for lg in lop_logs:
-            fill = decode_lop_fill_log(lg, block_ts=block_ts, recv_ts_ms=recv, gap=gap)
+            fill = decode_lop_fill_log(lg, block_ts=block_ts, recv_ts_ms=0, gap=gap)
             if fill is not None:
                 fills.append(fill)
+                # Attach gas from receipt when we already fetch receipts for swaps,
+                # or pull the fill tx receipt opportunistically.
+                txh = fill.tx_hash.lower()
+                if self.fetch_swap_receipts and txh and txh not in gas_used_by_tx:
+                    try:
+                        rcpt = self.rpc.get_transaction_receipt(txh)
+                        if rcpt and "gasUsed" in rcpt:
+                            gas_used_by_tx[txh] = int(rcpt["gasUsed"], 16)
+                        if rcpt:
+                            egp = rcpt.get("effectiveGasPrice") or rcpt.get("gasPrice")
+                            if egp is not None:
+                                gas_price_by_tx[txh] = (
+                                    int(egp, 16) if isinstance(egp, str) else int(egp)
+                                )
+                    except Exception as exc:  # noqa: BLE001
+                        logger.debug("LOP receipt %s failed: %s", txh, exc)
+
+        # Stamp after all RPC for this block — matches block_ts → DB latency AC.
+        recv = now_ms()
+        if states and self.on_pool_state:
+            stamped = [
+                FluxionPoolStateTick(
+                    pair_id=s.pair_id,
+                    pool=s.pool,
+                    block_number=s.block_number,
+                    block_ts=s.block_ts,
+                    recv_ts_ms=recv,
+                    sqrt_price_x96=s.sqrt_price_x96,
+                    tick=s.tick,
+                    liquidity=s.liquidity,
+                    token0=s.token0,
+                    token1=s.token1,
+                    mid_usdc_per_wrapper=s.mid_usdc_per_wrapper,
+                    mid_usdc_per_native=s.mid_usdc_per_native,
+                    wrapper_assets_per_share=s.wrapper_assets_per_share,
+                    gap=s.gap,
+                )
+                for s in states
+            ]
+            self.on_pool_state(stamped)
+        if swaps and self.on_swaps:
+            stamped_swaps = [
+                FluxionSwapTick(
+                    pair_id=t.pair_id,
+                    pool=t.pool,
+                    block_number=t.block_number,
+                    block_ts=t.block_ts,
+                    recv_ts_ms=recv,
+                    tx_hash=t.tx_hash,
+                    log_index=t.log_index,
+                    sender=t.sender,
+                    recipient=t.recipient,
+                    amount0=t.amount0,
+                    amount1=t.amount1,
+                    sqrt_price_x96=t.sqrt_price_x96,
+                    liquidity=t.liquidity,
+                    tick=t.tick,
+                    amount_token0=t.amount_token0,
+                    amount_token1=t.amount_token1,
+                    direction=t.direction,
+                    price_usdc_per_wrapper=t.price_usdc_per_wrapper,
+                    gas_used=t.gas_used,
+                    effective_gas_price=t.effective_gas_price,
+                    gap=t.gap,
+                )
+                for t in swaps
+            ]
+            self.on_swaps(stamped_swaps)
         if fills and self.on_rfq_fills:
-            self.on_rfq_fills(fills)
+            stamped_fills = [
+                FluxionRfqFillTick(
+                    block_number=f.block_number,
+                    block_ts=f.block_ts,
+                    recv_ts_ms=recv,
+                    tx_hash=f.tx_hash,
+                    log_index=f.log_index,
+                    order_hash=f.order_hash,
+                    remaining_making_amount=f.remaining_making_amount,
+                    gap=f.gap,
+                )
+                for f in fills
+            ]
+            self.on_rfq_fills(stamped_fills)
         return True
 
     def _resolve_tokens(self, meta: PoolMeta, block: int) -> tuple[str, str]:

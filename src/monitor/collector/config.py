@@ -54,6 +54,15 @@ class MantleCollectorConfig(BaseModel):
     rpc_retries: int = Field(ge=1)
     fetch_swap_receipts: bool
 
+    @model_validator(mode="after")
+    def _gap_bounds(self) -> MantleCollectorConfig:
+        if self.max_block_gap > self.max_catchup_blocks:
+            raise ValueError(
+                f"max_block_gap={self.max_block_gap} must be <= "
+                f"max_catchup_blocks={self.max_catchup_blocks}"
+            )
+        return self
+
 
 class RfqCollectorConfig(BaseModel):
     model_config = ConfigDict(extra="forbid", frozen=True)

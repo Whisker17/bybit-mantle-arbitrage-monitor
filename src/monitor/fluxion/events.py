@@ -74,12 +74,12 @@ def decode_v3_swap_log(
     wrapper = meta.wrapper_token.lower()
     t0a, t1a = token0.lower(), token1.lower()
     # Decimals: quote=6, wrapper=18 for all inventory pools.
-    if t0a == quote:
+    if t0a == quote and t1a == wrapper:
         dec0, dec1 = USDC_DECIMALS, meta.wrapper_decimals
-    elif t0a == wrapper:
+    elif t0a == wrapper and t1a == quote:
         dec0, dec1 = meta.wrapper_decimals, USDC_DECIMALS
     else:
-        dec0, dec1 = meta.wrapper_decimals, USDC_DECIMALS
+        return None
 
     amount_token0 = Decimal(amount0) / Decimal(10**dec0)
     amount_token1 = Decimal(amount1) / Decimal(10**dec1)

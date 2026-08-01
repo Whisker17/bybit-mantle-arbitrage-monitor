@@ -12,14 +12,19 @@ from monitor.bybit.parse import (
 
 
 def test_parse_ticker_applies_multiplier() -> None:
+    """Spot tickers carry bid1/ask1 (verified REST 2026-08-01 TSLAXUSDT)."""
     mult = Decimal("2")
+    # Shape mirrors GET /v5/market/tickers?category=spot (bid1Price present).
     payload = {
         "topic": "tickers.AAPLXUSDT",
         "ts": 1_700_000_000_000,
         "data": {
             "symbol": "AAPLXUSDT",
             "bid1Price": "200.0",
+            "bid1Size": "1.0",
             "ask1Price": "201.0",
+            "ask1Size": "2.0",
+            "lastPrice": "200.5",
         },
     }
     tick = parse_ticker_message(

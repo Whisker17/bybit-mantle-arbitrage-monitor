@@ -74,10 +74,9 @@ class RfqPoller:
     """Round-robin EXACT_INPUT quote polls respecting global rate limit.
 
     Each ``poll_next`` issues **one** HTTP quote. With ``poll_both_sides``, the
-    schedule interleaves buy_native and sell_native legs so a full pair cycle is
-    2N polls. Sleep between polls should be ``60 / rate_limit_per_minute`` so the
-    global budget is filled (pairs.yaml: N=11 → 11s/pair/side at 60/min when
-    both sides are on).
+    schedule interleaves buy_native and sell_native legs (2N slots). Sleep
+    between polls is ``60 / rate_limit_per_minute`` (1s at 60/min). With N=11
+    and both sides, each pair×leg repeats every **22s** (2N seconds).
     """
 
     def __init__(

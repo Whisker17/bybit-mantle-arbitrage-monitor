@@ -37,6 +37,11 @@ soon — anything touching key handling, RPC credentials defaults to at least Hi
   `fluxion_rfq_fills`, but no live fill was observed at inventory or wiring time.
   Confirm topic0 + decode layout from a real fill before M4 attribution trusts labels.
 
+- **RFQ fill rows lack pair/direction/size/price/taker** (Medium, WHI-731 → M4).
+  `fluxion_rfq_fills` stores order_hash + remaining + tx_hash only — `OrderFilled`
+  does not encode pair identity. Enrich from receipt Transfer/LOP order bytes when
+  a live fill is available; needed for M4 mechanism labels on RFQ legs.
+
 - **Fluxion V2 factory not published for xStocks** (Low, WHI-730 → later if needed).
   `config/pairs.yaml` / `AmmPool.kind` — inventory is V3-only; DESIGN still says
   “V2/V3”. Revisit if Fluxion publishes a V2 factory used by xStock pairs.

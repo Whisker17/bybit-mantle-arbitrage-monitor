@@ -10,11 +10,6 @@ from monitor.quotes import BybitBookTick, BybitTradeTick, now_ms
 from monitor.symbols.multipliers import de_multiplied_price
 
 
-def symbol_to_pair_id(symbol_by_pair: Mapping[str, str], symbol: str) -> str | None:
-    """Map Bybit symbol → pair_id using a prebuilt reverse map."""
-    return symbol_by_pair.get(symbol.upper())
-
-
 def _dec(value: object) -> Decimal:
     if isinstance(value, Decimal):
         return value
@@ -72,10 +67,6 @@ def parse_ticker_message(
         multiplier=mult,
         gap=gap,
     )
-
-
-# Back-compat alias used by older call sites / tests naming.
-parse_orderbook_message = parse_ticker_message
 
 
 def parse_public_trade_message(
