@@ -52,8 +52,8 @@ placeholders. Agents must not assume a module exists until its issue lands. -->
   - **PnL v2 research (WHI-754) landed:** Hummingbot CEX⇄AMM methodology →
     cash-flow PnL spec; note `docs/references/hummingbot-pnl.md`, DESIGN §2.6.
     Engine (optimal size + bucket table) is **WHI-756** — not landed.
-  - **Not landed yet:** M6 Web plan doc only; PnL v2 engine (WHI-756).
-    Do not assume that module exists until its issue lands.
+  - **Not landed yet:** M6 Web plan doc; PnL v2 engine (WHI-756).
+    Do not assume either module exists until its issue lands.
 
 ## Build, test, run
 

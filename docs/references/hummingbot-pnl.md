@@ -189,7 +189,7 @@ searches for optimal size; the operator picks `order_amount`.
 | \(Q\) | USD | Target single-trade **notional** at Bybit de-multiplied mid |
 | \(P_b^{\mathrm{mid}}\) | quote/base | Bybit mid after `de_multiplied_price` (USDT per 1 native-equivalent base) |
 | \(q\) | base | \(q = Q / P_b^{\mathrm{mid}}\) — economic base amount (native xStock units) |
-| \(m\) | — | Bybit `xstockMultiplier`; applied **only** when converting raw Bybit book prices → comparable prices (already done on ticks). Depth levels used in VWAP must be **de-multiplied prices** with sizes in the same unit as \(q\) (see §4.2) |
+| \(m\) | — | Bybit `xstockMultiplier` (>0). Converts raw Bybit book into units comparable to Fluxion native base (see §4.2 multiplier step) |
 | \(f_b\) | fraction | Bybit taker fee = \(10\,\mathrm{bps} = 0.001\) (config `bybit_taker_fee_bps`) |
 | \(f_p\) | fraction | AMM pool fee (e.g. 3000 → 0.003); RFQ: **0** (embedded in quote) |
 | \(G\) | USD | Mantle gas for **one** Fluxion leg (`gas_usd_per_swap`, default 0.01) |
@@ -203,8 +203,31 @@ searches for optimal size; the operator picks `order_amount`.
 
 ### 4.2 Bybit leg — VWAP + taker fee
 
-Inputs: ordered book side levels \(\{(p_i, s_i)\}\) with **de-multiplied** price
-\(p_i\) (USDT per base) and size \(s_i\) in **base** units consistent with \(q\).
+#### Multiplier step (before any walk)
+
+Raw Bybit L2 level: \((p^{\mathrm{raw}}_i, s^{\mathrm{raw}}_i)\) where \(p^{\mathrm{raw}}\) is
+the exchange price and \(s^{\mathrm{raw}}\) is the exchange base size in the
+instrument’s native lot unit.
+
+\[
+p_i = p^{\mathrm{raw}}_i / m,\qquad
+s_i = s^{\mathrm{raw}}_i \cdot m
+\]
+
+so that \(p_i \cdot s_i = p^{\mathrm{raw}}_i \cdot s^{\mathrm{raw}}_i\) (notional
+invariant) and \(p_i\) is USDT per **Fluxion-comparable** base unit. Matched
+base \(q\) and walk sizes \(s_i\) share that unit. Submitting a real Bybit order
+would convert back: \(s^{\mathrm{raw}} = q_{\mathrm{walk}} / m\) — paper PnL never
+submits, but collectors that store only raw levels must apply both formulas
+before calling the walk. Ticks that already expose `bid_de_multiplied` /
+de-multiplied depth still need **size** scaled by \(m\) if size was left raw.
+
+When \(m = 1\) (many pairs today) this is a no-op. When \(m \approx 1.00x\),
+omitting size scaling mis-states depth by \(\sim(m-1)\) (~tens of bps of size
+at current inventory max \(m\)).
+
+Inputs to the walk below: ordered levels \(\{(p_i, s_i)\}\) **after** the
+multiplier step.
 
 **Walk base amount** (Hummingbot `get_vwap_for_volume` style — sized in **base**,
 not USD):
@@ -249,8 +272,8 @@ Notes:
 2. Without depth, degrade to L1: \(P_{\mathrm{ask}}^{\mathrm{vwap}} = \mathrm{ask}_1\),
    \(P_{\mathrm{bid}}^{\mathrm{vwap}} = \mathrm{bid}_1\) (M3 today). Mark
    `bybit_depth_source = l1` vs `book`.
-3. **Multiplier step:** de-multiply **before** VWAP. Never de-multiply VWAP
-   after walking raw levels with native sizes (that would mismatch \(q\)).
+3. **Multiplier step:** apply §4.2 formulas to every level **before** VWAP.
+   Never de-multiply only the VWAP result after walking raw levels.
 
 ### 4.3 Fluxion leg — AMM vs RFQ
 
@@ -306,20 +329,29 @@ today (`config/collector.yaml`):
 
 ### 4.4 Direction cash-flows (USD)
 
-Treat USDT and USDC as USD with optional basis:
+**USDT ≈ USDC conversion:** treat both as 1:1 dollars in the cash legs
+(\(\mathrm{usd}(x) = x\)).
+
+**Basis wear (normative — matches M3):** let
+\(\beta = \texttt{usdt\_usdc\_basis\_bps} / 10^4\) (config; default 0). When
+\(\beta > 0\) (“Bybit USDT richer than Fluxion USDC by \(\beta\)”), subtract an
+**additive wear on both directions**:
 
 \[
-\mathrm{usd}(x_{\mathrm{USDT}}) = x_{\mathrm{USDT}},\quad
-\mathrm{usd}(x_{\mathrm{USDC}}) = x_{\mathrm{USDC}}\cdot(1 - \beta)
+\mathrm{basis\_usd}(Q) = \beta \cdot Q
 \]
 
-(With default \(\beta=0\), both are 1:1. \(\beta>0\) means “Bybit USDT richer”
-wear applied by shrinking USDC value of Fluxion cash — same spirit as M3
-additive basis bps; implementers may equivalently add \(\beta\cdot Q\) as a
-wear term. Document the chosen encoding in code comments; tests lock one.)
+\[
+\mathrm{PnL} = (\text{recv} - \text{spent} - G) - \mathrm{basis\_usd}(Q)
+\]
+
+Do **not** implement basis as a one-sided haircut on USDC only (that flips sign
+vs M3 on `buy_fluxion_sell_bybit`). Default \(\beta=0\) ⇒ no term. Error if
+left at 0 while the true basis is nonzero: typically sub-5 bps (DESIGN §8).
 
 All names below are from the **trader** perspective: `*_spent` leaves the wallet,
-`*_recv` enters it.
+`*_recv` enters it. \(Q_{\mathrm{ref}}\) is the AMM bucket \(Q\), or for RFQ rows
+\(q \cdot P_b^{\mathrm{mid}}\) (label notional).
 
 #### Direction `buy_fluxion_sell_bybit` (AMM)
 
@@ -327,7 +359,7 @@ All names below are from the **trader** perspective: `*_spent` leaves the wallet
 q           = Q / P_b_mid                         # net base
 USDC_spent  = amm_quote_in_for_base_out(q)        # binary-search exact-in; fee-inclusive
 USDT_recv   = q * P_bid_vwap * (1 - f_b)          # sell net q; fee in quote
-PnL_USD     = usd(USDT_recv) - usd(USDC_spent) - G
+PnL_USD     = USDT_recv - USDC_spent - G - basis_usd(Q)
 ```
 
 #### Direction `buy_bybit_sell_fluxion` (AMM)
@@ -337,7 +369,7 @@ q           = Q / P_b_mid                         # net base
 q_gross     = q / (1 - f_b)                       # Bybit buy fee in base
 USDT_spent  = q_gross * P_ask_vwap                # walk asks for q_gross
 USDC_recv   = amm_quote_out_for_base_in(q)        # exact-in base q; fee-inclusive
-PnL_USD     = usd(USDC_recv) - usd(USDT_spent) - G
+PnL_USD     = USDC_recv - USDT_spent - G - basis_usd(Q)
 ```
 
 #### RFQ variants (poll-keyed)
@@ -347,14 +379,16 @@ PnL_USD     = usd(USDC_recv) - usd(USDT_spent) - G
 USDC_spent = rfq.amountIn
 q          = rfq.amountOut
 USDT_recv  = q * P_bid_vwap * (1 - f_b)
-PnL_USD    = usd(USDT_recv) - usd(USDC_spent) - G
+Q_ref      = q * P_b_mid
+PnL_USD    = USDT_recv - USDC_spent - G - basis_usd(Q_ref)
 
 # buy_bybit_sell_fluxion @ RFQ sell poll
 q          = rfq.amountIn          # base sold on Fluxion
 USDC_recv  = rfq.amountOut
 q_gross    = q / (1 - f_b)
 USDT_spent = q_gross * P_ask_vwap
-PnL_USD    = usd(USDC_recv) - usd(USDT_spent) - G
+Q_ref      = q * P_b_mid
+PnL_USD    = USDC_recv - USDT_spent - G - basis_usd(Q_ref)
 ```
 
 ### 4.5 Relation to M3 `edge_bps`
@@ -466,12 +500,16 @@ If \(Q_{\max} < Q_{\min}\): no fillable size → `optimal = null`.
 1. **Coarse log grid:**  
    \(Q_i = \exp\bigl(\ln Q_{\min} + \frac{i}{n-1}(\ln Q_{\max}-\ln Q_{\min})\bigr)\),
    \(i=0..n-1\), \(n=\) `coarse_points`. Always include endpoints.
-2. Evaluate \(\mathrm{PnL}(Q_i)\) (unfillable → skip).
-3. **Local peaks:** any \(i\) with \(\mathrm{PnL}(Q_i) \ge \mathrm{PnL}(Q_{i-1})\) and
-   \(\ge \mathrm{PnL}(Q_{i+1})\) (endpoints: one-sided). Also retain the global
-   coarse argmax if not already a peak (plateau guard).
+2. Evaluate \(\mathrm{PnL}(Q_i)\). Unfillable samples get \(\mathrm{PnL} = -\infty\)
+   (still occupy their index so neighbors exist).
+3. **Local peaks:** among indices with finite PnL, any \(i\) with
+   \(\mathrm{PnL}(Q_i) \ge \mathrm{PnL}(Q_{i-1})\) and
+   \(\ge \mathrm{PnL}(Q_{i+1})\) (endpoints: one-sided; \(-\infty\) neighbors never
+   beat a finite value). Also retain the global coarse argmax among finite
+   points if not already a peak (plateau guard).
 4. **Refine:** for each peak, linearly sample `refine_points` in
-   \([Q_{i-1}, Q_{i+1}]\) (clamp to domain).
+   \([Q_{L}, Q_{R}]\) where \(Q_{L}, Q_{R}\) are the nearest **fillable** coarse
+   neighbors on each side (else domain endpoint).
 5. **Endpoint check:** re-evaluate \(Q_{\min}\), \(Q_{\max}\).
 6. **Winner:** max PnL among all evaluated fillable points. Ties → smaller \(Q\).
 

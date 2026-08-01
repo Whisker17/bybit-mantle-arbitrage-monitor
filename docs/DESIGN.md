@@ -123,8 +123,9 @@ bucket table. Methodology derivation and Hummingbot comparison:
 
 Bybit taker fee \(f_b = 10\,\mathrm{bps}\) (config). Spot fees are charged in the
 **received** asset (Bybit help center): buy → fee in base; sell → fee in quote.
-Levels for VWAP are **de-multiplied prices** with base sizes; multiplier is
-applied at tick ingest, not inside PnL. Full algebra in research note §4.2.
+VWAP levels: \(p = p^{\mathrm{raw}}/m\), \(s = s^{\mathrm{raw}}\cdot m\) (notional
+invariant; matched base \(q\) shares that unit). Full algebra in research note
+§4.2.
 
 | Direction | Buy leg (trader pays) | Sell leg (trader receives) | PnL (USD) |
 |-----------|----------------------|----------------------------|-----------|
@@ -133,9 +134,10 @@ applied at tick ingest, not inside PnL. Full algebra in research note §4.2.
 
 - \(G =\) `gas_usd_per_swap` (default $0.01), charged **once** per Fluxion leg
   (AMM and RFQ; default charge gas on RFQ too — conservative).
-- USDT/USDC: default 1:1 (\(\beta=0\)); optional basis via existing
-  `usdt_usdc_basis_bps` — error declaration: untreated basis is typically
-  sub-5 bps and remains DESIGN §8 open until measured.
+- USDT/USDC: cash legs 1:1; optional **additive** basis wear
+  \(\beta\cdot Q\) on both directions via `usdt_usdc_basis_bps` (same contract
+  as M3 `edge.py`, default 0) — error if left at 0 while true basis ≠ 0 is
+  typically sub-5 bps (DESIGN §8).
 - AMM fee: fee-inclusive amounts in cash-flow; UI wear breakdown may split fee
   vs impact **without** double-subtracting in \(\mathrm{PnL}\).
 - RFQ: no separate pool-fee line. Rows are keyed by **poll size** (USDC
