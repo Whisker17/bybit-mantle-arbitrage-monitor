@@ -122,6 +122,24 @@ class FluxionRfqQuoteTick:
     gap: bool = False
 
 
+# Single source of truth for the collector's RFQ ``side`` vocabulary. Writers use
+# ``monitor.fluxion.rfq.RfqLeg`` (``buy_native`` / ``sell_native``); the bare
+# ``buy`` / ``sell`` spellings are accepted for vendor payloads and fixtures.
+RfqSideLeg = Literal["buy", "sell"]
+RFQ_BUY_SIDES: frozenset[str] = frozenset({"buy_native", "buy"})
+RFQ_SELL_SIDES: frozenset[str] = frozenset({"sell_native", "sell"})
+
+
+def rfq_side_leg(side: str | None) -> RfqSideLeg | None:
+    """Normalize a stored RFQ ``side`` to its Fluxion leg; None if absent/unknown."""
+    normalized = (side or "").strip().lower()
+    if normalized in RFQ_BUY_SIDES:
+        return "buy"
+    if normalized in RFQ_SELL_SIDES:
+        return "sell"
+    return None
+
+
 @dataclass(frozen=True, slots=True)
 class FluxionRfqFillTick:
     """Limit Order Protocol fill event (RFQ settlement; signature-derived topics)."""

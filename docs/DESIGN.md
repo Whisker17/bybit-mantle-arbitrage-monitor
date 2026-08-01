@@ -108,7 +108,7 @@ in M3; default America/New_York RTH 09:30–16:00).
 | Python ≥3.11 + uv | matches phase-1; fast iteration for TUI |
 | httpx | RPC + REST (existing `mba.rpc` pattern) |
 | polars / duckdb | local analytics if needed; TUI may stay in-memory |
-| textual or rich (TUI) | pick in M5; not locked yet |
+| **Textual** (TUI) | M5 chose Textual over rich for interactive two-level nav (DataTable + detail screen); pure view models stay library-free |
 | Mantle JSON-RPC + Multicall3 | pool state + eth_call quotes |
 
 ### 4.2 Module layout
@@ -128,9 +128,9 @@ Planned `src/monitor/` packages (land with their issues; empty package until the
 | `monitor/fluxion` | AMM state/quotes + RFQ feed | M2 (landed WHI-731) |
 | `monitor/storage` | SQLite journal for collector ticks | M2 (landed WHI-731) |
 | `monitor/collector` | daemon orchestrating feeds → SQLite | M2 (landed WHI-731) |
-| `monitor/metrics` | edge, wear, session stats | M3 |
-| `monitor/attribution` | mechanism + behavior labels | M4 |
-| `monitor/tui` | live panel | M5 |
+| `monitor/metrics` | edge, wear, session stats | M3 (landed WHI-732) |
+| `monitor/attribution` | mechanism + behavior labels | M4 (landed WHI-733) |
+| `monitor/tui` | live panel (Textual overview + detail) | M5 (landed WHI-734) |
 
 #### Phase-1 → phase-2 reuse map
 
@@ -221,4 +221,4 @@ Dependency chain: M0 → M1 → M2 → (M3 ∥ M4) → M5 → M6.
 | Bybit quote is **USDT** while Fluxion AMM/RFQ quote is **USDC** — basis not modeled in M1 | M3 |
 | Live book depth quality vs phase-1 single snapshot approximation | M2/M3 |
 | Heuristic thresholds (80% / 20 trades) unvalidated on xStocks | M4 |
-| TUI library choice (textual vs rich) | M5 |
+| TUI library choice (textual vs rich) | **Resolved M5:** Textual |

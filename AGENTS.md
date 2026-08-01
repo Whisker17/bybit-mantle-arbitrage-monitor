@@ -38,8 +38,11 @@ placeholders. Agents must not assume a module exists until its issue lands. -->
     Bybit lead-lag → arb_bot / price_keeper / retail / unknown), pair aggregates
     for M5. Tunables in `config/attribution.yaml`; rules in
     `docs/references/m4-attribution-labels.md`.
-  - **Not landed yet:** M5–M6 TUI / web plan.
-    Do not assume those modules exist until their issues land.
+  - **M5 (WHI-734) landed:** `monitor/tui` — Textual live panel (overview table
+    + pair detail). Reads collector SQLite; spreads/edge via M3, attribution via
+    M4. Tunables in `config/tui.yaml`. Entry: `python -m monitor.tui`.
+  - **Not landed yet:** M6 Web plan doc only.
+    Do not assume that module exists until its issue lands.
 
 ## Build, test, run
 
@@ -52,7 +55,9 @@ uv run mypy                                   # type check
 uv run python -u -m mba.m5_report             # regenerate report/ from local parquet
 # Phase-2 live collector (M2 / WHI-731); needs network + optional MANTLE_RPC_URL:
 uv run python -m monitor.collector
-# Phase-2 TUI entrypoint lands with M5 (WHI-734).
+# Phase-2 TUI (M5 / WHI-734); reads collector SQLite (default data/monitor.db):
+uv run python -m monitor.tui
+# Optional: uv run python -m monitor.tui --db /path/to/monitor.db
 ```
 
 ## Runtime configuration
@@ -75,7 +80,8 @@ Module layout is fixed by `docs/DESIGN.md` §4.2. Short mirror:
     **`monitor/collector`** (M2) — live feeds → SQLite.
   - **`monitor/metrics`** (M3) — edge, wear, session stats from quote ticks.
   - **`monitor/attribution`** (M4) — mechanism + behavior labels / aggregates.
-  - Still to land: `tui` (M5).
+  - **`monitor/tui`** (M5) — Textual overview + detail panel over SQLite.
+  - Still to land: Web plan (M6).
   Reuse pieces from `mba` per DESIGN §4.2 table; do not import whole stages.
 
 ## Git workflow (mandatory)

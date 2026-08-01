@@ -1,0 +1,37 @@
+# TUI panel tunables — M5 / WHI-734.
+# Secrets stay in .env; this file is checked-in non-secret config.
+# Library choice: Textual (interactive two-level panel; DESIGN §4.1 / §8).
+
+version: 1
+
+# How often the panel re-reads SQLite and rebuilds view models (seconds).
+# Issue WHI-734: 1–2s refresh.
+refresh_interval_s: 1.5
+
+# SQLite journal written by `python -m monitor.collector` (M2).
+# Relative paths resolve against the process cwd (repo root when launched from there).
+sqlite_path: data/monitor.db
+
+# Reference notional for overview "net edge" column AND EdgeStats series.
+# MUST equal metrics.breach_size_usd (and therefore lie on size_ladder_usd) —
+# EdgeStats.observe_edge only records samples at breach_size_usd (M3).
+# Validated at TUI boot against config/metrics.yaml.
+reference_size_usd: 1000
+
+# Default sort for the overview table (column key + direction).
+# Keys: pair_id | net_edge | amm_spread | rfq_spread | bybit_mid | volume_24h | trades_24h
+default_sort: net_edge
+default_sort_desc: true
+
+# Rolling windows used by overview volume columns and detail history.
+# volume_window_ms = 24h per WHI-734 acceptance ("24h 量/笔数").
+volume_window_ms: 86400000
+# Unvalidated display caps (not in DESIGN §2) — retune after live dogfood:
+spread_history_max_points: 240
+trade_stream_limit: 80
+# Intentional cap, not a time window: detail-page cumulative P50/P95/P99/max are
+# rebuilt from at most this many of the pair's most recent journal book samples
+# (downsampled if more exist), so they are NOT a full 24h aggregate. The panel
+# header states the cap and each distribution row prints its own n=.
+edge_history_max_samples: 2000
+sparkline_width: 72
