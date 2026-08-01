@@ -1,0 +1,55 @@
+# Attribution / taker-label tunables — M4 / WHI-733.
+# Secrets stay in .env; this file is checked-in non-secret config.
+# Label semantics and priority are documented in
+# docs/references/m4-attribution-labels.md. Thresholds are unvalidated on
+# xStock flow (DESIGN §8); retune after the first live sample window.
+
+version: 1
+
+# How many top AMM takers (by trade count) to surface for M5 detail pages.
+top_takers_n: 10
+
+# Batch size for eth_getCode (contract-vs-EOA) and eth_getTransactionByHash
+# (entrypoint-vs-internal) probes. Pass via classify_addresses_from_config /
+# probe_roles_from_config (or batch_size=config.rpc_probe_batch_size).
+rpc_probe_batch_size: 50
+
+# --- arb-bot candidate (DESIGN §2.5 product rule of thumb) ---
+# Convergence-ratio = share of AMM trades whose direction moves Fluxion mid
+# toward contemporaneous Bybit mid. Requires both mids present.
+# min_scored_trades counts only trades with both mids (n_convergence_scored),
+# not raw n_trades — missing mids must not pad the sample.
+arb_bot:
+  min_scored_trades: 20
+  min_convergence_ratio: 0.80
+  # Optional secondary gate: share of trades whose direction aligns with a
+  # recent Bybit mid move (lead-lag). 0.0 = do not gate on this feature.
+  min_bybit_align_ratio: 0.0
+
+# --- price-keeper (repeated small bidirectional inventory rebalance) ---
+price_keeper:
+  min_trades: 10
+  # Both buy_native and sell_native must appear at least this often.
+  min_direction_share: 0.25
+  # Median trade notional (USD of the USDC leg) must be at or below this.
+  max_median_notional_usd: 500
+  # Hard cap: any single trade above this disqualifies price-keeper.
+  max_trade_notional_usd: 2000
+
+# --- retail residual (enough samples, no bot signature) ---
+retail:
+  min_trades: 5
+
+# --- activity regime (24/7 vs RTH-only), reported as a feature ---
+activity:
+  # Among trades with a session label, closed-hour share ≥ this → all_hours.
+  # Below this with enough samples → rth_only. Thin sample → unknown.
+  min_closed_share_for_all_hours: 0.10
+  min_trades_for_regime: 10
+
+# --- Bybit lead-lag alignment (per-trade feature feeding arb-bot gate) ---
+bybit_correlation:
+  # Look back this many ms on the Bybit mid series for Δmid before the trade.
+  lookback_ms: 5000
+  # Ignore Bybit moves smaller than this (bps of prior mid).
+  min_move_bps: 1.0
