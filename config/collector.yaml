@@ -1,0 +1,43 @@
+# Live collector tunables — M2 / WHI-731.
+# Secrets (RPC key) stay in .env; this file is checked-in non-secret config.
+
+version: 1
+
+sqlite_path: data/monitor.db
+
+bybit:
+  # Public spot multiplexed stream (bookTicker-equivalent via orderbook.1 + trades).
+  ws_url: "wss://stream.bybit.com/v5/public/spot"
+  # orderbook.1 = L1 bookTicker; publicTrade = prints.
+  book_topic_prefix: "orderbook.1"
+  trade_topic_prefix: "publicTrade"
+  reconnect_min_s: 1.0
+  reconnect_max_s: 60.0
+  # After reconnect, mark the next N book updates and trades as gap=1.
+  post_reconnect_gap_messages: 1
+  # Ping interval recommended by Bybit (~20s).
+  ping_interval_s: 20.0
+
+mantle:
+  public_rpc_url: "https://rpc.mantle.xyz"
+  multicall3: "0xca11bde05977b3631167028862be2a173976ca11"
+  # Poll head; Mantle block time ≈ 2s. Faster poll keeps ingest latency low.
+  block_poll_interval_s: 0.5
+  # Small lag so eth_call sees a settled block on load-balanced keyed endpoints.
+  head_lag_blocks: 2
+  # If block_number jumps by more than this, open an explicit gap.
+  max_block_gap: 1
+  rpc_min_interval_s: 0.05
+  rpc_timeout_s: 30.0
+  rpc_retries: 5
+  # Fetch gasUsed for swap txs via eth_getTransactionReceipt (batched per block).
+  fetch_swap_receipts: true
+
+rfq:
+  # Notional for EXACT_INPUT quote polls (USDC has 6 decimals). 100 USDC.
+  amount_usdc_raw: "100000000"
+  # Prefer same-origin proxy; fall back to upstream on non-2xx / transport error.
+  prefer_primary_url: true
+
+logging:
+  level: INFO

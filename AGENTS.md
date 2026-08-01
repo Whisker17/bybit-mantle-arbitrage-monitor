@@ -25,7 +25,11 @@ placeholders. Agents must not assume a module exists until its issue lands. -->
   - **M1 (WHI-730) landed:** `config/pairs.yaml` + `monitor/symbols` (fixed overlap
     list, Bybit multiplier map, RFQ mode `pollable_quote`). Research notes under
     `docs/references/m1-*.md`.
-  - **Not landed yet:** M2–M6 collectors / metrics / attribution / TUI / web plan.
+  - **M2 (WHI-731) landed:** live collectors — `monitor/bybit` (WS book+trades),
+    `monitor/fluxion` (per-block pool state, swaps, RFQ poll + LOP fills),
+    `monitor/storage` (SQLite), `monitor/collector` daemon
+    (`python -m monitor.collector`). Tunables in `config/collector.yaml`.
+  - **Not landed yet:** M3–M6 metrics / attribution / TUI / web plan.
     Do not assume those modules exist until their issues land.
 
 ## Build, test, run
@@ -37,7 +41,9 @@ uv run ruff check .                           # lint
 uv run mypy                                   # type check
 # Phase-1 pipeline (needs data/ parquet from a prior run):
 uv run python -u -m mba.m5_report             # regenerate report/ from local parquet
-# Phase-2 entrypoint lands with M5 (WHI-734); until then there is no live main.
+# Phase-2 live collector (M2 / WHI-731); needs network + optional MANTLE_RPC_URL:
+uv run python -m monitor.collector
+# Phase-2 TUI entrypoint lands with M5 (WHI-734).
 ```
 
 ## Runtime configuration
@@ -56,7 +62,9 @@ Module layout is fixed by `docs/DESIGN.md` §4.2. Short mirror:
   extend for xStocks.
 - **`monitor/`** — phase-2 live Bybit ⇄ Fluxion xStocks panel. All new product code.
   - **`monitor/symbols`** (M1) — fixed pair list + Bybit multiplier helpers.
-  - Still to land: `bybit`, `fluxion`, `metrics`, `attribution`, `tui` (M2–M5).
+  - **`monitor/bybit`**, **`monitor/fluxion`**, **`monitor/storage`**,
+    **`monitor/collector`** (M2) — live feeds → SQLite.
+  - Still to land: `metrics`, `attribution`, `tui` (M3–M5).
   Reuse pieces from `mba` per DESIGN §4.2 table; do not import whole stages.
 
 ## Git workflow (mandatory)

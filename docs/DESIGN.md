@@ -124,8 +124,10 @@ Planned `src/monitor/` packages (land with their issues; empty package until the
 | Module (planned) | Responsibility | First issue |
 |------------------|----------------|-------------|
 | `monitor/symbols` | fixed xStock list, Bybit multiplier map | M1 |
-| `monitor/bybit` | live Bybit book/trades WS | M2 |
-| `monitor/fluxion` | AMM state/quotes + RFQ feed | M2 |
+| `monitor/bybit` | live Bybit book/trades WS | M2 (landed WHI-731) |
+| `monitor/fluxion` | AMM state/quotes + RFQ feed | M2 (landed WHI-731) |
+| `monitor/storage` | SQLite journal for collector ticks | M2 (landed WHI-731) |
+| `monitor/collector` | daemon orchestrating feeds → SQLite | M2 (landed WHI-731) |
 | `monitor/metrics` | edge, wear, session stats | M3 |
 | `monitor/attribution` | mechanism + behavior labels | M4 |
 | `monitor/tui` | live panel | M5 |
@@ -153,9 +155,13 @@ decision, not M0).
 | `PairsConfig` / `Pair` | `monitor.symbols` | Fixed inventory from `config/pairs.yaml` (M1) |
 | `de_multiplied_price` | `monitor.symbols` | `bybit_mid / xstock_multiplier` before venue compare |
 | RFQ mode | `config/pairs.yaml` `rfq.mode` | **`pollable_quote`** (M1 decision; not fill-only degrade) |
+| `BybitBookTick` / `BybitTradeTick` | `monitor.quotes` | De-multiplied L1 + trades from Bybit WS |
+| `FluxionPoolStateTick` / `FluxionSwapTick` | `monitor.quotes` | Per-block AMM mid (wrapper + native) + swaps |
+| `FluxionRfqQuoteTick` / `FluxionRfqFillTick` | `monitor.quotes` | Pollable RFQ quote + LOP settlement events |
+| `CollectorConfig` | `monitor.collector` | `config/collector.yaml` tunables |
 
-_(M2 fills `QuoteTick` / feed protocols. Strategy/metrics code should depend only on
-quote interfaces, not on WS client internals.)_
+Strategy/metrics code should depend only on `monitor.quotes` shapes, not on WS/RPC
+client internals.
 
 ### 4.4 Core flows
 
@@ -166,13 +172,18 @@ quote interfaces, not on WS client internals.)_
 
 ### 4.5 State & recovery
 
-In-memory from process start. Restart = empty history (by design: no backfill).
-Optional local journal is out of scope for v1 unless M2 finds a hard need.
+Collectors start from the live tip (no historical backfill). Restart leaves prior
+SQLite rows in place but does not re-fetch missed wall-clock gaps — reconnects and
+long block lag write explicit rows to `collector_gaps` and set per-row `gap=1` on
+the next ticks. Local journal: `data/monitor.db` via `monitor.storage.SqliteStore`
+(M2 / WHI-731). TUI (M5) may still keep an in-memory view derived from the same
+ticks.
 
 ## 5. Data & Observability
 
 - TUI is the primary observability surface in v1.
-- Structured logs for feed disconnects / RPC errors (destination TBD in M2).
+- Structured logs for feed disconnects / RPC errors on stderr from
+  `python -m monitor.collector`; gap rows in SQLite `collector_gaps`.
 - No production PagerDuty-style alerting in v1.
 
 ## 6. Milestones
