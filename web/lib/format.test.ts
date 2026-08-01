@@ -8,11 +8,15 @@ import { describe, it } from "node:test";
 
 import {
   bpsTone,
+  explorerTxUrl,
   fmtDirection,
   fmtNotional,
+  fmtPct,
   fmtPrice,
   fmtSession,
   fmtSignedBps,
+  shortAddr,
+  totalWearBps,
 } from "./format";
 
 describe("fmtPrice", () => {
@@ -47,5 +51,46 @@ describe("fmtDirection / session / tone", () => {
     assert.equal(bpsTone("3"), "pos");
     assert.equal(bpsTone("-1"), "neg");
     assert.equal(bpsTone(null), "empty");
+  });
+});
+
+describe("shortAddr / explorer", () => {
+  it("shortens 0x addresses", () => {
+    assert.equal(
+      shortAddr("0xabcdef0123456789abcdef0123456789abcdef01"),
+      "0xabcdef…ef01",
+    );
+    assert.equal(shortAddr(null), "—");
+    assert.equal(shortAddr("0xabc"), "0xabc");
+  });
+
+  it("builds mantle explorer tx urls", () => {
+    assert.equal(
+      explorerTxUrl("0xdeadbeef"),
+      "https://mantlescan.xyz/tx/0xdeadbeef",
+    );
+    assert.equal(
+      explorerTxUrl("deadbeef"),
+      "https://mantlescan.xyz/tx/0xdeadbeef",
+    );
+    assert.equal(explorerTxUrl(null), null);
+  });
+});
+
+describe("fmtPct / totalWearBps", () => {
+  it("formats fractions and sums wear", () => {
+    assert.equal(fmtPct(0.123), "12.3%");
+    assert.equal(fmtPct(null), "—");
+    assert.equal(
+      totalWearBps({
+        bybit_taker_bps: "10",
+        fluxion_fee_bps: "5",
+        bybit_slip_bps: "1",
+        fluxion_slip_bps: "2",
+        gas_bps: "0.5",
+        basis_bps: "0",
+      }),
+      "18.5",
+    );
   });
 });

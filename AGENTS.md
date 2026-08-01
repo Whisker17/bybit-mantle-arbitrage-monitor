@@ -61,10 +61,14 @@ placeholders. Agents must not assume a module exists until its issue lands. -->
     TUI frozen for new features — Web is the surface for new metrics.
   - **Web overview (WHI-758) landed:** dark Tailwind overview table (TUI-parity
     columns + status bar + stale yellow banner + sort/filter + 2s poll + row
-    → `/pair/{id}/`). Bucket PnL column placeholder until WHI-756. Pair detail
-    route is a stub (full detail = WHI-759).
-  - **Not landed yet:** pair detail Web (WHI-759), PnL v2 engine (WHI-756).
-    Do not assume those modules exist until their issues land.
+    → `/pair/{id}/`). Bucket PnL column placeholder until WHI-756.
+  - **Web pair detail (WHI-759) landed:** `/pair/{id}/` full detail — uPlot
+    spread series (AMM+RFQ, open/closed bands, optional Bybit mid), Fluxion
+    trade stream, edge stats + cost waterfall + session distributions,
+    attribution (top takers + mechanism donut). Bucket/optimal PnL placeholder
+    until WHI-756. SpreadPoint gains rfq_spread_bps + bybit_mid for the chart.
+  - **Not landed yet:** PnL v2 engine (WHI-756).
+    Do not assume that module exists until its issue lands.
 ## Build, test, run
 
 ```bash
@@ -119,8 +123,8 @@ Module layout is fixed by `docs/DESIGN.md` §4.2. Short mirror:
     (**frozen** for new features).
   - **`monitor/api`** (WHI-757) — FastAPI read-only JSON over the journal.
   - **`web/`** (WHI-757+) — Next.js static export; overview (WHI-758);
-    deploy via `scripts/deploy-web.sh` + `deploy/`.
-  - Still to land: pair detail Web (WHI-759), PnL v2 (WHI-756).
+    pair detail (WHI-759); deploy via `scripts/deploy-web.sh` + `deploy/`.
+  - Still to land: PnL v2 (WHI-756).
   Reuse pieces from `mba` per DESIGN §4.2 table; do not import whole stages.
 
 ## Git workflow (mandatory)

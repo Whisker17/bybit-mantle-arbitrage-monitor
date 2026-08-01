@@ -56,9 +56,19 @@ class OverviewModel:
 
 @dataclass(frozen=True, slots=True)
 class SpreadPoint:
+    """One historical quote join for the detail spread chart.
+
+    ``amm_spread_bps`` is (AMM mid − Bybit mid) / Bybit in bps.
+    ``rfq_spread_bps`` is the mean of available RFQ buy/sell side spreads
+    as-of the book timestamp (stable series; overview column still uses
+    larger-absolute). ``bybit_mid`` is de-multiplied L1 mid for optional overlay.
+    """
+
     ts_ms: int
     amm_spread_bps: Decimal | None
     session: SessionKind
+    rfq_spread_bps: Decimal | None = None
+    bybit_mid: Decimal | None = None
 
 
 @dataclass(frozen=True, slots=True)

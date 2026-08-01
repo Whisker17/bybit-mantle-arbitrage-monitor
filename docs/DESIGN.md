@@ -47,8 +47,8 @@ Phase-1 WMNT/USDT0 offline backtest remains in-tree under `src/mba/` + `report/`
 
 - Live TUI shows per-symbol AMM + RFQ (or RFQ-degraded) mid/spread vs Bybit mid
   with cost-adjusted paper edge, session-segmented aggregates.
-- M0–M5 Linear issues Done; Web skeleton (WHI-757) + overview table (WHI-758)
-  serve from the VPS; pair detail and further pages follow (WHI-759+).
+- M0–M5 Linear issues Done; Web skeleton (WHI-757) + overview (WHI-758) +
+  pair detail (WHI-759) serve from the VPS; further metrics follow (WHI-756+).
 - Phase-1 pipeline still regenerates `report/` from local `data/` parquet.
 
 ## 2. Requirements / Specification
@@ -237,7 +237,7 @@ Planned `src/monitor/` packages (land with their issues; empty package until the
 | `monitor/attribution` | mechanism + behavior labels | M4 (landed WHI-733) |
 | `monitor/tui` | live panel (Textual overview + detail); **frozen** after Web lands | M5 (landed WHI-734) |
 | `monitor/api` | read-only FastAPI over the same journal + builders | WHI-757 (skeleton) |
-| `web/` | Next.js static export (panel UI) | WHI-757 skeleton; WHI-758 overview; WHI-759+ detail |
+| `web/` | Next.js static export (panel UI) | WHI-757 skeleton; WHI-758 overview; WHI-759 pair detail |
 | `deploy/` + `scripts/deploy-web.sh` | systemd unit, nginx site, one-command redeploy | WHI-757 |
 
 #### Phase-1 → phase-2 reuse map
@@ -436,6 +436,7 @@ Probe: `python -m monitor.collector.latency_probe`.
 | **M6** | WHI-735 | ~~Web panel plan doc only~~ **Canceled** 2026-08-01 — replaced by implementable Web issues |
 | **Web skeleton** | WHI-757 | FastAPI read-only API + Next.js static export + nginx/systemd deploy on VPS |
 | **Web overview** | WHI-758 | Full overview table (TUI-parity columns, status/stale banner, sort/filter) |
+| **Web pair detail** | WHI-759 | Pair detail: spread chart, trade stream, edge stats, attribution |
 
 Dependency chain: M0 → M1 → M2 → (M3 ∥ M4) → M5 → Web (WHI-757 → 758…).
 

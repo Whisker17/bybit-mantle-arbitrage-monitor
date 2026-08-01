@@ -53,9 +53,10 @@ soon — anything touching key handling, RPC credentials defaults to at least Hi
   does not encode pair identity. Enrich from receipt Transfer/LOP order bytes when
   a live fill is available. M4 ships pair-scoped RFQ share only for fills that
   already carry `pair_id`; unscoped fills still count in global mechanism share
-  (`build_global_mechanism_share`). M5 (WHI-734) deliberately omits unscoped RFQ
-  fills from pair detail trade streams and shows pair RFQ mechanism share as
-  empty until enrichment lands — do not invent pair_id in the TUI.
+  (`build_global_mechanism_share`). M5 (WHI-734) and Web pair detail (WHI-759)
+  deliberately omit unscoped RFQ fills from pair detail trade streams and show
+  pair RFQ mechanism share as empty until enrichment lands — do not invent
+  pair_id in the TUI or Web.
 
 - **Fluxion V2 factory not published for xStocks** (Low, WHI-730 → later if needed).
   `config/pairs.yaml` / `AmmPool.kind` — inventory is V3-only; DESIGN still says
@@ -87,8 +88,9 @@ soon — anything touching key handling, RPC credentials defaults to at least Hi
   is $1K/$5K/$20K; RFQ edges reuse the polled price with zero size slip. Prefer
   ladder-matched RFQ polls or flag `EdgeResult` with the quoted notional.
   M5 (WHI-734) mitigates on the overview **Net** column by selecting AMM-only
-  fillable edges at `reference_size_usd`; detail RFQ edge panels still show the
-  unslipped ladder extrapolation — do not treat those as size-accurate.
+  fillable edges at `reference_size_usd`; detail RFQ edge panels (TUI and Web
+  WHI-759) still show the unslipped ladder extrapolation — do not treat those
+  as size-accurate.
 
 - **NYSE holiday table years 2025–2027 only** (Low, WHI-732 → annual).
   `monitor.metrics.session._CALENDAR_YEARS` — `session_kind` raises outside the
@@ -109,10 +111,18 @@ soon — anything touching key handling, RPC credentials defaults to at least Hi
 
 - **OpenAPI lacks response schemas** (Low, WHI-757 → later).
   Routes still return `dict[str, Any]` after `to_json_dict`; `/docs` lists paths
-  but not field shapes. WHI-758 keeps hand-written wire types in
-  `web/lib/types.ts` (overview + pair stub share them) — still not generated
-  from OpenAPI. Add Pydantic response models (or generate TS) when a consumer
-  needs compile-time parity.
+  but not field shapes. WHI-758/WHI-759 keep hand-written wire types in
+  `web/lib/types.ts` (overview + full pair detail) — still not generated from
+  OpenAPI. Add Pydantic response models (or generate TS) when a consumer needs
+  compile-time parity; the pair-detail type surface is large enough that drift
+  risk is real.
+
+- **`build_spread_series` `_as_of` is linear, now hot at 1200 pts** (Low, WHI-759 → if API lag).
+  Each book sample scans pools + RFQ buy/sell histories from the start
+  (`monitor.tui.builder._as_of`). Fine at 240 points; with
+  `spread_history_max_points: 1200` and 2s detail polls this is ~O(n×hist)
+  per pair. Replace with `bisect_right` or a merge-walk cursor if
+  `/api/pairs/{id}` p95 exceeds MemoryMax/latency budget on the VPS.
 
 - **Full shadcn/ui CLI not installed** (Low, WHI-758 → polish if needed).
   Spec allowed "shadcn/ui + Tailwind"; WHI-758 ships Tailwind v4 + hand-rolled
