@@ -23,8 +23,9 @@ loaded into a typed, validated model at startup.
 | `collector.yaml` | `monitor.collector.load_collector_config` | Live collector tunables (Bybit WS, Mantle poll / `head_lag_blocks` / **latency_window_blocks** — WHI-749, RFQ notional, SQLite path, **retention / disk waterline** — WHI-751) — M2 / WHI-731. |
 | `metrics.yaml` | `monitor.metrics.load_metrics_config` | Paper-edge size ladder, Bybit taker / gas / USDT–USDC basis, session hours, breach size — M3 / WHI-732. |
 | `attribution.yaml` | `monitor.attribution.load_attribution_config` | Taker-label thresholds (arb-bot convergence, price-keeper size, activity regime, Bybit lead-lag) — M4 / WHI-733. Rules: `docs/references/m4-attribution-labels.md`. |
-| `tui.yaml` | `monitor.tui.load_tui_config` | Panel refresh interval, SQLite path, reference edge size, sort defaults, history windows — M5 / WHI-734. |
+| `tui.yaml` | `monitor.tui.load_tui_config` | Panel refresh interval, SQLite path, reference edge size, sort defaults, history windows — M5 / WHI-734. Also consumed by `monitor.api` for builder windows / reference size (single source of truth). |
+| `api.yaml` | `monitor.api.load_api_config` | Read-only FastAPI bind host/port, SQLite path, collector-stale / gap windows, poll interval hint, CORS — WHI-757. |
 
 Optional per-deployment override: untracked `pairs.local.yaml` / `collector.local.yaml`
-/ `metrics.local.yaml` / `attribution.local.yaml` / `tui.local.yaml` are reserved for
-later if needed; v1 loads the checked-in YAML only.
+/ `metrics.local.yaml` / `attribution.local.yaml` / `tui.local.yaml` / `api.local.yaml`
+are reserved for later if needed; v1 loads the checked-in YAML only.

@@ -52,9 +52,13 @@ placeholders. Agents must not assume a module exists until its issue lands. -->
   - **PnL v2 research (WHI-754) landed:** Hummingbot CEX⇄AMM methodology →
     cash-flow PnL spec; note `docs/references/hummingbot-pnl.md`, DESIGN §2.6.
     Engine (optimal size + bucket table) is **WHI-756** — not landed.
-  - **Not landed yet:** M6 Web plan doc; PnL v2 engine (WHI-756).
-    Do not assume either module exists until its issue lands.
-
+  - **Web skeleton (WHI-757) landed:** `monitor/api` (FastAPI read-only over
+    SQLite; reuses TUI builders), `web/` (Next.js static export, skeleton
+    pairs table), `deploy/` + `scripts/deploy-web.sh` (systemd + nginx).
+    Tunables in `config/api.yaml`. TUI frozen for new features — Web is the
+    surface for new metrics.
+  - **Not landed yet:** Web overview polish (WHI-758), pair detail Web, PnL v2
+    engine (WHI-756). Do not assume those modules exist until their issues land.
 ## Build, test, run
 
 ```bash
@@ -74,6 +78,13 @@ uv run python -m monitor.retention --growth-only
 uv run python -m monitor.retention
 # Block ingest latency probe (WHI-749); chain-only, no Bybit/RFQ:
 uv run python -m monitor.collector.latency_probe --duration-s 600
+# Phase-2 read-only Web API (WHI-757); needs collector journal:
+uv run python -m monitor.api
+# Optional: uv run python -m monitor.api --host 127.0.0.1 --port 8000
+# Web static export (build on laptop/CI — never on the 1GB VPS):
+#   cd web && npm ci && npm run build   # → web/out
+# Deploy to VPS (rsync out/ + API sources, restart systemd):
+#   ./scripts/deploy-web.sh user@host
 ```
 
 ## Runtime configuration
@@ -96,8 +107,12 @@ Module layout is fixed by `docs/DESIGN.md` §4.2. Short mirror:
     **`monitor/collector`** (M2) — live feeds → SQLite.
   - **`monitor/metrics`** (M3) — edge, wear, session stats from quote ticks.
   - **`monitor/attribution`** (M4) — mechanism + behavior labels / aggregates.
-  - **`monitor/tui`** (M5) — Textual overview + detail panel over SQLite.
-  - Still to land: Web plan (M6).
+  - **`monitor/tui`** (M5) — Textual overview + detail panel over SQLite
+    (**frozen** for new features).
+  - **`monitor/api`** (WHI-757) — FastAPI read-only JSON over the journal.
+  - **`web/`** (WHI-757+) — Next.js static export; deploy via
+    `scripts/deploy-web.sh` + `deploy/`.
+  - Still to land: richer Web pages (WHI-758+), PnL v2 (WHI-756).
   Reuse pieces from `mba` per DESIGN §4.2 table; do not import whole stages.
 
 ## Git workflow (mandatory)

@@ -28,7 +28,9 @@ long, after realistic costs, and who is moving the prices.
 - **Attribution:** mechanism layer (RFQ = MM-driven / AMM = active taker) +
   behavior layer (address heuristics; see §4.2 reuse of `m6_attribution`).
 - **Stats:** all metrics segmented by **US equity open vs closed** session.
-- **UI:** **TUI first (Python)**. Web panel is plan/docs only in v1 (M6).
+- **UI:** **TUI first (Python)**; Web panel (Next.js static export + FastAPI
+  read-only API, all on VPS) lands as post-M5 work (WHI-757+). TUI is
+  **frozen** once Web ships features — keep TUI usable, no new TUI metrics.
 
 Phase-1 WMNT/USDT0 offline backtest remains in-tree under `src/mba/` + `report/`
 (tag `phase1-backtest`) as an archived POC; it is not the product.
@@ -38,7 +40,6 @@ Phase-1 WMNT/USDT0 offline backtest remains in-tree under `src/mba/` + `report/`
 - Order placement, trade execution, or any private exchange API that can trade.
 - Triangular / multi-hop routing.
 - MEV, gas-auction, or frontrun modeling as a product feature.
-- Web UI implementation (plan only).
 - Historical backfill of Bybit or Fluxion tapes.
 - Venues beyond Bybit spot and Fluxion (Agni/Moe WMNT work stays in `src/mba` only).
 
@@ -46,7 +47,8 @@ Phase-1 WMNT/USDT0 offline backtest remains in-tree under `src/mba/` + `report/`
 
 - Live TUI shows per-symbol AMM + RFQ (or RFQ-degraded) mid/spread vs Bybit mid
   with cost-adjusted paper edge, session-segmented aggregates.
-- M0–M5 Linear issues Done; M6 produces a Web plan doc only.
+- M0–M5 Linear issues Done; Web skeleton (WHI-757) serves overview JSON + static
+  page from the VPS; richer Web pages follow (WHI-758+).
 - Phase-1 pipeline still regenerates `report/` from local `data/` parquet.
 
 ## 2. Requirements / Specification
@@ -207,6 +209,9 @@ not a proven continuous global max.
 | httpx | RPC + REST (existing `mba.rpc` pattern) |
 | polars / duckdb | local analytics if needed; TUI may stay in-memory |
 | **Textual** (TUI) | M5 chose Textual over rich for interactive two-level nav (DataTable + detail screen); pure view models stay library-free |
+| **FastAPI** (read-only API) | WHI-757: serves overview/detail/trades/health JSON over collector SQLite; reuses TUI builders + M3/M4 |
+| **Next.js static export** | WHI-757: build on laptop/CI, rsync `web/out` to VPS; no Node runtime on the 1GB box |
+| nginx + systemd | VPS: static site + `/api` reverse-proxy; `xstocks-api.service` (uvicorn, 1 worker, MemoryMax) |
 | Mantle JSON-RPC + Multicall3 | pool state + eth_call quotes |
 
 ### 4.2 Module layout
@@ -229,7 +234,10 @@ Planned `src/monitor/` packages (land with their issues; empty package until the
 | `monitor/retention` | thin CLI over `storage.retention` (`python -m monitor.retention`) | WHI-751 |
 | `monitor/metrics` | edge, wear, session stats | M3 (landed WHI-732) |
 | `monitor/attribution` | mechanism + behavior labels | M4 (landed WHI-733) |
-| `monitor/tui` | live panel (Textual overview + detail) | M5 (landed WHI-734) |
+| `monitor/tui` | live panel (Textual overview + detail); **frozen** after Web lands | M5 (landed WHI-734) |
+| `monitor/api` | read-only FastAPI over the same journal + builders | WHI-757 (skeleton) |
+| `web/` | Next.js static export (panel UI) | WHI-757 (skeleton page); WHI-758+ real pages |
+| `deploy/` + `scripts/deploy-web.sh` | systemd unit, nginx site, one-command redeploy | WHI-757 |
 
 #### Phase-1 → phase-2 reuse map
 
@@ -417,9 +425,11 @@ Probe: `python -m monitor.collector.latency_probe`.
 | **M3** | WHI-732 | Edge/wear metrics + session segmentation |
 | **M4** | WHI-733 | Attribution (mechanism + heuristics) |
 | **M5** | WHI-734 | TUI panel |
-| **M6** | WHI-735 | Web panel **plan doc only** |
+| **M6** | WHI-735 | ~~Web panel plan doc only~~ **Canceled** 2026-08-01 — replaced by implementable Web issues |
+| **Web skeleton** | WHI-757 | FastAPI read-only API + Next.js static export + nginx/systemd deploy on VPS |
+| **Web overview** | WHI-758 | Full overview table (blocked by WHI-757) |
 
-Dependency chain: M0 → M1 → M2 → (M3 ∥ M4) → M5 → M6.
+Dependency chain: M0 → M1 → M2 → (M3 ∥ M4) → M5 → Web (WHI-757 → 758…).
 
 ## 7. Rejected Alternatives
 
@@ -427,7 +437,8 @@ Dependency chain: M0 → M1 → M2 → (M3 ∥ M4) → M5 → M6.
 |--------|----------------|
 | New repo for phase-2 | Zero-commit state made overlay ≡ template; Linear project already points at `report/`; avoid moving 3k LOC |
 | Continue WMNT/USDT0 product | User rejected phase-1 POC product direction 2026-08-01 |
-| Web-first UI | TUI faster for operator; Web deferred to plan-only M6 |
+| Web-first UI (v1) | TUI first for operator speed; Web deferred until after M5, then full VPS stack (WHI-757) instead of plan-only M6 |
+| Vercel / hosted Web + data egress | Operator wants data on-box; 1GB VPS already runs nginx; static export + FastAPI co-located with collector SQLite |
 | Historical backfill for live panel | Product is forward-looking paper arb, not another backtest |
 | Single blended AMM+RFQ price | Must show both; quote availability and spreads still differ by pair and session, but closed ≠ RFQ-off (WHI-753) |
 | Auto-trade / bot execution | Explicit non-goal |
