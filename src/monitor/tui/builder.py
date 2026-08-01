@@ -400,21 +400,51 @@ def build_spread_series(
     pools: Sequence[FluxionPoolStateTick],
     metrics: MetricsConfig,
     max_points: int,
+    rfq_quotes: Sequence[FluxionRfqQuoteTick] = (),
 ) -> list[SpreadPoint]:
+    """Join Bybit books to as-of AMM pool + RFQ quotes for the detail chart.
+
+    RFQ is optional so older call sites still get AMM-only series; the Web
+    detail page (WHI-759) passes journal RFQ history for the second line.
+    """
     pool_by_ts = sorted(pools, key=lambda p: p.recv_ts_ms)
+    rfq_buy_hist = sorted(
+        [q for q in rfq_quotes if rfq_side_leg(q.side) == "buy"],
+        key=lambda q: q.poll_ts_ms,
+    )
+    rfq_sell_hist = sorted(
+        [q for q in rfq_quotes if rfq_side_leg(q.side) == "sell"],
+        key=lambda q: q.poll_ts_ms,
+    )
     points: list[SpreadPoint] = []
     for book in books:
         if book.bid_de_multiplied <= 0 or book.ask_de_multiplied <= 0:
             continue
         amm = _as_of(pool_by_ts, book.exchange_ts_ms, get_ts=lambda p: p.recv_ts_ms)
+        rfq_buy = _as_of(
+            rfq_buy_hist, book.exchange_ts_ms, get_ts=lambda q: q.poll_ts_ms
+        )
+        rfq_sell = _as_of(
+            rfq_sell_hist, book.exchange_ts_ms, get_ts=lambda q: q.poll_ts_ms
+        )
         snap = build_spread_snapshot(
-            bybit=book, amm=amm, config=metrics, ts_ms=book.exchange_ts_ms
+            bybit=book,
+            amm=amm,
+            config=metrics,
+            rfq_buy=rfq_buy,
+            rfq_sell=rfq_sell,
+            ts_ms=book.exchange_ts_ms,
         )
         points.append(
             SpreadPoint(
                 ts_ms=book.exchange_ts_ms,
                 amm_spread_bps=snap.amm_spread_bps,
                 session=snap.session,
+                rfq_spread_bps=_rfq_spread_for_overview(
+                    snap.rfq_buy_spread_bps,
+                    snap.rfq_sell_spread_bps,
+                ),
+                bybit_mid=snap.bybit_mid,
             )
         )
     if len(points) > max_points:
@@ -679,6 +709,7 @@ def build_pair_detail(
         pools=pools,
         metrics=metrics,
         max_points=tui.spread_history_max_points,
+        rfq_quotes=rfq_hist,
     )
 
     swaps = reader.swaps(pair.id, limit=tui.trade_stream_limit * 2)

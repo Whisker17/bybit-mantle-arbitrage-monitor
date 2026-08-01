@@ -166,8 +166,9 @@ export default function HomePage() {
       <p className="mt-3 text-[10px] text-muted-foreground">
         Prices are de-multiplied Bybit L1 vs Fluxion AMM/RFQ (USDC). Net edge is
         AMM-only at the reference notional (see status bar). Bucket PnL column
-        awaits WHI-756. Pair detail: WHI-759. UI primitives follow shadcn-style
-        patterns on Tailwind (dark-first desk theme).
+        awaits WHI-756. Row opens pair detail (spread chart, fills, edge,
+        attribution). UI primitives follow shadcn-style patterns on Tailwind
+        (dark-first desk theme).
       </p>
     </main>
   );

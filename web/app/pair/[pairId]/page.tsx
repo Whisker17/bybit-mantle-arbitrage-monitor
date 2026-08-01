@@ -1,7 +1,7 @@
 import Link from "next/link";
 
+import { PairDetail } from "@/components/pair/pair-detail";
 import { loadPairIdsFromConfig } from "@/lib/pair-ids";
-import { PairDetailStub } from "./pair-detail-stub";
 
 /**
  * Static-export requires every dynamic path at build time.
@@ -19,7 +19,7 @@ export default async function PairPage({
   const { pairId } = await params;
 
   return (
-    <main className="mx-auto max-w-[960px] px-3 py-4 sm:px-4">
+    <main className="mx-auto max-w-[1100px] px-3 py-4 sm:px-4">
       <div className="mb-4 flex items-center gap-3 text-xs">
         <Link
           href="/"
@@ -30,7 +30,7 @@ export default async function PairPage({
         <span className="text-border">|</span>
         <h1 className="text-sm font-semibold text-foreground">{pairId}</h1>
       </div>
-      <PairDetailStub pairId={pairId} />
+      <PairDetail pairId={pairId} />
     </main>
   );
 }

@@ -45,15 +45,147 @@ export type OverviewResponse = {
   error?: string | null;
 };
 
-/** Subset of PairDetailModel used by the WHI-758 route stub (full detail = WHI-759). */
-export type PairDetailStubResponse = {
+/** Full pair detail model from GET /api/pairs/{id} (TUI PairDetailModel). */
+export type PairDetailResponse = {
   pair_id: string;
   name: string;
   low_liquidity: boolean;
   generated_ts_ms: number;
   session_now: SessionKind;
   overview: PairOverviewRow;
+  spread_series: SpreadPoint[];
+  trades: TradeStreamRow[];
+  edge_amm: EdgePanel;
+  edge_rfq: EdgePanel;
+  attribution: PairAttribution | null;
+  arb_bot_trade_share: number | null;
+  price_keeper_trade_share: number | null;
+  rfq_mechanism_share: number | null;
   error?: string | null;
+};
+
+/** @deprecated Use PairDetailResponse — kept as alias for any residual imports. */
+export type PairDetailStubResponse = PairDetailResponse;
+
+export type SpreadPoint = {
+  ts_ms: number;
+  amm_spread_bps: string | null;
+  session: SessionKind;
+  rfq_spread_bps?: string | null;
+  bybit_mid?: string | null;
+};
+
+export type TradeStreamRow = {
+  ts_ms: number;
+  mechanism: string;
+  direction: string;
+  notional_usd: string | null;
+  price: string | null;
+  bybit_mid: string | null;
+  converging: boolean | null;
+  taker: string | null;
+  taker_label: string | null;
+  tx_hash: string;
+};
+
+export type CostBreakdown = {
+  bybit_taker_bps: string;
+  fluxion_fee_bps: string;
+  bybit_slip_bps: string;
+  fluxion_slip_bps: string;
+  gas_bps: string;
+  basis_bps: string;
+  /** Present when API serializes the property; else derived client-side. */
+  total_wear_bps?: string;
+};
+
+export type EdgeResult = {
+  pair_id: string;
+  venue: VenueKind;
+  direction: Direction;
+  size_usd: string;
+  bybit_mid: string;
+  fluxion_mid: string;
+  gross_spread_bps: string;
+  costs: CostBreakdown;
+  net_edge_bps: string;
+  fillable: boolean;
+  reason?: string | null;
+};
+
+export type Distribution = {
+  count: number;
+  p50: string | null;
+  p95: string | null;
+  p99: string | null;
+  max: string | null;
+};
+
+export type BreachStats = {
+  episode_count: number;
+  total_duration_ms: number;
+  currently_breaching: boolean;
+};
+
+export type EdgePanel = {
+  current: EdgeResult | null;
+  distribution_all: Distribution;
+  distribution_open: Distribution;
+  distribution_closed: Distribution;
+  breach_all: BreachStats;
+  breach_open: BreachStats;
+  breach_closed: BreachStats;
+  costs: CostBreakdown | null;
+};
+
+export type BehaviorLabel =
+  | "arb_bot"
+  | "price_keeper"
+  | "retail"
+  | "unknown";
+
+export type AddressFeatures = {
+  address: string;
+  n_trades: number;
+  n_buy: number;
+  n_sell: number;
+  notional_usd: string;
+  median_notional_usd: string;
+  max_notional_usd: string;
+  open_share: number;
+  closed_share: number;
+  activity_regime: string;
+  trades_per_day: number | null;
+  convergence_ratio: number | null;
+  n_convergence_scored: number;
+  bybit_align_ratio: number | null;
+  n_bybit_align_scored: number;
+  is_contract: boolean | null;
+  role: string | null;
+};
+
+export type TakerProfile = {
+  features: AddressFeatures;
+  label: BehaviorLabel;
+};
+
+export type MechanismShare = {
+  amm_trades: number;
+  rfq_trades: number;
+};
+
+export type PairAttribution = {
+  pair_id: string;
+  session: string;
+  window_start_ms: number | null;
+  window_end_ms: number | null;
+  mechanism: MechanismShare;
+  convergence_share: number | null;
+  n_convergence_scored: number;
+  label_trade_share: Record<string, number>;
+  label_trade_counts: Record<string, number>;
+  top_takers: TakerProfile[];
+  takers: TakerProfile[];
 };
 
 export type CollectorGap = {

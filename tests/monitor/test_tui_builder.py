@@ -235,3 +235,36 @@ def test_overview_and_detail_from_sqlite(tmp_path: Path) -> None:
             now=ts + 2000,
         )
         assert detail2.edge_amm.distribution_all.count == n1
+
+
+def test_build_spread_series_includes_rfq_and_bybit_mid() -> None:
+    """WHI-759 chart needs AMM + RFQ lines and optional Bybit mid overlay."""
+    from monitor.tui.builder import build_spread_series
+
+    metrics = load_metrics_config()
+    ts = _open_ts_ms()
+    books = [_book(ts=ts), _book(ts=ts + 1000)]
+    pools = [_amm(ts=ts), _amm(ts=ts + 1000)]
+    rfq = [
+        _rfq("AAPLx", Decimal("99.8"), "buy_native", ts=ts),
+        _rfq("AAPLx", Decimal("99.4"), "sell_native", ts=ts),
+    ]
+    series = build_spread_series(
+        books=books,
+        pools=pools,
+        metrics=metrics,
+        max_points=100,
+        rfq_quotes=rfq,
+    )
+    assert len(series) == 2
+    assert series[0].amm_spread_bps is not None
+    assert series[0].rfq_spread_bps is not None
+    assert series[0].bybit_mid is not None
+    # Bybit mid = (100 + 100.20) / 2
+    assert series[0].bybit_mid == Decimal("100.1")
+    # Without RFQ quotes, rfq_spread stays None but series still builds.
+    bare = build_spread_series(
+        books=books, pools=pools, metrics=metrics, max_points=100
+    )
+    assert bare[0].rfq_spread_bps is None
+    assert bare[0].amm_spread_bps is not None

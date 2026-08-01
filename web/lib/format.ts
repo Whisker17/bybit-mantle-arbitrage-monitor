@@ -92,3 +92,67 @@ export function bpsTone(
   if (n < 0) return "neg";
   return "flat";
 }
+
+/** Shorten 0x… addresses / hashes for dense tables (matches TUI short_addr). */
+export function shortAddr(
+  addr: string | null | undefined,
+  head = 6,
+  tail = 4,
+): string {
+  if (!addr) return "—";
+  // Strip optional 0x for length math, keep prefix in display.
+  const has0x = addr.startsWith("0x") || addr.startsWith("0X");
+  const body = has0x ? addr.slice(2) : addr;
+  if (body.length <= head + tail) return addr;
+  const prefix = has0x ? "0x" : "";
+  return `${prefix}${body.slice(0, head)}…${body.slice(-tail)}`;
+}
+
+/** Mantle mainnet explorer link for a transaction hash. */
+export function explorerTxUrl(txHash: string | null | undefined): string | null {
+  if (!txHash) return null;
+  const h = txHash.startsWith("0x") ? txHash : `0x${txHash}`;
+  return `https://mantlescan.xyz/tx/${h}`;
+}
+
+/** Fraction 0..1 → "12.3%"; null → em dash. */
+export function fmtPct(
+  value: number | null | undefined,
+  digits = 1,
+): string {
+  if (value === null || value === undefined || !Number.isFinite(value)) {
+    return "—";
+  }
+  return `${(value * 100).toFixed(digits)}%`;
+}
+
+export function fmtLabel(label: string | null | undefined): string {
+  if (!label) return "—";
+  return label.replaceAll("_", " ");
+}
+
+/** Sum of CostBreakdown wear fields (string decimals from API). */
+export function totalWearBps(costs: {
+  bybit_taker_bps: string;
+  fluxion_fee_bps: string;
+  bybit_slip_bps: string;
+  fluxion_slip_bps: string;
+  gas_bps: string;
+  basis_bps: string;
+  total_wear_bps?: string;
+} | null | undefined): string | null {
+  if (!costs) return null;
+  if (costs.total_wear_bps != null && costs.total_wear_bps !== "") {
+    return costs.total_wear_bps;
+  }
+  const parts = [
+    costs.bybit_taker_bps,
+    costs.fluxion_fee_bps,
+    costs.bybit_slip_bps,
+    costs.fluxion_slip_bps,
+    costs.gas_bps,
+    costs.basis_bps,
+  ].map(parseNum);
+  if (parts.some((p) => p === null)) return null;
+  return String(parts.reduce((a, b) => (a as number) + (b as number), 0));
+}
