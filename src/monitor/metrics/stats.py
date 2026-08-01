@@ -183,12 +183,16 @@ class EdgeStats:
                 return
             raw = ts_ms - state.last_ts_ms
             # Cap: overnight / reconnect must not inflate duration or weights.
+            gap_capped = raw > self.max_gap_ms
             gap_ms = raw if 0 < raw <= self.max_gap_ms else 0
             if state.last_breaching and gap_ms > 0:
                 state.total_duration_ms += gap_ms
             if state.samples:
                 prev_val, _ = state.samples[-1]
                 state.samples[-1] = (prev_val, Decimal(gap_ms))
+            # A capped gap ends the prior breach episode (overnight / restart).
+            if gap_capped:
+                state.last_breaching = False
 
         state.samples.append((net_edge_bps, Decimal(0)))  # weight filled later
         breaching = fillable and net_edge_bps > 0

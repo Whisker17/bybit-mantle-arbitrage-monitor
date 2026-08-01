@@ -15,7 +15,6 @@ from monitor.metrics.config import MetricsConfig
 from monitor.metrics.edge import (
     Direction,
     EdgeResult,
-    VenueKind,
     compute_edge,
     compute_edge_ladder,
     mid_from_bid_ask,
@@ -62,15 +61,17 @@ def rfq_price(tick: FluxionRfqQuoteTick | None) -> Decimal | None:
 def _rfq_side_matches(tick: FluxionRfqQuoteTick, direction: Direction) -> bool:
     """Map RFQ poll side to paper-arb direction.
 
-    Collector ``side`` is the *Fluxion* leg: buy_native / sell_native (see
-    ``monitor.fluxion.rfq``). Missing side → accept (legacy / tests).
+    Collector ``side`` is the *Fluxion* leg: ``buy_native`` / ``sell_native``
+    (``monitor.fluxion.rfq.RfqLeg``). Missing/unknown side → accept so tests and
+    vendor payloads without side still produce edges; callers already route via
+    the ``rfq_buy`` / ``rfq_sell`` parameters.
     """
     side = (tick.side or "").lower()
     if not side:
         return True
     if direction == "buy_fluxion_sell_bybit":
-        return side in ("buy", "buy_native", "exact_input_quote")
-    return side in ("sell", "sell_native")
+        return side in ("buy_native", "buy")
+    return side in ("sell_native", "sell")
 
 
 def build_spread_snapshot(
@@ -174,15 +175,4 @@ def build_edge_snapshot(
     )
 
 
-def best_edge_for_venue(
-    edges: list[EdgeResult],
-    *,
-    venue: VenueKind,
-    size_usd: Decimal | None = None,
-) -> EdgeResult | None:
-    candidates = [e for e in edges if e.venue == venue and e.fillable]
-    if size_usd is not None:
-        candidates = [e for e in candidates if e.size_usd == size_usd]
-    if not candidates:
-        return None
-    return max(candidates, key=lambda e: e.net_edge_bps)
+

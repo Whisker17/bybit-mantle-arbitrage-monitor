@@ -57,6 +57,16 @@ soon — anything touching key handling, RPC credentials defaults to at least Hi
   half-spread slip (differ by gas only on RFQ). Wire orderbook depth when M2
   streams it or M5 polls REST snapshots.
 
+- **RFQ poll notional ≠ edge ladder sizes** (Medium, WHI-732 → M5 / collector).
+  `config/collector.yaml` polls ~100 USDC / 0.1 native while `metrics.yaml` ladder
+  is $1K/$5K/$20K; RFQ edges reuse the polled price with zero size slip. Prefer
+  ladder-matched RFQ polls or flag `EdgeResult` with the quoted notional.
+
+- **NYSE holiday table years 2025–2027 only** (Low, WHI-732 → annual).
+  `monitor.metrics.session._CALENDAR_YEARS` — `session_kind` raises outside the
+  table so 2028 does not silently misclassify holidays. Extend the frozensets
+  (or move to YAML) before first use in 2028.
+
 ---
 
 ## Resolved

@@ -18,11 +18,10 @@ from dataclasses import dataclass
 from decimal import Decimal
 from typing import Literal
 
-from monitor.fluxion.pools import mid_from_sqrt_price_x96
 from monitor.metrics.amm_pool import AmmPoolState
+from monitor.metrics.bybit_slip import BPS
 
 Q96 = Decimal(2**96)
-BPS = Decimal(10_000)
 FluxionLeg = Literal["buy", "sell"]
 # Cap price move within one range step: refuse fills that move sqrt price by
 # more than this fraction of current sqrtP (safety rail vs silent understate).
@@ -138,12 +137,7 @@ def fluxion_amm_slip_bps(
     if size_usd <= 0:
         raise ValueError("size_usd must be positive")
 
-    mid = mid_from_sqrt_price_x96(
-        pool.sqrt_price_x96,
-        token0_is_quote=pool.token0_is_quote,
-        token0_decimals=pool.token0_decimals,
-        token1_decimals=pool.token1_decimals,
-    )
+    mid = pool.mid_quote_per_base()
     quote_decimals = pool.quote_decimals
     base_decimals = pool.base_decimals
     # Impact only — fee reported separately so wear stays additive.

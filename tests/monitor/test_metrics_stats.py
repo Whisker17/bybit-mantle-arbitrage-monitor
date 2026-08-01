@@ -71,6 +71,8 @@ def test_overnight_gap_does_not_inflate_open_duration() -> None:
     b = stats.breach_stats(SessionKind.OPEN)
     # Critical: duration must NOT include the overnight gap
     assert b.total_duration_ms == 0
+    # Capped gap ends the episode; next-day sample starts a new one
+    assert b.episode_count == 2
 
 
 def test_non_fillable_does_not_count_breach() -> None:
