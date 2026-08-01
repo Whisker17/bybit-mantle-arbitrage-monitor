@@ -1,12 +1,13 @@
-"""Edge / wear metrics and US equity session segmentation (M3 / WHI-732).
+"""Edge / wear metrics, session segmentation, and PnL v2 cash-flow engine.
 
-Public seams (tests and TUI depend on these, not internals):
+Public seams (tests and TUI/Web depend on these, not internals):
 
 - ``load_metrics_config`` — typed ``config/metrics.yaml``
 - ``spread_bps`` — Bybit mid vs AMM / RFQ mid
-- ``compute_edge`` / ``compute_edge_ladder`` — net paper edge + cost breakdown
+- ``compute_edge`` / ``compute_edge_ladder`` — M3 net paper edge + cost breakdown
+- ``compute_pnl_usd`` / ``pnl_bucket_table`` / ``optimal_size`` — PnL v2 (WHI-756)
 - ``is_us_rth_open`` / ``session_kind`` — NYSE open / closed / early-close
-- ``EdgeStats`` — time-weighted P50/P95/P99/max + cost-floor breach duration/count
+- ``EdgeStats`` / ``OptimalPnlStats`` — time-weighted distributions + breaches
 - ``build_spread_snapshot`` / ``build_edge_snapshot`` — tick → panel model (M5 feeds)
 
 Depends on ``monitor.quotes`` tick shapes only (DESIGN §4.3), not on WS/RPC clients.
@@ -16,6 +17,7 @@ from monitor.metrics.amm_pool import AmmPoolState
 from monitor.metrics.config import (
     MetricsConfig,
     MetricsConfigError,
+    PnlV2Config,
     default_metrics_path,
     load_metrics_config,
 )
@@ -29,6 +31,16 @@ from monitor.metrics.edge import (
     mid_from_bid_ask,
     spread_bps,
 )
+from monitor.metrics.pnl_v2 import (
+    OptimalSizeResult,
+    PnlBucketTable,
+    PnlCostBreakdownUsd,
+    PnlResult,
+    RfqPollQuote,
+    compute_pnl_usd,
+    optimal_size,
+    pnl_bucket_table,
+)
 from monitor.metrics.session import SessionKind, is_us_rth_open, session_kind
 from monitor.metrics.snapshot import (
     EdgeSnapshot,
@@ -36,7 +48,13 @@ from monitor.metrics.snapshot import (
     build_edge_snapshot,
     build_spread_snapshot,
 )
-from monitor.metrics.stats import BreachStats, Distribution, EdgeStats, SessionBuckets
+from monitor.metrics.stats import (
+    BreachStats,
+    Distribution,
+    EdgeStats,
+    OptimalPnlStats,
+    SessionBuckets,
+)
 
 __all__ = [
     "AmmPoolState",
@@ -48,6 +66,13 @@ __all__ = [
     "EdgeStats",
     "MetricsConfig",
     "MetricsConfigError",
+    "OptimalPnlStats",
+    "OptimalSizeResult",
+    "PnlBucketTable",
+    "PnlCostBreakdownUsd",
+    "PnlResult",
+    "PnlV2Config",
+    "RfqPollQuote",
     "SessionBuckets",
     "SessionKind",
     "SpreadSnapshot",
@@ -57,10 +82,13 @@ __all__ = [
     "build_spread_snapshot",
     "compute_edge",
     "compute_edge_ladder",
+    "compute_pnl_usd",
     "default_metrics_path",
     "is_us_rth_open",
     "load_metrics_config",
     "mid_from_bid_ask",
+    "optimal_size",
+    "pnl_bucket_table",
     "session_kind",
     "spread_bps",
 ]

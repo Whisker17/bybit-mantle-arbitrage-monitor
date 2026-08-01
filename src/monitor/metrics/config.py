@@ -45,6 +45,74 @@ class SessionConfig(BaseModel):
         return self
 
 
+class PnlV2Config(BaseModel):
+    """Cash-flow PnL engine tunables (DESIGN §2.6 / hummingbot-pnl §5)."""
+
+    model_config = ConfigDict(extra="forbid", frozen=True)
+
+    # Fixed AMM display / table buckets (not the M3 TUI ladder).
+    buckets_usd: list[Decimal] = Field(min_length=1)
+    q_min_usd: Decimal = Field(gt=0)
+    config_cap_usd: Decimal = Field(gt=0)
+    coarse_points: int = Field(default=24, ge=2)
+    refine_points: int = Field(default=16, ge=2)
+    q_tol_rel: Decimal = Field(default=Decimal("1e-6"), gt=0)
+    amm_solve_max_iters: int = Field(default=64, ge=1)
+    amm_cap_max_iters: int = Field(default=24, ge=1)
+    # Highlight / breach only — raw PnL is always emitted.
+    min_profit_usd: Decimal | None = Field(default=None)
+    min_profit_bps: Decimal | None = Field(default=None)
+    gas_on_rfq: bool = True
+    # Optional L1 soft depth cap (USD). None ⇒ depth_cap = +∞ on L1 path.
+    l1_assumed_size_usd: Decimal | None = Field(default=None)
+
+    @field_validator(
+        "buckets_usd",
+        "q_min_usd",
+        "config_cap_usd",
+        "q_tol_rel",
+        "min_profit_usd",
+        "min_profit_bps",
+        "l1_assumed_size_usd",
+        mode="before",
+    )
+    @classmethod
+    def _to_decimal(cls, value: object) -> object:
+        if value is None:
+            return None
+        if isinstance(value, list):
+            return [Decimal(str(v)) for v in value]
+        if isinstance(value, (int, float, str)):
+            return Decimal(str(value))
+        return value
+
+    @field_validator("buckets_usd")
+    @classmethod
+    def _positive_buckets(cls, value: list[Decimal]) -> list[Decimal]:
+        if any(s <= 0 for s in value):
+            raise ValueError("pnl_v2.buckets_usd entries must be > 0")
+        if list(value) != sorted(value):
+            raise ValueError("pnl_v2.buckets_usd must be strictly ascending")
+        if len(value) != len(set(value)):
+            raise ValueError("pnl_v2.buckets_usd must be unique")
+        return value
+
+    @model_validator(mode="after")
+    def _bounds(self) -> PnlV2Config:
+        if self.q_min_usd > self.config_cap_usd:
+            raise ValueError(
+                f"pnl_v2.q_min_usd={self.q_min_usd} must be <= "
+                f"config_cap_usd={self.config_cap_usd}"
+            )
+        if self.min_profit_usd is not None and self.min_profit_usd < 0:
+            raise ValueError("pnl_v2.min_profit_usd must be >= 0 when set")
+        if self.min_profit_bps is not None and self.min_profit_bps < 0:
+            raise ValueError("pnl_v2.min_profit_bps must be >= 0 when set")
+        if self.l1_assumed_size_usd is not None and self.l1_assumed_size_usd <= 0:
+            raise ValueError("pnl_v2.l1_assumed_size_usd must be > 0 when set")
+        return self
+
+
 class MetricsConfig(BaseModel):
     model_config = ConfigDict(extra="forbid", frozen=True)
 
@@ -59,6 +127,8 @@ class MetricsConfig(BaseModel):
     # Max inter-sample gap counted toward breach duration (ms). Larger gaps
     # (overnight, collector restart) do not inflate session-segmented duration.
     max_breach_gap_ms: int = Field(default=300_000, ge=1)
+    # PnL v2 cash-flow engine (WHI-756). Required — fail-fast at load (config/README).
+    pnl_v2: PnlV2Config
 
     @field_validator(
         "size_ladder_usd",
