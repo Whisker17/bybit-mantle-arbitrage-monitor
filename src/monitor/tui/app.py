@@ -101,6 +101,9 @@ class OverviewScreen(Screen[None]):
     def render_model(self, model: OverviewModel | None) -> None:
         status = self.query_one("#status", Static)
         table = self.query_one("#pairs", DataTable)
+        if not table.columns:
+            # Composed but not mounted yet — on_mount will render.
+            return
         if model is None:
             status.update("[red]No data yet — waiting for collector journal…[/]")
             return
@@ -443,8 +446,11 @@ class TuiApp(App[None]):
         self.overview: OverviewModel | None = None
 
     def on_mount(self) -> None:
-        self.push_screen(OverviewScreen(self))
+        # Build the model before pushing the screen: OverviewScreen.on_mount
+        # renders it once its columns exist. Ticking after push_screen would
+        # render into a table whose on_mount (add_columns) hasn't run yet.
         self.tick_overview()
+        self.push_screen(OverviewScreen(self))
 
     def open_detail(self, pair_id: str) -> None:
         self.push_screen(DetailScreen(self, pair_id))
