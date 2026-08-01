@@ -28,6 +28,7 @@ export default function HomePage() {
   const [overview, setOverview] = useState<OverviewResponse | null>(null);
   const [health, setHealth] = useState<HealthResponse | null>(null);
   const [err, setErr] = useState<string | null>(null);
+  const [pairsErr, setPairsErr] = useState<string | null>(null);
   const [pollMs, setPollMs] = useState(DEFAULT_POLL_MS);
 
   const [sortKey, setSortKey] = useState<SortKey>("net_edge");
@@ -66,6 +67,7 @@ export default function HomePage() {
     if (oRes.status === "fulfilled") {
       const o = oRes.value;
       setOverview(o);
+      setPairsErr(null);
       if (!sortHydrated.current && !sortTouched.current) {
         if (isSortKey(o.sort_key)) {
           setSortKey(o.sort_key);
@@ -73,10 +75,15 @@ export default function HomePage() {
         setSortDesc(Boolean(o.sort_desc));
         sortHydrated.current = true;
       }
-    } else if (hRes.status !== "fulfilled") {
-      // Both failed — err already set from health.
+    } else {
+      // Keep last overview so the table does not flash empty, but surface a
+      // yellow banner so frozen numbers never look live.
+      setPairsErr(
+        oRes.reason instanceof Error
+          ? oRes.reason.message
+          : String(oRes.reason),
+      );
     }
-    // pairs-only failure: keep last overview; health (if any) still paints the banner.
   }, []);
 
   useEffect(() => {
@@ -131,7 +138,7 @@ export default function HomePage() {
         filteredCount={visibleRows.length}
       />
 
-      <StaleBanner health={health} fetchError={err} />
+      <StaleBanner health={health} fetchError={err} pairsError={pairsErr} />
 
       <OverviewControls
         query={query}

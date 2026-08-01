@@ -19,12 +19,11 @@ def test_pairs_yaml_ids_match_symbols_loader() -> None:
     assert len(yaml_ids) == 11
 
 
-def test_web_pair_ids_loader_script_parses_yaml() -> None:
-    """Mirror the regex used by web/lib/pair-ids.ts loadPairIdsFromConfig."""
+def test_web_pair_ids_ts_source_uses_pairs_yaml() -> None:
+    """The TS loader must read config/pairs.yaml (not a hardcoded inventory)."""
     root = Path(__file__).resolve().parents[2]
-    text = (root / "config" / "pairs.yaml").read_text(encoding="utf-8")
-    import re
-
-    ids = re.findall(r"^\s+- id:\s+(\S+)\s*$", text, flags=re.MULTILINE)
-    cfg_ids = [p.id for p in load_pairs_config().pairs]
-    assert ids == cfg_ids
+    src = (root / "web" / "lib" / "pair-ids.ts").read_text(encoding="utf-8")
+    assert "pairs.yaml" in src
+    assert "loadPairIdsFromConfig" in src
+    # No hand-maintained 11-id array literal left in the module.
+    assert "AAPLx" not in src

@@ -20,8 +20,6 @@ function rawValue(
       return parseNum(row.volume_24h);
     case "trades_24h":
       return row.trades_24h;
-    default:
-      return row.pair_id;
   }
 }
 

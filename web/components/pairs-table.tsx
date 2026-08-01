@@ -1,6 +1,7 @@
 "use client";
 
 import Link from "next/link";
+import { useRouter } from "next/navigation";
 
 import { Badge } from "@/components/ui/badge";
 import { cn } from "@/lib/cn";
@@ -69,6 +70,8 @@ function BpsCell({ value }: { value: string | null }) {
 }
 
 export function PairsTable({ rows, sortKey, sortDesc, onSort }: Props) {
+  const router = useRouter();
+
   return (
     <div className="overflow-x-auto rounded-md border border-border">
       <table className="w-full min-w-[1100px] border-collapse text-xs">
@@ -116,19 +119,34 @@ export function PairsTable({ rows, sortKey, sortDesc, onSort }: Props) {
           ) : (
             rows.map((row) => {
               const dim = row.low_liquidity || row.stale;
+              const href = `/pair/${row.pair_id}/`;
               return (
                 <tr
                   key={row.pair_id}
                   className={cn(
-                    "border-b border-border/60 transition-colors hover:bg-muted/50",
+                    "border-b border-border/60 transition-colors hover:bg-muted/50 cursor-pointer",
                     dim && "opacity-50",
                   )}
+                  onClick={() => {
+                    router.push(href);
+                  }}
+                  onKeyDown={(e) => {
+                    if (e.key === "Enter" || e.key === " ") {
+                      e.preventDefault();
+                      router.push(href);
+                    }
+                  }}
+                  tabIndex={0}
                 >
                   <td className="px-2 py-1.5 font-medium text-foreground">
                     <span className="inline-flex items-center gap-1.5">
                       <Link
-                        href={`/pair/${row.pair_id}/`}
+                        href={href}
                         className="hover:underline underline-offset-2 focus-visible:outline-none focus-visible:ring-1 focus-visible:ring-ring rounded-sm"
+                        onClick={(e) => {
+                          // Let the row handler navigate; avoid double push.
+                          e.stopPropagation();
+                        }}
                       >
                         {row.pair_id}
                       </Link>

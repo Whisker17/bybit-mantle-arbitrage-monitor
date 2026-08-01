@@ -18,8 +18,12 @@ export function loadPairIdsFromConfig(): string[] {
     );
   }
   const text = fs.readFileSync(yamlPath, "utf8");
+  // Restrict to the `pairs:` list body so future top-level keys with `id:`
+  // fields cannot pollute generateStaticParams.
+  const pairsBlock = text.match(/^pairs:\s*\n([\s\S]*?)(?=\n[a-zA-Z_]|\n*$)/m);
+  const body = pairsBlock?.[1] ?? text;
   const ids: string[] = [];
-  for (const line of text.split("\n")) {
+  for (const line of body.split("\n")) {
     const m = /^\s+- id:\s+(\S+)\s*$/.exec(line);
     if (m) ids.push(m[1]);
   }

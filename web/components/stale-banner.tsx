@@ -5,14 +5,21 @@ import { fmtAgeMs } from "@/lib/format";
 
 type Props = {
   health: HealthResponse | null;
+  /** Hard failure fetching /api/health (or total API outage). */
   fetchError: string | null;
+  /**
+   * Soft failure on /api/pairs while health may still be fine — keep last rows
+   * but never look silently live (WHI-758 outage requirement).
+   */
+  pairsError?: string | null;
 };
 
 /**
- * Explicit yellow bar when the feed is dead or the journal is unreachable.
- * Must never look like a healthy panel with quietly stale numbers.
+ * Explicit yellow/red bar when the feed is dead, journal is unreachable, or
+ * the overview payload cannot refresh. Must never look like a healthy panel
+ * with quietly stale numbers.
  */
-export function StaleBanner({ health, fetchError }: Props) {
+export function StaleBanner({ health, fetchError, pairsError }: Props) {
   if (fetchError) {
     return (
       <div
@@ -30,20 +37,23 @@ export function StaleBanner({ health, fetchError }: Props) {
     );
   }
 
-  if (!health) return null;
-
   const reasons: string[] = [];
-  if (health.error) reasons.push(health.error);
-  if (!health.db_exists) reasons.push("collector journal missing");
-  if (!health.collector_alive) {
+  if (health?.error) reasons.push(health.error);
+  if (health && !health.db_exists) reasons.push("collector journal missing");
+  if (health && !health.collector_alive) {
     reasons.push(
       health.age_ms != null
         ? `collector data stale (age ${fmtAgeMs(health.age_ms)})`
         : "collector not alive",
     );
   }
+  if (pairsError) {
+    reasons.push(`overview refresh failed: ${pairsError}`);
+  }
 
-  if (health.ok && reasons.length === 0) return null;
+  const healthBad = health != null && !health.ok;
+  if (!healthBad && !pairsError && reasons.length === 0) return null;
+  if (health == null && !pairsError) return null;
 
   return (
     <div
@@ -59,7 +69,7 @@ export function StaleBanner({ health, fetchError }: Props) {
           {reasons.length > 0
             ? reasons.join(" · ")
             : "collector health degraded"}
-          {health.gap_recent ? " · recent collector gap recorded" : ""}
+          {health?.gap_recent ? " · recent collector gap recorded" : ""}
         </div>
       </div>
     </div>
