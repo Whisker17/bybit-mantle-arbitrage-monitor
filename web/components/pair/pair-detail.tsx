@@ -103,7 +103,7 @@ export function PairDetail({ pairId }: Props) {
   return (
     <div className="space-y-4">
       {err && (
-        <div className="rounded-md border border-warning/40 bg-warning/10 px-3 py-1.5 text-[11px] text-warning-foreground">
+        <div className="rounded-md border border-warning/40 bg-warning/10 px-3 py-1.5 text-[11px] text-warning">
           Refresh failed — showing last snapshot. {err}
         </div>
       )}

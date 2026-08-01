@@ -117,6 +117,13 @@ soon — anything touching key handling, RPC credentials defaults to at least Hi
   compile-time parity; the pair-detail type surface is large enough that drift
   risk is real.
 
+- **`build_spread_series` `_as_of` is linear, now hot at 1200 pts** (Low, WHI-759 → if API lag).
+  Each book sample scans pools + RFQ buy/sell histories from the start
+  (`monitor.tui.builder._as_of`). Fine at 240 points; with
+  `spread_history_max_points: 1200` and 2s detail polls this is ~O(n×hist)
+  per pair. Replace with `bisect_right` or a merge-walk cursor if
+  `/api/pairs/{id}` p95 exceeds MemoryMax/latency budget on the VPS.
+
 - **Full shadcn/ui CLI not installed** (Low, WHI-758 → polish if needed).
   Spec allowed "shadcn/ui + Tailwind"; WHI-758 ships Tailwind v4 + hand-rolled
   `components/ui/{badge,button,input}` in the shadcn style (no `components.json`,
