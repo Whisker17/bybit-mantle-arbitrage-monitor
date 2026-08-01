@@ -239,7 +239,11 @@ def test_overview_and_detail_from_sqlite(tmp_path: Path) -> None:
 
 def test_build_spread_series_includes_rfq_and_bybit_mid() -> None:
     """WHI-759 chart needs AMM + RFQ lines and optional Bybit mid overlay."""
-    from monitor.tui.builder import build_spread_series
+    from monitor.tui.builder import (
+        _rfq_spread_for_overview,
+        _rfq_spread_for_series,
+        build_spread_series,
+    )
 
     metrics = load_metrics_config()
     ts = _open_ts_ms()
@@ -262,6 +266,11 @@ def test_build_spread_series_includes_rfq_and_bybit_mid() -> None:
     assert series[0].bybit_mid is not None
     # Bybit mid = (100 + 100.20) / 2
     assert series[0].bybit_mid == Decimal("100.1")
+    # Series uses mean of sides (not max-abs overview rule).
+    buy = Decimal("-20")
+    sell = Decimal("10")
+    assert _rfq_spread_for_series(buy, sell) == Decimal("-5")
+    assert _rfq_spread_for_overview(buy, sell) == buy  # larger abs
     # Without RFQ quotes, rfq_spread stays None but series still builds.
     bare = build_spread_series(
         books=books, pools=pools, metrics=metrics, max_points=100

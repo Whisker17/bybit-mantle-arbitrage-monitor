@@ -108,11 +108,23 @@ export function shortAddr(
   return `${prefix}${body.slice(0, head)}…${body.slice(-tail)}`;
 }
 
+/**
+ * Mantle mainnet explorer base for tx links.
+ * Override via NEXT_PUBLIC_EXPLORER_TX_BASE (no trailing slash), same pattern
+ * as NEXT_PUBLIC_API_BASE — not a secret, but not baked into every call site.
+ */
+export function explorerTxBase(): string {
+  if (typeof process !== "undefined" && process.env.NEXT_PUBLIC_EXPLORER_TX_BASE) {
+    return process.env.NEXT_PUBLIC_EXPLORER_TX_BASE.replace(/\/$/, "");
+  }
+  return "https://mantlescan.xyz";
+}
+
 /** Mantle mainnet explorer link for a transaction hash. */
 export function explorerTxUrl(txHash: string | null | undefined): string | null {
   if (!txHash) return null;
   const h = txHash.startsWith("0x") ? txHash : `0x${txHash}`;
-  return `https://mantlescan.xyz/tx/${h}`;
+  return `${explorerTxBase()}/tx/${h}`;
 }
 
 /** Fraction 0..1 → "12.3%"; null → em dash. */
@@ -131,7 +143,11 @@ export function fmtLabel(label: string | null | undefined): string {
   return label.replaceAll("_", " ");
 }
 
-/** Sum of CostBreakdown wear fields (string decimals from API). */
+/**
+ * Sum of CostBreakdown wear fields (string decimals from API).
+ * ``total_wear_bps`` is a Python @property and is not in the JSON wire payload
+ * (asdict drops it) — always recompute client-side with fixed precision.
+ */
 export function totalWearBps(costs: {
   bybit_taker_bps: string;
   fluxion_fee_bps: string;
@@ -139,12 +155,8 @@ export function totalWearBps(costs: {
   fluxion_slip_bps: string;
   gas_bps: string;
   basis_bps: string;
-  total_wear_bps?: string;
 } | null | undefined): string | null {
   if (!costs) return null;
-  if (costs.total_wear_bps != null && costs.total_wear_bps !== "") {
-    return costs.total_wear_bps;
-  }
   const parts = [
     costs.bybit_taker_bps,
     costs.fluxion_fee_bps,
@@ -154,5 +166,8 @@ export function totalWearBps(costs: {
     costs.basis_bps,
   ].map(parseNum);
   if (parts.some((p) => p === null)) return null;
-  return String(parts.reduce((a, b) => (a as number) + (b as number), 0));
+  const nums = parts as number[];
+  const sum = nums.reduce((a, b) => a + b, 0);
+  // Avoid float tail like 18.500000000000004 — fixed-point style for wire parity.
+  return Number(sum.toFixed(4)).toString();
 }

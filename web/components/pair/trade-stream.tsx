@@ -2,8 +2,8 @@
 
 import type { ReactNode } from "react";
 
-import { EmptyPanel } from "@/components/pair/spread-chart";
 import { Badge } from "@/components/ui/badge";
+import { EmptyPanel } from "@/components/ui/empty-panel";
 import { cn } from "@/lib/cn";
 import {
   explorerTxUrl,

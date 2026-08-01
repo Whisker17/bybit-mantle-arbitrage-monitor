@@ -14,16 +14,14 @@ import { cn } from "@/lib/cn";
 type Props = {
   amm: EdgePanel;
   rfq: EdgePanel;
-  /** Sample cap stated in the TUI header (display only). */
-  sampleCapHint?: string;
 };
 
-export function EdgeStatsPanel({ amm, rfq, sampleCapHint }: Props) {
+export function EdgeStatsPanel({ amm, rfq }: Props) {
   return (
     <div className="space-y-3">
       <p className="text-[10px] text-muted-foreground">
-        Net paper edge (M3) — cumulative over last journal book samples
-        {sampleCapHint ? ` (≤${sampleCapHint})` : ""}. Bucket / optimal size PnL
+        Net paper edge (M3) — cumulative over recent journal book samples
+        (each distribution row prints its own n=). Bucket / optimal size PnL
         awaits WHI-756.
       </p>
       <div className="grid gap-3 lg:grid-cols-2">

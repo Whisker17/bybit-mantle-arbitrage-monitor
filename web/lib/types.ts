@@ -64,9 +64,6 @@ export type PairDetailResponse = {
   error?: string | null;
 };
 
-/** @deprecated Use PairDetailResponse — kept as alias for any residual imports. */
-export type PairDetailStubResponse = PairDetailResponse;
-
 export type SpreadPoint = {
   ts_ms: number;
   amm_spread_bps: string | null;
@@ -95,8 +92,6 @@ export type CostBreakdown = {
   fluxion_slip_bps: string;
   gas_bps: string;
   basis_bps: string;
-  /** Present when API serializes the property; else derived client-side. */
-  total_wear_bps?: string;
 };
 
 export type EdgeResult = {

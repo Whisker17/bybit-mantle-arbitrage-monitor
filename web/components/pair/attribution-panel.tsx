@@ -1,6 +1,6 @@
 "use client";
 
-import { EmptyPanel } from "@/components/pair/spread-chart";
+import { EmptyPanel } from "@/components/ui/empty-panel";
 import {
   fmtLabel,
   fmtNotional,
@@ -8,7 +8,6 @@ import {
   shortAddr,
 } from "@/lib/format";
 import type { PairAttribution, PairDetailResponse } from "@/lib/types";
-import { cn } from "@/lib/cn";
 
 type Props = {
   attribution: PairAttribution | null;
@@ -26,13 +25,13 @@ export function AttributionPanel({ attribution, detail }: Props) {
   }
 
   const m = attribution.mechanism;
-  const total = m.amm_trades + m.rfq_trades;
   // Pair-scoped RFQ fills are often 0 until enrichment (DEFERRED); avoid a
-  // false "0% RFQ" ring — surface n/a when rfq_trades == 0 and share is null.
+  // false "0% RFQ" ring — surface n/a when rfq_trades == 0. Do not invent a
+  // share from counts when the API left rfq_mechanism_share null.
   const rfqShareTxt =
     m.rfq_trades === 0
       ? "n/a (fills unscoped)"
-      : fmtPct(detail.rfq_mechanism_share ?? m.rfq_trades / Math.max(total, 1));
+      : fmtPct(detail.rfq_mechanism_share);
 
   const top = attribution.top_takers.slice(0, 10);
 
@@ -154,6 +153,9 @@ function MechanismDonut({
   const stroke = 14;
   const r = (size - stroke) / 2;
   const c = 2 * Math.PI * r;
+  // Theme-aligned strokes (same hues as Tailwind positive / warning).
+  const ammStroke = "hsl(142 55% 45%)";
+  const rfqStroke = "hsl(38 80% 55%)";
 
   if (total === 0) {
     return (
@@ -165,7 +167,6 @@ function MechanismDonut({
 
   const ammFrac = amm / total;
   const rfqFrac = rfq / total;
-  // When RFQ is unscoped (0), show full ring as AMM with muted label.
   const ammLen = c * ammFrac;
   const rfqLen = c * rfqFrac;
 
@@ -187,7 +188,7 @@ function MechanismDonut({
               cy={size / 2}
               r={r}
               fill="none"
-              stroke="hsl(142 55% 45%)"
+              stroke={ammStroke}
               strokeWidth={stroke}
               strokeDasharray={`${ammLen} ${c - ammLen}`}
               strokeDashoffset={0}
@@ -199,7 +200,7 @@ function MechanismDonut({
               cy={size / 2}
               r={r}
               fill="none"
-              stroke="hsl(38 80% 55%)"
+              stroke={rfqStroke}
               strokeWidth={stroke}
               strokeDasharray={`${rfqLen} ${c - rfqLen}`}
               strokeDashoffset={-ammLen}
@@ -225,14 +226,14 @@ function MechanismDonut({
           fills
         </text>
       </svg>
-      <div className="flex flex-wrap justify-center gap-2 text-[10px] text-muted-foreground">
-        <span className={cn("inline-flex items-center gap-1")}>
+      <div className="flex flex-col items-center gap-0.5 text-[10px] text-muted-foreground">
+        <span className="inline-flex items-center gap-1">
           <span className="h-1.5 w-1.5 rounded-full bg-positive" />
-          AMM {amm}
+          AMM n={amm}
         </span>
         <span className="inline-flex items-center gap-1">
           <span className="h-1.5 w-1.5 rounded-full bg-warning" />
-          RFQ {rfqShareLabel}
+          RFQ n={rfq} · share {rfqShareLabel}
         </span>
       </div>
     </div>

@@ -105,6 +105,24 @@ def _rfq_spread_for_overview(
     return max(candidates, key=lambda x: abs(x))
 
 
+def _rfq_spread_for_series(
+    buy_bps: Decimal | None,
+    sell_bps: Decimal | None,
+) -> Decimal | None:
+    """Stable RFQ series point: mean of available sides (not max-abs).
+
+    Overview uses max-abs so the table highlights the worse side. A chart line
+    that flips legs each sample is misleading — average keeps the series on
+    one continuous path when both quotes exist.
+    """
+    candidates = [b for b in (buy_bps, sell_bps) if b is not None]
+    if not candidates:
+        return None
+    if len(candidates) == 1:
+        return candidates[0]
+    return (candidates[0] + candidates[1]) / 2
+
+
 def build_pair_overview_row(
     pair: Pair,
     *,
@@ -440,7 +458,7 @@ def build_spread_series(
                 ts_ms=book.exchange_ts_ms,
                 amm_spread_bps=snap.amm_spread_bps,
                 session=snap.session,
-                rfq_spread_bps=_rfq_spread_for_overview(
+                rfq_spread_bps=_rfq_spread_for_series(
                     snap.rfq_buy_spread_bps,
                     snap.rfq_sell_spread_bps,
                 ),

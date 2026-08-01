@@ -21,9 +21,14 @@ import {
   fmtSession,
   fmtSignedBps,
 } from "@/lib/format";
-import type { PairDetailResponse, SessionKind } from "@/lib/types";
+import type {
+  HealthResponse,
+  PairDetailResponse,
+  SessionKind,
+} from "@/lib/types";
 import { cn } from "@/lib/cn";
 
+/** Fallback until /api/health returns poll_interval_s (config/api.yaml default). */
 const DEFAULT_POLL_MS = 2000;
 
 type Props = {
@@ -33,18 +38,35 @@ type Props = {
 export function PairDetail({ pairId }: Props) {
   const [data, setData] = useState<PairDetailResponse | null>(null);
   const [err, setErr] = useState<string | null>(null);
-  const [pollMs] = useState(DEFAULT_POLL_MS);
+  const [pollMs, setPollMs] = useState(DEFAULT_POLL_MS);
 
   const refresh = useCallback(async () => {
-    try {
-      const d = await fetchJson<PairDetailResponse>(
+    // Independent fetches so a 503 on detail (missing journal) does not discard
+    // a successful /api/health that should drive poll interval.
+    const [hRes, dRes] = await Promise.allSettled([
+      fetchJson<HealthResponse>("/api/health"),
+      fetchJson<PairDetailResponse>(
         `/api/pairs/${encodeURIComponent(pairId)}`,
-      );
-      setData(d);
+      ),
+    ]);
+
+    if (hRes.status === "fulfilled") {
+      const h = hRes.value;
+      if (h.poll_interval_s && h.poll_interval_s > 0) {
+        setPollMs(Math.round(h.poll_interval_s * 1000));
+      }
+    }
+
+    if (dRes.status === "fulfilled") {
+      setData(dRes.value);
       setErr(null);
-    } catch (e) {
+    } else {
       // Keep last good snapshot so panels do not flash empty on a blip.
-      setErr(e instanceof Error ? e.message : String(e));
+      setErr(
+        dRes.reason instanceof Error
+          ? dRes.reason.message
+          : String(dRes.reason),
+      );
     }
   }, [pairId]);
 

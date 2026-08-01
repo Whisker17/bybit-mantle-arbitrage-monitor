@@ -2,22 +2,24 @@
 
 /**
  * Lightweight uPlot chart for AMM/RFQ spread vs time.
- * Canvas path handles 1000+ points without React re-render per point.
+ * Canvas path handles 1000+ points; setData on poll (no full remount).
  */
 
 import { useEffect, useMemo, useRef, useState } from "react";
 import uPlot from "uplot";
 import "uplot/dist/uPlot.min.css";
 
-import { prepareSpreadSeries } from "@/lib/spread-chart";
-import type { SpreadPoint } from "@/lib/types";
+import { EmptyPanel } from "@/components/ui/empty-panel";
 import { cn } from "@/lib/cn";
+import { prepareSpreadSeries, type SpreadChartSeries } from "@/lib/spread-chart";
+import type { SpreadPoint } from "@/lib/types";
 
 type Props = {
   points: SpreadPoint[];
   className?: string;
 };
 
+/** Match Tailwind theme tokens (positive / primary-ish blue / warning). */
 const AMM_COLOR = "hsl(142 55% 45%)";
 const RFQ_COLOR = "hsl(210 70% 55%)";
 const MID_COLOR = "hsl(38 80% 55%)";
@@ -29,11 +31,22 @@ const GRID = "hsla(220, 10%, 40%, 0.25)";
 export function SpreadChart({ points, className }: Props) {
   const hostRef = useRef<HTMLDivElement>(null);
   const plotRef = useRef<uPlot | null>(null);
+  /** Stable handle for draw hook — updated every render without recreating plot. */
+  const seriesRef = useRef<SpreadChartSeries | null>(null);
   const [showMid, setShowMid] = useState(false);
 
   const series = useMemo(() => prepareSpreadSeries(points), [points]);
+  seriesRef.current = series;
   const empty = series.xs.length === 0 || (!series.hasAmm && !series.hasRfq);
 
+  // Fingerprint data for setData (identity of `points` array changes every poll).
+  const dataKey = useMemo(() => {
+    if (series.xs.length === 0) return "";
+    const last = series.xs.length - 1;
+    return `${series.xs.length}:${series.xs[0]}:${series.xs[last]}:${series.amm[last]}:${series.rfq[last]}`;
+  }, [series]);
+
+  // Create plot once (or when empty ↔ non-empty / showMid scale changes).
   useEffect(() => {
     if (empty || !hostRef.current) {
       plotRef.current?.destroy();
@@ -44,13 +57,7 @@ export function SpreadChart({ points, className }: Props) {
     const el = hostRef.current;
     const width = Math.max(el.clientWidth || 640, 320);
     const height = 220;
-
-    const data: uPlot.AlignedData = [
-      series.xs,
-      series.amm,
-      series.rfq,
-      series.bybitMid,
-    ];
+    const s0 = seriesRef.current!;
 
     const opts: uPlot.Options = {
       width,
@@ -88,8 +95,8 @@ export function SpreadChart({ points, className }: Props) {
           grid: { show: false },
           ticks: { stroke: GRID },
           font: "11px ui-monospace, Menlo, monospace",
-          size: showMid && series.hasMid ? 52 : 0,
-          show: showMid && series.hasMid,
+          size: showMid && s0.hasMid ? 52 : 0,
+          show: showMid && s0.hasMid,
           label: showMid ? "mid" : undefined,
           labelSize: 12,
           labelFont: "10px ui-monospace, Menlo, monospace",
@@ -104,7 +111,7 @@ export function SpreadChart({ points, className }: Props) {
           scale: "bps",
           spanGaps: false,
           points: { show: false },
-          show: series.hasAmm,
+          show: s0.hasAmm,
         },
         {
           label: "RFQ",
@@ -113,7 +120,7 @@ export function SpreadChart({ points, className }: Props) {
           scale: "bps",
           spanGaps: false,
           points: { show: false },
-          show: series.hasRfq,
+          show: s0.hasRfq,
         },
         {
           label: "Bybit mid",
@@ -123,28 +130,28 @@ export function SpreadChart({ points, className }: Props) {
           scale: "mid",
           spanGaps: false,
           points: { show: false },
-          show: showMid && series.hasMid,
+          show: showMid && s0.hasMid,
         },
       ],
       hooks: {
         drawClear: [
           (u) => {
+            const s = seriesRef.current;
+            if (!s || s.xs.length === 0) return;
             const { ctx } = u;
             const { left, top, width: w, height: h } = u.bbox;
             ctx.save();
-            // Base closed-session tint across the full plot.
             ctx.fillStyle = CLOSED_BAND;
             ctx.fillRect(left, top, w, h);
-            // Open bands over closed.
-            for (const [i0, i1] of series.openBands) {
-              const x0 = u.valToPos(series.xs[i0]!, "x", true);
-              const x1 = u.valToPos(series.xs[i1]!, "x", true);
+            for (const [i0, i1] of s.openBands) {
+              const x0 = u.valToPos(s.xs[i0]!, "x", true);
+              const x1 = u.valToPos(s.xs[i1]!, "x", true);
               const xL = Math.min(x0, x1);
               const xR = Math.max(x0, x1);
-              // Pad a half-step so single-point open bands are visible.
-              const pad = Math.max(1, (xR - xL) * 0.02 + 2);
+              // Pad only single-point open bands so a 1-sample open is visible.
+              const pad = i0 === i1 ? 2 : 0;
               ctx.fillStyle = OPEN_BAND;
-              ctx.fillRect(xL - pad, top, xR - xL + pad * 2, h);
+              ctx.fillRect(xL - pad, top, Math.max(xR - xL, 1) + pad * 2, h);
             }
             ctx.restore();
           },
@@ -153,7 +160,7 @@ export function SpreadChart({ points, className }: Props) {
     };
 
     plotRef.current?.destroy();
-    plotRef.current = new uPlot(opts, data, el);
+    plotRef.current = new uPlot(opts, [s0.xs, s0.amm, s0.rfq, s0.bybitMid], el);
 
     const ro = new ResizeObserver(() => {
       if (!hostRef.current || !plotRef.current) return;
@@ -169,7 +176,16 @@ export function SpreadChart({ points, className }: Props) {
       plotRef.current?.destroy();
       plotRef.current = null;
     };
-  }, [series, showMid, empty]);
+    // Recreate only when empty flips or mid axis toggles (scale layout change).
+    // eslint-disable-next-line react-hooks/exhaustive-deps -- series pushed via setData
+  }, [empty, showMid]);
+
+  // Push new samples without destroying the plot (keeps zoom/cursor).
+  useEffect(() => {
+    if (empty || !plotRef.current || !seriesRef.current) return;
+    const s = seriesRef.current;
+    plotRef.current.setData([s.xs, s.amm, s.rfq, s.bybitMid]);
+  }, [dataKey, empty, showMid]);
 
   if (empty) {
     return (
@@ -189,7 +205,7 @@ export function SpreadChart({ points, className }: Props) {
           <span className="inline-flex items-center gap-1">
             <span
               className="inline-block h-2.5 w-3 rounded-sm"
-              style={{ background: OPEN_BAND, border: "1px solid " + AMM_COLOR }}
+              style={{ background: OPEN_BAND, border: `1px solid ${AMM_COLOR}` }}
             />
             open
           </span>
@@ -233,21 +249,3 @@ function LegendSwatch({ color, label }: { color: string; label: string }) {
   );
 }
 
-export function EmptyPanel({
-  message,
-  className,
-}: {
-  message: string;
-  className?: string;
-}) {
-  return (
-    <div
-      className={cn(
-        "rounded-md border border-dashed border-border px-3 py-6 text-center text-[11px] text-muted-foreground",
-        className,
-      )}
-    >
-      {message}
-    </div>
-  );
-}
