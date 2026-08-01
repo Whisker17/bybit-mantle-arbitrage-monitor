@@ -351,9 +351,16 @@ def _format_attr_panel(model: PairDetailModel) -> str:
         lines.append("no trades in window")
         return "\n".join(lines)
     m = attr.mechanism
+    # Pair-scoped RFQ fills are unavailable until enrichment (DEFERRED); show
+    # n/a rather than a false 0% that looks like "no RFQ activity".
+    rfq_share_txt = (
+        "n/a (fills unscoped)"
+        if m.rfq_trades == 0
+        else _pct(model.rfq_mechanism_share)
+    )
     lines.append(
         f"mechanism: AMM={m.amm_trades} RFQ={m.rfq_trades} "
-        f"rfq_share={_pct(model.rfq_mechanism_share)}"
+        f"rfq_share={rfq_share_txt}"
     )
     lines.append(
         f"convergence_share={_pct(attr.convergence_share)} "
@@ -432,14 +439,12 @@ class TuiApp(App[None]):
         self.sort_desc: bool = tui.default_sort_desc
         self.edge_state = RunningEdgeState()
         self.overview: OverviewModel | None = None
-        self._detail_pair: str | None = None
 
     def on_mount(self) -> None:
         self.push_screen(OverviewScreen(self))
         self.tick_overview()
 
     def open_detail(self, pair_id: str) -> None:
-        self._detail_pair = pair_id
         self.push_screen(DetailScreen(self, pair_id))
 
     def tick_overview(self) -> None:

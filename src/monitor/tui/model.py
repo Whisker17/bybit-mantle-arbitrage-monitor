@@ -122,3 +122,7 @@ class RunningEdgeState:
     last_sample_ts: dict[tuple[str, VenueKind, Direction], int] = field(
         default_factory=dict
     )
+    # Pairs whose journal history has been fully walked into stats once.
+    # Overview live ticks may populate ``stats`` without this flag; detail
+    # cold-start must still rebuild so cumulative percentiles cover the DB.
+    history_rebuilt: set[str] = field(default_factory=set)

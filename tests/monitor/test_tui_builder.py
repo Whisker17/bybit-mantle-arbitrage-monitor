@@ -189,19 +189,23 @@ def test_overview_and_detail_from_sqlite(tmp_path: Path) -> None:
     store.close()
 
     with JournalReader(db) as reader:
+        state = RunningEdgeState()
+        # App path: overview first (seeds live ticks), then detail rebuilds history.
         overview = build_overview(
             pairs=pairs,
             reader=reader,
             metrics=metrics,
             tui=tui,
             now=ts + 2000,
+            edge_state=state,
         )
         assert overview.rows
         aapl = next(r for r in overview.rows if r.pair_id == "AAPLx")
         assert aapl.bybit_mid is not None
         assert aapl.amm_spread_bps is not None
+        assert aapl.pair_id in {k[0] for k in state.stats}  # warmed
+        assert "AAPLx" not in state.history_rebuilt
 
-        state = RunningEdgeState()
         detail = build_pair_detail(
             pair=pairs.pair_by_id("AAPLx"),
             reader=reader,
@@ -210,10 +214,23 @@ def test_overview_and_detail_from_sqlite(tmp_path: Path) -> None:
             tui=tui,
             edge_state=state,
             now=ts + 2000,
-            cold_start=True,
         )
         assert detail.pair_id == "AAPLx"
         assert detail.overview.bybit_mid == aapl.bybit_mid
         assert detail.spread_series  # history present
+        assert "AAPLx" in state.history_rebuilt
         # Edge panels use M3 EdgeStats — distribution count grows with history.
         assert detail.edge_amm.distribution_all.count >= 1
+
+        # Second detail open must not double-count history.
+        n1 = detail.edge_amm.distribution_all.count
+        detail2 = build_pair_detail(
+            pair=pairs.pair_by_id("AAPLx"),
+            reader=reader,
+            metrics=metrics,
+            attribution_cfg=attr,
+            tui=tui,
+            edge_state=state,
+            now=ts + 2000,
+        )
+        assert detail2.edge_amm.distribution_all.count == n1

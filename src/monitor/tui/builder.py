@@ -3,7 +3,7 @@
 The TUI never reimplements spread, edge, or attribution math — it only joins
 collector ticks and calls:
 
-- ``build_spread_snapshot`` / ``build_edge_snapshot`` / ``best_net_edge``
+- ``build_spread_snapshot`` / ``build_edge_snapshot``
 - ``EdgeStats`` / ``SessionBuckets``
 - ``amm_trade_from_swap`` / ``build_pair_attribution`` / ``is_converging``
 """
@@ -35,13 +35,11 @@ from monitor.metrics import (
     MetricsConfig,
     SessionBuckets,
     SessionKind,
-    best_net_edge,
     build_edge_snapshot,
     build_spread_snapshot,
     session_kind,
 )
 from monitor.metrics.edge import Direction, EdgeResult, VenueKind
-from monitor.metrics.stats import BreachStats, Distribution
 from monitor.quotes import (
     BybitBookTick,
     FluxionPoolStateTick,
@@ -74,9 +72,8 @@ def _session_at(ts_ms: int, metrics: MetricsConfig) -> SessionKind:
 def _pick_reference_edge(
     edges: Sequence[EdgeResult], *, size: Decimal
 ) -> EdgeResult | None:
+    """Best *fillable* edge at the reference size; None if nothing fillable."""
     at_size = [e for e in edges if e.size_usd == size and e.fillable]
-    if not at_size:
-        at_size = [e for e in edges if e.size_usd == size]
     if not at_size:
         return None
     return max(at_size, key=lambda e: e.net_edge_bps)
@@ -145,10 +142,8 @@ def build_pair_overview_row(
     )
     spreads = edge_snap.spreads
     combined = list(edge_snap.amm_edges) + list(edge_snap.rfq_edges)
-    best = best_net_edge([e for e in combined if e.size_usd == ref] or list(combined))
-    # Prefer reference-size fillable edge; fall back to best overall fillable.
-    ref_best = _pick_reference_edge(combined, size=ref)
-    chosen = ref_best if ref_best is not None else best
+    # Overview net-edge column is always at reference size and fillable-only.
+    chosen = _pick_reference_edge(combined, size=ref)
 
     return PairOverviewRow(
         pair_id=pair.id,
@@ -203,6 +198,9 @@ def build_overview(
         rfq_buy, rfq_sell = reader.latest_rfq_sides(pair.id)
         vol = reader.volume_stats(pair.id, since_ms=since)
         if edge_state is not None and bybit is not None:
+            # Stamp with exchange time so a stalled collector does not inflate
+            # EdgeStats with synthetic 1.5s samples of the same book.
+            sample_ts = bybit.exchange_ts_ms
             pool = amm_pool_from_tick(pair, amm) if amm is not None else None
             snap = build_edge_snapshot(
                 bybit=bybit,
@@ -211,13 +209,13 @@ def build_overview(
                 amm_pool=pool,
                 rfq_buy=rfq_buy,
                 rfq_sell=rfq_sell,
-                ts_ms=ts,
+                ts_ms=sample_ts,
             )
             observe_edges(
                 edge_state,
                 pair_id=pair.id,
                 edges=list(snap.amm_edges) + list(snap.rfq_edges),
-                ts_ms=ts,
+                ts_ms=sample_ts,
                 session=snap.spreads.session,
                 metrics=metrics,
                 reference_size=tui.reference_size_usd,
@@ -245,20 +243,6 @@ def build_overview(
         reference_size_usd=tui.reference_size_usd,
         rows=rows,
         db_path=str(reader.path),
-    )
-
-
-def _empty_edge_panel() -> EdgePanel:
-    empty_b = BreachStats(episode_count=0, total_duration_ms=0, currently_breaching=False)
-    return EdgePanel(
-        current=None,
-        distribution_all=Distribution.empty(),
-        distribution_open=Distribution.empty(),
-        distribution_closed=Distribution.empty(),
-        breach_all=empty_b,
-        breach_open=empty_b,
-        breach_closed=empty_b,
-        costs=None,
     )
 
 
@@ -584,9 +568,13 @@ def build_pair_detail(
     pools = reader.pool_states(pair.id, limit=tui.edge_history_max_samples)
     rfq_hist = reader.rfq_quotes(pair.id, limit=tui.edge_history_max_samples)
 
-    if cold_start or not any(
-        k[0] == pair.id for k in edge_state.stats
-    ):
+    # Overview live ticks may have already seeded EdgeStats keys; that must
+    # not skip a full journal walk. Rebuild once per pair per process.
+    if cold_start or pair.id not in edge_state.history_rebuilt:
+        for key in list(edge_state.stats):
+            if key[0] == pair.id:
+                del edge_state.stats[key]
+                edge_state.last_sample_ts.pop(key, None)
         rebuild_edge_history(
             edge_state,
             pair=pair,
@@ -596,9 +584,11 @@ def build_pair_detail(
             metrics=metrics,
             tui=tui,
         )
+        edge_state.history_rebuilt.add(pair.id)
 
-    # Live sample from latest tick.
+    # Live sample from latest tick (exchange time, not wall clock).
     if bybit is not None:
+        sample_ts = bybit.exchange_ts_ms
         pool = amm_pool_from_tick(pair, amm) if amm is not None else None
         snap = build_edge_snapshot(
             bybit=bybit,
@@ -607,13 +597,13 @@ def build_pair_detail(
             amm_pool=pool,
             rfq_buy=rfq_buy,
             rfq_sell=rfq_sell,
-            ts_ms=ts,
+            ts_ms=sample_ts,
         )
         observe_edges(
             edge_state,
             pair_id=pair.id,
             edges=list(snap.amm_edges) + list(snap.rfq_edges),
-            ts_ms=ts,
+            ts_ms=sample_ts,
             session=snap.spreads.session,
             metrics=metrics,
             reference_size=tui.reference_size_usd,

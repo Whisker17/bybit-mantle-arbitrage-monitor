@@ -13,6 +13,7 @@ from dataclasses import dataclass
 from decimal import Decimal
 from pathlib import Path
 
+from monitor.metrics.edge import mid_from_bid_ask
 from monitor.quotes import (
     BybitBookTick,
     FluxionPoolStateTick,
@@ -284,8 +285,9 @@ class JournalReader:
         out: list[tuple[int, Decimal]] = []
         for b in books:
             if b.bid_de_multiplied > 0 and b.ask_de_multiplied > 0:
-                mid = (b.bid_de_multiplied + b.ask_de_multiplied) / 2
-                out.append((b.exchange_ts_ms, mid))
+                out.append(
+                    (b.exchange_ts_ms, mid_from_bid_ask(b.bid_de_multiplied, b.ask_de_multiplied))
+                )
         return out
 
     def volume_stats(self, pair_id: str, *, since_ms: int) -> VolumeStats:
