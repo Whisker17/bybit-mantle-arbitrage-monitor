@@ -31,6 +31,14 @@ soon — anything touching key handling, RPC credentials defaults to at least Hi
 
 ## Open
 
+- **UncoveredCoverageProbe per-source try/except is a data clump** (Low, WHI-787).
+  `monitor/underlying/coverage_probe.py::UncoveredCoverageProbe.probe_once` —
+  `(yahoo_body, yahoo_err)` and `(hermes_feeds, hermes_err)` pairs are gathered
+  with identical try/except shape then threaded into `evaluate_uncovered_probe`.
+  Deferred as low severity with zero live uncovered tickers after WHI-787.
+  Fix: a small `SourceProbe(name, body, error)` (or shared helper) that collapses
+  the two fetch paths.
+
 - **Yahoo KR listing without FX.USD/KRW silently writes non-USD underlyings** (Medium, WHI-785 → when re-adding KR prefer_yahoo).
   `config/underlying.yaml` `fx_usd_krw_feed_id` is null after WHI-785 (SKHY is
   USD ADR). Re-adding a KR Yahoo ticker without restoring the FX feed id leaves

@@ -64,6 +64,7 @@ from monitor.underlying.coverage_probe import (
     META_MISMATCHES,
     META_PROBE_ERRORS,
     META_PROBE_MS,
+    ProbeError,
     ProbeOutcome,
     UncoveredCoverageProbe,
     errors_to_meta_json,
@@ -743,6 +744,22 @@ class CollectorDaemon:
                         self._stamp_uncovered_probe(outcome, probe_ms=now)
                     except Exception as exc:  # noqa: BLE001
                         logger.warning("uncovered coverage probe failed: %s", exc)
+                        # Outer failure (to_thread / set_meta): stamp empty
+                        # mismatches + a probe-level error so health does not
+                        # keep a prior "all clear" forever.
+                        self._stamp_uncovered_probe(
+                            ProbeOutcome(
+                                mismatches=[],
+                                errors=[
+                                    ProbeError(
+                                        ticker="*",
+                                        source="probe",
+                                        error=str(exc)[:400],
+                                    )
+                                ],
+                            ),
+                            probe_ms=now,
+                        )
                     finally:
                         last_uncovered_probe_ms = now
                 interval = poller.poll_interval_s()
