@@ -30,6 +30,7 @@ import {
   filterRows,
   isSortKey,
   parseOverviewSearch,
+  sortKeyLabel,
   sortRows,
   topNSummary,
   TOP_N_DEFAULT,
@@ -51,7 +52,7 @@ type Props = {
 
 /**
  * Apply shareable `?sort=&desc=&all=` into state setters.
- * Returns whether the URL supplied an explicit sort (so we skip the API default).
+ * Returns whether the URL supplied an explicit sort key (API default skipped).
  */
 function applyUrlState(
   fromUrl: OverviewUrlState,
@@ -61,19 +62,16 @@ function applyUrlState(
     showAll: (v: boolean) => void;
   },
 ): boolean {
-  let hasSort = false;
   if (fromUrl.sortKey) {
     set.sortKey(fromUrl.sortKey);
-    hasSort = true;
-  }
-  if (fromUrl.sortDesc !== undefined) {
-    set.sortDesc(fromUrl.sortDesc);
-    hasSort = true;
+    if (fromUrl.sortDesc !== undefined) {
+      set.sortDesc(fromUrl.sortDesc);
+    }
   }
   if (fromUrl.showAll !== undefined) {
     set.showAll(fromUrl.showAll);
   }
-  return hasSort;
+  return fromUrl.sortKey != null;
 }
 
 export function MarketOverview({ marketId }: Props) {
@@ -90,15 +88,16 @@ export function MarketOverview({ marketId }: Props) {
   const [query, setQuery] = useState("");
   const [hideLowLiquidity, setHideLowLiquidity] = useState(false);
   const [hideStale, setHideStale] = useState(false);
-  /** Operator (or share URL) owns sort — stop adopting server defaults. */
-  const sortTouched = useRef(false);
-  /** Sort is intentional (URL or server default applied) — safe to write URL. */
-  const sortHydrated = useRef(false);
+  /**
+   * Sort is intentional (share URL or API default applied) — safe to write
+   * shareable query params. Also set on operator sort / expand so early
+   * expand before first pairs poll still stamps `?all=1`.
+   */
+  const sortReady = useRef(false);
 
   // Mount + market switch: re-read share URL; otherwise wait for API default.
   useEffect(() => {
-    sortHydrated.current = false;
-    sortTouched.current = false;
+    sortReady.current = false;
     setOverview(null);
     setHealth(null);
     setPairsErr(null);
@@ -108,14 +107,13 @@ export function MarketOverview({ marketId }: Props) {
 
     if (typeof window === "undefined") return;
     const fromUrl = parseOverviewSearch(window.location.search);
-    const hasSort = applyUrlState(fromUrl, {
+    const hasSortKey = applyUrlState(fromUrl, {
       sortKey: setSortKey,
       sortDesc: setSortDesc,
       showAll: setShowAll,
     });
-    if (hasSort) {
-      sortTouched.current = true;
-      sortHydrated.current = true;
+    if (hasSortKey) {
+      sortReady.current = true;
     }
   }, [marketId]);
 
@@ -124,7 +122,7 @@ export function MarketOverview({ marketId }: Props) {
   // default (?sort=net_edge) before /api/pairs reports the market default.
   useEffect(() => {
     if (typeof window === "undefined") return;
-    if (!sortHydrated.current && !sortTouched.current) return;
+    if (!sortReady.current) return;
     const next = buildOverviewSearch({ sortKey, sortDesc, showAll });
     const url = `${window.location.pathname}${next}`;
     if (url !== `${window.location.pathname}${window.location.search}`) {
@@ -159,12 +157,12 @@ export function MarketOverview({ marketId }: Props) {
       const o = oRes.value;
       setOverview(o);
       setPairsErr(null);
-      if (!sortHydrated.current && !sortTouched.current) {
+      if (!sortReady.current) {
         if (isSortKey(o.sort_key)) {
           setSortKey(o.sort_key);
         }
         setSortDesc(Boolean(o.sort_desc));
-        sortHydrated.current = true;
+        sortReady.current = true;
       }
     } else {
       setPairsErr(
@@ -252,10 +250,24 @@ export function MarketOverview({ marketId }: Props) {
     [sortedRows, sortKey, showAll],
   );
 
+  const emptyMessage = useMemo(() => {
+    if (topView.totalCount === 0) {
+      return "No pairs match the current filter.";
+    }
+    if (topView.rows.length === 0 && topView.presentCount === 0) {
+      const label = sortKeyLabel(sortKey);
+      return `No pairs with ${label} data yet — n/a rows trail. Expand to see all ${topView.totalCount}.`;
+    }
+    return "No pairs match the current filter.";
+  }, [topView, sortKey]);
+
+  const markSortReady = useCallback(() => {
+    sortReady.current = true;
+  }, []);
+
   const handleSort = useCallback(
     (key: SortKey) => {
-      sortTouched.current = true;
-      sortHydrated.current = true;
+      markSortReady();
       if (key === sortKey) {
         // Direction flip keeps expand state.
         setSortDesc((d) => !d);
@@ -267,26 +279,29 @@ export function MarketOverview({ marketId }: Props) {
         setShowAll(false);
       }
     },
-    [sortKey],
+    [sortKey, markSortReady],
   );
 
-  const setSortKeyTouched = useCallback((k: SortKey) => {
-    sortTouched.current = true;
-    sortHydrated.current = true;
-    setSortKey(k);
-    setSortDesc(defaultSortDesc(k));
-    setShowAll(false);
-  }, []);
+  const setSortKeyTouched = useCallback(
+    (k: SortKey) => {
+      markSortReady();
+      setSortKey(k);
+      setSortDesc(defaultSortDesc(k));
+      setShowAll(false);
+    },
+    [markSortReady],
+  );
 
   const toggleSortDir = useCallback(() => {
-    sortTouched.current = true;
-    sortHydrated.current = true;
+    markSortReady();
     setSortDesc((d) => !d);
-  }, []);
+  }, [markSortReady]);
 
   const toggleShowAll = useCallback(() => {
+    // Ensure URL sync runs even if expand happens before first pairs poll.
+    markSortReady();
     setShowAll((v) => !v);
-  }, []);
+  }, [markSortReady]);
 
   return (
     <main className="mx-auto max-w-[1600px] px-3 py-3 sm:px-4">
@@ -338,6 +353,7 @@ export function MarketOverview({ marketId }: Props) {
             marketId={marketId}
             hasRfq={hasRfq}
             venues={venues}
+            emptyMessage={emptyMessage}
           />
 
           {(topView.isTruncated || topView.showAll) &&

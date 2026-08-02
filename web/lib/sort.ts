@@ -47,8 +47,8 @@ export function sortRows(
   key: SortKey,
   desc: boolean,
 ): PairOverviewRow[] {
-  const present = rows.filter((r) => rawValue(r, key) !== null);
-  const missing = rows.filter((r) => rawValue(r, key) === null);
+  const present = rows.filter((r) => hasSortValue(r, key));
+  const missing = rows.filter((r) => !hasSortValue(r, key));
 
   const sorted = [...present].sort((a, b) => {
     const va = rawValue(a, key);
@@ -133,8 +133,6 @@ export type TopNView = {
   totalCount: number;
   /** How many rows are currently rendered. */
   shownCount: number;
-  /** Cap used when collapsed. */
-  topN: number;
   showAll: boolean;
   /**
    * True when the collapsed view omits rows (present > N and/or trailing n/a
@@ -168,7 +166,6 @@ export function applyTopN(
       presentCount,
       totalCount,
       shownCount: totalCount,
-      topN: n,
       showAll: true,
       isTruncated: false,
     };
@@ -180,7 +177,6 @@ export function applyTopN(
     presentCount,
     totalCount,
     shownCount: rows.length,
-    topN: n,
     showAll: false,
     // Collapsed window is shorter than the full filtered list.
     isTruncated: totalCount > rows.length,
@@ -221,6 +217,8 @@ export type OverviewUrlState = {
 /**
  * Parse `?sort=&desc=&all=` from a location search string.
  * Unknown sort keys are ignored (caller keeps server/default).
+ * `desc` without a valid `sort` is ignored so a lone `?desc=0` cannot pin
+ * the client default sort key and suppress the market API default.
  */
 export function parseOverviewSearch(search: string): OverviewUrlState {
   const raw = search.startsWith("?") ? search.slice(1) : search;
@@ -230,10 +228,10 @@ export function parseOverviewSearch(search: string): OverviewUrlState {
   const sort = p.get("sort");
   if (sort && isSortKey(sort)) {
     out.sortKey = sort;
-  }
-  if (p.has("desc")) {
-    const d = p.get("desc");
-    out.sortDesc = d !== "0" && d !== "false";
+    if (p.has("desc")) {
+      const d = p.get("desc");
+      out.sortDesc = d !== "0" && d !== "false";
+    }
   }
   if (p.get("all") === "1" || p.get("all") === "true") {
     out.showAll = true;

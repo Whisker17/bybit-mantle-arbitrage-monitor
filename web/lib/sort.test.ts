@@ -135,6 +135,18 @@ describe("applyTopN (WHI-791)", () => {
     assert.equal(view.isTruncated, true);
   });
 
+  it("collapsed: zero present values → empty rows, still truncated for expand", () => {
+    const sorted = [
+      row({ pair_id: "A", tvl_usd: null }),
+      row({ pair_id: "B" }),
+    ];
+    const view = applyTopN(sorted, "tvl_usd", { n: 10, showAll: false });
+    assert.deepEqual(view.rows, []);
+    assert.equal(view.presentCount, 0);
+    assert.equal(view.totalCount, 2);
+    assert.equal(view.isTruncated, true);
+  });
+
   it("showAll: returns full sorted list including trailing n/a", () => {
     const sorted = [
       row({ pair_id: "A", tvl_usd: "10" }),
@@ -219,6 +231,8 @@ describe("overview URL state (WHI-791)", () => {
     });
     assert.deepEqual(parseOverviewSearch(""), {});
     assert.deepEqual(parseOverviewSearch("?sort=not_a_key"), {});
+    // Lone desc must not pin client default over the market API sort_key.
+    assert.deepEqual(parseOverviewSearch("?desc=0"), {});
     assert.deepEqual(parseOverviewSearch("?sort=tvl_usd&all=0"), {
       sortKey: "tvl_usd",
       showAll: false,

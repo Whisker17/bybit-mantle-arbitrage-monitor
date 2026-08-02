@@ -143,9 +143,9 @@ export type PairOverviewRow = {
   rfq_premium_bps?: string | null;
   premium_type_label?: string | null;
   /**
-   * Inventory snapshot pool liquidity USD (est / DexScreener). API still
-   * emits this for cold-start / TUI; Web overview ranks on live `tvl_usd`
-   * via Top-N sort (WHI-791), not this field.
+   * Inventory snapshot pool liquidity USD from TUI `PairOverviewRow`
+   * (serialized by the API). Web overview ranks on live `tvl_usd` only
+   * (WHI-791); this field is unused in the Web UI.
    */
   est_liquidity_usd?: string | null;
   /**
