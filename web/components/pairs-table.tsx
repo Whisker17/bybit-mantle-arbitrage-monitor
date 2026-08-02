@@ -371,7 +371,16 @@ function UnderlyingCell({ row }: { row: PairOverviewRow }) {
       </span>
     );
   }
-  if (row.underlying_price == null) {
+  // WHI-794: price<=0 or as_of_ms==0 is not a real equity print.
+  const undPx =
+    row.underlying_price == null ? null : Number(row.underlying_price);
+  const undAsOf = row.underlying_as_of_ms ?? null;
+  const undValid =
+    undPx != null &&
+    Number.isFinite(undPx) &&
+    undPx > 0 &&
+    (undAsOf == null || undAsOf > 0);
+  if (!undValid) {
     return (
       <span
         className="text-muted-foreground"
@@ -390,8 +399,8 @@ function UnderlyingCell({ row }: { row: PairOverviewRow }) {
     <span
       className="inline-flex items-center justify-end gap-1"
       title={
-        row.underlying_as_of_ms != null
-          ? `${row.underlying_ticker} ${row.underlying_source ?? ""} as_of ${new Date(row.underlying_as_of_ms).toISOString()}`
+        undAsOf != null
+          ? `${row.underlying_ticker} ${row.underlying_source ?? ""} as_of ${new Date(undAsOf).toISOString()}`
           : (row.underlying_ticker ?? undefined)
       }
     >

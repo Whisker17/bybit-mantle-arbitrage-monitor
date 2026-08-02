@@ -179,6 +179,9 @@ def build_premium_snapshot(
         return PremiumSnapshot.empty(ticker=ticker, reason="private")
     if underlying is None:
         return PremiumSnapshot.empty(ticker=ticker, reason="no_data")
+    # WHI-794: never treat a zero/epoch print as a real equity reference.
+    if underlying.price <= 0 or underlying.as_of_ms <= 0:
+        return PremiumSnapshot.empty(ticker=ticker, reason="no_data")
 
     u = underlying.price
     cex_p = premium_bps(cex_mid, u)

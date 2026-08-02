@@ -11,8 +11,10 @@ from monitor.underlying.coverage_probe import (
     META_MISMATCHES,
     META_PROBE_ERRORS,
     META_PROBE_MS,
+    META_UNPUBLISHED,
     errors_from_meta_json,
     mismatches_from_meta_json,
+    unpublished_from_meta_json,
 )
 
 
@@ -40,6 +42,8 @@ class HealthStatus:
     uncovered_coverage_probe_ms: int | None = None
     # Source-level probe failures (so total outage ≠ "all clear").
     uncovered_coverage_probe_errors: list[dict[str, Any]] = field(default_factory=list)
+    # WHI-794: Hermes feed_id pinned but latest never published (price/time 0).
+    unpublished_pyth_feeds: list[dict[str, Any]] = field(default_factory=list)
 
     @classmethod
     def unavailable(
@@ -71,6 +75,7 @@ class HealthStatus:
             uncovered_coverage_mismatches=[],
             uncovered_coverage_probe_ms=None,
             uncovered_coverage_probe_errors=[],
+            unpublished_pyth_feeds=[],
         )
 
 
@@ -126,9 +131,10 @@ def build_health(
     mismatches = mismatches_from_meta_json(reader.get_meta(META_MISMATCHES))
     probe_ms = _meta_int(reader, META_PROBE_MS)
     probe_errors = errors_from_meta_json(reader.get_meta(META_PROBE_ERRORS))
+    unpublished = unpublished_from_meta_json(reader.get_meta(META_UNPUBLISHED))
     # ``ok`` is the UI banner aggregate (alive today). Wider criteria (e.g.
     # !gap_recent) can fold in later without renaming the wire field.
-    # Uncovered mismatches / probe errors are advisory — they do not flip ok.
+    # Uncovered / unpublished advisories do not flip ok.
     return HealthStatus(
         ok=alive,
         generated_ts_ms=ts,
@@ -147,4 +153,5 @@ def build_health(
         uncovered_coverage_mismatches=mismatches,
         uncovered_coverage_probe_ms=probe_ms,
         uncovered_coverage_probe_errors=probe_errors,
+        unpublished_pyth_feeds=unpublished,
     )

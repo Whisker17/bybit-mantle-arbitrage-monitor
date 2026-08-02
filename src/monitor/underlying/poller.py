@@ -105,16 +105,20 @@ class UnderlyingPoller:
                 use_gap = True
 
         usd_krw = self._fx_usd_krw(prices_by_feed)
+        got = {t.ticker for t in ticks}
         for name in self.tickers:
             tcfg = self.cfg.tickers.get(name)
             if tcfg is None or tcfg.uncovered:
                 continue
-            if not tcfg.prefer_yahoo:
-                continue
             if not self.cfg.yahoo_fallback or self._yahoo is None:
-                logger.debug("yahoo fallback disabled; skip %s", name)
+                if tcfg.prefer_yahoo:
+                    logger.debug("yahoo fallback disabled; skip %s", name)
                 continue
             if not tcfg.yahoo_symbol:
+                continue
+            # prefer_yahoo: always Yahoo. Otherwise: Hermes miss → gap-fill
+            # (covers registered-but-never-published feeds, WHI-794).
+            if not tcfg.prefer_yahoo and name in got:
                 continue
             try:
                 chart = self._yahoo.fetch_chart(tcfg.yahoo_symbol)

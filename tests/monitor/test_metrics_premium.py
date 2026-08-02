@@ -80,6 +80,31 @@ def test_build_premium_snapshot_no_data() -> None:
     assert snap.premium_bps is None
 
 
+def test_build_premium_snapshot_rejects_zero_or_epoch_underlying() -> None:
+    """WHI-794: price=0 / as_of_ms=0 must not drive vs-Und (treat as no_data)."""
+    zero = UnderlyingPriceTick(
+        ticker="SOXL",
+        price=Decimal("0"),
+        currency="USD",
+        price_type="stale",
+        as_of_ms=0,
+        recv_ts_ms=1,
+        source="pyth_hermes",
+    )
+    snap = build_premium_snapshot(
+        ticker="SOXL",
+        underlying=zero,
+        cex_mid=Decimal("100"),
+        amm_mid=Decimal("101"),
+        rfq_mid=None,
+        private=False,
+    )
+    assert snap.empty_reason == "no_data"
+    assert snap.price is None
+    assert snap.premium_bps is None
+    assert snap.cex_premium_bps is None
+
+
 def test_build_premium_snapshot_three_venues() -> None:
     tick = UnderlyingPriceTick(
         ticker="AAPL",

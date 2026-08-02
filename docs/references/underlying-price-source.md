@@ -214,14 +214,103 @@ Bug class: a one-time “private / no feed” human judgment freezes in
    * `underlying_uncovered_probe_errors` — JSON list of `{ticker, source, error}`
      (total outage ≠ “all clear”)
    * `underlying_uncovered_probe_ms` — last probe attempt wall time
+   * `underlying_unpublished_feeds` — JSON list of never-published Hermes feeds
+     (WHI-794 reverse; see below)
 4. **Health** — `GET /api/health` exposes `uncovered_coverage_mismatches`,
-   `uncovered_coverage_probe_errors`, `uncovered_coverage_probe_ms`. Advisory
-   only — does **not** flip `ok`.
-5. **Empty uncovered list** — probe is a no-op (no network). After WHI-787 the
-   checked-in map has zero uncovered; the path stays for the next private or
-   pre-IPO name.
+   `uncovered_coverage_probe_errors`, `uncovered_coverage_probe_ms`, and
+   `unpublished_pyth_feeds`. Advisory only — does **not** flip `ok`.
+5. **Empty uncovered list** — uncovered reverse path is a no-op for Yahoo/
+   search; WHI-794 still batches Hermes `latest` for pinned feed ids.
 6. **When the probe does not run** — if `collector.yaml` `underlying.enabled`
    is false, or inventory yields no tickers, the collector never constructs the
    probe (same gate as the price poller). Use
    `python -m monitor.underlying --probe-uncovered` for a one-shot check, or
    re-enable the underlying loop.
+
+## Never-published Pyth feeds (WHI-794)
+
+Bug class: Hermes **registers** an equity feed id but **never publishes**
+(`price=0`, `publish_time=0`). Pre-fix parse accepted the row as a real print
+→ journal `0.00000` / `as_of_ms=0` / `stale`, Yahoo never ran, UI showed
+`0.0000 + stale`, vs Und polluted.
+
+### Fix contract
+
+1. **Parse reject** — `hermes_quote_is_valid` requires `publish_time > 0` and
+   `price > 0`. Invalid rows are dropped (no tick, no `prices_by_feed` entry).
+2. **Yahoo gap-fill** — poller: after Hermes, any covered ticker still missing
+   a tick with `yahoo_symbol` set is filled from Yahoo (same path as
+   `prefer_yahoo` names). `prefer_yahoo` still always uses Yahoo.
+3. **UI / premium** — `price <= 0` or `as_of_ms <= 0` → empty / n/a; no
+   `0.0000` as a price; vs Und does not compute.
+4. **Reverse guardrail** — same probe interval fetches Hermes `latest` for all
+   pinned feed ids; never-published → WARN + meta `underlying_unpublished_feeds`
+   + health `unpublished_pyth_feeds`.
+
+### Hermes publish_time audit (probe 2026-08-03, US closed)
+
+All config `feed_id` pins (44) via
+`GET /v2/updates/price/latest?ids[]=…&ignore_invalid_price_ids=true`.
+OK rows freeze at prior Friday RTH close (`2026-07-31 20:00 UTC`) as expected.
+**UNPUBLISHED** = `price=0` and `publish_time=0`.
+
+| Ticker | Hermes status | price | publish_time | Config after WHI-794 |
+|--------|---------------|------:|--------------|----------------------|
+| AAOI | **UNPUBLISHED** | 0 | 0 (never) | keep `feed_id` + `yahoo_symbol: AAOI` |
+| AXTI | **UNPUBLISHED** | 0 | 0 (never) | keep `feed_id` + `yahoo_symbol: AXTI` |
+| BE | **UNPUBLISHED** | 0 | 0 (never) | keep `feed_id` + `yahoo_symbol: BE` |
+| EWY | **UNPUBLISHED** | 0 | 0 (never) | keep `feed_id` + `yahoo_symbol: EWY` |
+| NBIS | **UNPUBLISHED** | 0 | 0 (never) | keep `feed_id` + `yahoo_symbol: NBIS` |
+| SOXL | **UNPUBLISHED** | 0 | 0 (never) | keep `feed_id` + `yahoo_symbol: SOXL` |
+| AAPL | ok | 309.85484 | 2026-07-31 20:00 UTC | Hermes primary |
+| AMAT | ok | 508.24505 | 2026-07-31 20:00 UTC | Hermes primary |
+| AMD | ok | 476.20259 | 2026-07-31 20:00 UTC | Hermes primary |
+| AMZN | ok | 271.64008 | 2026-07-31 20:00 UTC | Hermes primary |
+| ARM | ok | 239.90000 | 2026-07-31 20:00 UTC | Hermes primary |
+| AVGO | ok | 389.79000 | 2026-07-31 20:00 UTC | Hermes primary |
+| BABA | ok | 122.36605 | 2026-07-31 20:00 UTC | Hermes primary |
+| COIN | ok | 146.40766 | 2026-07-31 20:00 UTC | Hermes primary |
+| CRCL | ok | 62.54484 | 2026-07-31 20:00 UTC | Hermes primary |
+| CRWV | ok | 71.74000 | 2026-07-31 20:00 UTC | Hermes primary |
+| DELL | ok | 405.48721 | 2026-07-31 20:00 UTC | Hermes primary |
+| GLW | ok | 138.41000 | 2026-07-31 20:00 UTC | Hermes primary |
+| GOOGL | ok | 356.15798 | 2026-07-31 20:00 UTC | Hermes primary |
+| GS | ok | 1017.96000 | 2026-07-31 20:00 UTC | Hermes primary |
+| HOOD | ok | 86.59300 | 2026-07-31 20:00 UTC | Hermes primary |
+| IBM | ok | 224.08250 | 2026-07-31 20:00 UTC | Hermes primary |
+| INTC | ok | 90.34000 | 2026-07-31 20:00 UTC | Hermes primary |
+| MCD | ok | 270.64000 | 2026-07-31 20:00 UTC | Hermes primary |
+| META | ok | 556.64537 | 2026-07-31 20:00 UTC | Hermes primary |
+| MRVL | ok | 187.71002 | 2026-07-31 20:00 UTC | Hermes primary |
+| MSFT | ok | 465.21011 | 2026-07-31 20:00 UTC | Hermes primary |
+| MSTR | ok | 93.27353 | 2026-07-31 20:00 UTC | Hermes primary |
+| MU | ok | 823.26612 | 2026-07-31 20:00 UTC | Hermes primary |
+| NVDA | ok | 200.75750 | 2026-07-31 20:00 UTC | Hermes primary |
+| ORCL | ok | 130.20007 | 2026-07-31 20:00 UTC | Hermes primary |
+| PLTR | ok | 123.15440 | 2026-07-31 20:00 UTC | Hermes primary |
+| PYPL | ok | 57.22001 | 2026-07-31 20:00 UTC | Hermes primary |
+| QCOM | ok | 147.68000 | 2026-07-31 20:00 UTC | Hermes primary |
+| QQQ | ok | 681.56352 | 2026-07-31 20:00 UTC | Hermes primary |
+| RKLB | ok | 64.93525 | 2026-07-31 20:00 UTC | Hermes primary |
+| SMH | ok | 540.58500 | 2026-07-31 20:00 UTC | Hermes primary |
+| SNDK | ok | 1214.66412 | 2026-07-31 20:00 UTC | Hermes primary |
+| SOXS | ok | 45.62707 | 2026-07-31 20:00 UTC | Hermes primary |
+| SPY | ok | 746.69000 | 2026-07-31 20:00 UTC | Hermes primary |
+| TQQQ | ok | 64.77242 | 2026-07-31 20:00 UTC | Hermes primary |
+| TSLA | ok | 311.57003 | 2026-07-31 20:00 UTC | Hermes primary |
+| TSM | ok | 404.18744 | 2026-07-31 20:00 UTC | Hermes primary |
+| WDC | ok | 544.71501 | 2026-07-31 20:00 UTC | Hermes primary |
+
+Yahoo-only gap-fill (no Hermes pin): SKHY, SPCX, FLNC, KORU, LITE, MUU, MVLL,
+NOK, DRAM, INTW, SNXX — unchanged from prior issues.
+
+```bash
+# Expect SOXL/NBIS source=yahoo, price > 0 (not 0.0000):
+uv run python -m monitor.underlying --tickers SOXL,NBIS,AAPL
+# Expect unpublished_feed rows for any remaining never-published pins:
+uv run python -m monitor.underlying --probe-uncovered
+```
+
+**Deploy:** restart **both** collectors after shipping so parse reject + Yahoo
+gap-fill + probe meta land. Historical `price=0` journal rows age out via
+retention; UI/premium treat them as no_data even before prune.

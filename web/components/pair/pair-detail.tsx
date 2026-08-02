@@ -264,7 +264,9 @@ export function PairDetail({ marketId, pairId }: Props) {
             value={
               o.underlying_empty === "private"
                 ? "n/a private"
-                : o.underlying_price != null
+                : o.underlying_price != null &&
+                    Number(o.underlying_price) > 0 &&
+                    (o.underlying_as_of_ms == null || o.underlying_as_of_ms > 0)
                   ? `${fmtPrice(o.underlying_price)}${
                       o.underlying_price_type
                         ? ` (${o.underlying_price_type})`

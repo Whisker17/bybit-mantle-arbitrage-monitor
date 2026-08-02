@@ -46,6 +46,12 @@ describe("fmtPrice", () => {
     assert.equal(fmtPrice("100.12345"), "100.1235");
     assert.equal(fmtPrice(null), "—");
   });
+
+  it("treats non-positive prices as empty (WHI-794)", () => {
+    assert.equal(fmtPrice("0"), "—");
+    assert.equal(fmtPrice("0.0000"), "—");
+    assert.equal(fmtPrice(-1), "—");
+  });
 });
 
 describe("fmtSignedBps", () => {

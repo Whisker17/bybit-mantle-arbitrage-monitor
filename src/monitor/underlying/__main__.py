@@ -34,8 +34,8 @@ def main(argv: list[str] | None = None) -> int:
     p.add_argument(
         "--probe-uncovered",
         action="store_true",
-        help="WHI-787: probe uncovered tickers for public Yahoo/Pyth coverage "
-        "(standalone; does not require the collector)",
+        help="WHI-787/794: probe uncovered reverse mismatches + never-published "
+        "Hermes feeds (standalone; does not require the collector)",
     )
     args = p.parse_args(argv)
 
@@ -49,11 +49,14 @@ def main(argv: list[str] | None = None) -> int:
             probe.close()
         for m in outcome.mismatches:
             print(json.dumps({"kind": "mismatch", **m.to_dict()}))
+        for u in outcome.unpublished_feeds:
+            # WHI-794: configured Hermes feed never published.
+            print(json.dumps({"kind": "unpublished_feed", **u.to_dict()}))
         for e in outcome.errors:
             print(json.dumps({"kind": "error", **e.to_dict()}), file=sys.stderr)
         if not cfg.uncovered_tickers():
             print("# no uncovered tickers in config", file=sys.stderr)
-        if outcome.mismatches:
+        if outcome.mismatches or outcome.unpublished_feeds:
             return 1
         if outcome.inconclusive:
             return 2

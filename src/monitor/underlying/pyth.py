@@ -17,6 +17,15 @@ def scale_pyth_price(price_raw: str | int, expo: int) -> Decimal:
     return Decimal(str(price_raw)) * (Decimal(10) ** int(expo))
 
 
+def hermes_quote_is_valid(*, price: Decimal, publish_time: int) -> bool:
+    """True when Hermes price payload is a real print (WHI-794).
+
+    Registered-but-never-published feeds return ``price=0`` and
+    ``publish_time=0``. Those must not be stored as equity reference prices.
+    """
+    return publish_time > 0 and price > 0
+
+
 def parse_hermes_latest(
     body: dict[str, Any] | list[Any],
     *,
@@ -29,7 +38,8 @@ def parse_hermes_latest(
     """Map Hermes latest JSON → ticks + raw feed prices by feed id.
 
     Returns ``(ticks, prices_by_feed_id)``. FX feeds are only in the map, not
-    as equity ticks.
+    as equity ticks. Invalid quotes (``publish_time == 0`` or ``price <= 0``)
+    are dropped entirely so Yahoo gap-fill can run (WHI-794).
     """
     recv = recv_ts_ms if recv_ts_ms is not None else now_ms()
     now = now_ms_value if now_ms_value is not None else recv
@@ -49,6 +59,9 @@ def parse_hermes_latest(
             px = scale_pyth_price(price_obj["price"], int(price_obj["expo"]))
             publish_time = int(price_obj["publish_time"])
         except (KeyError, TypeError, ValueError, InvalidOperation):
+            continue
+        # WHI-794: never-published / non-positive Hermes rows are not data.
+        if not hermes_quote_is_valid(price=px, publish_time=publish_time):
             continue
         prices_by_feed[raw_id] = px
         conf_raw = price_obj.get("conf")

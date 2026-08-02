@@ -33,6 +33,8 @@ export function fmtPrice(
   if (value === null || value === undefined || value === "") return DASH;
   const n = typeof value === "number" ? value : Number(value);
   if (!Number.isFinite(n)) return String(value);
+  // WHI-794: 0 is not a price (never-published Pyth / empty book).
+  if (n <= 0) return DASH;
   return n.toFixed(digits);
 }
 

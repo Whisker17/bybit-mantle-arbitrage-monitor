@@ -124,10 +124,13 @@ tickers:
 # Hermes RTH Equity.US.{T}/USD where listed (probe 2026-08-02); Yahoo gap-fill
 # otherwise. PRE/POST/ON session feeds intentionally unused (deprecated).
 # Uncovered only when no single-name public tape is known.
+  # WHI-794: Hermes feed registered but never published (price=0/publish_time=0
+  # probe 2026-08-03) — keep feed_id for re-probe; Yahoo gap-fill until live.
   AAOI:
     currency: USD
     pyth_symbol: Equity.US.AAOI/USD
     feed_id: "ff68be691d07c6513247fd4e93a6d52b31e0ef7e4899acc43e59cb5c95b3fa76"
+    yahoo_symbol: "AAOI"
   AMAT:
     currency: USD
     pyth_symbol: Equity.US.AMAT/USD
@@ -144,18 +147,22 @@ tickers:
     currency: USD
     pyth_symbol: Equity.US.AVGO/USD
     feed_id: "d0c9aef79b28308b256db7742a0a9b08aaa5009db67a52ea7fa30ed6853f243b"
+  # WHI-794: Hermes never published (probe 2026-08-03) — Yahoo gap-fill.
   AXTI:
     currency: USD
     pyth_symbol: Equity.US.AXTI/USD
     feed_id: "56b6d6619fbd0b81ae09dbb8ccca77877b78aebf098b2fb95432a926af8e384c"
+    yahoo_symbol: "AXTI"
   BABA:
     currency: USD
     pyth_symbol: Equity.US.BABA/USD
     feed_id: "72bc23b1d0afb1f8edef20b7fb60982298993161bc0fd749587d6f60cd1ee9a3"
+  # WHI-794: Hermes never published (probe 2026-08-03) — Yahoo gap-fill.
   BE:
     currency: USD
     pyth_symbol: Equity.US.BE/USD
     feed_id: "a955f59cec6006d55ac21ab009c92662f2d9250bc22b86fcce16e7962c129c4f"
+    yahoo_symbol: "BE"
   CRWV:
     currency: USD
     pyth_symbol: Equity.US.CRWV/USD
@@ -164,10 +171,12 @@ tickers:
     currency: USD
     pyth_symbol: Equity.US.DELL/USD
     feed_id: "a2950270a22ce39a22cb3488ba91e60474cd93c6d01da2ecc5a97c1dd40f4995"
+  # WHI-794: Hermes never published (probe 2026-08-03) — Yahoo gap-fill.
   EWY:
     currency: USD
     pyth_symbol: Equity.US.EWY/USD
     feed_id: "7be2b3f9f9d02b1ffcf61fc26ad5cc6aff4dd02044f9abc22ee57f37b3b5d2e5"
+    yahoo_symbol: "EWY"
   GLW:
     currency: USD
     pyth_symbol: Equity.US.GLW/USD
@@ -188,10 +197,12 @@ tickers:
     currency: USD
     pyth_symbol: Equity.US.MSTR/USD
     feed_id: "e1e80251e5f5184f2195008382538e847fafc36f751896889dd3d1b1f6111f09"
+  # WHI-794: Hermes never published (probe 2026-08-03) — Yahoo gap-fill.
   NBIS:
     currency: USD
     pyth_symbol: Equity.US.NBIS/USD
     feed_id: "691630d65fbbc8d987717df10453c01907bee8caa60a4aaba4dafca64ea16dc4"
+    yahoo_symbol: "NBIS"
   ORCL:
     currency: USD
     pyth_symbol: Equity.US.ORCL/USD
@@ -224,10 +235,12 @@ tickers:
     currency: USD
     pyth_symbol: Equity.US.SNDK/USD
     feed_id: "c86a1f20cd7d5d07932baea30bcd8e479b775c4f51f82526bf1de6dc79fa3f76"
+  # WHI-794: Hermes never published (probe 2026-08-03) — Yahoo gap-fill.
   SOXL:
     currency: USD
     pyth_symbol: Equity.US.SOXL/USD
     feed_id: "53008e9cb71db278f91d7ee0011434af626548018b5f9d4c11000c387eac46fb"
+    yahoo_symbol: "SOXL"
   SOXS:
     currency: USD
     pyth_symbol: Equity.US.SOXS/USD

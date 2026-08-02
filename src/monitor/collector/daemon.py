@@ -64,11 +64,13 @@ from monitor.underlying.coverage_probe import (
     META_MISMATCHES,
     META_PROBE_ERRORS,
     META_PROBE_MS,
+    META_UNPUBLISHED,
     ProbeError,
     ProbeOutcome,
     UncoveredCoverageProbe,
     errors_to_meta_json,
     mismatches_to_meta_json,
+    unpublished_to_meta_json,
 )
 from monitor.underlying.poller import UnderlyingPoller
 from monitor.underlying.tickers import underlying_tickers_for_pairs
@@ -668,12 +670,15 @@ class CollectorDaemon:
             self._set_underlying_error("")
 
     def _stamp_uncovered_probe(self, outcome: ProbeOutcome, *, probe_ms: int) -> None:
-        """Persist WHI-787 uncovered coverage probe outcome to journal meta."""
+        """Persist WHI-787/794 coverage probe outcome to journal meta."""
         self.store.set_meta(
             META_MISMATCHES, mismatches_to_meta_json(outcome.mismatches)
         )
         self.store.set_meta(META_PROBE_ERRORS, errors_to_meta_json(outcome.errors))
         self.store.set_meta(META_PROBE_MS, str(probe_ms))
+        self.store.set_meta(
+            META_UNPUBLISHED, unpublished_to_meta_json(outcome.unpublished_feeds)
+        )
 
     async def _underlying_loop(self) -> None:
         """Poll Pyth Hermes (+ optional Yahoo) into underlying_prices (WHI-778)."""

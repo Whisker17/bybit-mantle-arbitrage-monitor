@@ -13,6 +13,9 @@ from monitor.tui.model import PairOverviewRow, SpreadPoint
 def fmt_price(value: Decimal | None, *, digits: int = 4) -> str:
     if value is None:
         return "—"
+    # WHI-794: 0 is not a price (never-published Pyth / empty book).
+    if value <= 0:
+        return "—"
     return f"{value:.{digits}f}"
 
 

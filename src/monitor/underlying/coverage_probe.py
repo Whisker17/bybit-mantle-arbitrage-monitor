@@ -1,8 +1,13 @@
-"""Uncovered-ticker coverage guardrail (WHI-787).
+"""Underlying coverage guardrails (WHI-787 + WHI-794).
 
-A one-time human "private / no feed" flag must not freeze forever. Periodically
-probe Pyth Hermes + Yahoo for every ``uncovered: true`` ticker; if a public
-source actually has a price, emit a mismatch for WARN logs and ``/api/health``.
+1. **Uncovered reverse (WHI-787):** a one-time human ``uncovered: true`` flag
+   must not freeze forever. Periodically probe Pyth Hermes + Yahoo; if a public
+   source actually has a price, emit a mismatch for WARN + ``/api/health``.
+
+2. **Unpublished Pyth feed (WHI-794 reverse):** config pins a Hermes ``feed_id``
+   but latest returns ``price=0`` / ``publish_time=0`` (registered, never
+   published). WARN + health so Yahoo gap-fill is configured before zeros
+   reappear on the panel.
 """
 
 from __future__ import annotations
@@ -10,10 +15,16 @@ from __future__ import annotations
 import json
 import logging
 from dataclasses import dataclass, field
+from decimal import InvalidOperation
 from typing import Any
 
 from monitor.underlying.config import UnderlyingConfig
-from monitor.underlying.pyth import HermesClient, hermes_has_equity_feed
+from monitor.underlying.pyth import (
+    HermesClient,
+    hermes_has_equity_feed,
+    hermes_quote_is_valid,
+    scale_pyth_price,
+)
 from monitor.underlying.yahoo import YahooChartClient, yahoo_chart_has_price
 
 logger = logging.getLogger(__name__)
@@ -22,6 +33,8 @@ logger = logging.getLogger(__name__)
 META_MISMATCHES = "underlying_uncovered_mismatches"
 META_PROBE_MS = "underlying_uncovered_probe_ms"
 META_PROBE_ERRORS = "underlying_uncovered_probe_errors"
+# WHI-794: configured Hermes feeds that never published.
+META_UNPUBLISHED = "underlying_unpublished_feeds"
 
 
 @dataclass(frozen=True, slots=True)
@@ -85,11 +98,52 @@ class ProbeError:
 
 
 @dataclass(frozen=True, slots=True)
+class UnpublishedFeed:
+    """Config pins a Hermes feed_id, but latest has never published (WHI-794)."""
+
+    ticker: str
+    feed_id: str
+    publish_time: int
+    price: str
+    detail: str
+
+    def to_dict(self) -> dict[str, Any]:
+        return {
+            "ticker": self.ticker,
+            "feed_id": self.feed_id,
+            "publish_time": self.publish_time,
+            "price": self.price,
+            "detail": self.detail,
+        }
+
+    @classmethod
+    def from_dict(cls, raw: dict[str, Any]) -> UnpublishedFeed | None:
+        ticker = raw.get("ticker")
+        feed_id = raw.get("feed_id")
+        if not isinstance(ticker, str) or not ticker:
+            return None
+        if not isinstance(feed_id, str) or not feed_id:
+            return None
+        try:
+            publish_time = int(raw.get("publish_time", 0))
+        except (TypeError, ValueError):
+            publish_time = 0
+        return cls(
+            ticker=ticker,
+            feed_id=feed_id,
+            publish_time=publish_time,
+            price=str(raw.get("price") if raw.get("price") is not None else "0"),
+            detail=str(raw.get("detail") or ""),
+        )
+
+
+@dataclass(frozen=True, slots=True)
 class ProbeOutcome:
-    """Result of one uncovered-coverage probe pass."""
+    """Result of one coverage probe pass (uncovered + unpublished feeds)."""
 
     mismatches: list[UncoveredMismatch] = field(default_factory=list)
     errors: list[ProbeError] = field(default_factory=list)
+    unpublished_feeds: list[UnpublishedFeed] = field(default_factory=list)
 
     @property
     def inconclusive(self) -> bool:
@@ -174,8 +228,92 @@ def errors_from_meta_json(raw: str | None) -> list[dict[str, Any]]:
     return out
 
 
+def unpublished_to_meta_json(rows: list[UnpublishedFeed]) -> str:
+    return json.dumps([r.to_dict() for r in rows], separators=(",", ":"))
+
+
+def unpublished_from_meta_json(raw: str | None) -> list[dict[str, Any]]:
+    if raw is None or raw == "":
+        return []
+    try:
+        data = json.loads(raw)
+    except json.JSONDecodeError:
+        return []
+    if not isinstance(data, list):
+        return []
+    out: list[dict[str, Any]] = []
+    for item in data:
+        if not isinstance(item, dict):
+            continue
+        parsed = UnpublishedFeed.from_dict(item)
+        if parsed is not None:
+            out.append(parsed.to_dict())
+    return out
+
+
+def detect_unpublished_pyth_feeds(
+    body: dict[str, Any] | list[Any],
+    *,
+    cfg: UnderlyingConfig,
+    tickers: set[str] | None = None,
+) -> list[UnpublishedFeed]:
+    """Pure: Hermes latest rows with ``publish_time==0`` or ``price<=0``.
+
+    Only considers config tickers that still pin a ``feed_id`` (not
+    ``prefer_yahoo`` / uncovered). Missing ids in the response are ignored —
+    those are transport/chunk issues, not "never published".
+    """
+    feed_to_ticker = cfg.feed_id_to_ticker()
+    if not feed_to_ticker:
+        return []
+    if isinstance(body, list):
+        parsed = body
+    else:
+        raw_parsed = body.get("parsed")
+        parsed = raw_parsed if isinstance(raw_parsed, list) else []
+
+    found: list[UnpublishedFeed] = []
+    seen: set[str] = set()
+    for item in parsed:
+        if not isinstance(item, dict):
+            continue
+        raw_id = str(item.get("id") or "").lower().removeprefix("0x")
+        ticker = feed_to_ticker.get(raw_id)
+        if ticker is None or ticker in seen:
+            continue
+        if tickers is not None and ticker not in tickers:
+            continue
+        price_obj = item.get("price")
+        if not isinstance(price_obj, dict):
+            continue
+        try:
+            px = scale_pyth_price(price_obj["price"], int(price_obj["expo"]))
+            publish_time = int(price_obj["publish_time"])
+        except (KeyError, TypeError, ValueError, InvalidOperation):
+            continue
+        if hermes_quote_is_valid(price=px, publish_time=publish_time):
+            continue
+        seen.add(ticker)
+        detail = (
+            f"Hermes feed {raw_id[:12]}… returned price={px} "
+            f"publish_time={publish_time} (registered but never published) — "
+            "add yahoo_symbol gap-fill in config/underlying.yaml"
+        )
+        found.append(
+            UnpublishedFeed(
+                ticker=ticker,
+                feed_id=raw_id,
+                publish_time=publish_time,
+                price=str(px),
+                detail=detail,
+            )
+        )
+    found.sort(key=lambda r: r.ticker)
+    return found
+
+
 class UncoveredCoverageProbe:
-    """Live probe of all config ``uncovered`` tickers via Hermes + Yahoo."""
+    """Live probe: uncovered reverse (WHI-787) + unpublished Pyth feeds (WHI-794)."""
 
     def __init__(
         self,
@@ -205,17 +343,17 @@ class UncoveredCoverageProbe:
             self._yahoo.close()
 
     def probe_once(self) -> ProbeOutcome:
-        """Probe every uncovered ticker.
+        """Probe uncovered tickers + configured Hermes feed validity.
 
-        Returns mismatches (config says uncovered, source has data) and
-        per-source errors so a total outage is not stamped as "all clear".
-        Empty uncovered list → empty outcome (no network).
+        Returns mismatches (config says uncovered, source has data),
+        unpublished Pyth feeds (config pins feed_id, latest never published),
+        and per-source errors so a total outage is not stamped as "all clear".
         """
-        names = self.cfg.uncovered_tickers()
-        if not names:
-            return ProbeOutcome()
         found: list[UncoveredMismatch] = []
         errors: list[ProbeError] = []
+        unpublished: list[UnpublishedFeed] = []
+
+        names = self.cfg.uncovered_tickers()
         for name in names:
             tcfg = self.cfg.tickers[name]
             # Prefer explicit yahoo_symbol if set; else try the canonical ticker.
@@ -258,10 +396,38 @@ class UncoveredCoverageProbe:
                     ",".join(hit.sources),
                     hit.detail,
                 )
-        if errors and not found:
+        if errors and not found and names:
             logger.warning(
                 "uncovered coverage probe inconclusive: %d source error(s), "
                 "0 mismatches (cannot confirm still uncovered)",
                 len(errors),
             )
-        return ProbeOutcome(mismatches=found, errors=errors)
+
+        # WHI-794 reverse: feed_id configured but Hermes never published.
+        feed_ids = self.cfg.pyth_feed_ids()
+        if feed_ids:
+            try:
+                body = self._hermes.fetch_latest(feed_ids)
+                unpublished = detect_unpublished_pyth_feeds(body, cfg=self.cfg)
+                for row in unpublished:
+                    logger.warning(
+                        "pyth feed never published ticker=%s feed=%s…: %s",
+                        row.ticker,
+                        row.feed_id[:12],
+                        row.detail,
+                    )
+            except Exception as exc:  # noqa: BLE001
+                errors.append(
+                    ProbeError(
+                        ticker="*",
+                        source="pyth_hermes_latest",
+                        error=str(exc)[:400],
+                    )
+                )
+                logger.debug("unpublished feed probe hermes latest failed: %s", exc)
+
+        return ProbeOutcome(
+            mismatches=found,
+            errors=errors,
+            unpublished_feeds=unpublished,
+        )
