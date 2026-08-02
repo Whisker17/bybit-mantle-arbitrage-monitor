@@ -44,6 +44,14 @@ export function overviewPnlCell(
       title: "PnL v2 not present in API response",
     };
   }
+  // Status first — no_book / no_pool / stale must not collapse into "no depth".
+  if (pnl.status !== "ok" && pnl.status !== "no_depth") {
+    return {
+      kind: "status",
+      label: STATUS_LABEL[pnl.status],
+      title: `PnL v2 status: ${pnl.status}`,
+    };
+  }
   if (pnl.status === "no_depth" || !pnl.has_depth) {
     return {
       kind: "status",
@@ -51,11 +59,11 @@ export function overviewPnlCell(
       title: "No Bybit depth curve in journal — bucket VWAP not available",
     };
   }
-  if (pnl.status !== "ok" || pnl.optimal_net_pnl_usd == null) {
+  if (pnl.optimal_net_pnl_usd == null) {
     return {
       kind: "status",
-      label: STATUS_LABEL[pnl.status],
-      title: `PnL v2 status: ${pnl.status}`,
+      label: STATUS_LABEL.no_fillable,
+      title: "PnL v2 status: no_fillable",
     };
   }
   const dir = pnl.direction;

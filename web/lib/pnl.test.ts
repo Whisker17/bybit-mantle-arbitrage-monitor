@@ -89,6 +89,25 @@ describe("overviewPnlCell", () => {
     const cell = overviewPnlCell(undefined);
     assert.equal(cell.kind, "empty");
   });
+
+  it("does not collapse no_book/stale into no depth", () => {
+    for (const status of ["no_book", "no_pool", "stale"] as const) {
+      const cell = overviewPnlCell({
+        status,
+        has_depth: false,
+        direction: null,
+        optimal_notional_usd: null,
+        optimal_net_pnl_usd: null,
+        optimal_net_pnl_bps: null,
+        bybit_depth_source: null,
+      });
+      assert.equal(cell.kind, "status");
+      if (cell.kind === "status") {
+        assert.notEqual(cell.label, "no depth");
+        assert.match(cell.label, /book|pool|stale/);
+      }
+    }
+  });
 });
 
 describe("isThinDepth / pickBucketTable", () => {

@@ -162,7 +162,7 @@ def rfq_tick_to_poll_quote(
     try:
         raw_in = Decimal(tick.amount_in)
         raw_out = Decimal(tick.amount_out)
-    except Exception:  # noqa: BLE001 — malformed journal strings
+    except (ArithmeticError, ValueError):
         return None
     if raw_in <= 0 or raw_out <= 0:
         return None
