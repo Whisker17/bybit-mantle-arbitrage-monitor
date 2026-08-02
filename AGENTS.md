@@ -77,6 +77,12 @@ placeholders. Agents must not assume a module exists until its issue lands. -->
     (optimal summary); `/api/pairs/{id}` full `pnl_v2.tables` + costs;
     process-local TTL cache (`pnl_cache_ttl_s` in `config/api.yaml`, default
     2.5s). Overview Bucket PnL column + detail bucket panel replace placeholders.
+  - **M7-1 inventory (WHI-770) landed:** `docs/references/m7-bstocks-inventory.md`
+    + draft `config/binance_pancake_pairs.yaml` — top-10 Binance ⇄ Pancake V3
+    bStocks (on-chain-verified pools), BEP-677 `uiMultiplier` pricing (multiply
+    Binance mid for raw compare; ≠ Bybit divide), AMM-only Terminal (no RFQ),
+    US VPS geo: `api.binance.com` 451 / use `data-api.binance.vision` +
+    `data-stream.binance.vision`. Schema load deferred to M7-2.
 
 ## Build, test, run
 

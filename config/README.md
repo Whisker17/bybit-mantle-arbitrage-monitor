@@ -25,6 +25,7 @@ loaded into a typed, validated model at startup.
 | `attribution.yaml` | `monitor.attribution.load_attribution_config` | Taker-label thresholds (arb-bot convergence, price-keeper size, activity regime, Bybit lead-lag) — M4 / WHI-733. Rules: `docs/references/m4-attribution-labels.md`. |
 | `tui.yaml` | `monitor.tui.load_tui_config` | Panel refresh interval, SQLite path, reference edge size, sort defaults, history windows — M5 / WHI-734. Also consumed by `monitor.api` for builder windows / reference size (single source of truth). |
 | `api.yaml` | `monitor.api.load_api_config` | Read-only FastAPI bind host/port, SQLite path, collector-stale / gap windows, poll interval hint, CORS — WHI-757; **`pnl_cache_ttl_s`** process-local PnL v2 snapshot TTL (default 2.5s, slightly above poll) — WHI-766. |
+| `binance_pancake_pairs.yaml` | *(none yet — M7-2)* | **Draft** Binance ⇄ PancakeSwap bStocks top-10 inventory (WHI-770 / M7-1). Isomorphic to `pairs.yaml`; not loaded until multi-market schema lands. Notes: `docs/references/m7-bstocks-inventory.md`. |
 
 Optional per-deployment override: untracked `pairs.local.yaml` / `collector.local.yaml`
 / `metrics.local.yaml` / `attribution.local.yaml` / `tui.local.yaml` / `api.local.yaml`

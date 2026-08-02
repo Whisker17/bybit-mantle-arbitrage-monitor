@@ -1,0 +1,241 @@
+# DRAFT — M7-1 / WHI-770 inventory for Binance spot ⇄ PancakeSwap (BSC) bStocks.
+# Schema is isomorphic to config/pairs.yaml so M7-2 multi-market work can absorb it
+# with minimal rename. NOT loaded by any runtime yet (M7-2 owns schema v2 + loaders).
+#
+# Overlap rule: Binance USDT spot bStock ∩ on-chain-verified Pancake V3 USDT pool.
+# Rank: top 10 by DexScreener liquidity.usd on the verified pool (2026-08-02).
+# Multipliers: BEP-677 uiMultiplier() snapshot (1e18 scale → float here); refresh live.
+# See docs/references/m7-bstocks-inventory.md for method, geo-block, and pricing formula.
+#
+# Pricing (≠ Bybit xStocks):
+#   comparable_binance_as_raw = binance_mid * ui_multiplier
+#   (AMM trades raw units; Binance prices display units when mult ≠ 1)
+
+version: 1
+market: binance_pancake
+inventory_as_of: "2026-08-02"
+# Same dollar gate as M1 for low_liquidity flag (inventory convention).
+low_liquidity_threshold_usd: 50000
+
+contracts:
+  chain_id: 56
+  # PancakeSwap V3 (BSC) — official addresses
+  pancake_v3_factory: "0x0BFbCF9fa4f9C56B0F40a671Ad40E0805A091865"
+  # Same CREATE2 multicall used across EVM chains
+  multicall3: "0xcA11bde05977b3631167028862bE2a173976CA11"
+  usdt: "0x55d398326f99059fF775485246999027B3197955"
+
+# No RFQ / quote-vendor layer on Pancake Stocks Terminal (AMM-only). Kept explicit
+# so M7-2 does not invent a Fluxion-shaped rfq: block by accident.
+rfq:
+  mode: none
+
+binance:
+  # From US VPS (RackNerd 107.175.234.202): api.binance.com / stream.binance.com → HTTP 451.
+  # Market-data mirror works — use these bases for the collector on that host (M7-6).
+  rest_base_url: "https://data-api.binance.vision"
+  ws_base_url: "wss://data-stream.binance.vision"
+  # Non-US hosts may use api.binance.com + stream.binance.com instead.
+  restricted_rest_base_url: "https://api.binance.com"
+  restricted_ws_base_url: "wss://stream.binance.com:9443"
+  quote_asset: USDT
+  # Paper-edge floor: base spot taker (BNB discount ignored).
+  taker_fee_bps: 10
+
+pancake:
+  # PCS V3 Swap includes protocolFees — use TOPIC0_V3_SWAP_PCS (see monitor.fluxion.abi).
+  swap_event: pancake_v3_protocol_fees
+  quote_token: USDT
+  quote_token_address: "0x55d398326f99059fF775485246999027B3197955"
+
+pairs:
+  - id: SPCXB
+    name: SpaceX bStock
+    low_liquidity: false
+    binance:
+      symbol: SPCXBUSDT
+      base_coin: SPCXB
+      multiplier: "1"
+      multiplier_source: bep677_uiMultiplier
+    pancake:
+      token: "0xbe9D156892E55e7154BcD3cB0FEA677F9D3103E1"
+      decimals: 18
+      quote_token: USDT
+      quote_token_address: "0x55d398326f99059fF775485246999027B3197955"
+      amm:
+        kind: v3
+        pool: "0x977DaFFC095b33872E2741c19568925015C35b4d"
+        fee: 2500
+        est_liquidity_usd: 3165924.0
+
+  - id: SKHYB
+    name: SK Hynix bStock
+    low_liquidity: false
+    binance:
+      symbol: SKHYBUSDT
+      base_coin: SKHYB
+      multiplier: "1"
+      multiplier_source: bep677_uiMultiplier
+    pancake:
+      token: "0xCA750eF65f295BBECd685Abf54e82CAf297BDB61"
+      decimals: 18
+      quote_token: USDT
+      quote_token_address: "0x55d398326f99059fF775485246999027B3197955"
+      amm:
+        kind: v3
+        pool: "0xD7d30F434b12F7Ed9b0Ae11fF1C754745a10aD52"
+        fee: 2500
+        est_liquidity_usd: 576779.0
+
+  - id: TSLAB
+    name: Tesla bStock
+    low_liquidity: false
+    binance:
+      symbol: TSLABUSDT
+      base_coin: TSLAB
+      multiplier: "1"
+      multiplier_source: bep677_uiMultiplier
+    pancake:
+      token: "0x5b1910eAaD6450E50f816082Aa078C41F10C292f"
+      decimals: 18
+      quote_token: USDT
+      quote_token_address: "0x55d398326f99059fF775485246999027B3197955"
+      amm:
+        kind: v3
+        pool: "0xB0f5E5400E8F0F7C242F2b7740C004f020579c41"
+        fee: 2500
+        est_liquidity_usd: 259603.0
+
+  - id: SPYB
+    name: SPDR S&P 500 ETF bStock
+    low_liquidity: false
+    binance:
+      symbol: SPYBUSDT
+      base_coin: SPYB
+      multiplier: "1"
+      multiplier_source: bep677_uiMultiplier
+    pancake:
+      token: "0x7138b48df7D98D7e3cc221BfE7192D0a178182D8"
+      decimals: 18
+      quote_token: USDT
+      quote_token_address: "0x55d398326f99059fF775485246999027B3197955"
+      amm:
+        kind: v3
+        pool: "0x7aA6d92Fc369A8C1EDc631A3aAc44eFB0808ddbF"
+        fee: 100
+        est_liquidity_usd: 257330.0
+
+  - id: NVDAB
+    name: NVIDIA bStock
+    low_liquidity: false
+    binance:
+      symbol: NVDABUSDT
+      base_coin: NVDAB
+      multiplier: "1"
+      multiplier_source: bep677_uiMultiplier
+    pancake:
+      token: "0x02Fca66C1D1aFB4E2A7884261eB00F63598a7436"
+      decimals: 18
+      quote_token: USDT
+      quote_token_address: "0x55d398326f99059fF775485246999027B3197955"
+      amm:
+        kind: v3
+        pool: "0x8FB4243b553aC29BA088aCf00B9B7dA24bD6690C"
+        fee: 2500
+        est_liquidity_usd: 227548.0
+
+  - id: AAPLB
+    name: Apple bStock
+    low_liquidity: false
+    binance:
+      symbol: AAPLBUSDT
+      base_coin: AAPLB
+      multiplier: "1"
+      multiplier_source: bep677_uiMultiplier
+    pancake:
+      token: "0x431a3BEE82E2ca41e49895CbECE5bB0F76A89b7A"
+      decimals: 18
+      quote_token: USDT
+      quote_token_address: "0x55d398326f99059fF775485246999027B3197955"
+      amm:
+        kind: v3
+        pool: "0xe9b9998B2EC5430D2246c7f1F8D9f298c97D7365"
+        fee: 2500
+        est_liquidity_usd: 125187.0
+
+  - id: GOOGLB
+    name: Alphabet bStock
+    low_liquidity: false
+    binance:
+      symbol: GOOGLBUSDT
+      base_coin: GOOGLB
+      multiplier: "1"
+      multiplier_source: bep677_uiMultiplier
+    pancake:
+      token: "0x3F53De71c126BdaBAe20f9cD64848d317f6C3238"
+      decimals: 18
+      quote_token: USDT
+      quote_token_address: "0x55d398326f99059fF775485246999027B3197955"
+      amm:
+        kind: v3
+        pool: "0x89001D846f7CA36EE089F73eEFC25657E1798144"
+        fee: 2500
+        est_liquidity_usd: 77284.0
+
+  - id: MSFTB
+    name: Microsoft bStock
+    low_liquidity: true
+    binance:
+      symbol: MSFTBUSDT
+      base_coin: MSFTB
+      multiplier: "1"
+      multiplier_source: bep677_uiMultiplier
+    pancake:
+      token: "0x80106cb3EAD06659A5ad19DF39D9b4733863B9b0"
+      decimals: 18
+      quote_token: USDT
+      quote_token_address: "0x55d398326f99059fF775485246999027B3197955"
+      amm:
+        kind: v3
+        pool: "0x58e44C2e5B17EF40915B4B3AE8451B6B87285B44"
+        fee: 10000
+        est_liquidity_usd: 44349.0
+
+  - id: INTCB
+    name: Intel bStock
+    low_liquidity: true
+    binance:
+      symbol: INTCBUSDT
+      base_coin: INTCB
+      multiplier: "1"
+      multiplier_source: bep677_uiMultiplier
+    pancake:
+      token: "0xe614E2fc6C787035FF51f452e8E826Bfd32D5283"
+      decimals: 18
+      quote_token: USDT
+      quote_token_address: "0x55d398326f99059fF775485246999027B3197955"
+      amm:
+        kind: v3
+        pool: "0x4dD8e7C67033Ef4A745bB9f82a7C57c676eB2481"
+        fee: 2500
+        est_liquidity_usd: 15672.0
+
+  - id: MUB
+    name: Micron Technology bStock
+    low_liquidity: true
+    binance:
+      symbol: MUBUSDT
+      base_coin: MUB
+      # Dividend-reinvestment scale observed on-chain (BEP-677); not 1.0.
+      multiplier: "1.0001075125688057"
+      multiplier_source: bep677_uiMultiplier
+    pancake:
+      token: "0xcdf2f3e0fa43C47A6662a91C9E4a7C5f69762699"
+      decimals: 18
+      quote_token: USDT
+      quote_token_address: "0x55d398326f99059fF775485246999027B3197955"
+      amm:
+        kind: v3
+        pool: "0x9E75Ced0a01590890917C5180c3e3ed6a86A071e"
+        fee: 2500
+        est_liquidity_usd: 8912.0
