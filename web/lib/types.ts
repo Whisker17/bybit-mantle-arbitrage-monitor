@@ -260,7 +260,6 @@ export type SpreadPoint = {
   bybit_mid?: string | null;
   /** WHI-779: CEX tokenized mid vs underlying (bps). */
   cex_premium_bps?: string | null;
-  amm_premium_bps?: string | null;
 };
 
 export type TradeStreamRow = {

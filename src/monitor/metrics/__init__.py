@@ -59,9 +59,11 @@ from monitor.metrics.pnl_v2 import (
 from monitor.metrics.premium import (
     PremiumSnapshot,
     build_premium_snapshot,
+    equity_equivalent_mid,
     mean_mid,
     premium_bps,
     premium_type_label,
+    reclassify_underlying_for_display,
 )
 from monitor.metrics.session import SessionKind, is_us_rth_open, session_kind
 from monitor.metrics.snapshot import (
@@ -113,6 +115,7 @@ __all__ = [
     "compute_edge_ladder",
     "compute_pnl_usd",
     "default_metrics_path",
+    "equity_equivalent_mid",
     "is_us_rth_open",
     "levels_from_depth_curve",
     "load_metrics_config",
@@ -123,6 +126,7 @@ __all__ = [
     "pnl_bucket_table",
     "premium_bps",
     "premium_type_label",
+    "reclassify_underlying_for_display",
     "rfq_tick_to_poll_quote",
     "session_kind",
     "spread_bps",

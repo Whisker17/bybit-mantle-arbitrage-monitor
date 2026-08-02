@@ -95,7 +95,6 @@ class SpreadPoint:
     rfq_spread_bps: Decimal | None = None
     bybit_mid: Decimal | None = None
     cex_premium_bps: Decimal | None = None
-    amm_premium_bps: Decimal | None = None
 
 
 @dataclass(frozen=True, slots=True)

@@ -8,22 +8,18 @@
 import { Badge } from "@/components/ui/badge";
 import { EmptyPanel } from "@/components/ui/empty-panel";
 import { cn } from "@/lib/cn";
-import { bpsTone, fmtPrice, fmtSignedBps } from "@/lib/format";
+import {
+  bpsTone,
+  fmtPrice,
+  fmtSignedBps,
+  priceTypeBadgeVariant,
+} from "@/lib/format";
 import type { Distribution, PremiumPanel as PremiumPanelModel } from "@/lib/types";
 
 type Props = {
   premium: PremiumPanelModel | null | undefined;
   hasRfq?: boolean;
 };
-
-function priceTypeBadgeVariant(
-  pt: string | null | undefined,
-): "open" | "closed" | "warning" | "muted" {
-  if (pt === "live") return "open";
-  if (pt === "stale") return "warning";
-  if (pt === "pre" || pt === "post" || pt === "close") return "closed";
-  return "muted";
-}
 
 function DistRow({ label, d }: { label: string; d: Distribution }) {
   if (d.count === 0) {

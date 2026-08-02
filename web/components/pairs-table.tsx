@@ -16,6 +16,7 @@ import {
   fmtUsd,
   fmtUtcHm,
   fmtVolumeRatio,
+  priceTypeBadgeVariant,
   usdTone,
 } from "@/lib/format";
 import { marketPairPath } from "@/lib/markets";
@@ -186,15 +187,6 @@ function MmActiveCell({ status }: { status: MmActiveStatus | null | undefined })
       {mmActiveLabel(s)}
     </span>
   );
-}
-
-function priceTypeBadgeVariant(
-  pt: string | null | undefined,
-): "open" | "closed" | "warning" | "muted" {
-  if (pt === "live") return "open";
-  if (pt === "stale") return "warning";
-  if (pt === "pre" || pt === "post" || pt === "close") return "closed";
-  return "muted";
 }
 
 function UnderlyingCell({ row }: { row: PairOverviewRow }) {

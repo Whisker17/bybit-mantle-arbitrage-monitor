@@ -118,3 +118,64 @@ def test_premium_distribution_from_series() -> None:
     assert dist.count == 4
     assert dist.max == Decimal("40")
     assert dist.p50 is not None
+
+
+def test_equity_equivalent_mid_bstocks_divides_ui_multiplier() -> None:
+    from monitor.metrics.premium import equity_equivalent_mid
+
+    # display*mult journal mid 300 with mult 100 → per-share 3
+    assert equity_equivalent_mid(
+        Decimal("300"), ui_multiplier=Decimal("100")
+    ) == Decimal("3")
+    # Bybit path: no ui_multiplier → pass through
+    assert equity_equivalent_mid(Decimal("305"), ui_multiplier=None) == Decimal("305")
+
+
+def test_reclassify_stale_when_as_of_old_during_open() -> None:
+    """Read path: live stamp + old as_of during RTH → stale (spec closed-session)."""
+    from datetime import UTC, datetime
+
+    from monitor.metrics.premium import reclassify_underlying_for_display
+    from monitor.underlying.config import load_underlying_config
+
+    cfg = load_underlying_config()
+    # 2026-06-03 (Wed) 18:00 UTC = 14:00 ET (EDT) — NYSE open; holiday table 2025–27.
+    now_ms = int(datetime(2026, 6, 3, 18, 0, tzinfo=UTC).timestamp() * 1000)
+    # as_of 10 minutes older than stale_after_open_ms (120s) → stale
+    as_of = now_ms - 600_000
+    tick = UnderlyingPriceTick(
+        ticker="AAPL",
+        price=Decimal("200"),
+        currency="USD",
+        price_type="live",
+        as_of_ms=as_of,
+        recv_ts_ms=as_of + 50,
+        source="pyth_hermes",
+    )
+    out = reclassify_underlying_for_display(
+        tick,
+        now_ms=now_ms,
+        session=cfg.session,
+        stale_after_open_ms=cfg.stale_after_open_ms,
+        stale_after_closed_ms=cfg.stale_after_closed_ms,
+        stale_after_abs_ms=cfg.stale_after_abs_ms,
+    )
+    assert out.price_type == "stale"
+    # Fresh as_of stays live
+    fresh = reclassify_underlying_for_display(
+        UnderlyingPriceTick(
+            ticker="AAPL",
+            price=Decimal("200"),
+            currency="USD",
+            price_type="live",
+            as_of_ms=now_ms - 30_000,
+            recv_ts_ms=now_ms,
+            source="pyth_hermes",
+        ),
+        now_ms=now_ms,
+        session=cfg.session,
+        stale_after_open_ms=cfg.stale_after_open_ms,
+        stale_after_closed_ms=cfg.stale_after_closed_ms,
+        stale_after_abs_ms=cfg.stale_after_abs_ms,
+    )
+    assert fresh.price_type == "live"

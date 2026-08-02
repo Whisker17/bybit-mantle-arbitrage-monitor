@@ -37,7 +37,8 @@ export function SpreadChart({ points, className, showRfq = true }: Props) {
   /** Stable handle for draw hook — updated every render without recreating plot. */
   const seriesRef = useRef<SpreadChartSeries | null>(null);
   const [showMid, setShowMid] = useState(false);
-  const [showPremium, setShowPremium] = useState(true);
+  // Default off: premium often hundreds of bps and would squash AMM/RFQ scale.
+  const [showPremium, setShowPremium] = useState(false);
 
   const series = useMemo(() => prepareSpreadSeries(points), [points]);
   seriesRef.current = series;

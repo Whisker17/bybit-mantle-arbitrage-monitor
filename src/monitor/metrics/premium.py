@@ -2,26 +2,33 @@
 
 Premium is measured in **bps of the underlying**:
 
-    premium_bps = (de_multiplied_tokenized_mid / underlying_price − 1) × 10⁴
+    premium_bps = (equity_eq_tokenized_mid / underlying_price − 1) × 10⁴
 
-``de_multiplied`` is the journal comparable price (Bybit: divide xstockMultiplier;
-Binance: multiply uiMultiplier). AMM ``mid_usdc_per_native`` and RFQ prices are
-already per-share USDC/USDT space after collection.
+Equity-equivalent mid (per share):
 
-Closed-session semantics live on ``UnderlyingPriceTick.price_type`` — never treat
-``close`` / ``pre`` / ``post`` as a silent live premium; UI labels via
-``premium_type_label``.
+* **Bybit xStocks** — journal ``*_de_multiplied`` is already
+  ``token_price / xstockMultiplier`` (equity space); AMM
+  ``mid_usdc_per_native`` is USDC per native after ERC-4626 convert.
+* **Binance bStocks** — journal ``*_de_multiplied`` is
+  ``display * ui_multiplier`` (raw/on-chain space). Divide by
+  ``ui_multiplier`` again so premium uses per-share display units
+  matching the equity print.
+
+Closed-session semantics: re-evaluate ``price_type`` at read time against
+``as_of_ms`` + ``now_ms`` (collector may have stamped ``live`` hours ago if the
+underlying poller alone stalls). UI labels via ``premium_type_label``.
 """
 
 from __future__ import annotations
 
-from dataclasses import dataclass
+from dataclasses import dataclass, replace
 from decimal import Decimal
 from typing import Literal
 
+from monitor.metrics.config import SessionConfig
 from monitor.quotes import UnderlyingPriceTick
+from monitor.underlying.price_type import PriceType, classify_price_type
 
-PriceType = Literal["live", "pre", "post", "close", "stale"]
 EmptyReason = Literal["no_data", "private"]
 
 _BPS = Decimal(10_000)
@@ -48,7 +55,7 @@ def premium_bps(
 
 
 def mean_mid(a: Decimal | None, b: Decimal | None) -> Decimal | None:
-    """Mean of available mids (RFQ buy/sell → single RFQ mid for premium)."""
+    """Mean of available RFQ buy/sell mids → single RFQ mid for premium."""
     sides = [x for x in (a, b) if x is not None and x > 0]
     if not sides:
         return None
@@ -57,11 +64,64 @@ def mean_mid(a: Decimal | None, b: Decimal | None) -> Decimal | None:
     return (sides[0] + sides[1]) / 2
 
 
+def equity_equivalent_mid(
+    comparable_mid: Decimal | None,
+    *,
+    ui_multiplier: Decimal | None = None,
+) -> Decimal | None:
+    """Map journal comparable mid → per-share equity units for premium.
+
+    ``ui_multiplier`` set (bStocks) → divide out the BEP-677 multiply that
+    collection applied. ``None`` (Bybit/Fluxion) → pass through.
+    """
+    if comparable_mid is None or comparable_mid <= 0:
+        return None
+    if ui_multiplier is None:
+        return comparable_mid
+    if ui_multiplier <= 0:
+        return None
+    return comparable_mid / ui_multiplier
+
+
 def premium_type_label(price_type: str | None) -> str | None:
     """Human annotation for the premium column (never silent on close/pre/post)."""
     if price_type is None:
         return None
     return _TYPE_LABELS.get(price_type, price_type)
+
+
+def reclassify_underlying_for_display(
+    tick: UnderlyingPriceTick,
+    *,
+    now_ms: int,
+    session: SessionConfig,
+    stale_after_open_ms: int,
+    stale_after_closed_ms: int,
+    stale_after_abs_ms: int,
+) -> UnderlyingPriceTick:
+    """Re-stamp ``price_type`` using wall-clock now (read path, WHI-779).
+
+    Collector classification freezes at poll time; a dead Hermes feed would
+    otherwise keep ``live`` forever. Stored type is the source session hint
+    so explicit pre/post survive when still fresh.
+    """
+    hint: PriceType | None
+    if tick.price_type in ("pre", "post", "live", "close"):
+        hint = tick.price_type  # type: ignore[assignment]
+    else:
+        hint = None
+    new_type = classify_price_type(
+        as_of_ms=tick.as_of_ms,
+        now_ms=now_ms,
+        session=session,
+        stale_after_open_ms=stale_after_open_ms,
+        stale_after_closed_ms=stale_after_closed_ms,
+        stale_after_abs_ms=stale_after_abs_ms,
+        source_session_hint=hint,
+    )
+    if new_type == tick.price_type:
+        return tick
+    return replace(tick, price_type=new_type)
 
 
 @dataclass(frozen=True, slots=True)
@@ -109,10 +169,11 @@ def build_premium_snapshot(
     rfq_mid: Decimal | None,
     private: bool = False,
 ) -> PremiumSnapshot:
-    """Assemble premiums from a latest underlying print + venue mids.
+    """Assemble premiums from a latest underlying print + equity-eq venue mids.
 
-    Pure: no I/O. ``private=True`` (SPCX / uncovered) short-circuits before
-    ``no_data`` so the UI can show an explicit private empty state.
+    Pure: no I/O. Callers must pass **equity-equivalent** mids (see
+    ``equity_equivalent_mid``). ``private=True`` (SPCX / uncovered)
+    short-circuits before ``no_data``.
     """
     if private:
         return PremiumSnapshot.empty(ticker=ticker, reason="private")
@@ -126,7 +187,7 @@ def build_premium_snapshot(
     pt: PriceType | None
     raw_pt = underlying.price_type
     if raw_pt in ("live", "pre", "post", "close", "stale"):
-        pt = raw_pt
+        pt = raw_pt  # type: ignore[assignment]
     else:
         pt = None
     return PremiumSnapshot(
