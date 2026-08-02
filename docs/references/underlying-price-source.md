@@ -139,6 +139,19 @@ uv run python -m monitor.collector --market binance-pancake
 
 # One-shot smoke (no journal required for parse tests):
 uv run python -m monitor.underlying
+uv run python -m monitor.underlying --tickers SKHY
+# expect source=yahoo, currency=USD, price ~1e2 (Nasdaq ADR), not KRW/FX path
 ```
 
 Config: `config/underlying.yaml` + `underlying:` block in `config/collector.yaml`.
+
+**WHI-785 deploy:** `underlying.yaml` is loaded at collector start. After shipping the
+SKHY ADR retarget, **restart** the `binance-pancake` collector (and any other
+process that polls underlyings) so new rows use Yahoo `SKHY` USD. Historical
+`yahoo+pyth_fx` KR-derived SKHY rows age out via retention — no backfill.
+
+```sql
+SELECT ticker, price, currency, source, as_of_ms
+FROM underlying_prices WHERE ticker='SKHY' ORDER BY as_of_ms DESC LIMIT 5;
+-- expect source like 'yahoo', price ~ADR USD level
+```

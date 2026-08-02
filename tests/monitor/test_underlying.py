@@ -61,7 +61,6 @@ def test_load_checked_in_underlying_config() -> None:
     assert skhy.yahoo_symbol == "SKHY"
     assert skhy.feed_id is None
     assert skhy.pyth_symbol is None
-    assert cfg.needs_fx({"SKHY"}) is False
     assert "AAPL" in cfg.covered_tickers()
     assert "SPCX" in cfg.uncovered_tickers()
 
@@ -232,9 +231,14 @@ def test_parse_hermes_latest_maps_feed() -> None:
 
 
 def test_parse_yahoo_chart_usd_no_fx() -> None:
-    """WHI-785: Nasdaq ADR (SKHY) is already USD — no KRW FX conversion."""
+    """WHI-785: Nasdaq ADR (SKHY) is already USD — no KRW FX conversion.
+
+    Even if an FX rate is present (prefer_yahoo still batches FX.USD/KRW),
+    USD meta must keep source=yahoo and the ADR price.
+    """
     cfg = load_underlying_config()
-    as_of_s = int(_ms(2026, 8, 1, 16, 0) / 1000)  # US session close
+    # Friday 16:00 ET close; as_of at close; now = Sunday → price_type close.
+    as_of_s = int(_ms(2026, 7, 31, 16, 0) / 1000)
     body = {
         "chart": {
             "result": [
@@ -258,20 +262,20 @@ def test_parse_yahoo_chart_usd_no_fx() -> None:
         cfg=cfg,
         recv_ts_ms=now,
         now_ms_value=now,
-        usd_krw=None,
+        usd_krw=Decimal("1442.96"),  # must be ignored for USD meta
     )
     assert tick is not None
     assert tick.ticker == "SKHY"
     assert tick.currency == "USD"
     assert tick.source == "yahoo"
     assert tick.price == Decimal("143.73")
-    assert tick.price_type in {"close", "stale", "post", "pre"}
+    assert tick.price_type == "close"
 
 
 def test_parse_yahoo_chart_krw_to_usd() -> None:
-    """KRW Yahoo path still converts when FX is supplied (infrastructure)."""
+    """KRW Yahoo path still converts when FX is supplied (dormant infra)."""
     cfg = load_underlying_config()
-    as_of_s = int(_ms(2026, 8, 1, 2, 0) / 1000)  # KRX session-ish
+    as_of_s = int(_ms(2026, 7, 31, 16, 0) / 1000)
     body = {
         "chart": {
             "result": [
@@ -301,48 +305,7 @@ def test_parse_yahoo_chart_krw_to_usd() -> None:
     assert tick.currency == "USD"
     assert tick.source == "yahoo+pyth_fx"
     assert tick.price == Decimal("1000")
-    assert tick.price_type in {"close", "stale", "post", "pre"}
-
-
-def test_needs_fx_only_for_korean_yahoo_symbols(tmp_path: Path) -> None:
-    """FX.USD/KRW is only batched when a prefer_yahoo symbol is a KR listing."""
-    p = tmp_path / "fx.yaml"
-    p.write_text(
-        dedent(
-            """
-            version: 1
-            hermes_base_url: https://example
-            open_poll_interval_s: 30
-            closed_poll_interval_s: 300
-            http_timeout_s: 20
-            stale_after_open_ms: 1
-            stale_after_abs_ms: 1
-            stale_after_closed_ms: 1
-            yahoo_fallback: true
-            yahoo_chart_base_url: https://example
-            fx_usd_krw_feed_id: "abc123"
-            session:
-              timezone: America/New_York
-              open: "09:30"
-              close: "16:00"
-              early_close: "13:00"
-            tickers:
-              ADR:
-                currency: USD
-                yahoo_symbol: "SKHY"
-                prefer_yahoo: true
-              KR:
-                currency: USD
-                yahoo_symbol: "000660.KS"
-                prefer_yahoo: true
-            """
-        ),
-        encoding="utf-8",
-    )
-    cfg = load_underlying_config(p)
-    assert cfg.needs_fx({"ADR"}) is False
-    assert cfg.needs_fx({"KR"}) is True
-    assert cfg.needs_fx({"ADR", "KR"}) is True
+    assert tick.price_type == "close"
 
 
 def test_market_state_hint() -> None:

@@ -127,7 +127,7 @@ placeholders. Agents must not assume a module exists until its issue lands. -->
     explicit accumulating empty state when a market journal is not ready.
   - **Underlying price source (WHI-778) landed:** research note
     `docs/references/underlying-price-source.md` (Pyth Hermes primary +
-    Yahoo gap-fill for SKHY; SPCX uncovered/private); journal table
+    Yahoo gap-fill for SKHY US ADR; SPCX uncovered/private); journal table
     `underlying_prices` (schema v5); `monitor/underlying` poller wired into
     both collectors; config `config/underlying.yaml` +
     `collector.yaml` `underlying.enabled`.
