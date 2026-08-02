@@ -16,10 +16,12 @@ price?** Secondary: among AMM takers, who looks like bot / keeper / retail.
 | `amm` | `FluxionSwapTick` | Active taker hit the V3 pool (pool fee + slip paid by taker). |
 | `rfq` | `FluxionRfqFillTick` | Limit-order / Atomic RFQ settlement — **MM quote-driven**. |
 
-Every decoded fill is labeled with exactly one mechanism. RFQ fills currently lack
-pair / direction / taker enrichment (see `docs/DEFERRED_ISSUES.md`); they still
-contribute to **global** RFQ vs AMM share, but pair-scoped RFQ share only counts
-fills that carry a `pair_id`.
+Every decoded fill is labeled with exactly one mechanism. RFQ fills are
+receipt-enriched (WHI-768) with `pair_id` / maker / taker / direction / amounts
+when Transfer legs map to inventory tokens; unmapped stock tokens still yield
+maker recovery but may leave `pair_id` null. Pair-scoped RFQ share only counts
+fills that carry a `pair_id`; unscoped fills still contribute to **global** RFQ
+vs AMM share.
 
 ### Session is not mechanism (WHI-753)
 
@@ -38,13 +40,27 @@ the normative M4 rule).
   describes *when those addresses trade the pool*, not whether the RFQ book
   exists outside RTH.
 
-## Behavior layer (AMM takers only)
+## Behavior layer
 
-Unit of analysis is the **taker address** = Swap `recipient` (pool beneficiary),
-same convention as phase-1 `mba/m6_attribution.py`. RFQ legs are not behavior-labeled
-until taker enrichment lands.
+Two paths share the `BehaviorLabel` enum:
 
-### Features computed per address (within a window × pair scope)
+1. **AMM takers** (`assign_behavior_label` / `label_takers`) — unit of analysis is
+   the **taker address** = Swap `recipient` (pool beneficiary), same convention as
+   phase-1 `mba/m6_attribution.py`. Priority:
+   `arb_bot → price_keeper → retail → unknown`.
+2. **Full address path** (WHI-768 `assign_address_label` /
+   `label_addresses_from_journal`) — combines AMM swaps + enriched RFQ fills +
+   native ERC-20 transfers. Priority:
+   `market_maker → arb_bot → rebalancer → price_keeper → retail → unknown`.
+   Config `address_overrides` (and sticky `address_labels.source=manual` rows)
+   win over auto. Orthogonal flag `is_rebalancer` is set whenever CEX-touch
+   transfers fire, even if the primary label is `market_maker` / `arb_bot`.
+
+Rules and thresholds for `market_maker` / `rebalancer` live in
+`docs/references/mm-attribution-analysis.md` and `config/attribution.yaml`
+(`market_maker:`, `rebalancer:`, `cex_wallets`).
+
+### Features computed per address (within a window × pair scope) — AMM path
 
 | Feature | Definition |
 |---------|------------|
@@ -70,7 +86,7 @@ native, Bybit de-multiplied):
 
 ### Behavior labels (mutually exclusive, priority order)
 
-Applied after features; first match wins:
+**AMM-taker path** (`assign_behavior_label`) — applied after features; first match wins:
 
 1. **`arb_bot`** — `n_convergence_scored ≥ arb_bot.min_scored_trades` **and**
    `convergence_ratio ≥ arb_bot.min_convergence_ratio` **and**
@@ -83,6 +99,14 @@ Applied after features; first match wins:
    no trade exceeds `max_trade_notional_usd`.
 3. **`retail`** — `n_trades ≥ retail.min_trades` and neither bot label fired.
 4. **`unknown`** — everything else (thin sample).
+
+**Full address path** (WHI-768) prepends / inserts:
+
+0. **`market_maker`** — `n_rfq_maker ≥ market_maker.min_rfq_maker_fills` **or**
+   cross-pair bidirectional AMM + mean-reversion gates (see analysis note).
+2b. **`rebalancer`** — after `arb_bot`, when
+    `cex_touch_transfers ≥ rebalancer.min_cex_touch_transfers` against
+    `rebalancer.cex_wallets`.
 
 `is_contract` and `activity_regime` are **reported alongside** the label; they do
 not override the priority list (a contract with weak convergence is still `retail`
@@ -104,9 +128,9 @@ Session segmentation reuses `SessionKind` from metrics (open / closed / all).
 - **Time period** = caller's event window × `session` filter (`open` / `closed` /
   `all`). `window_start_ms` / `window_end_ms` describe that window; multi-bucket
   calendars (hourly bars) are left to M5 if needed.
-- **Pair RFQ share** requires `RfqFillEvent.pair_id`. Unscoped RFQ fills still
-  count in `build_global_mechanism_share` only — see `docs/DEFERRED_ISSUES.md`
-  (RFQ fill enrichment). M4 does not invent pair identity from LOP topics.
+- **Pair RFQ share** requires `RfqFillEvent.pair_id` (populated by WHI-768 receipt
+  enrichment when the stock token maps to inventory). Unscoped RFQ fills still
+  count in `build_global_mechanism_share` only.
 
 ## Acceptance / QA procedure (top-10 spot check)
 

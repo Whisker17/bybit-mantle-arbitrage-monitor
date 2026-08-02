@@ -256,7 +256,7 @@ Planned `src/monitor/` packages (land with their issues; empty package until the
 | `monitor/collector` | daemon orchestrating feeds → SQLite (+ retention loop) | M2 (landed WHI-731); retention WHI-751 |
 | `monitor/retention` | thin CLI over `storage.retention` (`python -m monitor.retention`) | WHI-751 |
 | `monitor/metrics` | edge, wear, session stats | M3 (landed WHI-732) |
-| `monitor/attribution` | mechanism + behavior labels | M4 (landed WHI-733) |
+| `monitor/attribution` | mechanism + behavior labels (+ MM/rebalancer, WHI-768) | M4 (landed WHI-733); MM productization WHI-768 |
 | `monitor/tui` | live panel (Textual overview + detail); **frozen** after Web lands | M5 (landed WHI-734) |
 | `monitor/api` | read-only FastAPI over the same journal + builders | WHI-757 (skeleton) |
 | `web/` | Next.js static export (panel UI) | WHI-757 skeleton; WHI-758 overview; WHI-759 pair detail |
@@ -360,7 +360,10 @@ python -m monitor.retention --growth-only
 | `fluxion_pool_state` | **7 days** | Edge rebuild + sparklines. |
 | `fluxion_rfq_quotes` | **3 days** | Poll tape; RFQ notional is small vs book. |
 | `fluxion_swaps` | **permanent** | M4 attribution feedstock (low volume). |
-| `fluxion_rfq_fills` | **permanent** | M4 attribution feedstock (low volume). |
+| `fluxion_rfq_fills` | **permanent** | M4 attribution feedstock (low volume). WHI-768 enriches maker/taker/pair/amounts from receipts. |
+| `erc20_transfers` | **permanent** | WHI-768 native xStock Transfer stream (inventory / rebalance feedstock; low volume). |
+| `address_labels` | **permanent** | WHI-768 address → label + evidence (auto + manual override). |
+| `rebalance_events` | **permanent** | WHI-768 CEX-touch deposit/withdraw stream. |
 | `collector_gaps` | **30 days** | Ops history. |
 
 **M3 cumulative P50/P95/P99/max + breach stats** live in process memory
@@ -398,8 +401,10 @@ deploy with `python -m monitor.retention --growth-only` (WHI-755 AC).
    with `--full-vacuum` (or critical waterline) to shrink the file on disk.
 5. **Schema:** `SCHEMA_VERSION` bumps add tables via `CREATE IF NOT EXISTS`
    (no destructive migration). v2 = `bybit_book_1m`; v3 = `bybit_depth`
-   (WHI-755). Meta key is updated for operators; readers do not gate on the
-   integer.
+   (WHI-755); v4 = RFQ fill enrichment columns + `erc20_transfers` +
+   `address_labels` + `rebalance_events` (WHI-768; ALTER ADD COLUMN for
+   pre-v4 `fluxion_rfq_fills`). Meta key is updated for operators; readers
+   do not gate on the integer.
 
 #### Disk waterline (`retention.disk`)
 
@@ -409,8 +414,9 @@ deploy with `python -m monitor.retention --growth-only` (WHI-755 AC).
 | warn | < warn, ≥ critical | Multiply pruneable TTLs by `warn_ttl_factor` (0.25) |
 | critical | < `critical_free_bytes` (1 GiB) | Multiply by `critical_ttl_factor` (0.05); pause **new** `bybit_book` inserts until a later run clears critical; force `VACUUM` attempt |
 
-`fluxion_swaps` / `fluxion_rfq_fills` TTLs are **never accelerated** (only an
-explicit non-null TTL in config would prune them).
+`fluxion_swaps` / `fluxion_rfq_fills` / `erc20_transfers` / `rebalance_events`
+TTLs are **never accelerated** (only an explicit non-null TTL in config would
+prune them).
 
 ### 5.2 Mantle block ingest latency (WHI-749)
 
@@ -421,9 +427,13 @@ latency_ms = max(0, recv_ts_ms - block_ts * 1000)
 ```
 
 `block_ts` is the on-chain block timestamp; `recv_ts_ms` is local wall clock
-**after** all per-block RPC (getBlock + Multicall3 + logs + optional receipts).
-The value therefore includes host clock skew vs chain time, tip visibility on
-the RPC LB, and processing — not “RPC RTT alone.”
+**after** all per-block RPC (getBlock + Multicall3 + pool/LOP logs + optional
+swap receipts + WHI-768 RFQ receipt enrich when fills present + optional
+native Transfer `getLogs`). The value therefore includes host clock skew vs
+chain time, tip visibility on the RPC LB, and processing — not “RPC RTT alone.”
+Transfer stream + RFQ enrich are config-gated (`mantle.collect_erc20_transfers`,
+`mantle.enrich_rfq_fills`); re-measure P95 after enabling on the VPS if the
+latency SLO is tight.
 
 **Defaults** (`config/collector.yaml`):
 

@@ -5,7 +5,8 @@ Consumer windows that must remain intact after a prune (DESIGN §5.1):
 - TUI 24h volume → ``bybit_trades`` + ``fluxion_swaps`` (swaps never pruned)
 - TUI cold-start EdgeStats / sparklines → recent ``bybit_book`` + pool + RFQ
   (capped at ``edge_history_max_samples``; raw TTL ≥ a few hours is enough)
-- M4 attribution → ``fluxion_swaps`` / ``fluxion_rfq_fills`` permanent
+- M4 / WHI-768 attribution → ``fluxion_swaps`` / ``fluxion_rfq_fills`` /
+  ``erc20_transfers`` / ``address_labels`` / ``rebalance_events`` permanent
 
 Before deleting raw ``bybit_book`` rows older than the raw TTL, the last L1 of
 each minute is upserted into ``bybit_book_1m`` so a compact series survives
@@ -42,6 +43,9 @@ _TABLE_POLICIES: tuple[tuple[str, str, str], ...] = (
     ("fluxion_rfq_quotes", "poll_ts_ms", "fluxion_rfq_quotes_ms"),
     ("fluxion_swaps", "recv_ts_ms", "fluxion_swaps_ms"),
     ("fluxion_rfq_fills", "recv_ts_ms", "fluxion_rfq_fills_ms"),
+    # WHI-768 permanent feedstock (TTL None by default; listed for growth reports).
+    ("erc20_transfers", "recv_ts_ms", "erc20_transfers_ms"),
+    ("rebalance_events", "recv_ts_ms", "rebalance_events_ms"),
     ("collector_gaps", "gap_start_ms", "collector_gaps_ms"),
 )
 
@@ -62,6 +66,8 @@ class EffectiveTtls:
     fluxion_rfq_quotes_ms: int | None
     fluxion_swaps_ms: int | None
     fluxion_rfq_fills_ms: int | None
+    erc20_transfers_ms: int | None
+    rebalance_events_ms: int | None
     collector_gaps_ms: int | None
 
     def get(self, attr: str) -> int | None:
@@ -143,6 +149,8 @@ def effective_ttls(cfg: RetentionConfig, level: DiskLevel) -> EffectiveTtls:
         # Attribution feedstock: never accelerated — only an explicit non-null TTL.
         fluxion_swaps_ms=cfg.fluxion_swaps_ms,
         fluxion_rfq_fills_ms=cfg.fluxion_rfq_fills_ms,
+        erc20_transfers_ms=cfg.erc20_transfers_ms,
+        rebalance_events_ms=cfg.rebalance_events_ms,
         collector_gaps_ms=s(cfg.collector_gaps_ms),
     )
 
