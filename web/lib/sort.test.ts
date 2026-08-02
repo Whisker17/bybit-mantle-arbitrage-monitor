@@ -179,6 +179,19 @@ describe("topNSummary / sortKeyLabel (WHI-791)", () => {
     assert.equal(topNSummary(view, "tvl_usd"), "Top 10 of 55 by TVL");
   });
 
+  it("notes how many rows have data when some are n/a", () => {
+    const sorted = [
+      row({ pair_id: "A", tvl_usd: "10" }),
+      row({ pair_id: "B", tvl_usd: "9" }),
+      row({ pair_id: "C", tvl_usd: null }),
+    ];
+    const view = applyTopN(sorted, "tvl_usd", { n: 10, showAll: false });
+    assert.equal(
+      topNSummary(view, "tvl_usd"),
+      "Top 2 of 3 by TVL · 2 with data",
+    );
+  });
+
   it("reports full list when expanded", () => {
     const sorted = [
       row({ pair_id: "A", tvl_usd: "1" }),

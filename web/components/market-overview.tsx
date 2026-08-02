@@ -33,6 +33,7 @@ import {
   sortRows,
   topNSummary,
   TOP_N_DEFAULT,
+  type OverviewUrlState,
 } from "@/lib/sort";
 import type {
   HealthResponse,
@@ -48,6 +49,33 @@ type Props = {
   marketId: string;
 };
 
+/**
+ * Apply shareable `?sort=&desc=&all=` into state setters.
+ * Returns whether the URL supplied an explicit sort (so we skip the API default).
+ */
+function applyUrlState(
+  fromUrl: OverviewUrlState,
+  set: {
+    sortKey: (k: SortKey) => void;
+    sortDesc: (d: boolean) => void;
+    showAll: (v: boolean) => void;
+  },
+): boolean {
+  let hasSort = false;
+  if (fromUrl.sortKey) {
+    set.sortKey(fromUrl.sortKey);
+    hasSort = true;
+  }
+  if (fromUrl.sortDesc !== undefined) {
+    set.sortDesc(fromUrl.sortDesc);
+    hasSort = true;
+  }
+  if (fromUrl.showAll !== undefined) {
+    set.showAll(fromUrl.showAll);
+  }
+  return hasSort;
+}
+
 export function MarketOverview({ marketId }: Props) {
   const [overview, setOverview] = useState<OverviewResponse | null>(null);
   const [health, setHealth] = useState<HealthResponse | null>(null);
@@ -62,34 +90,12 @@ export function MarketOverview({ marketId }: Props) {
   const [query, setQuery] = useState("");
   const [hideLowLiquidity, setHideLowLiquidity] = useState(false);
   const [hideStale, setHideStale] = useState(false);
-  /** Once the operator touches sort / expand, stop adopting server defaults. */
+  /** Operator (or share URL) owns sort — stop adopting server defaults. */
   const sortTouched = useRef(false);
+  /** Sort is intentional (URL or server default applied) — safe to write URL. */
   const sortHydrated = useRef(false);
-  /** URL search applied once on mount (shareable sort/top-N state). */
-  const urlHydrated = useRef(false);
 
-  // Hydrate sort / top-N from the share URL before the first server default lands.
-  useEffect(() => {
-    if (urlHydrated.current) return;
-    urlHydrated.current = true;
-    if (typeof window === "undefined") return;
-    const fromUrl = parseOverviewSearch(window.location.search);
-    if (fromUrl.sortKey) {
-      setSortKey(fromUrl.sortKey);
-      sortTouched.current = true;
-      sortHydrated.current = true;
-    }
-    if (fromUrl.sortDesc !== undefined) {
-      setSortDesc(fromUrl.sortDesc);
-      sortTouched.current = true;
-      sortHydrated.current = true;
-    }
-    if (fromUrl.showAll !== undefined) {
-      setShowAll(fromUrl.showAll);
-    }
-  }, []);
-
-  // Reset view when switching markets so each market can apply its default.
+  // Mount + market switch: re-read share URL; otherwise wait for API default.
   useEffect(() => {
     sortHydrated.current = false;
     sortTouched.current = false;
@@ -99,30 +105,26 @@ export function MarketOverview({ marketId }: Props) {
     setErr(null);
     setQuery("");
     setShowAll(false);
-    // Re-read URL after market path change (path changes, query may persist).
-    if (typeof window !== "undefined") {
-      const fromUrl = parseOverviewSearch(window.location.search);
-      if (fromUrl.sortKey) {
-        setSortKey(fromUrl.sortKey);
-        sortTouched.current = true;
-        sortHydrated.current = true;
-      }
-      if (fromUrl.sortDesc !== undefined) {
-        setSortDesc(fromUrl.sortDesc);
-        sortTouched.current = true;
-        sortHydrated.current = true;
-      }
-      if (fromUrl.showAll !== undefined) {
-        setShowAll(fromUrl.showAll);
-      }
+
+    if (typeof window === "undefined") return;
+    const fromUrl = parseOverviewSearch(window.location.search);
+    const hasSort = applyUrlState(fromUrl, {
+      sortKey: setSortKey,
+      sortDesc: setSortDesc,
+      showAll: setShowAll,
+    });
+    if (hasSort) {
+      sortTouched.current = true;
+      sortHydrated.current = true;
     }
   }, [marketId]);
 
   // Keep shareable query params in sync (replaceState — no history spam).
+  // Wait until sort is intentional so a clean load does not stamp the client
+  // default (?sort=net_edge) before /api/pairs reports the market default.
   useEffect(() => {
     if (typeof window === "undefined") return;
-    // Wait until URL hydration has run so we do not clobber ?sort= on first paint.
-    if (!urlHydrated.current && !sortTouched.current) return;
+    if (!sortHydrated.current && !sortTouched.current) return;
     const next = buildOverviewSearch({ sortKey, sortDesc, showAll });
     const url = `${window.location.pathname}${next}`;
     if (url !== `${window.location.pathname}${window.location.search}`) {
@@ -253,21 +255,24 @@ export function MarketOverview({ marketId }: Props) {
   const handleSort = useCallback(
     (key: SortKey) => {
       sortTouched.current = true;
+      sortHydrated.current = true;
       if (key === sortKey) {
+        // Direction flip keeps expand state.
         setSortDesc((d) => !d);
       } else {
         setSortKey(key);
         setSortDesc(defaultSortDesc(key));
+        // New sort key rebuilds the Top-N set — collapse so "click CEX Vol →
+        // Top 10 by CEX Vol" is the default path (spec).
+        setShowAll(false);
       }
-      // Changing the sort key rebuilds the Top-N set; stay collapsed so
-      // "click CEX Vol → Top 10 by CEX Vol" is the default path.
-      setShowAll(false);
     },
     [sortKey],
   );
 
   const setSortKeyTouched = useCallback((k: SortKey) => {
     sortTouched.current = true;
+    sortHydrated.current = true;
     setSortKey(k);
     setSortDesc(defaultSortDesc(k));
     setShowAll(false);
@@ -275,6 +280,7 @@ export function MarketOverview({ marketId }: Props) {
 
   const toggleSortDir = useCallback(() => {
     sortTouched.current = true;
+    sortHydrated.current = true;
     setSortDesc((d) => !d);
   }, []);
 
@@ -339,15 +345,13 @@ export function MarketOverview({ marketId }: Props) {
               <div className="mt-2 flex flex-wrap items-center justify-between gap-2 rounded-md border border-border bg-card px-3 py-2 text-[11px] text-muted-foreground">
                 <span className="tabular-nums text-foreground/90">
                   {topNSummary(topView, sortKey)}
-                  {!topView.showAll && topView.presentCount < topView.totalCount
-                    ? ` · ${topView.presentCount} with data`
-                    : ""}
                 </span>
                 <Button
                   type="button"
                   variant="outline"
                   className="h-7 text-[11px]"
                   onClick={toggleShowAll}
+                  aria-expanded={topView.showAll}
                 >
                   {topView.showAll
                     ? `Collapse to Top ${TOP_N_DEFAULT}`

@@ -182,7 +182,8 @@ export function applyTopN(
     shownCount: rows.length,
     topN: n,
     showAll: false,
-    isTruncated: presentCount > n || totalCount > rows.length,
+    // Collapsed window is shorter than the full filtered list.
+    isTruncated: totalCount > rows.length,
   };
 }
 
@@ -200,7 +201,11 @@ export function topNSummary(view: TopNView, key: SortKey): string {
   if (view.showAll) {
     return `Showing all ${view.totalCount} pairs · sorted by ${label}`;
   }
-  return `Top ${view.shownCount} of ${view.totalCount} by ${label}`;
+  let msg = `Top ${view.shownCount} of ${view.totalCount} by ${label}`;
+  if (view.presentCount < view.totalCount) {
+    msg += ` · ${view.presentCount} with data`;
+  }
+  return msg;
 }
 
 // ---------------------------------------------------------------------------
