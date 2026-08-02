@@ -564,6 +564,7 @@ export function PairsTable({
                         href={href}
                         className="hover:underline underline-offset-2 focus-visible:outline-none focus-visible:ring-1 focus-visible:ring-ring rounded-sm"
                         onClick={(e) => {
+                          // Let the row handler navigate; avoid double push.
                           e.stopPropagation();
                         }}
                       >

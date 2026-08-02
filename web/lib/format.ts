@@ -141,7 +141,8 @@ export function venueLabel(venue: string): string {
 
 /**
  * Derive venues from a market id (`bybit-fluxion` → bybit/fluxion).
- * Prefer API ``cex_venue``/``dex_venue`` when available.
+ * Prefer explicit API / market-card ``cex_venue``/``dex_venue`` via
+ * {@link resolveVenues} — id-split is only a fallback for known id shapes.
  */
 export function venuesFromMarketId(
   marketId: string | null | undefined,
@@ -154,6 +155,7 @@ export function venuesFromMarketId(
   return { ...DEFAULT_VENUES };
 }
 
+/** Prefer explicit venues; fall back to market-id split; else Bybit/Fluxion. */
 export function resolveVenues(
   venues?: DirectionVenues | null,
   marketId?: string | null,
@@ -182,7 +184,7 @@ export function fmtDirection(
   return `${cex}→${dex}`;
 }
 
-/** Full-words tooltip for Dir cells (acceptance: tooltips explain direction). */
+/** Full-words tooltip for Dir cells (no wire-enum leakage — WHI-780). */
 export function fmtDirectionTitle(
   direction: Direction | null | undefined,
   venues?: DirectionVenues | null,
@@ -193,9 +195,9 @@ export function fmtDirectionTitle(
   const cex = venueLabel(v.cex);
   const dex = venueLabel(v.dex);
   if (direction === "buy_fluxion_sell_bybit") {
-    return `Buy ${dex}, sell ${cex} (wire: buy_fluxion_sell_bybit)`;
+    return `Buy ${dex}, sell ${cex}`;
   }
-  return `Buy ${cex}, sell ${dex} (wire: buy_bybit_sell_fluxion)`;
+  return `Buy ${cex}, sell ${dex}`;
 }
 
 /** Direction toggle labels for pair-detail edge panel. */

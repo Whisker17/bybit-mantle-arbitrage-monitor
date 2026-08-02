@@ -14,16 +14,18 @@ import {
   fmtPrice,
   fmtTsMs,
   shortAddr,
+  type DirectionVenues,
 } from "@/lib/format";
 import type { TradeStreamRow } from "@/lib/types";
 
 type Props = {
   trades: TradeStreamRow[];
-  /** Market id for venue-aware Dir codes (WHI-780). */
+  /** Explicit venues preferred; marketId is fallback only (WHI-780). */
+  venues?: DirectionVenues | null;
   marketId?: string;
 };
 
-export function TradeStream({ trades, marketId }: Props) {
+export function TradeStream({ trades, venues, marketId }: Props) {
   if (trades.length === 0) {
     return (
       <EmptyPanel message="No Fluxion fills in the detail window (or RFQ fills lack pair_id — see DEFERRED_ISSUES)." />
@@ -77,13 +79,13 @@ export function TradeStream({ trades, marketId }: Props) {
                     title={
                       t.direction === "buy_fluxion_sell_bybit" ||
                       t.direction === "buy_bybit_sell_fluxion"
-                        ? fmtDirectionTitle(t.direction, null, marketId)
+                        ? fmtDirectionTitle(t.direction, venues, marketId)
                         : undefined
                     }
                   >
                     {t.direction === "buy_fluxion_sell_bybit" ||
                     t.direction === "buy_bybit_sell_fluxion"
-                      ? fmtDirection(t.direction, null, marketId)
+                      ? fmtDirection(t.direction, venues, marketId)
                       : t.direction || "—"}
                   </Td>
                   <Td align="right" className="tabular-nums">

@@ -33,6 +33,7 @@ export function parseMarketYaml(text: string): MarketCard {
   let displayName = "";
   let hasRfq = false;
   let cexVenue = "";
+  let dexVenue = "";
   let inCex = false;
   let inDex = false;
   for (const line of text.split("\n")) {
@@ -59,6 +60,8 @@ export function parseMarketYaml(text: string): MarketCard {
       if (vM) cexVenue = parseScalar(vM[1]);
     }
     if (inDex) {
+      const vM = /^\s+venue:\s*(.+)$/.exec(line);
+      if (vM) dexVenue = parseScalar(vM[1]);
       const rM = /^\s+has_rfq:\s*(true|false)\s*$/.exec(line);
       if (rM) hasRfq = rM[1] === "true";
     }
@@ -72,12 +75,14 @@ export function parseMarketYaml(text: string): MarketCard {
       : cexVenue === "binance"
         ? "Binance"
         : id.split("-")[0] ?? id;
+  const idParts = id.split("-");
   return {
     id,
     display_name: displayName || id,
     short_label: short,
     has_rfq: hasRfq,
-    cex_venue: cexVenue || id,
+    cex_venue: cexVenue || idParts[0] || id,
+    dex_venue: dexVenue || idParts[1] || "",
   };
 }
 

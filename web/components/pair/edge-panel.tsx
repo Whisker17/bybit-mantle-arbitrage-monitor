@@ -15,6 +15,7 @@ import {
   resolveVenues,
   totalWearBps,
   usdTone,
+  type DirectionVenues,
 } from "@/lib/format";
 import {
   isOptimalBucket,
@@ -40,7 +41,8 @@ type Props = {
   pnl?: PnlPairSnapshot | null;
   /** Hide RFQ venue card when market has no RFQ (WHI-774). */
   hasRfq?: boolean;
-  /** Market id for venue-aware Dir labels (WHI-780). */
+  /** Explicit venues preferred over marketId split (WHI-780). */
+  venues?: DirectionVenues | null;
   marketId?: string;
 };
 
@@ -54,9 +56,10 @@ export function EdgeStatsPanel({
   rfq,
   pnl,
   hasRfq = true,
+  venues: venuesProp,
   marketId,
 }: Props) {
-  const venues = resolveVenues(null, marketId);
+  const venues = resolveVenues(venuesProp, marketId);
   const directions = DIRECTION_IDS.map((id) => ({
     id,
     label: directionToggleLabel(id, venues, marketId),
@@ -90,12 +93,13 @@ export function EdgeStatsPanel({
           hasRfq ? "lg:grid-cols-2" : "lg:grid-cols-1",
         )}
       >
-        <VenueEdgeCard title="AMM" panel={amm} marketId={marketId} />
+        <VenueEdgeCard title="AMM" panel={amm} venues={venues} marketId={marketId} />
         {hasRfq && (
           <VenueEdgeCard
             title="RFQ"
             panel={rfq}
             note="unslipped ladder (see DEFERRED)"
+            venues={venues}
             marketId={marketId}
           />
         )}
@@ -106,6 +110,7 @@ export function EdgeStatsPanel({
         onDirection={setDirection}
         table={table}
         directions={directions}
+        venues={venues}
         marketId={marketId}
       />
     </div>
@@ -116,11 +121,13 @@ function VenueEdgeCard({
   title,
   panel,
   note,
+  venues,
   marketId,
 }: {
   title: string;
   panel: EdgePanel;
   note?: string;
+  venues?: DirectionVenues | null;
   marketId?: string;
 }) {
   const cur = panel.current;
@@ -143,9 +150,9 @@ function VenueEdgeCard({
             <Bps value={cur.net_edge_bps} className="text-sm font-semibold" />
             <span
               className="text-muted-foreground"
-              title={fmtDirectionTitle(cur.direction, null, marketId)}
+              title={fmtDirectionTitle(cur.direction, venues, marketId)}
             >
-              {fmtDirection(cur.direction, null, marketId)} @ $
+              {fmtDirection(cur.direction, venues, marketId)} @ $
               {Number(cur.size_usd).toLocaleString()}
             </span>
             <span className="text-muted-foreground">
@@ -273,6 +280,7 @@ function BucketPnlPanel({
   onDirection,
   table,
   directions,
+  venues,
   marketId,
 }: {
   snap: PnlPairSnapshot | null | undefined;
@@ -280,6 +288,7 @@ function BucketPnlPanel({
   onDirection: (d: Direction) => void;
   table: PnlBucketTable | null;
   directions: Array<{ id: Direction; label: string }>;
+  venues?: DirectionVenues | null;
   marketId?: string;
 }) {
   if (snap == null) {
@@ -340,11 +349,11 @@ function BucketPnlPanel({
           </span>
           <span
             className="text-muted-foreground"
-            title={fmtDirectionTitle(best.direction, null, marketId)}
+            title={fmtDirectionTitle(best.direction, venues, marketId)}
           >
             {" "}
             @ ${fmtNotional(best.optimal_notional_usd)}{" "}
-            {fmtDirection(best.direction, null, marketId)}
+            {fmtDirection(best.direction, venues, marketId)}
           </span>
         </p>
       )}

@@ -88,14 +88,19 @@ describe("fmtDirection / session / tone", () => {
     assert.equal(fmtDirection("buy_fluxion_sell_bybit", null, "bybit-fluxion"), "F→B");
   });
 
-  it("tooltips use full venue words", () => {
-    assert.match(
-      fmtDirectionTitle("buy_fluxion_sell_bybit", { cex: "binance", dex: "pancake" }) ?? "",
-      /Buy Pancake, sell Binance/,
+  it("tooltips use full venue words without wire-enum leakage", () => {
+    assert.equal(
+      fmtDirectionTitle("buy_fluxion_sell_bybit", { cex: "binance", dex: "pancake" }),
+      "Buy Pancake, sell Binance",
     );
-    assert.match(
-      fmtDirectionTitle("buy_bybit_sell_fluxion", { cex: "bybit", dex: "fluxion" }) ?? "",
-      /Buy Bybit, sell Fluxion/,
+    assert.equal(
+      fmtDirectionTitle("buy_bybit_sell_fluxion", { cex: "bybit", dex: "fluxion" }),
+      "Buy Bybit, sell Fluxion",
+    );
+    assert.equal(
+      (fmtDirectionTitle("buy_fluxion_sell_bybit", { cex: "binance", dex: "pancake" }) ??
+        "").includes("fluxion"),
+      false,
     );
   });
 
