@@ -42,6 +42,6 @@ describe("loadPairIdsFromConfig", () => {
   });
 
   it("loadMarketIds matches known markets", () => {
-    assert.deepEqual(loadMarketIds(), ["bybit-fluxion", "binance-pancake"]);
+    assert.deepEqual(new Set(loadMarketIds()), new Set(["bybit-fluxion", "binance-pancake"]));
   });
 });

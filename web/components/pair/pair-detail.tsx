@@ -166,7 +166,7 @@ export function PairDetail({ marketId, pairId }: Props) {
           )}
         </div>
         <dl className="grid grid-cols-2 gap-x-4 gap-y-1.5 text-xs sm:grid-cols-3 lg:grid-cols-4">
-          <Field label="CEX mid" value={fmtPrice(o.bybit_mid)} />
+          <Field label="Bybit mid" value={fmtPrice(o.bybit_mid)} />
           <Field label="AMM mid" value={fmtPrice(o.amm_mid)} />
           {hasRfq && (
             <Field
@@ -204,14 +204,17 @@ export function PairDetail({ marketId, pairId }: Props) {
         title="Spread history"
         subtitle={
           hasRfq
-            ? "AMM + RFQ vs CEX mid · session bands"
+            ? "AMM + RFQ vs Bybit mid · session bands"
             : "AMM vs CEX mid · session bands"
         }
       >
         <SpreadChart points={data.spread_series} showRfq={hasRfq} />
       </Panel>
 
-      <Panel title="DEX fills" subtitle={`latest ${data.trades.length}`}>
+      <Panel
+        title={hasRfq ? "Fluxion fills" : "DEX fills"}
+        subtitle={`latest ${data.trades.length}`}
+      >
         <TradeStream trades={data.trades} />
       </Panel>
 

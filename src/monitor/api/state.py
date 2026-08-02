@@ -88,14 +88,15 @@ class MarketRuntime:
     def data_status(self) -> str:
         """Wire status for overview / markets list.
 
-        * ``ok`` — builder-ready inventory + journal file present
-        * ``accumulating`` — market configured but no journal yet, or inventory
-          shape not yet wired into overview builders (e.g. binance-pancake
-          until collector + bStocks builders land)
+        * ``ok`` — builder-ready inventory (PairsConfig) available
+        * ``accumulating`` — inventory shape not yet wired into overview
+          builders (e.g. binance-pancake until bStocks builders land)
+
+        Missing journals on a builder-ready market are an error path (HTTP
+        503 on pair routes), not ``accumulating`` — that label is reserved
+        for markets that cannot produce overview rows yet (WHI-774).
         """
         if self.pairs is None:
-            return "accumulating"
-        if not self.db_path.is_file() and self.reader is None:
             return "accumulating"
         return "ok"
 
@@ -118,10 +119,7 @@ class AppState:
     def market(self, market_id: str | None = None) -> MarketRuntime:
         """Resolve a market runtime; default is the process default market."""
         mid = normalize_market_id(market_id or self.default_market_id)
-        try:
-            return self.markets[mid]
-        except KeyError as exc:
-            raise KeyError(mid) from exc
+        return self.markets[mid]
 
     def close(self) -> None:
         for runtime in self.markets.values():

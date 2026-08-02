@@ -6,6 +6,7 @@ from typing import Any
 
 from fastapi import APIRouter, HTTPException, Request
 
+from monitor.api.routes.common import runtime_or_404
 from monitor.api.serialize import to_json_dict, to_jsonable
 from monitor.api.state import AppState, MarketRuntime, app_state_from_request
 from monitor.attribution.address_labels import inventory_events_from_ticks
@@ -19,7 +20,6 @@ from monitor.attribution.mm_panel import (
     mm_active_status,
     pair_active_addresses,
 )
-from monitor.markets.ids import normalize_market_id
 from monitor.metrics.pnl_snapshot import (
     PnlOptimalSummary,
     PnlPairSnapshot,
@@ -38,14 +38,6 @@ from monitor.tui.pool import amm_pool_from_tick
 router = APIRouter(tags=["pairs"])
 
 _ACCUMULATING_MSG = "Market data accumulating"
-
-
-def _runtime_or_404(state: AppState, market: str | None) -> MarketRuntime:
-    mid = normalize_market_id(market) if market else state.default_market_id
-    try:
-        return state.market(mid)
-    except KeyError as exc:
-        raise HTTPException(status_code=404, detail=f"unknown market: {mid}") from exc
 
 
 def _require_reader(runtime: MarketRuntime) -> JournalReader:
@@ -212,17 +204,16 @@ def _detail_model(
 
 
 def _list_pairs_body(state: AppState, runtime: MarketRuntime) -> dict[str, Any]:
-    """Overview table body for one market (shared by legacy + scoped routes)."""
+    """Overview table body for one market (shared by legacy + scoped routes).
+
+    Builder-ready markets with a missing journal keep the pre-WHI-774 503
+    contract. Markets without PairsConfig (binance-pancake today) return a
+    200 accumulating empty state instead of crashing the process.
+    """
     if runtime.pairs is None:
         return _empty_overview(state, runtime, error=_ACCUMULATING_MSG)
 
-    reader = runtime.ensure_reader()
-    if reader is None:
-        return _empty_overview(
-            state,
-            runtime,
-            error=f"{_ACCUMULATING_MSG}: journal not found ({runtime.db_path})",
-        )
+    reader = _require_reader(runtime)
 
     with runtime.lock:
         model = build_overview(
@@ -363,28 +354,28 @@ def _get_pair_trades_body(
 def list_pairs(request: Request) -> dict[str, Any]:
     """Legacy overview → default market (bookmark / old client compatible)."""
     state = app_state_from_request(request)
-    return _list_pairs_body(state, _runtime_or_404(state, None))
+    return _list_pairs_body(state, runtime_or_404(state, None))
 
 
 @router.get("/api/pairs/{pair_id}")
 def get_pair(pair_id: str, request: Request) -> dict[str, Any]:
     """Legacy detail → default market."""
     state = app_state_from_request(request)
-    return _get_pair_body(state, _runtime_or_404(state, None), pair_id)
+    return _get_pair_body(state, runtime_or_404(state, None), pair_id)
 
 
 @router.get("/api/pairs/{pair_id}/mm")
 def get_pair_mm(pair_id: str, request: Request) -> dict[str, Any]:
     """Legacy MM panel → default market."""
     state = app_state_from_request(request)
-    return _get_pair_mm_body(state, _runtime_or_404(state, None), pair_id)
+    return _get_pair_mm_body(state, runtime_or_404(state, None), pair_id)
 
 
 @router.get("/api/pairs/{pair_id}/trades")
 def get_pair_trades(pair_id: str, request: Request) -> dict[str, Any]:
     """Legacy trades → default market."""
     state = app_state_from_request(request)
-    return _get_pair_trades_body(state, _runtime_or_404(state, None), pair_id)
+    return _get_pair_trades_body(state, runtime_or_404(state, None), pair_id)
 
 
 # --- Market-scoped routes ----------------------------------------------------
@@ -394,21 +385,21 @@ def get_pair_trades(pair_id: str, request: Request) -> dict[str, Any]:
 def list_market_pairs(market: str, request: Request) -> dict[str, Any]:
     """Market-scoped overview table + PnL v2 + MM active badge."""
     state = app_state_from_request(request)
-    return _list_pairs_body(state, _runtime_or_404(state, market))
+    return _list_pairs_body(state, runtime_or_404(state, market))
 
 
 @router.get("/api/{market}/pairs/{pair_id}")
 def get_market_pair(market: str, pair_id: str, request: Request) -> dict[str, Any]:
     """Market-scoped pair detail + PnL v2 + address panel."""
     state = app_state_from_request(request)
-    return _get_pair_body(state, _runtime_or_404(state, market), pair_id)
+    return _get_pair_body(state, runtime_or_404(state, market), pair_id)
 
 
 @router.get("/api/{market}/pairs/{pair_id}/mm")
 def get_market_pair_mm(market: str, pair_id: str, request: Request) -> dict[str, Any]:
     """Market-scoped MM inventory curves + rebalance timeline."""
     state = app_state_from_request(request)
-    return _get_pair_mm_body(state, _runtime_or_404(state, market), pair_id)
+    return _get_pair_mm_body(state, runtime_or_404(state, market), pair_id)
 
 
 @router.get("/api/{market}/pairs/{pair_id}/trades")
@@ -417,4 +408,4 @@ def get_market_pair_trades(
 ) -> dict[str, Any]:
     """Market-scoped trade stream."""
     state = app_state_from_request(request)
-    return _get_pair_trades_body(state, _runtime_or_404(state, market), pair_id)
+    return _get_pair_trades_body(state, runtime_or_404(state, market), pair_id)

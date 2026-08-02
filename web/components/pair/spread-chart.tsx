@@ -127,7 +127,7 @@ export function SpreadChart({ points, className, showRfq = true }: Props) {
           show: showRfq && s0.hasRfq,
         },
         {
-          label: "CEX mid",
+          label: "Bybit mid",
           stroke: MID_COLOR,
           width: 1,
           dash: [4, 3],

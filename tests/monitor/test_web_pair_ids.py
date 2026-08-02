@@ -34,9 +34,12 @@ def test_web_pair_ids_ts_source_uses_market_inventory() -> None:
     assert "TSLAB" not in src
 
 
-def test_web_markets_ts_knows_both_markets() -> None:
+def test_web_markets_ts_loads_from_config_markets() -> None:
+    """markets.ts must parse config/markets YAML — not a hand-typed market list."""
     root = Path(__file__).resolve().parents[2]
     src = (root / "web" / "lib" / "markets.ts").read_text(encoding="utf-8")
-    assert "bybit-fluxion" in src
-    assert "binance-pancake" in src
+    assert "config" in src and "markets" in src
+    assert "loadKnownMarketsFromDisk" in src or "parseMarketYaml" in src
     assert "marketOverviewPath" in src
+    # No hand-maintained display strings for a third market.
+    assert "Bybit ⇄ Fluxion" not in src

@@ -24,7 +24,7 @@ from monitor.markets import (
     normalize_market_id,
 )
 from monitor.storage import JournalReader
-from monitor.tui.config import load_tui_config, validate_tui_against_metrics
+from monitor.tui.config import TuiConfig, load_tui_config, validate_tui_against_metrics
 
 
 def _inventory_pair_count(inventory: dict[str, Any]) -> int:
@@ -38,13 +38,10 @@ def _build_market_runtime(
     *,
     market_id: str,
     api: ApiConfig,
-    tui: object,
+    tui: TuiConfig,
     sqlite_override: Path | None,
 ) -> MarketRuntime:
     """Assemble one market's configs + optional journal reader."""
-    from monitor.tui.config import TuiConfig
-
-    assert isinstance(tui, TuiConfig)
     mid = normalize_market_id(market_id)
     ctx = load_market_context(mid, sqlite_path=sqlite_override, load_collector=True)
     # Metrics/tui cross-check once per market (costs differ; sizes shared).
@@ -172,7 +169,7 @@ def create_app(
             "every ~2s (see config/api.yaml poll_interval_s). "
             "Legacy unscoped /api/pairs and /api/health map to the default market."
         ),
-        version="0.2.0",
+        version="0.1.0",
         lifespan=lifespan,
     )
 

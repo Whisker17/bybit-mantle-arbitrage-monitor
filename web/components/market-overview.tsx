@@ -70,15 +70,11 @@ export function MarketOverview({ marketId }: Props) {
 
   const refresh = useCallback(async () => {
     // Independent fetches so a 503 on pairs does not discard a successful health.
-    const [hRes, oRes, mRes] = await Promise.allSettled([
+    // /api/markets is NOT on the 2s poll — it is loaded separately (switcher only).
+    const [hRes, oRes] = await Promise.allSettled([
       fetchJson<HealthResponse>(marketApiHealthPath(marketId)),
       fetchJson<OverviewResponse>(marketApiPairsPath(marketId)),
-      fetchJson<MarketsResponse>("/api/markets"),
     ]);
-
-    if (mRes.status === "fulfilled") {
-      setMarkets(mRes.value);
-    }
 
     if (hRes.status === "fulfilled") {
       const h = hRes.value;
@@ -114,6 +110,27 @@ export function MarketOverview({ marketId }: Props) {
       );
     }
   }, [marketId]);
+
+  // Market list for the switcher — once on mount + slow refresh (not every 2s).
+  useEffect(() => {
+    let cancelled = false;
+    const loadMarkets = async () => {
+      try {
+        const m = await fetchJson<MarketsResponse>("/api/markets");
+        if (!cancelled) setMarkets(m);
+      } catch {
+        // Switcher falls back to KNOWN_MARKETS.
+      }
+    };
+    void loadMarkets();
+    const id = window.setInterval(() => {
+      void loadMarkets();
+    }, 30_000);
+    return () => {
+      cancelled = true;
+      window.clearInterval(id);
+    };
+  }, []);
 
   useEffect(() => {
     void refresh();

@@ -4,22 +4,14 @@ from __future__ import annotations
 
 from typing import Any
 
-from fastapi import APIRouter, HTTPException, Request
+from fastapi import APIRouter, Request
 
 from monitor.api.health import HealthStatus, build_health
+from monitor.api.routes.common import runtime_or_404
 from monitor.api.serialize import to_json_dict
 from monitor.api.state import AppState, MarketRuntime, app_state_from_request
-from monitor.markets.ids import normalize_market_id
 
 router = APIRouter(tags=["health"])
-
-
-def _runtime_or_404(state: AppState, market: str | None) -> MarketRuntime:
-    mid = normalize_market_id(market) if market else state.default_market_id
-    try:
-        return state.market(mid)
-    except KeyError as exc:
-        raise HTTPException(status_code=404, detail=f"unknown market: {mid}") from exc
 
 
 def _health_body(state: AppState, runtime: MarketRuntime) -> dict[str, Any]:
@@ -52,7 +44,7 @@ def _health_body(state: AppState, runtime: MarketRuntime) -> dict[str, Any]:
 def get_health(request: Request) -> dict[str, Any]:
     """Legacy unscoped health → default market (bookmark / old client compatible)."""
     state = app_state_from_request(request)
-    runtime = _runtime_or_404(state, None)
+    runtime = runtime_or_404(state, None)
     return _health_body(state, runtime)
 
 
@@ -60,5 +52,5 @@ def get_health(request: Request) -> dict[str, Any]:
 def get_market_health(market: str, request: Request) -> dict[str, Any]:
     """Per-market collector alive flag, latest block, recent gaps."""
     state = app_state_from_request(request)
-    runtime = _runtime_or_404(state, market)
+    runtime = runtime_or_404(state, market)
     return _health_body(state, runtime)

@@ -49,7 +49,7 @@ const COLS: Col[] = [
   { key: null, label: "Bid", align: "right" },
   { key: null, label: "Ask", align: "right" },
   { key: "bybit_mid", label: "Mid", align: "right" },
-  { key: null, label: "AMM", align: "right", title: "AMM mid" },
+  { key: null, label: "AMM", align: "right", title: "Fluxion AMM mid" },
   {
     key: null,
     label: "RFQb",

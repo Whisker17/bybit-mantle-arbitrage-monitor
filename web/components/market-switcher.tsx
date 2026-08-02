@@ -5,7 +5,9 @@
  * Selected market is the URL segment /m/{market}/ — no localStorage.
  */
 
+import { Building2, Landmark } from "lucide-react";
 import Link from "next/link";
+import type { LucideIcon } from "lucide-react";
 
 import { cn } from "@/lib/cn";
 import {
@@ -21,12 +23,23 @@ type Props = {
   markets?: MarketSummary[] | null;
 };
 
+const ICONS: Record<string, LucideIcon> = {
+  bybit: Landmark,
+  binance: Building2,
+};
+
 function cardFromSummary(m: MarketSummary): MarketCard {
   return {
     id: m.id,
     display_name: m.display_name,
-    short_label: m.cex_venue === "binance" ? "Binance" : m.cex_venue === "bybit" ? "Bybit" : m.id,
+    short_label:
+      m.cex_venue === "binance"
+        ? "Binance"
+        : m.cex_venue === "bybit"
+          ? "Bybit"
+          : m.id,
     has_rfq: m.has_rfq,
+    cex_venue: m.cex_venue,
   };
 }
 
@@ -48,6 +61,11 @@ export function MarketSwitcher({ marketId, markets }: Props) {
         const active = card.id === marketId;
         const summary = markets?.find((m) => m.id === card.id);
         const alive = summary?.health.collector_alive ?? null;
+        const Icon = ICONS[card.cex_venue] ?? Landmark;
+        // Second half of "CEX ⇄ DEX" display_name for the long label.
+        const dexHalf = card.display_name.includes("⇄")
+          ? card.display_name.split("⇄")[1]?.trim()
+          : "";
         return (
           <Link
             key={card.id}
@@ -61,26 +79,32 @@ export function MarketSwitcher({ marketId, markets }: Props) {
             aria-current={active ? "page" : undefined}
             title={card.display_name}
           >
+            <Icon className="h-3.5 w-3.5 shrink-0" aria-hidden />
             <span
               className={cn(
                 "inline-block h-1.5 w-1.5 rounded-full",
                 alive === true && "bg-positive",
                 alive === false && "bg-warning",
-                alive === null && (active ? "bg-primary-foreground/70" : "bg-muted-foreground/50"),
+                alive === null &&
+                  (active
+                    ? "bg-primary-foreground/70"
+                    : "bg-muted-foreground/50"),
               )}
               aria-hidden
             />
             <span>{card.short_label}</span>
-            <span
-              className={cn(
-                "hidden font-normal sm:inline",
-                active ? "text-primary-foreground/80" : "text-muted-foreground/80",
-              )}
-            >
-              {card.display_name.includes("⇄")
-                ? card.display_name.split("⇄")[1]?.trim()
-                : ""}
-            </span>
+            {dexHalf && (
+              <span
+                className={cn(
+                  "hidden font-normal sm:inline",
+                  active
+                    ? "text-primary-foreground/80"
+                    : "text-muted-foreground/80",
+                )}
+              >
+                ⇄ {dexHalf}
+              </span>
+            )}
           </Link>
         );
       })}
