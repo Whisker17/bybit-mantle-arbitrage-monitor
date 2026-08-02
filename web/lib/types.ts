@@ -124,6 +124,21 @@ export type PairOverviewRow = {
   cex_trade_count_24h?: number | null;
   dex_volume_truncated?: boolean;
   dex_volume_window_start_ms?: number | null;
+  /** WHI-779: underlying equity reference + tokenized premium. */
+  underlying_ticker?: string | null;
+  underlying_price?: string | null;
+  underlying_currency?: string | null;
+  underlying_price_type?: "live" | "pre" | "post" | "close" | "stale" | null;
+  underlying_as_of_ms?: number | null;
+  underlying_source?: string | null;
+  /** Explicit empty: no_data | private (never a dashed placeholder alone). */
+  underlying_empty?: "no_data" | "private" | null;
+  /** Default Premium column = CEX mid vs underlying (bps). */
+  premium_bps?: string | null;
+  cex_premium_bps?: string | null;
+  amm_premium_bps?: string | null;
+  rfq_premium_bps?: string | null;
+  premium_type_label?: string | null;
 };
 
 /** Session bucket for volume compare (WHI-777). */
@@ -205,6 +220,8 @@ export type PairDetailResponse = {
   address_panel?: AddressPanelRow[] | null;
   /** WHI-777: CEX vs DEX 24h volume compare with session splits. */
   volume_compare?: VolumeCompare | null;
+  /** WHI-779: current premium + journal-window distributions. */
+  premium?: PremiumPanel | null;
   error?: string | null;
   /** Present after WHI-774 multi-market routes. */
   market_id?: string;
@@ -213,12 +230,37 @@ export type PairDetailResponse = {
   data_status?: MarketDataStatus;
 };
 
+export type PremiumSnapshot = {
+  ticker: string;
+  price: string | null;
+  currency: string | null;
+  price_type: "live" | "pre" | "post" | "close" | "stale" | null;
+  as_of_ms: number | null;
+  source: string | null;
+  premium_bps: string | null;
+  cex_premium_bps: string | null;
+  amm_premium_bps: string | null;
+  rfq_premium_bps: string | null;
+  type_label: string | null;
+  empty_reason: "no_data" | "private" | null;
+};
+
+export type PremiumPanel = {
+  current: PremiumSnapshot;
+  distribution: Distribution;
+  distribution_open: Distribution;
+  distribution_closed: Distribution;
+};
+
 export type SpreadPoint = {
   ts_ms: number;
   amm_spread_bps: string | null;
   session: SessionKind;
   rfq_spread_bps?: string | null;
   bybit_mid?: string | null;
+  /** WHI-779: CEX tokenized mid vs underlying (bps). */
+  cex_premium_bps?: string | null;
+  amm_premium_bps?: string | null;
 };
 
 export type TradeStreamRow = {
@@ -458,4 +500,6 @@ export type SortKey =
   | "trades_24h"
   | "cex_volume_24h"
   | "dex_volume_24h"
-  | "volume_ratio";
+  | "volume_ratio"
+  | "premium_bps"
+  | "underlying_price";

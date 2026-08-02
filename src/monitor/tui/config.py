@@ -27,6 +27,8 @@ SortKey = Literal[
     "cex_volume_24h",
     "dex_volume_24h",
     "volume_ratio",
+    "premium_bps",
+    "underlying_price",
 ]
 
 

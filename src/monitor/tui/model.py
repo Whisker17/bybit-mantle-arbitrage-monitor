@@ -12,6 +12,7 @@ from decimal import Decimal
 
 from monitor.attribution.aggregate import PairAttribution
 from monitor.metrics.edge import CostBreakdown, Direction, EdgeResult, VenueKind
+from monitor.metrics.premium import PremiumSnapshot
 from monitor.metrics.session import SessionKind
 from monitor.metrics.stats import BreachStats, Distribution, EdgeStats
 from monitor.metrics.volume import VolumeCompare
@@ -49,6 +50,19 @@ class PairOverviewRow:
     cex_trade_count_24h: int | None = None
     dex_volume_truncated: bool = False
     dex_volume_window_start_ms: int | None = None
+    # WHI-779: underlying equity + tokenized premium vs underlying.
+    underlying_ticker: str | None = None
+    underlying_price: Decimal | None = None
+    underlying_currency: str | None = None
+    underlying_price_type: str | None = None
+    underlying_as_of_ms: int | None = None
+    underlying_source: str | None = None
+    underlying_empty: str | None = None  # "no_data" | "private"
+    premium_bps: Decimal | None = None  # CEX vs underlying (default column)
+    cex_premium_bps: Decimal | None = None
+    amm_premium_bps: Decimal | None = None
+    rfq_premium_bps: Decimal | None = None
+    premium_type_label: str | None = None
 
 
 @dataclass(frozen=True, slots=True)
@@ -71,6 +85,8 @@ class SpreadPoint:
     ``rfq_spread_bps`` is the mean of available RFQ buy/sell side spreads
     as-of the book timestamp (stable series; overview column still uses
     larger-absolute). ``bybit_mid`` is de-multiplied L1 mid for optional overlay.
+    ``cex_premium_bps`` / ``amm_premium_bps`` are tokenized vs underlying
+    (WHI-779); None when no as-of underlying print.
     """
 
     ts_ms: int
@@ -78,6 +94,8 @@ class SpreadPoint:
     session: SessionKind
     rfq_spread_bps: Decimal | None = None
     bybit_mid: Decimal | None = None
+    cex_premium_bps: Decimal | None = None
+    amm_premium_bps: Decimal | None = None
 
 
 @dataclass(frozen=True, slots=True)
@@ -111,6 +129,16 @@ class EdgePanel:
 
 
 @dataclass(frozen=True, slots=True)
+class PremiumPanel:
+    """Detail-page current premium + journal-window distribution (WHI-779)."""
+
+    current: PremiumSnapshot
+    distribution: Distribution  # CEX premium over spread_series points
+    distribution_open: Distribution
+    distribution_closed: Distribution
+
+
+@dataclass(frozen=True, slots=True)
 class PairDetailModel:
     pair_id: str
     name: str
@@ -129,6 +157,8 @@ class PairDetailModel:
     rfq_mechanism_share: float | None
     # WHI-777: CEX vs DEX volume compare (detail mini-panel).
     volume_compare: VolumeCompare | None = None
+    # WHI-779: underlying premium panel.
+    premium: PremiumPanel | None = None
     error: str | None = None
 
 

@@ -40,12 +40,20 @@ from monitor.metrics import (
     session_kind,
 )
 from monitor.metrics.edge import Direction, EdgeResult, VenueKind, mid_from_bid_ask
+from monitor.metrics.premium import (
+    PremiumSnapshot,
+    build_premium_snapshot,
+    mean_mid,
+    premium_bps,
+)
+from monitor.metrics.stats import Distribution
 from monitor.metrics.volume import VolumeCompare, build_volume_compare
 from monitor.quotes import (
     BybitBookTick,
     FluxionPoolStateTick,
     FluxionRfqQuoteTick,
     FluxionSwapTick,
+    UnderlyingPriceTick,
     now_ms,
     rfq_side_leg,
 )
@@ -59,11 +67,17 @@ from monitor.tui.model import (
     OverviewModel,
     PairDetailModel,
     PairOverviewRow,
+    PremiumPanel,
     RunningEdgeState,
     SpreadPoint,
     TradeStreamRow,
 )
 from monitor.tui.pool import amm_pool_from_tick, quote_is_token0
+from monitor.underlying.config import UnderlyingConfig, load_underlying_config
+from monitor.underlying.tickers import (
+    pair_id_to_underlying_ticker,
+    underlying_tickers_for_pairs,
+)
 
 _T = TypeVar("_T")
 
@@ -146,6 +160,87 @@ def _volume_fields(vol: VolumeCompare | None) -> dict[str, object]:
         "dex_volume_truncated": vol.dex.truncated,
         "dex_volume_window_start_ms": vol.dex.window_start_ms,
     }
+
+
+def _premium_fields(
+    premium: PremiumSnapshot | None,
+    *,
+    ticker: str | None = None,
+) -> dict[str, object]:
+    """WHI-779 underlying + premium columns (explicit empty when unknown)."""
+    if premium is None:
+        return {
+            "underlying_ticker": ticker,
+            "underlying_price": None,
+            "underlying_currency": None,
+            "underlying_price_type": None,
+            "underlying_as_of_ms": None,
+            "underlying_source": None,
+            "underlying_empty": "no_data" if ticker else None,
+            "premium_bps": None,
+            "cex_premium_bps": None,
+            "amm_premium_bps": None,
+            "rfq_premium_bps": None,
+            "premium_type_label": None,
+        }
+    return {
+        "underlying_ticker": premium.ticker,
+        "underlying_price": premium.price,
+        "underlying_currency": premium.currency,
+        "underlying_price_type": premium.price_type,
+        "underlying_as_of_ms": premium.as_of_ms,
+        "underlying_source": premium.source,
+        "underlying_empty": premium.empty_reason,
+        "premium_bps": premium.premium_bps,
+        "cex_premium_bps": premium.cex_premium_bps,
+        "amm_premium_bps": premium.amm_premium_bps,
+        "rfq_premium_bps": premium.rfq_premium_bps,
+        "premium_type_label": premium.type_label,
+    }
+
+
+def _load_underlying_cfg() -> UnderlyingConfig | None:
+    """Best-effort load; missing config degrades to no_data empty states."""
+    from monitor.underlying.config import UnderlyingConfigError
+
+    try:
+        return load_underlying_config()
+    except (UnderlyingConfigError, OSError):
+        return None
+
+
+def _private_tickers(cfg: UnderlyingConfig | None) -> frozenset[str]:
+    if cfg is None:
+        return frozenset()
+    return frozenset(cfg.uncovered_tickers())
+
+
+def _premium_for_pair(
+    pair: Pair | BStocksPair,
+    *,
+    bybit: BybitBookTick | None,
+    amm: FluxionPoolStateTick | None,
+    rfq_buy: FluxionRfqQuoteTick | None,
+    rfq_sell: FluxionRfqQuoteTick | None,
+    underlying_by_ticker: Mapping[str, UnderlyingPriceTick],
+    private: frozenset[str],
+) -> PremiumSnapshot:
+    ticker = pair_id_to_underlying_ticker(pair.id)
+    cex_mid: Decimal | None = None
+    if bybit is not None and bybit.bid_de_multiplied > 0 and bybit.ask_de_multiplied > 0:
+        cex_mid = mid_from_bid_ask(bybit.bid_de_multiplied, bybit.ask_de_multiplied)
+    amm_mid = None if amm is None else amm.mid_usdc_per_native
+    from monitor.metrics.snapshot import rfq_price
+
+    rfq_mid = mean_mid(rfq_price(rfq_buy), rfq_price(rfq_sell))
+    return build_premium_snapshot(
+        ticker=ticker,
+        underlying=underlying_by_ticker.get(ticker),
+        cex_mid=cex_mid,
+        amm_mid=amm_mid,
+        rfq_mid=rfq_mid,
+        private=ticker in private,
+    )
 
 
 def _inventory_quote_is_token0(pair: Pair | BStocksPair) -> bool:
@@ -286,6 +381,7 @@ def build_pair_overview_row(
     tui: TuiConfig,
     ts_ms: int | None = None,
     volume_compare: VolumeCompare | None = None,
+    premium: PremiumSnapshot | None = None,
 ) -> PairOverviewRow:
     """Build one overview row. Pure: no I/O.
 
@@ -294,6 +390,10 @@ def build_pair_overview_row(
     """
     ref = tui.reference_size_usd
     vfields = _volume_fields(volume_compare)
+    pfields = _premium_fields(
+        premium,
+        ticker=pair_id_to_underlying_ticker(pair.id),
+    )
     if bybit is None:
         return PairOverviewRow(
             pair_id=pair.id,
@@ -318,6 +418,7 @@ def build_pair_overview_row(
             trades_24h=trades_24h,
             stale=True,
             **vfields,  # type: ignore[arg-type]
+            **pfields,  # type: ignore[arg-type]
         )
 
     pool = amm_pool_from_tick(pair, amm) if amm is not None else None
@@ -358,6 +459,7 @@ def build_pair_overview_row(
         trades_24h=trades_24h,
         stale=False,
         **vfields,  # type: ignore[arg-type]
+        **pfields,  # type: ignore[arg-type]
     )
 
 
@@ -382,6 +484,10 @@ def build_overview(
     key = sort_key if sort_key is not None else tui.default_sort
     desc = tui.default_sort_desc if sort_desc is None else sort_desc
     since = ts - tui.volume_window_ms
+    u_cfg = _load_underlying_cfg()
+    private = _private_tickers(u_cfg)
+    tickers = underlying_tickers_for_pairs([p.id for p in pairs.pairs])
+    underlying_by = reader.latest_underlying_prices(tickers)
     rows: list[PairOverviewRow] = []
     for pair in pairs.pairs:
         bybit = reader.latest_bybit_book(pair.id)
@@ -395,6 +501,15 @@ def build_overview(
             since_ms=since,
             now_ms=ts,
             amm=amm,
+        )
+        prem = _premium_for_pair(
+            pair,
+            bybit=bybit,
+            amm=amm,
+            rfq_buy=rfq_buy,
+            rfq_sell=rfq_sell,
+            underlying_by_ticker=underlying_by,
+            private=private,
         )
         if edge_state is not None and bybit is not None:
             # Stamp with exchange time so a stalled collector does not inflate
@@ -433,6 +548,7 @@ def build_overview(
                 tui=tui,
                 ts_ms=ts,
                 volume_compare=vcmp,
+                premium=prem,
             )
         )
     rows = sort_rows(rows, key=key, desc=desc)
@@ -588,11 +704,13 @@ def build_spread_series(
     metrics: MetricsConfig,
     max_points: int,
     rfq_quotes: Sequence[FluxionRfqQuoteTick] = (),
+    underlying: Sequence[UnderlyingPriceTick] = (),
 ) -> list[SpreadPoint]:
     """Join Bybit books to as-of AMM pool + RFQ quotes for the detail chart.
 
     RFQ is optional so older call sites still get AMM-only series; the Web
     detail page (WHI-759) passes journal RFQ history for the second line.
+    Underlying prints (WHI-779) join as-of ``as_of_ms`` for premium series.
     """
     pool_by_ts = sorted(pools, key=lambda p: p.recv_ts_ms)
     rfq_buy_hist = sorted(
@@ -603,6 +721,7 @@ def build_spread_series(
         [q for q in rfq_quotes if rfq_side_leg(q.side) == "sell"],
         key=lambda q: q.poll_ts_ms,
     )
+    und_by_ts = sorted(underlying, key=lambda u: u.as_of_ms)
     points: list[SpreadPoint] = []
     for book in books:
         if book.bid_de_multiplied <= 0 or book.ask_de_multiplied <= 0:
@@ -622,6 +741,13 @@ def build_spread_series(
             rfq_sell=rfq_sell,
             ts_ms=book.exchange_ts_ms,
         )
+        und = _as_of(und_by_ts, book.exchange_ts_ms, get_ts=lambda u: u.as_of_ms)
+        cex_prem: Decimal | None = None
+        amm_prem: Decimal | None = None
+        if und is not None and und.price > 0:
+            cex_prem = premium_bps(snap.bybit_mid, und.price)
+            if snap.amm_mid is not None:
+                amm_prem = premium_bps(snap.amm_mid, und.price)
         points.append(
             SpreadPoint(
                 ts_ms=book.exchange_ts_ms,
@@ -632,6 +758,8 @@ def build_spread_series(
                     snap.rfq_sell_spread_bps,
                 ),
                 bybit_mid=snap.bybit_mid,
+                cex_premium_bps=cex_prem,
+                amm_premium_bps=amm_prem,
             )
         )
     if len(points) > max_points:
@@ -643,7 +771,7 @@ def build_spread_series(
                 max(
                     (
                         abs(v)
-                        for v in (p.amm_spread_bps, p.rfq_spread_bps)
+                        for v in (p.amm_spread_bps, p.rfq_spread_bps, p.cex_premium_bps)
                         if v is not None
                     ),
                     default=Decimal(0),
@@ -654,6 +782,28 @@ def build_spread_series(
         kept_ts = {t for t, _ in downsample(series, max_points=max_points)}
         points = [p for p in points if p.ts_ms in kept_ts]
     return points
+
+
+def _premium_distribution(
+    points: Sequence[SpreadPoint],
+) -> tuple[Distribution, Distribution, Distribution]:
+    """Equal-weight CEX premium distributions over journal window."""
+    all_v = [p.cex_premium_bps for p in points if p.cex_premium_bps is not None]
+    open_v = [
+        p.cex_premium_bps
+        for p in points
+        if p.cex_premium_bps is not None and p.session is SessionKind.OPEN
+    ]
+    closed_v = [
+        p.cex_premium_bps
+        for p in points
+        if p.cex_premium_bps is not None and p.session is SessionKind.CLOSED
+    ]
+    return (
+        Distribution.from_values(all_v),
+        Distribution.from_values(open_v),
+        Distribution.from_values(closed_v),
+    )
 
 
 def bybit_mid_series(
@@ -822,6 +972,19 @@ def build_pair_detail(
         amm=amm,
         full_session_split=True,
     )
+    u_cfg = _load_underlying_cfg()
+    private = _private_tickers(u_cfg)
+    ticker = pair_id_to_underlying_ticker(pair.id)
+    underlying_by = reader.latest_underlying_prices([ticker])
+    prem = _premium_for_pair(
+        pair,
+        bybit=bybit,
+        amm=amm,
+        rfq_buy=rfq_buy,
+        rfq_sell=rfq_sell,
+        underlying_by_ticker=underlying_by,
+        private=private,
+    )
     overview = build_pair_overview_row(
         pair,
         bybit=bybit,
@@ -834,6 +997,7 @@ def build_pair_detail(
         tui=tui,
         ts_ms=ts,
         volume_compare=vcmp,
+        premium=prem,
     )
 
     books = reader.bybit_books(
@@ -841,6 +1005,9 @@ def build_pair_detail(
     )
     pools = reader.pool_states(pair.id, limit=tui.edge_history_max_samples)
     rfq_hist = reader.rfq_quotes(pair.id, limit=tui.edge_history_max_samples)
+    und_hist = reader.underlying_prices(
+        ticker, limit=max(tui.spread_history_max_points, 200)
+    )
 
     # Overview live ticks may have already seeded EdgeStats keys; that must
     # not skip a full journal walk. Rebuild once per pair per process.
@@ -919,6 +1086,14 @@ def build_pair_detail(
         metrics=metrics,
         max_points=tui.spread_history_max_points,
         rfq_quotes=rfq_hist,
+        underlying=und_hist,
+    )
+    dist_all, dist_open, dist_closed = _premium_distribution(spread_series)
+    premium_panel = PremiumPanel(
+        current=prem,
+        distribution=dist_all,
+        distribution_open=dist_open,
+        distribution_closed=dist_closed,
     )
 
     swaps = reader.swaps(pair.id, limit=tui.trade_stream_limit * 2)
@@ -968,4 +1143,5 @@ def build_pair_detail(
         ),
         rfq_mechanism_share=attr.mechanism.rfq_share,
         volume_compare=vcmp,
+        premium=premium_panel,
     )

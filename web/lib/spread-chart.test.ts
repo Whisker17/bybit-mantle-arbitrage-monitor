@@ -32,6 +32,7 @@ describe("prepareSpreadSeries", () => {
         amm_spread_bps: "-12.5",
         rfq_spread_bps: "3.0",
         bybit_mid: "100.1",
+        cex_premium_bps: "50.0",
         session: "open",
       },
       {
@@ -39,6 +40,7 @@ describe("prepareSpreadSeries", () => {
         amm_spread_bps: null,
         rfq_spread_bps: null,
         bybit_mid: "100.2",
+        cex_premium_bps: null,
         session: "closed",
       },
     ];
@@ -48,9 +50,11 @@ describe("prepareSpreadSeries", () => {
     assert.equal(s.amm[1], null);
     assert.equal(s.rfq[0], 3.0);
     assert.equal(s.bybitMid[1], 100.2);
+    assert.equal(s.cexPremium[0], 50.0);
     assert.equal(s.hasAmm, true);
     assert.equal(s.hasRfq, true);
     assert.equal(s.hasMid, true);
+    assert.equal(s.hasPremium, true);
     assert.deepEqual(s.openBands, [[0, 0]]);
   });
 });

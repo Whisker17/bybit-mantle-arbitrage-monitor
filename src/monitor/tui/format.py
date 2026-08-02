@@ -147,6 +147,8 @@ def sort_rows(
             "cex_volume_24h": row.cex_volume_24h,
             "dex_volume_24h": row.dex_volume_24h,
             "volume_ratio": row.volume_ratio,
+            "premium_bps": row.premium_bps,
+            "underlying_price": row.underlying_price,
         }
         return mapping.get(key, row.pair_id)
 

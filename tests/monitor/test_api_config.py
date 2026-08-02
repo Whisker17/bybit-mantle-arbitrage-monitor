@@ -19,7 +19,11 @@ def test_load_default_api_config() -> None:
     assert cfg.collector_stale_ms == 30_000
     assert cfg.poll_interval_s == 2.0
     assert cfg.pnl_cache_ttl_s == 2.5
-    assert cfg.cors_origins == []
+    # Local Next dogfood origins (config/api.yaml); empty on VPS via deploy overlay.
+    assert cfg.cors_origins == [
+        "http://127.0.0.1:3000",
+        "http://localhost:3000",
+    ]
 
 
 def test_resolved_sqlite_path_relative(tmp_path: Path) -> None:

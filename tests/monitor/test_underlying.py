@@ -296,6 +296,46 @@ def test_insert_underlying_prices(tmp_path: Path) -> None:
     store.close()
 
 
+def test_reader_latest_underlying_and_history(tmp_path: Path) -> None:
+    """WHI-779: JournalReader surfaces underlying prints for premium join."""
+    from monitor.storage import JournalReader
+
+    db = tmp_path / "u2.db"
+    store = SqliteStore(db)
+    older = UnderlyingPriceTick(
+        ticker="TSLA",
+        price=Decimal("250"),
+        currency="USD",
+        price_type="close",
+        as_of_ms=1_000,
+        recv_ts_ms=1_010,
+        source="pyth_hermes",
+    )
+    newer = UnderlyingPriceTick(
+        ticker="TSLA",
+        price=Decimal("255"),
+        currency="USD",
+        price_type="live",
+        as_of_ms=2_000,
+        recv_ts_ms=2_010,
+        source="pyth_hermes",
+    )
+    store.insert_underlying_prices([older, newer])
+    store.close()
+
+    with JournalReader(db) as reader:
+        latest = reader.latest_underlying_price("TSLA")
+        assert latest is not None
+        assert latest.price == Decimal("255")
+        assert latest.price_type == "live"
+        batch = reader.latest_underlying_prices(["TSLA", "AAPL"])
+        assert "TSLA" in batch
+        assert "AAPL" not in batch
+        hist = reader.underlying_prices("TSLA", limit=10)
+        assert [h.as_of_ms for h in hist] == [1_000, 2_000]
+
+
+
 def test_invalid_underlying_config(tmp_path: Path) -> None:
     p = tmp_path / "bad.yaml"
     p.write_text(
