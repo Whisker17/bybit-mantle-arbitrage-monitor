@@ -2,6 +2,7 @@
 
 from __future__ import annotations
 
+from decimal import Decimal
 from typing import Any
 
 from fastapi import APIRouter, HTTPException, Request
@@ -239,6 +240,8 @@ def _detail_model(
     # Pairs check first so accumulating markets report "not wired" not "no journal".
     pair = _pair_or_404(runtime, pair_id)
     reader = _require_reader(runtime)
+    inv = _require_inventory(runtime)
+    threshold = Decimal(str(inv.low_liquidity_threshold_usd))
     with runtime.lock:
         model = build_pair_detail(
             pair=pair,
@@ -247,6 +250,7 @@ def _detail_model(
             attribution_cfg=runtime.attribution,
             tui=runtime.tui,
             edge_state=runtime.edge_state,
+            low_liquidity_threshold_usd=threshold,
         )
         pnl = _pnl_snapshot_for_pair(runtime, state, pair=pair, reader=reader)
         return model, pnl

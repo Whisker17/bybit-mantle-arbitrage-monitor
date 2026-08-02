@@ -241,6 +241,48 @@ and optional inventory pool fee when `--pair-id` matches. Synthetic demo only
 explicit quote/base decimals (USDC=6 on Mantle, USDT=18 on BSC). TUI/API pair
 wrappers accept `Pair` or `BStocksPair`.
 
+### 2.8 Live DEX pool TVL (WHI-782)
+
+**Why:** volume answers “is anyone trading here?”; TVL answers “is there
+capital to trade against?”. Inventory YAML `est_liquidity_usd` is a static
+snapshot (explicitly not live). V3 `liquidity` (L) is **virtual liquidity in
+the current tick range**, not dollar TVL — never display L as TVL.
+
+**Definition (normative):**
+
+```
+TVL_usd = base_balance × mid_quote_per_base + quote_balance × 1
+```
+
+- `base_balance` / `quote_balance` = ERC-20 `balanceOf` of the pool contract
+  (base = wrapper share on Fluxion ERC-4626 pools; native on Pancake).
+- `mid_quote_per_base` = same-block AMM mid for that base token
+  (`mid_usdc_per_wrapper` from pool state).
+- Quote (USDC/USDT) priced at $1.
+
+**Not depth:** V3 concentrated liquidity means total TVL ≠ size you can eat
+without moving price. Tradeable depth is the PnL v2 bucket table (§2.6). UI
+tooltips and column titles must keep that distinction.
+
+**Collection:** throttled wall-clock poll (`tvl_poll_interval_s`, default 30s)
+on both markets. Cadence is independent of the ongoing slot0 stride, but a
+due TVL sample **forces one slot0/mid fetch that block** (needed for
+valuation mid) and may write an extra `fluxion_pool_state` row off-stride.
+Two `balanceOf` calls per pool via Multicall3 when due; journal table
+`dex_pool_tvl` (schema v7).
+
+**Low-liquidity dimming:** overview `low_liquidity` uses live TVL vs the
+inventory threshold (`low_liquidity_threshold_usd`, still config) when a sample
+exists; falls back to the inventory-time flag until the first poll. Pairs
+without an AMM pool remain low-liquidity regardless of TVL.
+
+**API / Web:** overview rows expose `tvl_usd` + `tvl_as_of_ms` (detail overview
+mirrors the same). History remains queryable via `JournalReader.pool_tvl_series`
+for a future chart — not embedded on the 2s detail poll. Web DEX column group
+shows TVL (`$K`/`$M` via the same notional formatter as volume). Until the first
+sample, the cell uses the project-wide empty glyph (`—`); tooltip states
+“waiting for first sample”.
+
 ## 3. Cross-cutting Policies
 
 - **No secrets in git.** RPC keys and Linear API keys only in `.env`.
@@ -397,6 +439,7 @@ python -m monitor.retention --growth-only
 | `address_labels` | **permanent** | WHI-768 address → label + evidence (auto + manual override). |
 | `rebalance_events` | **permanent** | WHI-768 CEX-touch deposit/withdraw stream. |
 | `cex_volume_24h` | **7 days** | WHI-777 CEX REST 24h quote volume snapshots (Bybit `turnover24h` / Binance `quoteVolume`, ~60s poll). UI uses latest row per pair. |
+| `dex_pool_tvl` | **7 days** | WHI-782 live DEX pool TVL (`balanceOf` × AMM mid, throttled ~30s). Capital-size metric — **not** V3 virtual L and **not** tradeable depth (depth = PnL v2 buckets). UI uses latest; detail may series. |
 | `collector_gaps` | **30 days** | Ops history. |
 | `underlying_prices` | **7 days** | WHI-778 equity reference (Pyth Hermes / Yahoo gap-fill). Dedup on `(ticker, as_of_ms, source)`. |
 

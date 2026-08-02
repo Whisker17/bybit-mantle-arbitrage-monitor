@@ -127,7 +127,7 @@ placeholders. Agents must not assume a module exists until its issue lands. -->
     explicit accumulating empty state when a market journal is not ready.
   - **Underlying price source (WHI-778) landed:** research note
     `docs/references/underlying-price-source.md` (Pyth Hermes primary +
-    Yahoo gap-fill for SKHY; SPCX uncovered/private); journal table
+    Yahoo gap-fill for SKHY US ADR; SPCX uncovered/private); journal table
     `underlying_prices` (schema v5); `monitor/underlying` poller wired into
     both collectors; config `config/underlying.yaml` +
     `collector.yaml` `underlying.enabled`.
@@ -158,6 +158,11 @@ placeholders. Agents must not assume a module exists until its issue lands. -->
     series by basis (DEX vs CEX, CEX vs Und, DEX vs Und). `SpreadPoint`
     gains `amm_premium_bps` / `rfq_premium_bps` (RFQ vs Und for API/hover;
     chart plots CEX + AMM only).
+  - **DEX TVL column (WHI-782) landed:** live pool TVL via throttled
+    `balanceOf` + AMM mid → journal `dex_pool_tvl` (schema v7);
+    `tvl_poll_interval_s` on mantle/bsc; overview `tvl_usd` / `tvl_as_of_ms`
+    + DEX-group TVL column; dynamic `low_liquidity` from live TVL (inventory
+    flag is cold-start fallback). Capital size ≠ depth (PnL v2 buckets).
   - **Underlying dual-market ops (WHI-788) landed:** bybit blank Underlying
     was a **stale collector process** (pre-778 binary; binance restarted later).
     Meta hardening: always write `underlying_last_poll_ms` / `underlying_last_n`

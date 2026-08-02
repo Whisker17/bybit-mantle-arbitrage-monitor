@@ -15,6 +15,7 @@ from monitor.quotes import (
     BybitTradeTick,
     CexVolumeTick,
     CollectorGap,
+    DexPoolTvlTick,
     Erc20TransferTick,
     FluxionPoolStateTick,
     FluxionRfqFillTick,
@@ -574,6 +575,33 @@ class SqliteStore:
             rows,
         )
 
+    def insert_pool_tvl(self, ticks: Iterable[DexPoolTvlTick]) -> int:
+        """Append throttled DEX pool TVL snapshots (WHI-782)."""
+        rows = [
+            (
+                t.pair_id,
+                t.pool.lower(),
+                t.block_number,
+                t.block_ts,
+                t.recv_ts_ms,
+                str(t.base_bal),
+                str(t.quote_bal),
+                str(t.base_price),
+                str(t.tvl_usd),
+                1 if t.gap else 0,
+            )
+            for t in ticks
+        ]
+        return self._insert_many(
+            """
+            INSERT OR IGNORE INTO dex_pool_tvl (
+                pair_id, pool, block_number, block_ts, recv_ts_ms,
+                base_bal, quote_bal, base_price, tvl_usd, gap
+            ) VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?)
+            """,
+            rows,
+        )
+
     def insert_gap(self, gap: CollectorGap) -> None:
         with self._lock:
             with self._conn:
@@ -617,6 +645,7 @@ class SqliteStore:
             "collector_gaps",
             "underlying_prices",
             "cex_volume_24h",
+            "dex_pool_tvl",
         }:
             raise ValueError(f"unknown table: {table}")
         with self._lock:

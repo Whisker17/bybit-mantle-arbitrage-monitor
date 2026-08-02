@@ -1,6 +1,8 @@
-"""Optional Yahoo chart fallback for Pyth gaps (SKHY) — WHI-778.
+"""Optional Yahoo chart fallback for Pyth gaps (SKHY US ADR) — WHI-778/785.
 
 Unofficial endpoint; see docs/references/underlying-price-source.md license note.
+When Yahoo meta currency is already USD, writes source ``yahoo`` with no FX.
+KRW quotes still convert via optional Pyth ``FX.USD/KRW`` (``yahoo+pyth_fx``).
 """
 
 from __future__ import annotations

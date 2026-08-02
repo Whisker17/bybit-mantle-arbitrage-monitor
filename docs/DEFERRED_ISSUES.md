@@ -31,6 +31,14 @@ soon — anything touching key handling, RPC credentials defaults to at least Hi
 
 ## Open
 
+- **Yahoo KR listing without FX.USD/KRW silently writes non-USD underlyings** (Medium, WHI-785 → when re-adding KR prefer_yahoo).
+  `config/underlying.yaml` `fx_usd_krw_feed_id` is null after WHI-785 (SKHY is
+  USD ADR). Re-adding a KR Yahoo ticker without restoring the FX feed id leaves
+  `needs_fx` false and `parse_yahoo_chart` can emit `currency=KRW` into a
+  premium path that assumes USD — silent ~1000× wrong bps. No live KR consumer
+  today. Fix: model validator rejecting `prefer_yahoo` when Yahoo may quote
+  non-USD without `fx_usd_krw_feed_id`, or require explicit `yahoo_quote_currency`.
+
 - **Overview table COLS header vs hand-written body `<td>` order dual-write** (Low, WHI-780 → when table grows).
   `web/components/pairs-table.tsx` — thead derives groups/`colSpan` from the `COLS`
   list, but body cells are still a manual `<td>` sequence. Adding/reordering a leaf

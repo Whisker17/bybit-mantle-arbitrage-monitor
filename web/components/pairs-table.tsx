@@ -46,6 +46,17 @@ function dexVolumeTitle(row: PairOverviewRow): string {
   return base;
 }
 
+function tvlTitle(row: PairOverviewRow): string {
+  if (row.tvl_usd == null) {
+    return "Waiting for first TVL sample (balanceOf poll, ~30s cadence)";
+  }
+  const asOf =
+    row.tvl_as_of_ms != null
+      ? ` · as of ${fmtUtcHm(row.tvl_as_of_ms)} UTC`
+      : "";
+  return `Pool TVL ${fmtNotional(row.tvl_usd)}${asOf} — capital size, not depth (PnL v2 buckets)`;
+}
+
 type Props = {
   rows: PairOverviewRow[];
   sortKey: SortKey;
@@ -180,6 +191,15 @@ const COLS: Col[] = [
     align: "right",
     title:
       "AMM mid vs underlying equity (bps). Hover for RFQ vs underlying when RFQ exists",
+  },
+  {
+    id: "tvl",
+    key: "tvl_usd",
+    label: "TVL",
+    group: "dex",
+    align: "right",
+    title:
+      "DEX pool TVL (token balances × mid). Capital size — not tradeable depth (see PnL v2 buckets). V3 L is not TVL.",
   },
   {
     id: "dex_vol",
@@ -749,6 +769,12 @@ export function PairsTable({
                   )}
                   <td className="px-2 py-1.5 text-right">
                     <DexVsUndCell row={row} hasRfq={hasRfq} />
+                  </td>
+                  <td
+                    className="px-2 py-1.5 text-right tabular-nums"
+                    title={tvlTitle(row)}
+                  >
+                    {fmtNotional(row.tvl_usd)}
                   </td>
                   <td
                     className="px-2 py-1.5 text-right tabular-nums"

@@ -144,9 +144,16 @@ export type PairOverviewRow = {
   premium_type_label?: string | null;
   /**
    * WHI-781: inventory snapshot pool liquidity USD (est / DexScreener).
-   * Used client-side to rank the TVL badge; not live journal TVL.
+   * Badge ranking falls back here when live TVL is absent.
    */
   est_liquidity_usd?: string | null;
+  /**
+   * WHI-782: live DEX pool TVL (balanceOf × AMM mid). Capital size, not depth.
+   * Null until the collector's first throttled TVL sample.
+   */
+  tvl_usd?: string | null;
+  /** WHI-782: recv_ts_ms of the TVL sample used for tvl_usd. */
+  tvl_as_of_ms?: number | null;
 };
 
 /** Session bucket for volume compare (WHI-777). */
@@ -520,4 +527,5 @@ export type SortKey =
   | "volume_ratio"
   | "premium_bps"
   | "amm_premium"
-  | "underlying_price";
+  | "underlying_price"
+  | "tvl_usd";

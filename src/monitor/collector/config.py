@@ -114,6 +114,8 @@ class MantleCollectorConfig(BaseModel):
     # Rolling window for block_ingest_latency_{p50,p95,p99}_ms meta (WHI-749).
     # Required in collector.yaml (no silent default — fail-fast like sibling fields).
     latency_window_blocks: int = Field(ge=1, le=10_000)
+    # WHI-782: live pool TVL via balanceOf (throttled; 0 disables).
+    tvl_poll_interval_s: float = Field(default=30.0, ge=0)
 
     @model_validator(mode="after")
     def _gap_bounds(self) -> MantleCollectorConfig:
@@ -225,6 +227,9 @@ class BscCollectorConfig(BaseModel):
     # BSC USDT decimals (inventory is 18; kept explicit for mid math).
     quote_decimals: int = Field(default=18, ge=0, le=255)
     latency_window_blocks: int = Field(ge=1, le=10_000)
+    # WHI-782: live pool TVL via balanceOf (throttled; 0 disables).
+    # Independent of pool_state_every_n_blocks — TVL moves slowly.
+    tvl_poll_interval_s: float = Field(default=30.0, ge=0)
 
     @model_validator(mode="after")
     def _gap_bounds(self) -> BscCollectorConfig:
@@ -307,6 +312,8 @@ class RetentionConfig(BaseModel):
     rebalance_events_ms: int | None = Field(default=None, ge=1)
     # WHI-777 CEX REST volume snapshots (only latest needed for UI; keep a week).
     cex_volume_24h_ms: int | None = Field(default=604_800_000, ge=1)  # 7d
+    # WHI-782 live DEX pool TVL samples (overview uses latest; detail may series).
+    dex_pool_tvl_ms: int | None = Field(default=604_800_000, ge=1)  # 7d
     collector_gaps_ms: int | None = Field(default=2_592_000_000, ge=1)  # 30d
     # WHI-778 underlying equity reference (recv_ts_ms).
     underlying_prices_ms: int | None = Field(default=604_800_000, ge=1)  # 7d

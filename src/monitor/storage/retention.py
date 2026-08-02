@@ -47,6 +47,8 @@ _TABLE_POLICIES: tuple[tuple[str, str, str], ...] = (
     ("erc20_transfers", "recv_ts_ms", "erc20_transfers_ms"),
     ("rebalance_events", "recv_ts_ms", "rebalance_events_ms"),
     ("cex_volume_24h", "poll_ts_ms", "cex_volume_24h_ms"),
+    # WHI-782 live pool TVL samples (throttled; UI uses latest + optional series).
+    ("dex_pool_tvl", "recv_ts_ms", "dex_pool_tvl_ms"),
     ("collector_gaps", "gap_start_ms", "collector_gaps_ms"),
     # WHI-778 underlying equity reference (shared by ticker).
     ("underlying_prices", "recv_ts_ms", "underlying_prices_ms"),
@@ -72,6 +74,7 @@ class EffectiveTtls:
     erc20_transfers_ms: int | None
     rebalance_events_ms: int | None
     cex_volume_24h_ms: int | None
+    dex_pool_tvl_ms: int | None
     collector_gaps_ms: int | None
     underlying_prices_ms: int | None
 
@@ -157,6 +160,7 @@ def effective_ttls(cfg: RetentionConfig, level: DiskLevel) -> EffectiveTtls:
         erc20_transfers_ms=cfg.erc20_transfers_ms,
         rebalance_events_ms=cfg.rebalance_events_ms,
         cex_volume_24h_ms=s(cfg.cex_volume_24h_ms),
+        dex_pool_tvl_ms=s(cfg.dex_pool_tvl_ms),
         collector_gaps_ms=s(cfg.collector_gaps_ms),
         underlying_prices_ms=s(cfg.underlying_prices_ms),
     )

@@ -39,6 +39,7 @@ retention:
   erc20_transfers_ms: null          # permanent — WHI-768 inventory Transfer stream
   rebalance_events_ms: null         # permanent — WHI-768 CEX-touch rebalance events
   cex_volume_24h_ms: 604800000      # 7 days REST snapshots (WHI-777; UI uses latest)
+  dex_pool_tvl_ms: 604800000        # 7 days live pool TVL samples (WHI-782; throttled)
   collector_gaps_ms: 2592000000     # 30 days
   underlying_prices_ms: 604800000   # 7 days underlying equity prints (WHI-778)
   delete_batch_size: 5000
@@ -107,6 +108,9 @@ markets:
       collect_erc20_transfers: true
       # Equal-weight samples for meta block_ingest_latency_{p50,p95,p99}_ms.
       latency_window_blocks: 256
+      # WHI-782: live pool TVL (balanceOf × AMM mid). Independent of per-block
+      # slot0; 0 disables. ~30s is enough — TVL moves much slower than price.
+      tvl_poll_interval_s: 30
 
     # WHI-777: authoritative Bybit rolling 24h quote turnover (REST poll).
     cex_volume:
@@ -172,6 +176,8 @@ markets:
       pool_state_every_n_blocks: 8
       quote_decimals: 18
       latency_window_blocks: 256
+      # WHI-782: live pool TVL (balanceOf × AMM mid); independent of pool stride.
+      tvl_poll_interval_s: 30
     # WHI-777: Binance 24h quoteVolume via vision REST (same geo host as stream).
     cex_volume:
       enabled: true

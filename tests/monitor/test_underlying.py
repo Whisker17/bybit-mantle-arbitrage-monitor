@@ -55,7 +55,14 @@ def test_load_checked_in_underlying_config() -> None:
     assert "AAPL" in cfg.tickers
     assert cfg.tickers["AAPL"].feed_id is not None
     assert cfg.tickers["SPCX"].uncovered is True
-    assert cfg.tickers["SKHY"].prefer_yahoo is True
+    # WHI-785: SKHY is Nasdaq ADR (USD Yahoo), not KRX 000660.KS.
+    skhy = cfg.tickers["SKHY"]
+    assert skhy.prefer_yahoo is True
+    assert skhy.yahoo_symbol == "SKHY"
+    assert skhy.feed_id is None
+    assert skhy.pyth_symbol is None
+    assert cfg.fx_usd_krw_feed_id is None
+    assert cfg.needs_fx({"SKHY"}) is False
     assert "AAPL" in cfg.covered_tickers()
     assert "SPCX" in cfg.uncovered_tickers()
 
@@ -107,8 +114,8 @@ def test_classify_close_on_weekend() -> None:
 
 
 def test_classify_source_live_hint_outside_nyse() -> None:
-    """KRX can be live while NYSE is closed — honor Yahoo REGULAR → live."""
-    now = _ms(2026, 8, 2, 0, 30)  # Sunday evening ET / Monday KRX morning-ish
+    """Honor source REGULAR→live even when our NYSE session is closed."""
+    now = _ms(2026, 8, 2, 0, 30)  # Sunday evening ET
     as_of = now - 5_000
     assert (
         classify_price_type(
@@ -225,9 +232,52 @@ def test_parse_hermes_latest_maps_feed() -> None:
     assert aapl_id.lower().removeprefix("0x") in by_feed
 
 
-def test_parse_yahoo_chart_krw_to_usd() -> None:
+def test_parse_yahoo_chart_usd_no_fx() -> None:
+    """WHI-785: Nasdaq ADR (SKHY) is already USD — no KRW FX conversion.
+
+    Even if an FX rate is present (prefer_yahoo still batches FX.USD/KRW),
+    USD meta must keep source=yahoo and the ADR price.
+    """
     cfg = load_underlying_config()
-    as_of_s = int(_ms(2026, 8, 1, 2, 0) / 1000)  # KRX session-ish
+    # Friday 16:00 ET close; as_of at close; now = Sunday → price_type close.
+    as_of_s = int(_ms(2026, 7, 31, 16, 0) / 1000)
+    body = {
+        "chart": {
+            "result": [
+                {
+                    "meta": {
+                        "regularMarketPrice": 143.73,
+                        "regularMarketTime": as_of_s,
+                        "currency": "USD",
+                        "marketState": "CLOSED",
+                        "exchangeName": "NMS",
+                    }
+                }
+            ]
+        }
+    }
+    now = _ms(2026, 8, 2, 12, 0)
+    tick = parse_yahoo_chart(
+        body,
+        ticker="SKHY",
+        currency="USD",
+        cfg=cfg,
+        recv_ts_ms=now,
+        now_ms_value=now,
+        usd_krw=Decimal("1442.96"),  # must be ignored for USD meta
+    )
+    assert tick is not None
+    assert tick.ticker == "SKHY"
+    assert tick.currency == "USD"
+    assert tick.source == "yahoo"
+    assert tick.price == Decimal("143.73")
+    assert tick.price_type == "close"
+
+
+def test_parse_yahoo_chart_krw_to_usd() -> None:
+    """Parser still converts KRW when caller supplies FX (no live KR ticker)."""
+    cfg = load_underlying_config()
+    as_of_s = int(_ms(2026, 7, 31, 16, 0) / 1000)
     body = {
         "chart": {
             "result": [
@@ -245,7 +295,7 @@ def test_parse_yahoo_chart_krw_to_usd() -> None:
     now = _ms(2026, 8, 2, 12, 0)
     tick = parse_yahoo_chart(
         body,
-        ticker="SKHY",
+        ticker="SYNTH_KRW",  # not a config ticker; pure parser unit test
         currency="USD",
         cfg=cfg,
         recv_ts_ms=now,
@@ -253,11 +303,11 @@ def test_parse_yahoo_chart_krw_to_usd() -> None:
         usd_krw=Decimal("1442.96057"),
     )
     assert tick is not None
-    assert tick.ticker == "SKHY"
+    assert tick.ticker == "SYNTH_KRW"
     assert tick.currency == "USD"
     assert tick.source == "yahoo+pyth_fx"
     assert tick.price == Decimal("1000")
-    assert tick.price_type in {"close", "stale", "post", "pre"}
+    assert tick.price_type == "close"
 
 
 def test_market_state_hint() -> None:

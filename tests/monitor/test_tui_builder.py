@@ -129,6 +129,7 @@ def test_overview_row_matches_m3_edge() -> None:
         trades_24h=0,
         metrics=metrics,
         tui=tui,
+        low_liquidity_threshold_usd=Decimal(str(pairs.low_liquidity_threshold_usd)),
         ts_ms=_open_ts_ms(),
     )
     assert row.session is SessionKind.OPEN
@@ -179,6 +180,7 @@ def test_overview_row_wires_premium_fields() -> None:
         trades_24h=0,
         metrics=metrics,
         tui=tui,
+        low_liquidity_threshold_usd=Decimal(str(pairs.low_liquidity_threshold_usd)),
         ts_ms=_open_ts_ms(),
         premium=prem,
     )
@@ -204,6 +206,7 @@ def test_overview_row_wires_premium_fields() -> None:
         trades_24h=0,
         metrics=metrics,
         tui=tui,
+        low_liquidity_threshold_usd=Decimal(str(pairs.low_liquidity_threshold_usd)),
         premium=private,
     )
     assert row_priv.underlying_empty == "private"
@@ -284,6 +287,7 @@ def test_overview_and_detail_from_sqlite(tmp_path: Path) -> None:
         assert aapl.pair_id in {k[0] for k in state.stats}  # warmed
         assert "AAPLx" not in state.history_rebuilt
 
+        thr = Decimal(str(pairs.low_liquidity_threshold_usd))
         detail = build_pair_detail(
             pair=pairs.pair_by_id("AAPLx"),
             reader=reader,
@@ -292,6 +296,7 @@ def test_overview_and_detail_from_sqlite(tmp_path: Path) -> None:
             tui=tui,
             edge_state=state,
             now=ts + 2000,
+            low_liquidity_threshold_usd=thr,
         )
         assert detail.pair_id == "AAPLx"
         assert detail.overview.bybit_mid == aapl.bybit_mid
@@ -310,6 +315,7 @@ def test_overview_and_detail_from_sqlite(tmp_path: Path) -> None:
             tui=tui,
             edge_state=state,
             now=ts + 2000,
+            low_liquidity_threshold_usd=thr,
         )
         assert detail2.edge_amm.distribution_all.count == n1
 
