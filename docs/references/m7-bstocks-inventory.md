@@ -83,8 +83,8 @@ use other decimals — always read `decimals()`.)
 | AMZNB, PYPLB, GSB, … | Binance-listed; pancake USDT pool missing or dust after verification. |
 | SOXLB (~$6k), MUUB (broken mid) | Verified but below top 10. |
 
-Only **12** Binance bStocks had a verified Pancake USDT pool with non-trivial scan coverage;
-liquidity is highly concentrated in the first ~7 rows.
+Of the **55** bases searched, **12** had a verified Pancake USDT pool after on-chain
+filter; liquidity is highly concentrated in the first ~7 of the top-10.
 
 ## Multiplier semantics (比价命门)
 
@@ -298,7 +298,9 @@ ranked by DexScreener liq (SOXLB #11, MUUB #12 / broken mid).
    `UIMultiplierUpdated` log subscription for precise corporate-action timing.
 4. **Vision WS soak** — upgrade works; long-run disconnect/rate limits not measured here.
 5. **SPCXB** — SpaceX not a traditional public equity; treat as high-vol / special risk
-   despite top liquidity.
+   despite top liquidity. **Session calendar:** M3 NYSE open/closed segmentation does
+   **not** apply cleanly — SPCXB (private) and SKHYB (KRX primary listing) need per-asset
+   session rules in M7 metrics, not a hard copy of xStocks NYSE hours.
 6. **PCS Swap topic0 on live bStock pool** — not re-decoded this PR (public RPC
    `eth_getLogs` limit); collector must confirm before production decode.
 7. **V2 / StableSwap exhaustiveness** — re-inventory may want PCS V2 factory
