@@ -464,8 +464,10 @@ Probe: `python -m monitor.collector.latency_probe`.
 | **Web skeleton** | WHI-757 | FastAPI read-only API + Next.js static export + nginx/systemd deploy on VPS |
 | **Web overview** | WHI-758 | Full overview table (TUI-parity columns, status/stale banner, sort/filter) |
 | **Web pair detail** | WHI-759 | Pair detail: spread chart, trade stream, edge stats, attribution |
+| **M7 multi-market (Binance ⇄ Pancake bStocks)** | WHI-770… | Second market beside Bybit⇄Fluxion. **M7-1 inventory landed** (WHI-770): top-10 pairs, BEP-677 multiplier pricing, geo-block path — `docs/references/m7-bstocks-inventory.md`, draft `config/binance_pancake_pairs.yaml`. Schema/loaders M7-2+ |
 
 Dependency chain: M0 → M1 → M2 → (M3 ∥ M4) → M5 → Web (WHI-757 → 758…).
+M7 is parallel product expansion after Web PnL v2; does not block Web polish.
 
 ## 7. Rejected Alternatives
 
@@ -486,6 +488,8 @@ Dependency chain: M0 → M1 → M2 → (M3 ∥ M4) → M5 → Web (WHI-757 → 7
 | xChange RFQ **public quote** API may not exist → degrade to last RFQ fill | **Resolved M1:** public EXACT_INPUT quote is pollable; see `docs/references/m1-rfq-feasibility.md` |
 | Closed hours assumed RFQ-dark / AMM-only pricing | **Resolved WHI-753:** liquid pairs still quote two-sided RFQ on weekends and track Bybit mid; see `docs/references/m4-closed-session-rfq.md`. Open-vs-closed *fill* rates still open. |
 | Bybit xStocks **multiplier** must be applied or edges are nonsense | **Resolved M1:** `instruments-info.xstockMultiplier` + `de_multiplied_price`; snapshots in `config/pairs.yaml` |
+| bStocks (Binance) multiplier may not match Bybit semantics | **Resolved WHI-770 (inventory):** BEP-677 `uiMultiplier` scales **UI qty**, raw `balanceOf` unchanged — not classic rebase. Binance public `exchangeInfo` has no mult field. Pricing identity: `amm_raw_mid ≈ binance_display_mid * (uiMultiplier/1e18)` (**multiply**, opposite direction from Bybit divide). Draft field `ui_multiplier` in `config/binance_pancake_pairs.yaml` — do not reuse `de_multiplied_price` unchanged. |
+| US VPS cannot reach `api.binance.com` for M7 collector | **Resolved WHI-770 (measured):** `107.175.234.202` gets HTTP **451** on api/stream.binance.com; **`data-api.binance.vision` + `data-stream.binance.vision` return 200/101**. Default M7-6 path: vision endpoints on existing VPS; non-US sidecar only if vision gaps. |
 | Fluxion pool ABI / fork lineage unknown until M1 (phase-1 Agni topic0 trap) | **Resolved M1:** UniV3-lineage factory/quoter; liquid xStock pools fee=3000 USDC. M2 still re-verifies topic0 on live swaps |
 | Bybit quote is **USDT** while Fluxion AMM/RFQ quote is **USDC** — basis not modeled in M1 | M3 (knob `usdt_usdc_basis_bps`, default 0); PnL v2 same default — measure before production accuracy claims |
 | Live book depth quality vs phase-1 single snapshot approximation | M2/M3; PnL v2 VWAP needs depth (L1 degrade until wired) |

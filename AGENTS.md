@@ -90,6 +90,12 @@ placeholders. Agents must not assume a module exists until its issue lands. -->
     `python -m monitor.collector.backfill_rfq` and
     `python -m monitor.attribution.refresh`. Schema v4. UI surface for
     labels is WHI-769 (not this issue).
+  - **M7-1 inventory (WHI-770) landed:** `docs/references/m7-bstocks-inventory.md`
+    + draft `config/binance_pancake_pairs.yaml` — top-10 Binance ⇄ Pancake V3
+    bStocks (on-chain-verified pools), BEP-677 `uiMultiplier` pricing (multiply
+    Binance mid for raw compare; ≠ Bybit divide), AMM-only Terminal (no RFQ),
+    US VPS geo: `api.binance.com` 451 / use `data-api.binance.vision` +
+    `data-stream.binance.vision`. Schema load deferred to M7-2.
 
 ## Build, test, run
 
