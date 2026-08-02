@@ -49,6 +49,7 @@ from monitor.metrics.premium import (
     premium_bps,
     reclassify_underlying_for_display,
 )
+from monitor.metrics.snapshot import rfq_price
 from monitor.metrics.stats import Distribution
 from monitor.metrics.volume import VolumeCompare, build_volume_compare
 from monitor.quotes import (
@@ -239,8 +240,6 @@ def _premium_for_pair(
     cex_eq = equity_equivalent_mid(cex_mid, ui_multiplier=ui_mult)
     amm_raw = None if amm is None else amm.mid_usdc_per_native
     amm_eq = equity_equivalent_mid(amm_raw, ui_multiplier=ui_mult)
-    from monitor.metrics.snapshot import rfq_price
-
     # RFQ is Fluxion-only (no ui_multiplier path).
     rfq_mid = mean_mid(rfq_price(rfq_buy), rfq_price(rfq_sell))
     return build_premium_snapshot(
@@ -776,21 +775,8 @@ def build_spread_series(
             )
         )
     if len(points) > max_points:
-        # Even subsample (downsample ignores magnitude); keep first/last.
-        series = [
-            (
-                p.ts_ms,
-                max(
-                    (
-                        abs(v)
-                        for v in (p.amm_spread_bps, p.rfq_spread_bps)
-                        if v is not None
-                    ),
-                    default=Decimal(0),
-                ),
-            )
-            for p in points
-        ]
+        # Even subsample (keep first/last); magnitude is unused by downsample.
+        series = [(p.ts_ms, Decimal(0)) for p in points]
         kept_ts = {t for t, _ in downsample(series, max_points=max_points)}
         points = [p for p in points if p.ts_ms in kept_ts]
     return points

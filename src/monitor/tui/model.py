@@ -85,8 +85,8 @@ class SpreadPoint:
     ``rfq_spread_bps`` is the mean of available RFQ buy/sell side spreads
     as-of the book timestamp (stable series; overview column still uses
     larger-absolute). ``bybit_mid`` is de-multiplied L1 mid for optional overlay.
-    ``cex_premium_bps`` / ``amm_premium_bps`` are tokenized vs underlying
-    (WHI-779); None when no as-of underlying print.
+    ``cex_premium_bps`` is CEX equity-eq mid vs underlying (WHI-779 chart
+    series); None when no as-of underlying print.
     """
 
     ts_ms: int
