@@ -110,14 +110,12 @@ def hermes_has_equity_feed(
 ) -> bool:
     """True when Hermes ``price_feeds`` includes a usable equity for ``ticker``.
 
-    Prefers exact RTH ``Equity.US.{T}/USD``. Also accepts any non-extended-hours
-    ``Equity.*`` symbol whose base equals the ticker (covers future KR/HK
-    listings that would otherwise stay falsely ``uncovered``).
+    Accepts any non-extended-hours ``Equity.{REGION}.{BASE}/{QUOTE}`` whose
+    ``BASE`` equals the ticker (US RTH and future KR/HK listings).
     """
     if not feeds:
         return False
     t = ticker.upper()
-    want_us_rth = f"Equity.US.{t}/USD"
     for item in feeds:
         if not isinstance(item, dict):
             continue
@@ -130,14 +128,12 @@ def hermes_has_equity_feed(
         # Ignore deprecated extended-hours suffixes.
         if symbol.endswith((".PRE", ".POST", ".ON")):
             continue
-        if symbol == want_us_rth:
-            return True
-        # Equity.{CCY}.{BASE}/{QUOTE} — match base to ticker.
+        # Equity.{REGION}.{BASE}/{QUOTE} — match base to ticker.
         try:
             rest = symbol.removeprefix("Equity.")
             base_quote = rest.split(".", 1)[1]  # after region
             base = base_quote.split("/", 1)[0]
-        except (IndexError, ValueError):
+        except IndexError:
             continue
         if base.upper() == t:
             return True

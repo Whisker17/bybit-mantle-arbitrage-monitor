@@ -220,3 +220,8 @@ Bug class: a one-time “private / no feed” human judgment freezes in
 5. **Empty uncovered list** — probe is a no-op (no network). After WHI-787 the
    checked-in map has zero uncovered; the path stays for the next private or
    pre-IPO name.
+6. **When the probe does not run** — if `collector.yaml` `underlying.enabled`
+   is false, or inventory yields no tickers, the collector never constructs the
+   probe (same gate as the price poller). Use
+   `python -m monitor.underlying --probe-uncovered` for a one-shot check, or
+   re-enable the underlying loop.

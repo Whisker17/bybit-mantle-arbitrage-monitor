@@ -69,6 +69,20 @@ class ProbeError:
     def to_dict(self) -> dict[str, Any]:
         return {"ticker": self.ticker, "source": self.source, "error": self.error}
 
+    @classmethod
+    def from_dict(cls, raw: dict[str, Any]) -> ProbeError | None:
+        ticker = raw.get("ticker")
+        source = raw.get("source")
+        if not isinstance(ticker, str) or not ticker:
+            return None
+        if not isinstance(source, str) or not source:
+            return None
+        return cls(
+            ticker=ticker,
+            source=source,
+            error=str(raw.get("error") or ""),
+        )
+
 
 @dataclass(frozen=True, slots=True)
 class ProbeOutcome:
@@ -152,18 +166,11 @@ def errors_from_meta_json(raw: str | None) -> list[dict[str, Any]]:
         return []
     out: list[dict[str, Any]] = []
     for item in data:
-        if (
-            isinstance(item, dict)
-            and isinstance(item.get("ticker"), str)
-            and isinstance(item.get("source"), str)
-        ):
-            out.append(
-                {
-                    "ticker": item["ticker"],
-                    "source": item["source"],
-                    "error": str(item.get("error") or ""),
-                }
-            )
+        if not isinstance(item, dict):
+            continue
+        parsed = ProbeError.from_dict(item)
+        if parsed is not None:
+            out.append(parsed.to_dict())
     return out
 
 
