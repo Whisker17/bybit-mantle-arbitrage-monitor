@@ -11,6 +11,7 @@ from dataclasses import dataclass, field
 from decimal import Decimal
 
 from monitor.attribution.aggregate import PairAttribution
+from monitor.metrics.amm_quote import AmmQuoteReason
 from monitor.metrics.edge import CostBreakdown, Direction, EdgeResult, VenueKind
 from monitor.metrics.premium import PremiumSnapshot
 from monitor.metrics.session import SessionKind
@@ -42,6 +43,8 @@ class PairOverviewRow:
     volume_24h: Decimal  # legacy TUI cell: CEX journal notional (price_dm × size)
     trades_24h: int  # legacy: CEX journal prints + DEX swaps
     stale: bool = False  # True when no Bybit book yet
+    # WHI-795: why AMM mid is n/a when a pool tick existed (empty_pool / invalid_mid).
+    amm_quote_reason: AmmQuoteReason | None = None
     # WHI-777: CEX REST vs DEX swap 24h (API / Web primary surface).
     cex_volume_24h: Decimal | None = None
     dex_volume_24h: Decimal | None = None

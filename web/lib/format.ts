@@ -1,6 +1,46 @@
-import type { Direction, SessionKind } from "./types";
+import type { AmmQuoteReason, Direction, SessionKind } from "./types";
 
 const DASH = "—";
+
+/** Human label for AMM quote suppression (WHI-795). */
+const AMM_QUOTE_REASON_LABEL: Record<AmmQuoteReason, string> = {
+  empty_pool: "empty pool",
+  invalid_mid: "invalid mid",
+};
+
+/**
+ * Label for AMM mid / vs CEX / AMM vs Und when the mid is suppressed.
+ * Returns null when the reason is absent (plain dash / n/a is enough).
+ */
+export function ammQuoteReasonLabel(
+  reason: AmmQuoteReason | null | undefined,
+): string | null {
+  if (reason == null) return null;
+  return AMM_QUOTE_REASON_LABEL[reason];
+}
+
+/** Prefer formatted value; when null and reason present, show reason label. */
+export function fmtOrAmmReason(
+  formatted: string,
+  value: string | number | null | undefined,
+  reason: AmmQuoteReason | null | undefined,
+): string {
+  if (value !== null && value !== undefined && value !== "") return formatted;
+  return ammQuoteReasonLabel(reason) ?? formatted;
+}
+
+/** Shared hover copy when AMM mid is suppressed (WHI-795). */
+export function ammQuoteReasonTitle(
+  reason: AmmQuoteReason | null | undefined,
+): string | undefined {
+  if (reason === "empty_pool") {
+    return "Pool has zero in-range liquidity — residual slot0 mid suppressed";
+  }
+  if (reason === "invalid_mid") {
+    return "AMM mid non-positive — suppressed";
+  }
+  return undefined;
+}
 
 /**
  * CEX mid vs underlying (bps). Prefers explicit cex field; falls back to

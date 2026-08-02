@@ -138,10 +138,83 @@ def test_overview_row_matches_m3_edge() -> None:
     assert row.net_edge_bps == expected.net_edge_bps
     assert row.net_edge_venue == "amm"
     assert row.net_edge_direction == expected.direction
+    assert row.amm_quote_reason is None
     assert not row.low_liquidity
     # WHI-781: inventory est_liquidity_usd for Web TVL ranking.
     assert pair.fluxion.amm is not None
     assert row.est_liquidity_usd == Decimal(str(pair.fluxion.amm.est_liquidity_usd))
+
+
+def test_overview_row_empty_pool_suppresses_amm_and_premium() -> None:
+    """WHI-795: residual empty-pool mid → n/a + empty_pool reason (no phantom bps)."""
+    pairs = load_pairs_config()
+    pair = pairs.pair_by_id("AAPLx")
+    metrics = load_metrics_config()
+    tui = load_tui_config()
+    bybit = _book()
+    # Residual mid far from CEX (would be ~+1016 bps if quoted).
+    empty = FluxionPoolStateTick(
+        pair_id="AAPLx",
+        pool="0x2cc6a607f3445d826b9e29f507b3a2e3b9dae106",
+        block_number=1,
+        block_ts=_open_ts_ms() // 1000,
+        recv_ts_ms=_open_ts_ms(),
+        sqrt_price_x96=2**96,
+        tick=0,
+        liquidity=0,
+        token0=USDC,
+        token1="0x5aa7649fdbda47de64a07ac81d64b682af9c0724",
+        mid_usdc_per_wrapper=Decimal("110.0"),
+        mid_usdc_per_native=Decimal("110.0"),
+        wrapper_assets_per_share=Decimal(1),
+    )
+    und = UnderlyingPriceTick(
+        ticker="AAPL",
+        price=Decimal("100"),
+        currency="USD",
+        price_type="live",
+        as_of_ms=_open_ts_ms(),
+        recv_ts_ms=_open_ts_ms(),
+        source="pyth_hermes",
+    )
+    # Same path as builder: quotable mid → premium (empty pool → no AMM premium).
+    from monitor.metrics.amm_quote import quotable_amm_mid
+    from monitor.metrics.premium import equity_equivalent_mid
+
+    amm_raw, reason = quotable_amm_mid(empty)
+    assert reason == "empty_pool"
+    assert amm_raw is None
+    prem = build_premium_snapshot(
+        ticker="AAPL",
+        underlying=und,
+        cex_mid=Decimal("100.10"),
+        amm_mid=equity_equivalent_mid(amm_raw),
+        rfq_mid=None,
+        private=False,
+    )
+    row = build_pair_overview_row(
+        pair,
+        bybit=bybit,
+        amm=empty,
+        rfq_buy=None,
+        rfq_sell=None,
+        volume_24h=Decimal(0),
+        trades_24h=0,
+        metrics=metrics,
+        tui=tui,
+        low_liquidity_threshold_usd=Decimal(str(pairs.low_liquidity_threshold_usd)),
+        ts_ms=_open_ts_ms(),
+        premium=prem,
+    )
+    assert row.amm_mid is None
+    assert row.amm_spread_bps is None
+    assert row.amm_quote_reason == "empty_pool"
+    assert row.net_edge_bps is None
+    assert row.net_edge_direction is None
+    assert row.amm_premium_bps is None
+    # No residual mid → no phantom magnitude (guardrail would trip > ±5000).
+    for bps in (row.amm_spread_bps, row.amm_premium_bps, row.net_edge_bps):
+        assert bps is None or abs(bps) <= Decimal(5000)
 
 
 def test_overview_row_wires_premium_fields() -> None:

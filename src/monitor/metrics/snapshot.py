@@ -11,6 +11,7 @@ from datetime import UTC, datetime
 from decimal import Decimal
 
 from monitor.metrics.amm_pool import AmmPoolState
+from monitor.metrics.amm_quote import AmmQuoteReason, quotable_amm_mid
 from monitor.metrics.config import MetricsConfig
 from monitor.metrics.edge import (
     Direction,
@@ -43,6 +44,8 @@ class SpreadSnapshot:
     rfq_buy_spread_bps: Decimal | None
     rfq_sell_spread_bps: Decimal | None
     session: SessionKind
+    # WHI-795: why amm_mid is None when a pool tick was present (empty_pool / …).
+    amm_quote_reason: AmmQuoteReason | None = None
 
 
 @dataclass(frozen=True, slots=True)
@@ -85,10 +88,14 @@ def build_spread_snapshot(
     rfq_sell: FluxionRfqQuoteTick | None = None,
     ts_ms: int | None = None,
 ) -> SpreadSnapshot:
-    """Build dual spread series: Bybit mid vs AMM, vs RFQ buy, vs RFQ sell."""
+    """Build dual spread series: Bybit mid vs AMM, vs RFQ buy, vs RFQ sell.
+
+    AMM mid is suppressed when the pool is not quotable (empty liquidity /
+    non-positive residual slot0 mid — WHI-795). RFQ is independent.
+    """
     ts = ts_ms if ts_ms is not None else bybit.recv_ts_ms
     bybit_mid = mid_from_bid_ask(bybit.bid_de_multiplied, bybit.ask_de_multiplied)
-    amm_mid = amm.mid_usdc_per_native if amm is not None else None
+    amm_mid, amm_reason = quotable_amm_mid(amm)
     buy_mid = rfq_price(rfq_buy)
     sell_mid = rfq_price(rfq_sell)
     dt = datetime.fromtimestamp(ts / 1000, tz=UTC)
@@ -108,6 +115,7 @@ def build_spread_snapshot(
             spread_bps(bybit_mid, sell_mid) if sell_mid is not None else None
         ),
         session=sk,
+        amm_quote_reason=amm_reason,
     )
 
 
@@ -130,12 +138,13 @@ def build_edge_snapshot(
         ts_ms=ts_ms,
     )
     amm_edges: list[EdgeResult] = []
-    if amm is not None and amm_pool is not None:
+    # Same quotability gate as spreads — empty pool must not produce net edge.
+    if amm_pool is not None and spreads.amm_mid is not None:
         amm_edges = compute_edge_ladder(
             pair_id=bybit.pair_id,
             bybit_bid=bybit.bid_de_multiplied,
             bybit_ask=bybit.ask_de_multiplied,
-            fluxion_mid=amm.mid_usdc_per_native,
+            fluxion_mid=spreads.amm_mid,
             venue="amm",
             config=config,
             amm=amm_pool,

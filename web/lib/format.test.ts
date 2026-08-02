@@ -7,6 +7,7 @@ import assert from "node:assert/strict";
 import { describe, it } from "node:test";
 
 import {
+  ammQuoteReasonLabel,
   bpsTone,
   cexPremiumBps,
   directionToggleLabel,
@@ -14,6 +15,7 @@ import {
   fmtDirection,
   fmtDirectionTitle,
   fmtNotional,
+  fmtOrAmmReason,
   fmtPct,
   fmtPrice,
   fmtSession,
@@ -29,6 +31,25 @@ import {
   venueLabel,
   venuesFromMarketId,
 } from "./format";
+
+describe("ammQuoteReasonLabel", () => {
+  it("maps wire reasons to human labels", () => {
+    assert.equal(ammQuoteReasonLabel("empty_pool"), "empty pool");
+    assert.equal(ammQuoteReasonLabel("invalid_mid"), "invalid mid");
+    assert.equal(ammQuoteReasonLabel(null), null);
+    assert.equal(ammQuoteReasonLabel(undefined), null);
+  });
+});
+
+describe("fmtOrAmmReason", () => {
+  it("keeps formatted value when present", () => {
+    assert.equal(fmtOrAmmReason("+10.0", "10", "empty_pool"), "+10.0");
+  });
+  it("substitutes reason when value missing", () => {
+    assert.equal(fmtOrAmmReason("—", null, "empty_pool"), "empty pool");
+    assert.equal(fmtOrAmmReason("—", null, null), "—");
+  });
+});
 
 describe("cexPremiumBps", () => {
   it("prefers cex_premium_bps over legacy premium_bps", () => {

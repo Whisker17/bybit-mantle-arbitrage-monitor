@@ -18,6 +18,7 @@ from typing import Any, Literal
 
 from monitor.fluxion.abi import USDC_DECIMALS
 from monitor.metrics.amm_pool import AmmPoolState
+from monitor.metrics.amm_quote import quotable_amm_mid
 from monitor.metrics.bybit_slip import BPS
 from monitor.metrics.config import MetricsConfig
 from monitor.metrics.edge import Direction
@@ -40,6 +41,8 @@ PnlStatus = Literal[
     "ok",
     "no_book",
     "no_pool",
+    "empty_pool",
+    "invalid_mid",
     "no_depth",
     "no_fillable",
     "stale",
@@ -269,6 +272,11 @@ def build_pnl_pair_snapshot(
             status="no_pool", has_depth=False, best=empty, tables={}
         )
 
+    # Same quotability reason as spreads (WHI-795). Do not early-return tables={}
+    # — RFQ rows (bybit-fluxion) still compute; AMM buckets land unfillable.
+    # Overview status prefers quote_reason over no_fillable when optimal is empty.
+    _quotable_mid, quote_reason = quotable_amm_mid(amm_tick)
+
     if _ticks_stale(bybit=bybit, amm=amm_tick, now_ms=now_ms, stale_ms=stale_ms):
         empty = _empty_summary(status="stale", has_depth=False)
         return PnlPairSnapshot(
@@ -317,13 +325,27 @@ def build_pnl_pair_snapshot(
         if table.optimal is not None and table.optimal.result.fillable:
             candidates.append(table.optimal)
 
+    # Residual slot0 geometry must not win overview optimal when the tick is
+    # unquotable (liquidity 0 or non-positive mid) — same seam as spreads.
+    if quote_reason is not None:
+        candidates = []
+
     base_status: PnlStatus = "ok" if has_depth else "no_depth"
     if not candidates:
-        # Prefer no_depth over no_fillable so overview shows the actionable gap.
-        status: PnlStatus = "no_depth" if not has_depth else "no_fillable"
-        best = _empty_summary(status=status, has_depth=has_depth)
+        # Prefer unquotable reason (empty_pool / invalid_mid) over no_fillable so
+        # overview agrees with vs CEX. Prefer no_depth over bare no_fillable.
+        if quote_reason is not None:
+            unfillable_status: PnlStatus = quote_reason
+        elif not has_depth:
+            unfillable_status = "no_depth"
+        else:
+            unfillable_status = "no_fillable"
+        best = _empty_summary(status=unfillable_status, has_depth=has_depth)
         return PnlPairSnapshot(
-            status=status, has_depth=has_depth, best=best, tables=tables
+            status=unfillable_status,
+            has_depth=has_depth,
+            best=best,
+            tables=tables,
         )
 
     winner = max(candidates, key=lambda o: (o.pnl_usd, -o.q_star_usd))

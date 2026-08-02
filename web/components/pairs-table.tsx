@@ -7,6 +7,8 @@ import { useMemo } from "react";
 import { Badge } from "@/components/ui/badge";
 import { cn } from "@/lib/cn";
 import {
+  ammQuoteReasonLabel,
+  ammQuoteReasonTitle,
   bpsTone,
   cexPremiumBps,
   fmtDirection,
@@ -296,7 +298,26 @@ function buildGroupStrip(cols: Col[], venues: DirectionVenues): GroupStrip[] {
   return out;
 }
 
-function BpsCell({ value }: { value: string | null }) {
+function BpsCell({
+  value,
+  emptyLabel,
+  emptyTitle,
+}: {
+  value: string | null;
+  /** When value is null, show this instead of em-dash (e.g. empty pool). */
+  emptyLabel?: string | null;
+  emptyTitle?: string | null;
+}) {
+  if (value == null && emptyLabel) {
+    return (
+      <span
+        className="text-muted-foreground"
+        title={emptyTitle ?? emptyLabel}
+      >
+        {emptyLabel}
+      </span>
+    );
+  }
   const tone = bpsTone(value);
   return (
     <span
@@ -309,6 +330,24 @@ function BpsCell({ value }: { value: string | null }) {
     >
       {fmtSignedBps(value)}
     </span>
+  );
+}
+
+/** AMM mid / price cell with empty-pool reason (WHI-795). */
+function AmmMidCell({ row }: { row: PairOverviewRow }) {
+  const reason = ammQuoteReasonLabel(row.amm_quote_reason);
+  if (row.amm_mid == null && reason) {
+    return (
+      <span
+        className="text-muted-foreground"
+        title={ammQuoteReasonTitle(row.amm_quote_reason)}
+      >
+        {reason}
+      </span>
+    );
+  }
+  return (
+    <span className="tabular-nums">{fmtPrice(row.amm_mid)}</span>
   );
 }
 
@@ -488,6 +527,17 @@ function DexVsUndCell({
   hasRfq: boolean;
 }) {
   const amm = row.amm_premium_bps ?? null;
+  const emptyPool = ammQuoteReasonLabel(row.amm_quote_reason);
+  if (amm == null && emptyPool) {
+    return (
+      <span
+        className="text-muted-foreground"
+        title={ammQuoteReasonTitle(row.amm_quote_reason)}
+      >
+        {emptyPool}
+      </span>
+    );
+  }
   return (
     <VsUndCell
       row={row}
@@ -709,7 +759,7 @@ export function PairsTable({
                       groupSep("dex"),
                     )}
                   >
-                    {fmtPrice(row.amm_mid)}
+                    <AmmMidCell row={row} />
                   </td>
                   {hasRfq && (
                     <>
@@ -722,7 +772,11 @@ export function PairsTable({
                     </>
                   )}
                   <td className="px-2 py-1.5 text-right">
-                    <BpsCell value={row.amm_spread_bps} />
+                    <BpsCell
+                      value={row.amm_spread_bps}
+                      emptyLabel={ammQuoteReasonLabel(row.amm_quote_reason)}
+                      emptyTitle={ammQuoteReasonTitle(row.amm_quote_reason)}
+                    />
                   </td>
                   {hasRfq && (
                     <td className="px-2 py-1.5 text-right">
@@ -756,13 +810,25 @@ export function PairsTable({
                       groupSep("edge"),
                     )}
                   >
-                    <BpsCell value={row.net_edge_bps} />
+                    <BpsCell
+                      value={row.net_edge_bps}
+                      emptyLabel={ammQuoteReasonLabel(row.amm_quote_reason)}
+                      emptyTitle={ammQuoteReasonTitle(row.amm_quote_reason)}
+                    />
                   </td>
                   <td
                     className="px-2 py-1.5 text-muted-foreground"
-                    title={dirTitle}
+                    title={
+                      row.net_edge_direction == null &&
+                      ammQuoteReasonLabel(row.amm_quote_reason)
+                        ? ammQuoteReasonTitle(row.amm_quote_reason)
+                        : dirTitle
+                    }
                   >
-                    {fmtDirection(row.net_edge_direction, venues, marketId)}
+                    {row.net_edge_direction == null &&
+                    ammQuoteReasonLabel(row.amm_quote_reason)
+                      ? ammQuoteReasonLabel(row.amm_quote_reason)
+                      : fmtDirection(row.net_edge_direction, venues, marketId)}
                   </td>
                   {/* Vol gap */}
                   <td

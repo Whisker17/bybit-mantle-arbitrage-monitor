@@ -18,11 +18,14 @@ import { Badge } from "@/components/ui/badge";
 import { EmptyPanel } from "@/components/ui/empty-panel";
 import { fetchJson } from "@/lib/api";
 import {
+  ammQuoteReasonLabel,
+  ammQuoteReasonTitle,
   bpsTone,
   cexPremiumBps,
   fmtDirection,
   fmtDirectionTitle,
   fmtNotional,
+  fmtOrAmmReason,
   fmtPrice,
   fmtSession,
   fmtSignedBps,
@@ -174,6 +177,7 @@ export function PairDetail({ marketId, pairId }: Props) {
 
   const o = data.overview;
   const session: SessionKind = data.session_now;
+  const ammReason = ammQuoteReasonLabel(o.amm_quote_reason);
 
   return (
     <div className="space-y-4">
@@ -200,7 +204,15 @@ export function PairDetail({ marketId, pairId }: Props) {
         </div>
         <dl className="grid grid-cols-2 gap-x-4 gap-y-1.5 text-xs sm:grid-cols-3 lg:grid-cols-4">
           <Field label="Bybit mid" value={fmtPrice(o.bybit_mid)} />
-          <Field label="AMM mid" value={fmtPrice(o.amm_mid)} />
+          <Field
+            label="AMM mid"
+            value={fmtOrAmmReason(
+              fmtPrice(o.amm_mid),
+              o.amm_mid,
+              o.amm_quote_reason,
+            )}
+            title={ammQuoteReasonTitle(o.amm_quote_reason)}
+          />
           {hasRfq && (
             <Field
               label="RFQ b/s"
@@ -209,7 +221,11 @@ export function PairDetail({ marketId, pairId }: Props) {
           )}
           <Field
             label="vs CEX"
-            value={fmtSignedBps(o.amm_spread_bps)}
+            value={fmtOrAmmReason(
+              fmtSignedBps(o.amm_spread_bps),
+              o.amm_spread_bps,
+              o.amm_quote_reason,
+            )}
             tone={bpsTone(o.amm_spread_bps)}
             title="AMM mid vs CEX mid (bps)"
           />
@@ -231,6 +247,7 @@ export function PairDetail({ marketId, pairId }: Props) {
             label="DEX vs Und"
             privateUnderlying={o.underlying_empty === "private"}
             value={o.amm_premium_bps ?? null}
+            emptyLabel={ammReason}
             title={
               hasRfq && o.rfq_premium_bps != null
                 ? `AMM vs Und ${fmtSignedBps(o.amm_premium_bps)} · RFQ vs Und ${fmtSignedBps(o.rfq_premium_bps)}`
@@ -239,13 +256,25 @@ export function PairDetail({ marketId, pairId }: Props) {
           />
           <Field
             label="Net edge"
-            value={fmtSignedBps(o.net_edge_bps)}
+            value={fmtOrAmmReason(
+              fmtSignedBps(o.net_edge_bps),
+              o.net_edge_bps,
+              o.amm_quote_reason,
+            )}
             tone={bpsTone(o.net_edge_bps)}
           />
           <Field
             label="Direction"
-            value={fmtDirection(o.net_edge_direction, venues, marketId)}
-            title={fmtDirectionTitle(o.net_edge_direction, venues, marketId)}
+            value={fmtOrAmmReason(
+              fmtDirection(o.net_edge_direction, venues, marketId),
+              o.net_edge_direction,
+              o.amm_quote_reason,
+            )}
+            title={
+              o.net_edge_direction == null && ammReason
+                ? ammQuoteReasonTitle(o.amm_quote_reason)
+                : fmtDirectionTitle(o.net_edge_direction, venues, marketId)
+            }
           />
           <Field label="Venue" value={o.net_edge_venue ?? "—"} />
           <Field
@@ -414,11 +443,14 @@ function VsUndField({
   privateUnderlying,
   value,
   title,
+  emptyLabel,
 }: {
   label: string;
   privateUnderlying: boolean;
   value: string | null | undefined;
   title: string;
+  /** When value is null (e.g. empty pool), show this instead of em-dash. */
+  emptyLabel?: string | null;
 }) {
   if (privateUnderlying) {
     return (
@@ -427,6 +459,16 @@ function VsUndField({
         value="n/a"
         tone="empty"
         title="Private underlying — no premium"
+      />
+    );
+  }
+  if ((value == null || value === "") && emptyLabel) {
+    return (
+      <Field
+        label={label}
+        value={emptyLabel}
+        tone="empty"
+        title={title}
       />
     );
   }
