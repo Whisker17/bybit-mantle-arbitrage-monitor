@@ -9,6 +9,7 @@ import { useCallback, useEffect, useState, type ReactNode } from "react";
 
 import { AttributionPanel } from "@/components/pair/attribution-panel";
 import { EdgeStatsPanel } from "@/components/pair/edge-panel";
+import { MmPanel } from "@/components/pair/mm-panel";
 import { SpreadChart } from "@/components/pair/spread-chart";
 import { TradeStream } from "@/components/pair/trade-stream";
 import { Badge } from "@/components/ui/badge";
@@ -21,6 +22,7 @@ import {
   fmtSession,
   fmtSignedBps,
 } from "@/lib/format";
+import { mmActiveLabel, mmActiveTitle } from "@/lib/mm";
 import type {
   HealthResponse,
   PairDetailResponse,
@@ -118,6 +120,11 @@ export function PairDetail({ pairId }: Props) {
           </Badge>
           {data.low_liquidity && <Badge variant="muted">low-liq</Badge>}
           {o.stale && <Badge variant="warning">stale</Badge>}
+          {o.mm_active === "active" && (
+            <Badge variant="mm" title={mmActiveTitle(o.mm_active)}>
+              {mmActiveLabel(o.mm_active)}
+            </Badge>
+          )}
         </div>
         <dl className="grid grid-cols-2 gap-x-4 gap-y-1.5 text-xs sm:grid-cols-3 lg:grid-cols-4">
           <Field label="Bybit mid" value={fmtPrice(o.bybit_mid)} />
@@ -169,9 +176,10 @@ export function PairDetail({ pairId }: Props) {
         />
       </Panel>
 
-      <Panel title="Attribution" subtitle="M4 mechanism + top takers">
+      <Panel title="Attribution" subtitle="M4 mechanism + labeled addresses">
         <AttributionPanel
           attribution={data.attribution}
+          addressPanel={data.address_panel}
           detail={{
             arb_bot_trade_share: data.arb_bot_trade_share,
             price_keeper_trade_share: data.price_keeper_trade_share,
@@ -180,10 +188,19 @@ export function PairDetail({ pairId }: Props) {
         />
       </Panel>
 
+      <Panel
+        title="Market makers"
+        subtitle="inventory curves · rebalance timeline"
+      >
+        <MmPanel pairId={pairId} pollMs={pollMs} />
+      </Panel>
+
       <p className="text-[10px] text-muted-foreground">
         Poll every {pollMs / 1000}s · generated{" "}
         {new Date(data.generated_ts_ms).toLocaleTimeString()} · TUI-parity
         builders via <code className="text-foreground">/api/pairs/{"{id}"}</code>
+        {" · "}
+        <code className="text-foreground">/api/pairs/{"{id}"}/mm</code>
       </p>
     </div>
   );

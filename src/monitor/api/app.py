@@ -15,7 +15,7 @@ from monitor.api.config import ApiConfig, load_api_config
 from monitor.api.pnl_cache import PnlSnapshotCache
 from monitor.api.routes import health as health_routes
 from monitor.api.routes import pairs as pairs_routes
-from monitor.api.state import AppState
+from monitor.api.state import AppState, InventoryEventsCache
 from monitor.markets import DEFAULT_MARKET_ID, load_market_context, normalize_market_id
 from monitor.storage import JournalReader
 from monitor.tui.config import load_tui_config, validate_tui_against_metrics
@@ -69,6 +69,7 @@ def build_app_state(
         db_path=db_path,
         reader=reader,
         pnl_cache=PnlSnapshotCache(ttl_s=cfg.pnl_cache_ttl_s),
+        inventory_cache=InventoryEventsCache(ttl_s=cfg.mm_inventory_cache_ttl_s),
     )
 
 

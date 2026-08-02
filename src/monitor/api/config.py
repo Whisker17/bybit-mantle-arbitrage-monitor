@@ -33,6 +33,11 @@ class ApiConfig(BaseModel):
     # PnL v2 snapshot TTL (seconds). 0 disables cache (recompute every request).
     # Default slightly above poll_interval_s so steady pollers still hit cache.
     pnl_cache_ttl_s: float = Field(default=2.5, ge=0, le=60)
+    # MM panel (WHI-769) — lookback, series caps, inventory event TTL.
+    mm_active_window_ms: int = Field(default=86_400_000, ge=1_000)
+    mm_series_max_points: int = Field(default=500, ge=10, le=10_000)
+    mm_rebalance_limit: int = Field(default=100, ge=1, le=5_000)
+    mm_inventory_cache_ttl_s: float = Field(default=2.5, ge=0, le=60)
     cors_origins: list[str] = Field(default_factory=list)
 
     @field_validator("cors_origins", mode="before")

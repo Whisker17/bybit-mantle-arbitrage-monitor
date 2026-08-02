@@ -112,6 +112,8 @@ export type PairOverviewRow = {
   stale: boolean;
   /** Present after WHI-766; older APIs may omit. */
   pnl_v2?: PnlOptimalSummary | null;
+  /** Present after WHI-769; older APIs may omit. */
+  mm_active?: MmActiveStatus | null;
 };
 
 export type OverviewResponse = {
@@ -143,6 +145,8 @@ export type PairDetailResponse = {
   rfq_mechanism_share: number | null;
   /** Dual-direction bucket tables + optimal (WHI-766). */
   pnl_v2?: PnlPairSnapshot | null;
+  /** Extended address table (labels + evidence) — WHI-769. */
+  address_panel?: AddressPanelRow[] | null;
   error?: string | null;
 };
 
@@ -216,10 +220,73 @@ export type EdgePanel = {
 };
 
 export type BehaviorLabel =
+  | "market_maker"
   | "arb_bot"
+  | "rebalancer"
   | "price_keeper"
   | "retail"
   | "unknown";
+
+/** Overview / detail MM activity badge (WHI-769). */
+export type MmActiveStatus = "active" | "inactive" | "unknown";
+
+/** GET /api/pairs/{id}/mm empty-state machine. */
+export type MmDataStatus = "ok" | "accumulating" | "no_candidates";
+
+/** Extended top-address row on pair detail (labels + evidence). */
+export type AddressPanelRow = {
+  address: string;
+  label: string;
+  evidence_summary: string | null;
+  is_rebalancer: boolean;
+  n_trades: number;
+  notional_usd: string;
+  convergence_ratio: number | null;
+  last_active_ms: number | null;
+  source: string | null;
+  n_rfq_maker: number;
+  n_amm: number;
+  is_contract?: boolean | null;
+};
+
+export type InventoryPoint = {
+  ts_ms: number;
+  inventory: string;
+  tx_hash: string;
+  kind: string;
+  delta_native: string;
+};
+
+export type MmAddressSeries = {
+  address: string;
+  label: string;
+  evidence_summary: string | null;
+  is_rebalancer: boolean;
+  final_inventory: string;
+  series: InventoryPoint[];
+};
+
+export type RebalanceTimelineItem = {
+  address: string;
+  counterparty: string;
+  pair_id: string;
+  token: string;
+  amount: string;
+  direction: string;
+  block_number: number;
+  block_ts: number;
+  recv_ts_ms: number;
+  tx_hash: string;
+  log_index: number;
+};
+
+export type MmPairResponse = {
+  pair_id: string;
+  status: MmDataStatus;
+  generated_ts_ms: number;
+  addresses: MmAddressSeries[];
+  rebalance_events: RebalanceTimelineItem[];
+};
 
 export type AddressFeatures = {
   address: string;

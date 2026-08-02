@@ -40,6 +40,40 @@ class VolumeStats:
     fluxion_swap_count: int
 
 
+@dataclass(frozen=True, slots=True)
+class AddressLabelRow:
+    """One row from address_labels (WHI-768 productized labels)."""
+
+    address: str
+    label: str
+    evidence_summary: str
+    first_seen_ms: int | None
+    last_seen_ms: int | None
+    source: str
+    is_rebalancer: bool
+    n_rfq_maker: int
+    n_amm: int
+    cex_touch_transfers: int
+    updated_at_ms: int
+
+
+@dataclass(frozen=True, slots=True)
+class RebalanceEventRow:
+    """One CEX-touch rebalance event (WHI-768)."""
+
+    address: str
+    counterparty: str
+    pair_id: str
+    token: str
+    amount: Decimal
+    direction: str
+    block_number: int
+    block_ts: int
+    recv_ts_ms: int
+    tx_hash: str
+    log_index: int
+
+
 def _sides_for(leg: RfqSideLeg) -> frozenset[str]:
     return RFQ_BUY_SIDES if leg == "buy" else RFQ_SELL_SIDES
 
@@ -372,6 +406,63 @@ class JournalReader:
         ).fetchall()
         return [_row_to_transfer(r) for r in rows]
 
+    def address_labels(self, *, label: str | None = None) -> list[AddressLabelRow]:
+        """All persisted address labels (WHI-768); optional label filter."""
+        clauses: list[str] = []
+        params: list[object] = []
+        if label is not None:
+            clauses.append("label = ?")
+            params.append(label)
+        where = f"WHERE {' AND '.join(clauses)}" if clauses else ""
+        rows = self._conn.execute(
+            f"""
+            SELECT address, label, evidence_summary, first_seen_ms, last_seen_ms,
+                   source, is_rebalancer, n_rfq_maker, n_amm, cex_touch_transfers,
+                   updated_at_ms
+            FROM address_labels
+            {where}
+            ORDER BY (last_seen_ms IS NULL), last_seen_ms DESC, address
+            """,
+            params,
+        ).fetchall()
+        return [_row_to_address_label(r) for r in rows]
+
+    def address_label_count(self) -> int:
+        """Total rows in address_labels (0 → refresh never ran / empty)."""
+        row = self._conn.execute("SELECT COUNT(*) AS n FROM address_labels").fetchone()
+        return int(row["n"]) if row is not None else 0
+
+    def rebalance_events(
+        self,
+        *,
+        pair_id: str | None = None,
+        address: str | None = None,
+        limit: int = 500,
+    ) -> list[RebalanceEventRow]:
+        """Rebalance timeline (WHI-768), newest first."""
+        clauses: list[str] = []
+        params: list[object] = []
+        if pair_id is not None:
+            clauses.append("pair_id = ?")
+            params.append(pair_id)
+        if address is not None:
+            clauses.append("address = ?")
+            params.append(address.lower())
+        where = f"WHERE {' AND '.join(clauses)}" if clauses else ""
+        params.append(limit)
+        rows = self._conn.execute(
+            f"""
+            SELECT address, counterparty, pair_id, token, amount, direction,
+                   block_number, block_ts, recv_ts_ms, tx_hash, log_index
+            FROM rebalance_events
+            {where}
+            ORDER BY block_ts DESC, block_number DESC, log_index DESC
+            LIMIT ?
+            """,
+            params,
+        ).fetchall()
+        return [_row_to_rebalance_event(r) for r in rows]
+
 
 # --- row mappers ----------------------------------------------------------
 
@@ -552,4 +643,38 @@ def _row_to_transfer(row: sqlite3.Row) -> Erc20TransferTick:
         amount=_d(row["amount"]),
         amount_raw=int(str(row["amount_raw"])),
         gap=bool(int(row["gap"] or 0)),
+    )
+
+
+def _row_to_address_label(row: sqlite3.Row) -> AddressLabelRow:
+    first = row["first_seen_ms"]
+    last = row["last_seen_ms"]
+    return AddressLabelRow(
+        address=str(row["address"]).lower(),
+        label=str(row["label"]),
+        evidence_summary=str(row["evidence_summary"]),
+        first_seen_ms=None if first is None else int(first),
+        last_seen_ms=None if last is None else int(last),
+        source=str(row["source"]),
+        is_rebalancer=bool(int(row["is_rebalancer"] or 0)),
+        n_rfq_maker=int(row["n_rfq_maker"] or 0),
+        n_amm=int(row["n_amm"] or 0),
+        cex_touch_transfers=int(row["cex_touch_transfers"] or 0),
+        updated_at_ms=int(row["updated_at_ms"]),
+    )
+
+
+def _row_to_rebalance_event(row: sqlite3.Row) -> RebalanceEventRow:
+    return RebalanceEventRow(
+        address=str(row["address"]).lower(),
+        counterparty=str(row["counterparty"]).lower(),
+        pair_id=str(row["pair_id"]),
+        token=str(row["token"]).lower(),
+        amount=_d(row["amount"]),
+        direction=str(row["direction"]),
+        block_number=int(row["block_number"]),
+        block_ts=int(row["block_ts"]),
+        recv_ts_ms=int(row["recv_ts_ms"]),
+        tx_hash=str(row["tx_hash"]).lower(),
+        log_index=int(row["log_index"]),
     )

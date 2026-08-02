@@ -15,8 +15,9 @@ import {
   fmtUsd,
   usdTone,
 } from "@/lib/format";
+import { mmActiveLabel, mmActiveTitle } from "@/lib/mm";
 import { overviewPnlCell } from "@/lib/pnl";
-import type { PairOverviewRow, SortKey } from "@/lib/types";
+import type { MmActiveStatus, PairOverviewRow, SortKey } from "@/lib/types";
 
 type Props = {
   rows: PairOverviewRow[];
@@ -53,6 +54,12 @@ const COLS: Col[] = [
     label: "Bucket PnL",
     align: "right",
     title: "Optimal size net PnL (PnL v2) — hover for direction & notional",
+  },
+  {
+    key: null,
+    label: "MM",
+    title:
+      "Market-maker trade activity in lookback window: active / inactive / unknown",
   },
 ];
 
@@ -97,12 +104,28 @@ function BucketPnlCell({ row }: { row: PairOverviewRow }) {
   );
 }
 
+function MmActiveCell({ status }: { status: MmActiveStatus | null | undefined }) {
+  const s = status ?? "unknown";
+  if (s === "active") {
+    return (
+      <Badge variant="mm" className="normal-case" title={mmActiveTitle(s)}>
+        {mmActiveLabel(s)}
+      </Badge>
+    );
+  }
+  return (
+    <span className="text-muted-foreground" title={mmActiveTitle(s)}>
+      {mmActiveLabel(s)}
+    </span>
+  );
+}
+
 export function PairsTable({ rows, sortKey, sortDesc, onSort }: Props) {
   const router = useRouter();
 
   return (
     <div className="overflow-x-auto rounded-md border border-border">
-      <table className="w-full min-w-[1100px] border-collapse text-xs">
+      <table className="w-full min-w-[1160px] border-collapse text-xs">
         <thead>
           <tr className="border-b border-border bg-muted/40 text-muted-foreground">
             {COLS.map((col) => {
@@ -249,6 +272,9 @@ export function PairsTable({ rows, sortKey, sortDesc, onSort }: Props) {
                   </td>
                   <td className="px-2 py-1.5 text-right">
                     <BucketPnlCell row={row} />
+                  </td>
+                  <td className="px-2 py-1.5">
+                    <MmActiveCell status={row.mm_active} />
                   </td>
                 </tr>
               );
