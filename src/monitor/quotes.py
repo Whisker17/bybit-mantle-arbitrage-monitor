@@ -236,6 +236,24 @@ class UnderlyingPriceTick:
 
 
 @dataclass(frozen=True, slots=True)
+class CexVolumeTick:
+    """Exchange-reported rolling 24h quote volume (WHI-777 REST poll).
+
+    ``volume_quote_24h`` is the venue's quote-currency turnover (USDT ≈ USD).
+    Do not de-multiply: turnover is already notional of the listed product.
+    """
+
+    pair_id: str
+    symbol: str
+    poll_ts_ms: int
+    recv_ts_ms: int
+    volume_quote_24h: Decimal
+    trade_count_24h: int | None
+    source: Literal["bybit", "binance"]
+    gap: bool = False
+
+
+@dataclass(frozen=True, slots=True)
 class CollectorGap:
     """Explicit gap window after disconnect / missed blocks / poll stall."""
 

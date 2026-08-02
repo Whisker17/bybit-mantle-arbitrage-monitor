@@ -12,6 +12,7 @@ import { EdgeStatsPanel } from "@/components/pair/edge-panel";
 import { MmPanel } from "@/components/pair/mm-panel";
 import { SpreadChart } from "@/components/pair/spread-chart";
 import { TradeStream } from "@/components/pair/trade-stream";
+import { VolumePanel } from "@/components/pair/volume-panel";
 import { Badge } from "@/components/ui/badge";
 import { EmptyPanel } from "@/components/ui/empty-panel";
 import { fetchJson } from "@/lib/api";
@@ -212,11 +213,26 @@ export function PairDetail({ marketId, pairId }: Props) {
           <Field label="Direction" value={fmtDirection(o.net_edge_direction)} />
           <Field label="Venue" value={o.net_edge_venue ?? "—"} />
           <Field
-            label="Vol / trades 24h"
-            value={`${fmtNotional(o.volume_24h)} / ${o.trades_24h}`}
+            label="CEX Vol 24h"
+            value={fmtNotional(o.cex_volume_24h)}
+          />
+          <Field
+            label="DEX Vol 24h"
+            value={
+              o.dex_volume_truncated
+                ? `${fmtNotional(o.dex_volume_24h)} *`
+                : fmtNotional(o.dex_volume_24h)
+            }
           />
         </dl>
       </section>
+
+      <Panel
+        title="Volume compare"
+        subtitle="CEX REST 24h vs DEX swaps · open/closed sessions"
+      >
+        <VolumePanel volume={data.volume_compare} />
+      </Panel>
 
       <Panel
         title="Spread history"

@@ -46,6 +46,7 @@ _TABLE_POLICIES: tuple[tuple[str, str, str], ...] = (
     # WHI-768 permanent feedstock (TTL None by default; listed for growth reports).
     ("erc20_transfers", "recv_ts_ms", "erc20_transfers_ms"),
     ("rebalance_events", "recv_ts_ms", "rebalance_events_ms"),
+    ("cex_volume_24h", "poll_ts_ms", "cex_volume_24h_ms"),
     ("collector_gaps", "gap_start_ms", "collector_gaps_ms"),
     # WHI-778 underlying equity reference (shared by ticker).
     ("underlying_prices", "recv_ts_ms", "underlying_prices_ms"),
@@ -70,6 +71,7 @@ class EffectiveTtls:
     fluxion_rfq_fills_ms: int | None
     erc20_transfers_ms: int | None
     rebalance_events_ms: int | None
+    cex_volume_24h_ms: int | None
     collector_gaps_ms: int | None
     underlying_prices_ms: int | None
 
@@ -154,6 +156,7 @@ def effective_ttls(cfg: RetentionConfig, level: DiskLevel) -> EffectiveTtls:
         fluxion_rfq_fills_ms=cfg.fluxion_rfq_fills_ms,
         erc20_transfers_ms=cfg.erc20_transfers_ms,
         rebalance_events_ms=cfg.rebalance_events_ms,
+        cex_volume_24h_ms=s(cfg.cex_volume_24h_ms),
         collector_gaps_ms=s(cfg.collector_gaps_ms),
         underlying_prices_ms=s(cfg.underlying_prices_ms),
     )

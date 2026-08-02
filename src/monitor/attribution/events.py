@@ -63,9 +63,14 @@ class RfqFillEvent:
 
 
 def swap_notional_usd(swap: FluxionSwapTick, *, quote_is_token0: bool) -> Decimal:
-    """Absolute USDC-leg notional from a decoded swap (pool amount convention)."""
-    leg = swap.amount_token0 if quote_is_token0 else swap.amount_token1
-    return abs(leg)
+    """Absolute USDC-leg notional from a decoded swap (pool amount convention).
+
+    Implementation lives in ``monitor.metrics.volume`` (M3); re-exported here
+    so existing M4 call sites keep a stable import path.
+    """
+    from monitor.metrics.volume import swap_notional_usd as _impl
+
+    return _impl(swap, quote_is_token0=quote_is_token0)
 
 
 def amm_trade_from_swap(

@@ -16,6 +16,8 @@ import {
   fmtSession,
   fmtSignedBps,
   fmtUsd,
+  fmtUtcHm,
+  fmtVolumeRatio,
   shortAddr,
   totalWearBps,
   usdTone,
@@ -104,5 +106,18 @@ describe("fmtPct / totalWearBps", () => {
       }),
       "18.5",
     );
+  });
+});
+
+describe("fmtVolumeRatio / fmtUtcHm (WHI-777)", () => {
+  it("formats compact multipliers", () => {
+    assert.equal(fmtVolumeRatio("12.34"), "12.3×");
+    assert.equal(fmtVolumeRatio("150"), "150×");
+    assert.equal(fmtVolumeRatio("2500"), "2.5K×");
+    assert.equal(fmtVolumeRatio(null), "—");
+  });
+
+  it("renders UTC HH:MM for truncated labels", () => {
+    assert.equal(fmtUtcHm(Date.UTC(2024, 0, 1, 12, 34, 0)), "12:34");
   });
 });

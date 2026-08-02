@@ -7,7 +7,7 @@ window so downstream metrics can exclude or weight them.
 
 from __future__ import annotations
 
-SCHEMA_VERSION = 5
+SCHEMA_VERSION = 6
 
 DDL: tuple[str, ...] = (
     """
@@ -167,6 +167,10 @@ DDL: tuple[str, ...] = (
     """
     CREATE INDEX IF NOT EXISTS idx_fluxion_swaps_pair_block
         ON fluxion_swaps (pair_id, block_number)
+    """,
+    """
+    CREATE INDEX IF NOT EXISTS idx_fluxion_swaps_pair_recv
+        ON fluxion_swaps (pair_id, recv_ts_ms)
     """,
     """
     CREATE TABLE IF NOT EXISTS fluxion_rfq_quotes (
@@ -337,6 +341,28 @@ DDL: tuple[str, ...] = (
     """
     CREATE INDEX IF NOT EXISTS idx_underlying_prices_recv
         ON underlying_prices (recv_ts_ms)
+    """,
+    # WHI-777: authoritative CEX rolling 24h quote volume (REST poll).
+    """
+    CREATE TABLE IF NOT EXISTS cex_volume_24h (
+        id                  INTEGER PRIMARY KEY AUTOINCREMENT,
+        pair_id             TEXT    NOT NULL,
+        symbol              TEXT    NOT NULL,
+        poll_ts_ms          INTEGER NOT NULL,
+        recv_ts_ms          INTEGER NOT NULL,
+        volume_quote_24h    TEXT    NOT NULL,
+        trade_count_24h     INTEGER,
+        source              TEXT    NOT NULL,
+        gap                 INTEGER NOT NULL DEFAULT 0
+    )
+    """,
+    """
+    CREATE INDEX IF NOT EXISTS idx_cex_volume_24h_pair_ts
+        ON cex_volume_24h (pair_id, poll_ts_ms)
+    """,
+    """
+    CREATE INDEX IF NOT EXISTS idx_cex_volume_24h_ts
+        ON cex_volume_24h (poll_ts_ms)
     """,
 )
 

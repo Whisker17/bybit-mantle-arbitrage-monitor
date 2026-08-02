@@ -40,6 +40,7 @@ from monitor.metrics import (
     session_kind,
 )
 from monitor.metrics.edge import Direction, EdgeResult, VenueKind, mid_from_bid_ask
+from monitor.metrics.volume import VolumeCompare, build_volume_compare
 from monitor.quotes import (
     BybitBookTick,
     FluxionPoolStateTick,
@@ -124,6 +125,154 @@ def _rfq_spread_for_series(
     return (candidates[0] + candidates[1]) / 2
 
 
+def _volume_fields(vol: VolumeCompare | None) -> dict[str, object]:
+    """WHI-777 CEX/DEX columns for overview rows (defaults when unknown)."""
+    if vol is None:
+        return {
+            "cex_volume_24h": None,
+            "dex_volume_24h": Decimal(0),
+            "volume_ratio": None,
+            "dex_trade_count_24h": 0,
+            "cex_trade_count_24h": None,
+            "dex_volume_truncated": False,
+            "dex_volume_window_start_ms": None,
+        }
+    return {
+        "cex_volume_24h": vol.cex_volume_24h,
+        "dex_volume_24h": vol.dex.volume_usd,
+        "volume_ratio": vol.volume_ratio,
+        "dex_trade_count_24h": vol.dex.trade_count,
+        "cex_trade_count_24h": vol.cex_trade_count_24h,
+        "dex_volume_truncated": vol.dex.truncated,
+        "dex_volume_window_start_ms": vol.dex.window_start_ms,
+    }
+
+
+def _inventory_quote_is_token0(pair: Pair | BStocksPair) -> bool:
+    """Fallback when no pool tick: UniV3 address order → quote is token0."""
+    if isinstance(pair, BStocksPair):
+        quote = pair.pancake.quote_token_address.lower()
+        base = pair.pancake.native_token.lower()
+    else:
+        quote = pair.fluxion.quote_token_address.lower()
+        base = pair.fluxion.wrapper_token.lower()
+    return quote < base
+
+
+def _collector_coverage_ms(reader: JournalReader) -> int | None:
+    """Write-once first start, falling back to this process start."""
+    started_raw = reader.get_meta("collector_first_started_ms") or reader.get_meta(
+        "collector_started_ms"
+    )
+    if started_raw is None:
+        return None
+    try:
+        return int(started_raw)
+    except ValueError:
+        return None
+
+
+def _quote_is_token0_resolved(
+    pair: Pair | BStocksPair,
+    *,
+    reader: JournalReader,
+    amm: FluxionPoolStateTick | None,
+) -> bool:
+    pool_tick = amm if amm is not None else reader.latest_pool_state(pair.id)
+    q0 = quote_is_token0(pair, pool_tick) if pool_tick is not None else None
+    return q0 if q0 is not None else _inventory_quote_is_token0(pair)
+
+
+def _volume_compare_for_pair(
+    pair: Pair | BStocksPair,
+    *,
+    reader: JournalReader,
+    metrics: MetricsConfig,
+    since_ms: int,
+    now_ms: int,
+    include_journal_cex: bool = False,
+    amm: FluxionPoolStateTick | None = None,
+    full_session_split: bool = False,
+) -> VolumeCompare:
+    """Assemble CEX REST vs DEX swap volume (WHI-777).
+
+    Overview path (``full_session_split=False``) uses SQL totals for DEX so
+    the 2s poll does not hydrate every swap row. Detail sets
+    ``full_session_split=True`` for open/closed buckets.
+    """
+    cex = reader.latest_cex_volume(pair.id)
+    earliest = reader.earliest_swap_recv_ts_ms(pair.id)
+    collector_started = _collector_coverage_ms(reader)
+    q0 = _quote_is_token0_resolved(pair, reader=reader, amm=amm)
+    journal = (
+        reader.trades_since(pair.id, since_ms=since_ms) if include_journal_cex else None
+    )
+
+    if full_session_split:
+        swaps = reader.swaps_since(pair.id, since_ms=since_ms)
+        return build_volume_compare(
+            cex_tick=cex,
+            swaps=swaps,
+            quote_is_token0=q0,
+            since_ms=since_ms,
+            now_ms=now_ms,
+            metrics=metrics,
+            earliest_swap_recv_ts_ms=earliest,
+            collector_started_ms=collector_started,
+            journal_trades=journal,
+        )
+
+    # Lightweight overview: SQL sum/count + empty session buckets.
+    from monitor.metrics.volume import (
+        DexVolumeWindow,
+        SessionVolumeSlice,
+        VolumeCompare,
+        aggregate_cex_journal_volume,
+        volume_ratio,
+    )
+
+    notional, count = reader.dex_volume_totals(
+        pair.id, since_ms=since_ms, quote_is_token0=q0
+    )
+    # Truncation metadata only (no swap list).
+    coverage_candidates = [
+        t for t in (collector_started, earliest) if t is not None
+    ]
+    coverage_start = min(coverage_candidates) if coverage_candidates else None
+    truncated = coverage_start is not None and coverage_start > since_ms
+    window_start = coverage_start if truncated else since_ms
+    zero = SessionVolumeSlice(volume_usd=Decimal(0), trade_count=0)
+    dex = DexVolumeWindow(
+        volume_usd=notional,
+        trade_count=count,
+        open=zero,
+        closed=zero,
+        window_start_ms=window_start,
+        requested_since_ms=since_ms,
+        now_ms=now_ms,
+        truncated=truncated,
+        earliest_recv_ts_ms=earliest,
+    )
+    jwin = None
+    if journal is not None:
+        jwin = aggregate_cex_journal_volume(
+            journal, since_ms=since_ms, now_ms=now_ms, metrics=metrics
+        )
+    cex_vol = None if cex is None else cex.volume_quote_24h
+    cex_n = None if cex is None else cex.trade_count_24h
+    if cex_n is None and jwin is not None:
+        cex_n = jwin.trade_count
+    return VolumeCompare(
+        cex_volume_24h=cex_vol,
+        cex_trade_count_24h=cex_n,
+        cex_source=None if cex is None else cex.source,
+        cex_poll_ts_ms=None if cex is None else cex.poll_ts_ms,
+        dex=dex,
+        cex_journal=jwin,
+        volume_ratio=volume_ratio(cex_vol, notional),
+    )
+
+
 def build_pair_overview_row(
     pair: Pair | BStocksPair,
     *,
@@ -136,6 +285,7 @@ def build_pair_overview_row(
     metrics: MetricsConfig,
     tui: TuiConfig,
     ts_ms: int | None = None,
+    volume_compare: VolumeCompare | None = None,
 ) -> PairOverviewRow:
     """Build one overview row. Pure: no I/O.
 
@@ -143,6 +293,7 @@ def build_pair_overview_row(
     is resolved via ``amm_pool_from_pair_tick``.
     """
     ref = tui.reference_size_usd
+    vfields = _volume_fields(volume_compare)
     if bybit is None:
         return PairOverviewRow(
             pair_id=pair.id,
@@ -166,6 +317,7 @@ def build_pair_overview_row(
             volume_24h=volume_24h,
             trades_24h=trades_24h,
             stale=True,
+            **vfields,  # type: ignore[arg-type]
         )
 
     pool = amm_pool_from_tick(pair, amm) if amm is not None else None
@@ -205,6 +357,7 @@ def build_pair_overview_row(
         volume_24h=volume_24h,
         trades_24h=trades_24h,
         stale=False,
+        **vfields,  # type: ignore[arg-type]
     )
 
 
@@ -235,6 +388,14 @@ def build_overview(
         amm = reader.latest_pool_state(pair.id)
         rfq_buy, rfq_sell = reader.latest_rfq_sides(pair.id)
         vol = reader.volume_stats(pair.id, since_ms=since)
+        vcmp = _volume_compare_for_pair(
+            pair,
+            reader=reader,
+            metrics=metrics,
+            since_ms=since,
+            now_ms=ts,
+            amm=amm,
+        )
         if edge_state is not None and bybit is not None:
             # Stamp with exchange time so a stalled collector does not inflate
             # EdgeStats with synthetic 1.5s samples of the same book.
@@ -265,11 +426,13 @@ def build_overview(
                 amm=amm,
                 rfq_buy=rfq_buy,
                 rfq_sell=rfq_sell,
+                # TUI frozen: keep journal CEX notional for legacy Vol cell.
                 volume_24h=vol.bybit_notional,
                 trades_24h=vol.bybit_trade_count + vol.fluxion_swap_count,
                 metrics=metrics,
                 tui=tui,
                 ts_ms=ts,
+                volume_compare=vcmp,
             )
         )
     rows = sort_rows(rows, key=key, desc=desc)
@@ -649,6 +812,16 @@ def build_pair_detail(
     amm = reader.latest_pool_state(pair.id)
     rfq_buy, rfq_sell = reader.latest_rfq_sides(pair.id)
     vol = reader.volume_stats(pair.id, since_ms=since_vol)
+    vcmp = _volume_compare_for_pair(
+        pair,
+        reader=reader,
+        metrics=metrics,
+        since_ms=since_vol,
+        now_ms=ts,
+        include_journal_cex=True,
+        amm=amm,
+        full_session_split=True,
+    )
     overview = build_pair_overview_row(
         pair,
         bybit=bybit,
@@ -660,6 +833,7 @@ def build_pair_detail(
         metrics=metrics,
         tui=tui,
         ts_ms=ts,
+        volume_compare=vcmp,
     )
 
     books = reader.bybit_books(
@@ -793,4 +967,5 @@ def build_pair_detail(
             BehaviorLabel.PRICE_KEEPER
         ),
         rfq_mechanism_share=attr.mechanism.rfq_share,
+        volume_compare=vcmp,
     )

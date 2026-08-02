@@ -20,6 +20,12 @@ function rawValue(
       return parseNum(row.volume_24h);
     case "trades_24h":
       return row.trades_24h;
+    case "cex_volume_24h":
+      return parseNum(row.cex_volume_24h ?? null);
+    case "dex_volume_24h":
+      return parseNum(row.dex_volume_24h ?? null);
+    case "volume_ratio":
+      return parseNum(row.volume_ratio ?? null);
   }
 }
 
@@ -74,8 +80,9 @@ export const SORT_KEYS: { key: SortKey; label: string }[] = [
   { key: "net_edge", label: "Net edge" },
   { key: "amm_spread", label: "AMM bps" },
   { key: "rfq_spread", label: "RFQ bps" },
-  { key: "volume_24h", label: "Vol 24h" },
-  { key: "trades_24h", label: "Trades" },
+  { key: "cex_volume_24h", label: "CEX Vol" },
+  { key: "dex_volume_24h", label: "DEX Vol" },
+  { key: "volume_ratio", label: "CEX/DEX" },
   { key: "bybit_mid", label: "Bybit mid" },
   { key: "pair_id", label: "Pair" },
 ];

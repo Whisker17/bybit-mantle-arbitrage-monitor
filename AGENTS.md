@@ -131,6 +131,13 @@ placeholders. Agents must not assume a module exists until its issue lands. -->
     `underlying_prices` (schema v5); `monitor/underlying` poller wired into
     both collectors; config `config/underlying.yaml` +
     `collector.yaml` `underlying.enabled`. Display/premium column is WHI-779.
+  - **CEX/DEX 24h volume (WHI-777) landed:** CEX REST poll (Bybit
+    `turnover24h` / Binance `quoteVolume`, 60s) → journal `cex_volume_24h`
+    (schema v6); DEX volume from collected swaps with truncation label when
+    window &lt; 24h; overview columns CEX Vol / DEX Vol / CEX÷DEX ratio;
+    detail `volume_compare` panel (session open/closed split); API fields
+    `cex_volume_24h` / `dex_volume_24h` / `volume_ratio` on pairs + detail.
+    Module `monitor/cex_volume` + `monitor/metrics/volume.py`. Both markets.
 
 ## Build, test, run
 

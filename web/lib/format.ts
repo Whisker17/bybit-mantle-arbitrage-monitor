@@ -42,6 +42,28 @@ export function fmtNotional(value: string | number | null | undefined): string {
   return v.toFixed(0);
 }
 
+/** CEX/DEX volume ratio (compact ×). */
+export function fmtVolumeRatio(
+  value: string | number | null | undefined,
+  digits = 1,
+): string {
+  if (value === null || value === undefined || value === "") return DASH;
+  const n = typeof value === "number" ? value : Number(value);
+  if (!Number.isFinite(n)) return String(value);
+  if (n >= 1000) return `${(n / 1000).toFixed(1)}K×`;
+  if (n >= 100) return `${n.toFixed(0)}×`;
+  return `${n.toFixed(digits)}×`;
+}
+
+/** UTC HH:MM for truncated DEX volume labels (WHI-777). */
+export function fmtUtcHm(tsMs: number | null | undefined): string {
+  if (tsMs === null || tsMs === undefined || !Number.isFinite(tsMs)) return DASH;
+  const d = new Date(tsMs);
+  const hh = String(d.getUTCHours()).padStart(2, "0");
+  const mm = String(d.getUTCMinutes()).padStart(2, "0");
+  return `${hh}:${mm}`;
+}
+
 /** Signed USD (PnL v2). Compact for overview cells. */
 export function fmtUsd(
   value: string | number | null | undefined,

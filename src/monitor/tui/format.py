@@ -144,6 +144,9 @@ def sort_rows(
             "bybit_mid": row.bybit_mid,
             "volume_24h": row.volume_24h,
             "trades_24h": row.trades_24h,
+            "cex_volume_24h": row.cex_volume_24h,
+            "dex_volume_24h": row.dex_volume_24h,
+            "volume_ratio": row.volume_ratio,
         }
         return mapping.get(key, row.pair_id)
 

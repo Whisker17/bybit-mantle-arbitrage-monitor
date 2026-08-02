@@ -39,6 +39,12 @@ def test_load_checked_in_collector_config() -> None:
     assert cfg.retention.bybit_book_raw_ms == 172_800_000
     assert cfg.retention.fluxion_swaps_ms is None
     assert cfg.retention.disk.warn_free_bytes >= cfg.retention.disk.critical_free_bytes
+    # WHI-777 CEX REST volume poll
+    assert cfg.cex_volume is not None
+    assert cfg.cex_volume.enabled is True
+    assert cfg.cex_volume.venue == "bybit"
+    assert cfg.cex_volume.poll_interval_s == 60
+    assert cfg.retention.cex_volume_24h_ms == 604_800_000
 
 
 def test_reconnect_max_must_ge_min(tmp_path: Path) -> None:
