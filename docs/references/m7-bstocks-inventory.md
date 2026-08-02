@@ -262,7 +262,7 @@ Uni’s 500/3000).
 | Ticket | Input from this note |
 |--------|----------------------|
 | M7-2 domain/config | **Landed WHI-771:** `config/markets/binance-pancake.yaml` + `monitor.markets`; costs/multiplier_semantics=multiply; collector scaffold under `collector.yaml` `markets.binance-pancake`. |
-| M7 collectors | Binance via **vision** hosts from US VPS; BSC poll budget ~4× Mantle if head-following every block; PCS Swap topic0; `uiMultiplier` refresh loop. |
+| M7 collectors | **Landed WHI-772:** `monitor/binance` + BSC `ChainPoller` (no RFQ); vision hosts; `pool_state_every_n_blocks: 2`; PCS Swap topic0 dual-accept; multiply `ui_multiplier` at journal write. Live `uiMultiplier` refresh loop still open. |
 | M7 metrics | Multiplier: **multiply** Binance mid by UI mult for raw comparison; costs: 10 bps CEX + pool fee bps; no USDT/USDC basis. |
 | M7 attribution | AMM-only; drop RFQ mechanism axis or hard-code `mechanism=amm`. |
 | M7-6 deploy | Prefer vision endpoints on existing VPS; optional non-US sidecar if vision insufficient. |

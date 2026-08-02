@@ -31,6 +31,17 @@ soon — anything touching key handling, RPC credentials defaults to at least Hi
 
 ## Open
 
+- **WHI-772 VPS 30-minute soak + co-resident memory not measured in this PR** (Medium, WHI-772 → M7-6 / WHI-775).
+  Collector wiring lands with unit tests; acceptance “30 分钟实跑 / 0 结构性 gap /
+  内存实测（与现采集器共存）” needs deploy host + keyed BSC RPC. Report totals to
+  M7-6 capacity issue. Latency meta fields (`block_ingest_latency_*`) are wired.
+
+- **bStocks live `uiMultiplier` refresh loop not implemented** (Medium, WHI-772 → later).
+  Inventory snapshots `ui_multiplier` (M7-1); journal multiplies that snapshot at
+  write time. Corporate-action drift needs on-chain `uiMultiplier()` / event
+  subscription (noted open in `docs/references/m7-bstocks-inventory.md`). Latent
+  while nearly all top-10 pairs are 1.0.
+
 - **Open vs closed RFQ coverage / lag not measured on continuous tape** (Medium, WHI-753 → WHI-760).
   `docs/references/m4-closed-session-rfq.md` is a weekend one-shot (3 rounds +
   slim JSON sample). Needs a running collector through ≥1 NYSE RTH day then a

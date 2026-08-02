@@ -309,20 +309,23 @@ def main(argv: list[str] | None = None) -> int:
             args.out.write_text(text + "\n", encoding="utf-8")
         return 0
 
+    if cfg.mantle is None:
+        raise SystemExit("latency_probe requires bybit-fluxion (mantle) collector config")
+    mantle = cfg.mantle
     head_lag = (
         args.head_lag_blocks
         if args.head_lag_blocks is not None
-        else cfg.mantle.head_lag_blocks
+        else mantle.head_lag_blocks
     )
     poll_iv = (
         args.block_poll_interval_s
         if args.block_poll_interval_s is not None
-        else cfg.mantle.block_poll_interval_s
+        else mantle.block_poll_interval_s
     )
     if args.public_rpc:
-        rpc_url = cfg.mantle.public_rpc_url
+        rpc_url = mantle.public_rpc_url
     else:
-        rpc_url = resolve_mantle_rpc_url(cfg.mantle.public_rpc_url)
+        rpc_url = resolve_mantle_rpc_url(mantle.public_rpc_url)
     kind = rpc_url_kind(rpc_url)
 
     pools = [
@@ -356,13 +359,13 @@ def main(argv: list[str] | None = None) -> int:
         rpc_kind=kind,
         pools=pools,
         lop_address=pairs.contracts.limit_order_protocol,
-        multicall3=cfg.mantle.multicall3,
-        rpc_min_interval_s=cfg.mantle.rpc_min_interval_s,
-        rpc_timeout_s=cfg.mantle.rpc_timeout_s,
-        rpc_retries=cfg.mantle.rpc_retries,
-        max_block_gap=cfg.mantle.max_block_gap,
-        max_catchup_blocks=cfg.mantle.max_catchup_blocks,
-        fetch_swap_receipts=cfg.mantle.fetch_swap_receipts,
+        multicall3=mantle.multicall3,
+        rpc_min_interval_s=mantle.rpc_min_interval_s,
+        rpc_timeout_s=mantle.rpc_timeout_s,
+        rpc_retries=mantle.rpc_retries,
+        max_block_gap=mantle.max_block_gap,
+        max_catchup_blocks=mantle.max_catchup_blocks,
+        fetch_swap_receipts=mantle.fetch_swap_receipts,
     )
     text = format_probe_result(result)
     print(text)

@@ -1,7 +1,7 @@
 # Market: Binance ⇄ PancakeSwap bStocks — M7-2 / WHI-771 schema v2.
 # Inventory body under `inventory:` is the former config/binance_pancake_pairs.yaml (M7-1).
 # Multipliers: BEP-677 uiMultiplier — MULTIPLY Binance mid (≠ Bybit divide).
-# Collector runtime for this market lands in M7-3 (WHI-772); inventory is loadable now.
+# Collector runtime: M7-3 / WHI-772 — `python -m monitor.collector --market binance-pancake`.
 # See docs/references/m7-bstocks-inventory.md.
 
 version: 2
