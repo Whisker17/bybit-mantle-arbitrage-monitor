@@ -139,11 +139,7 @@ def build_edge_snapshot(
     )
     amm_edges: list[EdgeResult] = []
     # Same quotability gate as spreads — empty pool must not produce net edge.
-    if (
-        amm is not None
-        and amm_pool is not None
-        and spreads.amm_mid is not None
-    ):
+    if amm_pool is not None and spreads.amm_mid is not None:
         amm_edges = compute_edge_ladder(
             pair_id=bybit.pair_id,
             bybit_bid=bybit.bid_de_multiplied,

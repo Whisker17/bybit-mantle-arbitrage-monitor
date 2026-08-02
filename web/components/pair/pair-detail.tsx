@@ -19,11 +19,13 @@ import { EmptyPanel } from "@/components/ui/empty-panel";
 import { fetchJson } from "@/lib/api";
 import {
   ammQuoteReasonLabel,
+  ammQuoteReasonTitle,
   bpsTone,
   cexPremiumBps,
   fmtDirection,
   fmtDirectionTitle,
   fmtNotional,
+  fmtOrAmmReason,
   fmtPrice,
   fmtSession,
   fmtSignedBps,
@@ -203,16 +205,12 @@ export function PairDetail({ marketId, pairId }: Props) {
           <Field label="Bybit mid" value={fmtPrice(o.bybit_mid)} />
           <Field
             label="AMM mid"
-            value={
-              o.amm_mid == null && ammReason
-                ? ammReason
-                : fmtPrice(o.amm_mid)
-            }
-            title={
-              o.amm_quote_reason === "empty_pool"
-                ? "Pool has zero in-range liquidity — residual slot0 mid suppressed"
-                : undefined
-            }
+            value={fmtOrAmmReason(
+              fmtPrice(o.amm_mid),
+              o.amm_mid,
+              o.amm_quote_reason,
+            )}
+            title={ammQuoteReasonTitle(o.amm_quote_reason)}
           />
           {hasRfq && (
             <Field
@@ -222,11 +220,11 @@ export function PairDetail({ marketId, pairId }: Props) {
           )}
           <Field
             label="vs CEX"
-            value={
-              o.amm_spread_bps == null && ammReason
-                ? ammReason
-                : fmtSignedBps(o.amm_spread_bps)
-            }
+            value={fmtOrAmmReason(
+              fmtSignedBps(o.amm_spread_bps),
+              o.amm_spread_bps,
+              o.amm_quote_reason,
+            )}
             tone={bpsTone(o.amm_spread_bps)}
             title="AMM mid vs CEX mid (bps)"
           />
@@ -257,21 +255,25 @@ export function PairDetail({ marketId, pairId }: Props) {
           />
           <Field
             label="Net edge"
-            value={
-              o.net_edge_bps == null && ammReason
-                ? ammReason
-                : fmtSignedBps(o.net_edge_bps)
-            }
+            value={fmtOrAmmReason(
+              fmtSignedBps(o.net_edge_bps),
+              o.net_edge_bps,
+              o.amm_quote_reason,
+            )}
             tone={bpsTone(o.net_edge_bps)}
           />
           <Field
             label="Direction"
-            value={
+            value={fmtOrAmmReason(
+              fmtDirection(o.net_edge_direction, venues, marketId),
+              o.net_edge_direction,
+              o.amm_quote_reason,
+            )}
+            title={
               o.net_edge_direction == null && ammReason
-                ? ammReason
-                : fmtDirection(o.net_edge_direction, venues, marketId)
+                ? ammQuoteReasonTitle(o.amm_quote_reason)
+                : fmtDirectionTitle(o.net_edge_direction, venues, marketId)
             }
-            title={fmtDirectionTitle(o.net_edge_direction, venues, marketId)}
           />
           <Field label="Venue" value={o.net_edge_venue ?? "—"} />
           <Field

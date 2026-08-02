@@ -19,10 +19,6 @@ from monitor.quotes import FluxionPoolStateTick
 # Wire reason codes (stable API / journal-adjacent). UI maps to human labels.
 AmmQuoteReason = Literal["empty_pool", "invalid_mid"]
 
-# Phantom-spread guardrail: abs(bps) beyond this is almost never a real arb
-# on liquid tokenized stocks; tests fail when a residual mid leaks through.
-MAX_SANE_ABS_BPS = Decimal(5000)
-
 
 def quotable_amm_mid(
     tick: FluxionPoolStateTick | None,
@@ -51,26 +47,8 @@ def is_pool_quotable(tick: FluxionPoolStateTick | None) -> bool:
     return mid is not None
 
 
-def assert_sane_bps(value: Decimal | None, *, limit: Decimal = MAX_SANE_ABS_BPS) -> None:
-    """Test-only guardrail: fail loudly on phantom-magnitude bps.
-
-    Production paths never call this — empty-pool suppression is the fix.
-    Tests on any bps column should call it so residual-mid bugs surface as
-    assertion failures rather than screenshots.
-    """
-    if value is None:
-        return
-    if abs(value) > limit:
-        raise AssertionError(
-            f"bps magnitude {value} exceeds sane limit ±{limit} "
-            f"(likely residual empty-pool mid or bad join)"
-        )
-
-
 __all__ = [
-    "MAX_SANE_ABS_BPS",
     "AmmQuoteReason",
-    "assert_sane_bps",
     "is_pool_quotable",
     "quotable_amm_mid",
 ]

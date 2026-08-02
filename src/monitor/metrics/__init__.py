@@ -22,9 +22,7 @@ from monitor.metrics.amm_pool import (
     amm_pool_from_tick,
 )
 from monitor.metrics.amm_quote import (
-    MAX_SANE_ABS_BPS,
     AmmQuoteReason,
-    assert_sane_bps,
     is_pool_quotable,
     quotable_amm_mid,
 )
@@ -88,7 +86,6 @@ from monitor.metrics.stats import (
 )
 
 __all__ = [
-    "MAX_SANE_ABS_BPS",
     "AmmPoolState",
     "AmmQuoteReason",
     "BreachStats",
@@ -115,7 +112,6 @@ __all__ = [
     "VenueKind",
     "amm_pool_from_pair_tick",
     "amm_pool_from_tick",
-    "assert_sane_bps",
     "best_net_edge",
     "build_edge_snapshot",
     "build_pnl_pair_snapshot",

@@ -16,7 +16,30 @@ export function ammQuoteReasonLabel(
   reason: AmmQuoteReason | null | undefined,
 ): string | null {
   if (reason == null) return null;
-  return AMM_QUOTE_REASON_LABEL[reason] ?? reason;
+  return AMM_QUOTE_REASON_LABEL[reason];
+}
+
+/** Prefer formatted value; when null and reason present, show reason label. */
+export function fmtOrAmmReason(
+  formatted: string,
+  value: string | number | null | undefined,
+  reason: AmmQuoteReason | null | undefined,
+): string {
+  if (value !== null && value !== undefined && value !== "") return formatted;
+  return ammQuoteReasonLabel(reason) ?? formatted;
+}
+
+/** Shared hover copy when AMM mid is suppressed (WHI-795). */
+export function ammQuoteReasonTitle(
+  reason: AmmQuoteReason | null | undefined,
+): string | undefined {
+  if (reason === "empty_pool") {
+    return "Pool has zero in-range liquidity — residual slot0 mid suppressed";
+  }
+  if (reason === "invalid_mid") {
+    return "AMM mid non-positive — suppressed";
+  }
+  return undefined;
 }
 
 /**

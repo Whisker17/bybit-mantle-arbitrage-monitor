@@ -12,14 +12,24 @@ from zoneinfo import ZoneInfo
 
 import pytest
 
-from monitor.metrics.amm_quote import (
-    MAX_SANE_ABS_BPS,
-    assert_sane_bps,
-    quotable_amm_mid,
-)
+from monitor.metrics.amm_quote import quotable_amm_mid
 from monitor.metrics.config import load_metrics_config
 from monitor.metrics.snapshot import build_edge_snapshot, build_spread_snapshot
 from monitor.quotes import BybitBookTick, FluxionPoolStateTick
+
+# Test-only scaffold (not production) — residual empty-pool mids often exceed this.
+MAX_SANE_ABS_BPS = Decimal(5000)
+
+
+def assert_sane_bps(value: Decimal | None, *, limit: Decimal = MAX_SANE_ABS_BPS) -> None:
+    if value is None:
+        return
+    if abs(value) > limit:
+        raise AssertionError(
+            f"bps magnitude {value} exceeds sane limit ±{limit} "
+            f"(likely residual empty-pool mid or bad join)"
+        )
+
 
 ET = ZoneInfo("America/New_York")
 

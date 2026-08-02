@@ -147,8 +147,6 @@ def test_overview_row_matches_m3_edge() -> None:
 
 def test_overview_row_empty_pool_suppresses_amm_and_premium() -> None:
     """WHI-795: residual empty-pool mid → n/a + empty_pool reason (no phantom bps)."""
-    from monitor.metrics.amm_quote import assert_sane_bps
-
     pairs = load_pairs_config()
     pair = pairs.pair_by_id("AAPLx")
     metrics = load_metrics_config()
@@ -214,9 +212,9 @@ def test_overview_row_empty_pool_suppresses_amm_and_premium() -> None:
     assert row.net_edge_bps is None
     assert row.net_edge_direction is None
     assert row.amm_premium_bps is None
-    assert_sane_bps(row.amm_spread_bps)
-    assert_sane_bps(row.amm_premium_bps)
-    assert_sane_bps(row.net_edge_bps)
+    # No residual mid → no phantom magnitude (guardrail would trip > ±5000).
+    for bps in (row.amm_spread_bps, row.amm_premium_bps, row.net_edge_bps):
+        assert bps is None or abs(bps) <= Decimal(5000)
 
 
 def test_overview_row_wires_premium_fields() -> None:

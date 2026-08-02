@@ -29,7 +29,6 @@ from monitor.tui.format import (
     fmt_direction,
     fmt_notional,
     fmt_price,
-    fmt_price_or_reason,
     fmt_session,
     fmt_signed_bps,
     short_addr,
@@ -138,16 +137,12 @@ class OverviewScreen(Screen[None]):
                     fmt_price(row.bybit_bid),
                     fmt_price(row.bybit_ask),
                     fmt_price(row.bybit_mid),
-                    fmt_price_or_reason(row.amm_mid, row.amm_quote_reason),
+                    fmt_price(row.amm_mid),
                     fmt_price(row.rfq_buy),
                     fmt_price(row.rfq_sell),
-                    fmt_signed_bps(
-                        row.amm_spread_bps, reason=row.amm_quote_reason
-                    ),
+                    fmt_signed_bps(row.amm_spread_bps),
                     fmt_signed_bps(row.rfq_spread_bps),
-                    fmt_signed_bps(
-                        row.net_edge_bps, reason=row.amm_quote_reason
-                    ),
+                    fmt_signed_bps(row.net_edge_bps),
                     fmt_direction(
                         row.net_edge_direction,
                         cex_venue=self._app_state.cex_venue,
@@ -256,8 +251,8 @@ class DetailScreen(Screen[None]):
             f"[bold]{model.pair_id}[/] {model.name}{liq}  "
             f"session={fmt_session(model.session_now)}  "
             f"mid={fmt_price(o.bybit_mid)}  "
-            f"AMM={fmt_price_or_reason(o.amm_mid, o.amm_quote_reason)}  "
-            f"net={fmt_signed_bps(o.net_edge_bps, reason=o.amm_quote_reason)} bps "
+            f"AMM={fmt_price(o.amm_mid)}  "
+            f"net={fmt_signed_bps(o.net_edge_bps)} bps "
             f"({dir_label} {o.net_edge_venue or '—'})"
         )
 

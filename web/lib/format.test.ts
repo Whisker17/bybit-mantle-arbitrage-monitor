@@ -15,6 +15,7 @@ import {
   fmtDirection,
   fmtDirectionTitle,
   fmtNotional,
+  fmtOrAmmReason,
   fmtPct,
   fmtPrice,
   fmtSession,
@@ -36,6 +37,16 @@ describe("ammQuoteReasonLabel", () => {
     assert.equal(ammQuoteReasonLabel("invalid_mid"), "invalid mid");
     assert.equal(ammQuoteReasonLabel(null), null);
     assert.equal(ammQuoteReasonLabel(undefined), null);
+  });
+});
+
+describe("fmtOrAmmReason", () => {
+  it("keeps formatted value when present", () => {
+    assert.equal(fmtOrAmmReason("+10.0", "10", "empty_pool"), "+10.0");
+  });
+  it("substitutes reason when value missing", () => {
+    assert.equal(fmtOrAmmReason("—", null, "empty_pool"), "empty pool");
+    assert.equal(fmtOrAmmReason("—", null, null), "—");
   });
 });
 

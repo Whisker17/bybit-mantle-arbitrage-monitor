@@ -8,6 +8,7 @@ import { Badge } from "@/components/ui/badge";
 import { cn } from "@/lib/cn";
 import {
   ammQuoteReasonLabel,
+  ammQuoteReasonTitle,
   bpsTone,
   cexPremiumBps,
   fmtDirection,
@@ -338,7 +339,7 @@ function AmmMidCell({ row }: { row: PairOverviewRow }) {
     return (
       <span
         className="text-muted-foreground"
-        title="Pool has zero in-range liquidity — residual slot0 mid suppressed"
+        title={ammQuoteReasonTitle(row.amm_quote_reason)}
       >
         {reason}
       </span>
@@ -528,7 +529,7 @@ function DexVsUndCell({
     return (
       <span
         className="text-muted-foreground"
-        title="Pool has zero in-range liquidity — residual mid suppressed"
+        title={ammQuoteReasonTitle(row.amm_quote_reason)}
       >
         {emptyPool}
       </span>
@@ -771,7 +772,7 @@ export function PairsTable({
                     <BpsCell
                       value={row.amm_spread_bps}
                       emptyLabel={ammQuoteReasonLabel(row.amm_quote_reason)}
-                      emptyTitle="Pool has zero in-range liquidity — residual mid suppressed"
+                      emptyTitle={ammQuoteReasonTitle(row.amm_quote_reason)}
                     />
                   </td>
                   {hasRfq && (
@@ -809,14 +810,22 @@ export function PairsTable({
                     <BpsCell
                       value={row.net_edge_bps}
                       emptyLabel={ammQuoteReasonLabel(row.amm_quote_reason)}
-                      emptyTitle="Pool has zero in-range liquidity — no net edge"
+                      emptyTitle={ammQuoteReasonTitle(row.amm_quote_reason)}
                     />
                   </td>
                   <td
                     className="px-2 py-1.5 text-muted-foreground"
-                    title={dirTitle}
+                    title={
+                      row.net_edge_direction == null &&
+                      ammQuoteReasonLabel(row.amm_quote_reason)
+                        ? ammQuoteReasonTitle(row.amm_quote_reason)
+                        : dirTitle
+                    }
                   >
-                    {fmtDirection(row.net_edge_direction, venues, marketId)}
+                    {row.net_edge_direction == null &&
+                    ammQuoteReasonLabel(row.amm_quote_reason)
+                      ? ammQuoteReasonLabel(row.amm_quote_reason)
+                      : fmtDirection(row.net_edge_direction, venues, marketId)}
                   </td>
                   {/* Vol gap */}
                   <td

@@ -16,45 +16,15 @@ def fmt_price(value: Decimal | None, *, digits: int = 4) -> str:
     return f"{value:.{digits}f}"
 
 
-def fmt_amm_quote_reason(reason: str | None) -> str | None:
-    """Human label for AMM quote suppression (WHI-795)."""
-    if reason is None:
-        return None
-    if reason == "empty_pool":
-        return "empty pool"
-    if reason == "invalid_mid":
-        return "invalid mid"
-    return reason
-
-
-def fmt_price_or_reason(
-    value: Decimal | None,
-    reason: str | None,
-    *,
-    digits: int = 4,
-) -> str:
-    """Price cell: prefer reason label when mid is suppressed."""
-    if value is None:
-        label = fmt_amm_quote_reason(reason)
-        return label if label is not None else "—"
-    return fmt_price(value, digits=digits)
-
-
 def fmt_bps(value: Decimal | None, *, digits: int = 1) -> str:
     if value is None:
         return "—"
     return f"{value:.{digits}f}"
 
 
-def fmt_signed_bps(
-    value: Decimal | None,
-    *,
-    digits: int = 1,
-    reason: str | None = None,
-) -> str:
+def fmt_signed_bps(value: Decimal | None, *, digits: int = 1) -> str:
     if value is None:
-        label = fmt_amm_quote_reason(reason)
-        return label if label is not None else "—"
+        return "—"
     sign = "+" if value > 0 else ""
     return f"{sign}{value:.{digits}f}"
 
