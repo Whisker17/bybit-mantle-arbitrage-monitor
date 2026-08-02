@@ -182,7 +182,8 @@ const COLS: Col[] = [
     group: "edge",
     title: "Arb direction (market-aware short codes)",
   },
-  { id: "ven", key: null, label: "Ven", group: "edge" },
+  // Ven (net_edge_venue amm/rfq) dropped from overview — low density; RFQ
+  // columns already surface mechanism, and binance-pancake is always amm.
   {
     id: "vol_ratio",
     key: "volume_ratio",
@@ -706,9 +707,6 @@ export function PairsTable({
                     title={dirTitle}
                   >
                     {fmtDirection(row.net_edge_direction, venues, marketId)}
-                  </td>
-                  <td className="px-2 py-1.5 uppercase text-muted-foreground">
-                    {row.net_edge_venue ?? "—"}
                   </td>
                   {/* Vol gap */}
                   <td
