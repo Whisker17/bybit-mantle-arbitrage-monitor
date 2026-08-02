@@ -4,7 +4,10 @@ from __future__ import annotations
 
 from decimal import Decimal
 
+from eth_utils import keccak  # type: ignore[attr-defined]
+
 from monitor.attribution.mm_draft import (
+    DraftAddressFeatures,
     DraftLabel,
     DraftThresholds,
     InventoryEvent,
@@ -19,6 +22,9 @@ from monitor.attribution.mm_draft import (
     decode_rfq_fill_from_receipt,
     inventory_mean_reversion,
 )
+
+TOPIC_TRANSFER = "0x" + keccak(text="Transfer(address,address,uint256)").hex()
+TOPIC_APPROVAL = "0x" + keccak(text="Approval(address,address,uint256)").hex()
 
 
 def test_inventory_mean_reversion_oscillation() -> None:
@@ -61,9 +67,7 @@ def test_build_position_series_cumulative() -> None:
 
 
 def test_assign_market_maker_via_rfq_maker() -> None:
-    from monitor.attribution.mm_draft import AddressFeatures
-
-    feats = AddressFeatures(
+    feats = DraftAddressFeatures(
         address="0xmm",
         n_pairs=1,
         n_amm=0,
@@ -79,6 +83,8 @@ def test_assign_market_maker_via_rfq_maker() -> None:
         closed_share=0.5,
         convergence_ratio=None,
         n_convergence_scored=0,
+        bybit_align_ratio=None,
+        n_bybit_align_scored=0,
         both_directions=False,
         pairs=("TSLAx",),
         inv_mean_reversion=None,
@@ -89,9 +95,7 @@ def test_assign_market_maker_via_rfq_maker() -> None:
 
 
 def test_assign_arb_bot_via_convergence() -> None:
-    from monitor.attribution.mm_draft import AddressFeatures
-
-    feats = AddressFeatures(
+    feats = DraftAddressFeatures(
         address="0xarb",
         n_pairs=1,
         n_amm=30,
@@ -107,6 +111,8 @@ def test_assign_arb_bot_via_convergence() -> None:
         closed_share=0.1,
         convergence_ratio=0.9,
         n_convergence_scored=25,
+        bybit_align_ratio=None,
+        n_bybit_align_scored=0,
         both_directions=True,
         pairs=("TSLAx",),
         inv_mean_reversion=0.3,
@@ -116,9 +122,7 @@ def test_assign_arb_bot_via_convergence() -> None:
 
 
 def test_assign_rebalancer_via_cex_touches() -> None:
-    from monitor.attribution.mm_draft import AddressFeatures
-
-    feats = AddressFeatures(
+    feats = DraftAddressFeatures(
         address="0xreb",
         n_pairs=1,
         n_amm=0,
@@ -134,6 +138,8 @@ def test_assign_rebalancer_via_cex_touches() -> None:
         closed_share=None,
         convergence_ratio=None,
         n_convergence_scored=0,
+        bybit_align_ratio=None,
+        n_bybit_align_scored=0,
         both_directions=False,
         pairs=("TSLAx",),
         inv_mean_reversion=None,
@@ -143,9 +149,7 @@ def test_assign_rebalancer_via_cex_touches() -> None:
 
 
 def test_arb_bot_outranks_rebalancer() -> None:
-    from monitor.attribution.mm_draft import AddressFeatures
-
-    feats = AddressFeatures(
+    feats = DraftAddressFeatures(
         address="0xarb2",
         n_pairs=2,
         n_amm=30,
@@ -161,6 +165,8 @@ def test_arb_bot_outranks_rebalancer() -> None:
         closed_share=0.2,
         convergence_ratio=0.9,
         n_convergence_scored=25,
+        bybit_align_ratio=None,
+        n_bybit_align_scored=0,
         both_directions=True,
         pairs=("TSLAx", "AAPLx"),
         inv_mean_reversion=0.4,
@@ -180,7 +186,7 @@ def test_decode_rfq_fill_maker_from_approval() -> None:
     approval = {
         "address": stock,
         "topics": [
-            "0x" + __import__("eth_utils").keccak(text="Approval(address,address,uint256)").hex(),
+            TOPIC_APPROVAL,
             "0x" + "0" * 24 + maker[2:],
             "0x" + "0" * 24 + lop[2:],
         ],
@@ -190,7 +196,7 @@ def test_decode_rfq_fill_maker_from_approval() -> None:
     xfer_stock = {
         "address": stock,
         "topics": [
-            "0x" + __import__("eth_utils").keccak(text="Transfer(address,address,uint256)").hex(),
+            TOPIC_TRANSFER,
             "0x" + "0" * 24 + maker[2:],
             "0x" + "0" * 24 + router[2:],
         ],
@@ -200,7 +206,7 @@ def test_decode_rfq_fill_maker_from_approval() -> None:
     xfer_usdc = {
         "address": usdc,
         "topics": [
-            "0x" + __import__("eth_utils").keccak(text="Transfer(address,address,uint256)").hex(),
+            TOPIC_TRANSFER,
             "0x" + "0" * 24 + router[2:],
             "0x" + "0" * 24 + taker[2:],
         ],
@@ -275,6 +281,7 @@ def test_compute_pair_features_directions() -> None:
     assert feats.n_buy == 1 and feats.n_sell == 1
     assert feats.convergence_ratio == 0.5
     assert feats.n_amm == 2
-    agg = aggregate_address_features([feats], address="0x1")
+    agg = aggregate_address_features(ev, address="0x1")
     assert agg.both_directions
     assert agg.n_pairs == 1
+    assert agg.median_notional_usd == Decimal("110")  # median of 100,120

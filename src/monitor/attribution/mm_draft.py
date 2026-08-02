@@ -9,10 +9,9 @@ from __future__ import annotations
 
 from collections import defaultdict
 from collections.abc import Iterable, Mapping, Sequence
-from dataclasses import dataclass, field
+from dataclasses import dataclass
 from decimal import Decimal
 from enum import StrEnum
-from statistics import mean, pstdev
 
 from eth_utils import keccak  # type: ignore[attr-defined]
 
@@ -44,6 +43,7 @@ class InventoryEvent:
     direction: str | None = None  # buy_native | sell_native | None
     notional_usd: Decimal | None = None
     converges: bool | None = None
+    bybit_align: bool | None = None  # direction vs Bybit mid Δ (lead-lag)
     session: str | None = None  # open | closed
     role: str | None = None  # taker | maker | transfer_counterparty
     counterparty: str | None = None
@@ -81,15 +81,12 @@ class AddressPairFeatures:
     convergence_ratio: float | None
     n_convergence_scored: int
     # inventory path stats
-    inv_mean: float | None
-    inv_std: float | None
     inv_mean_reversion: float | None  # fraction of steps that move toward 0
-    inv_max_abs: float | None
     final_inventory: Decimal
 
 
 @dataclass(frozen=True, slots=True)
-class AddressFeatures:
+class DraftAddressFeatures:
     address: str
     n_pairs: int
     n_amm: int
@@ -105,6 +102,8 @@ class AddressFeatures:
     closed_share: float | None
     convergence_ratio: float | None
     n_convergence_scored: int
+    bybit_align_ratio: float | None
+    n_bybit_align_scored: int
     both_directions: bool
     # cross-pair
     pairs: tuple[str, ...]
@@ -139,21 +138,20 @@ class DraftThresholds:
     # rebalancer
     reb_min_cex_touch_transfers: int = 3
     reb_min_transfer_notional_native: Decimal = Decimal("1")
-    # arb_bot (align with M4 defaults; gate on scorable convergence)
+    # arb_bot / price_keeper / retail — match config/attribution.yaml (M4)
     arb_min_scored: int = 20
     arb_min_convergence: float = 0.80
-    # price_keeper
+    arb_min_bybit_align_ratio: float = 0.0  # 0 = do not gate (M4 default)
     pk_min_trades: int = 10
-    pk_min_direction_share: float = 0.30
-    pk_max_median_notional_usd: Decimal = Decimal("200")
-    pk_max_trade_notional_usd: Decimal = Decimal("1000")
-    # retail
-    retail_min_trades: int = 3
+    pk_min_direction_share: float = 0.25
+    pk_max_median_notional_usd: Decimal = Decimal("500")
+    pk_max_trade_notional_usd: Decimal = Decimal("2000")
+    retail_min_trades: int = 5
 
 
 @dataclass(frozen=True, slots=True)
 class LabeledAddress:
-    features: AddressFeatures
+    features: DraftAddressFeatures
     label: DraftLabel
     reasons: tuple[str, ...]
 
@@ -246,18 +244,16 @@ def compute_pair_features(series: PositionSeries) -> AddressPairFeatures:
     med = _median_decimal(notionals)
     max_n = max(notionals) if notionals else Decimal(0)
 
-    n_open = sum(1 for e in ev if e.session == "open")
-    n_closed = sum(1 for e in ev if e.session == "closed")
+    trade_ev = [
+        e for e in ev if e.kind in (LedgerKind.AMM_SWAP, LedgerKind.RFQ_FILL)
+    ]
+    n_open = sum(1 for e in trade_ev if e.session == "open")
+    n_closed = sum(1 for e in trade_ev if e.session == "closed")
     sess_den = n_open + n_closed
 
     conv_hits = sum(1 for e in ev if e.converges is True)
     conv_scored = sum(1 for e in ev if e.converges is not None)
-
-    inv_vals = [float(x) for x in series.inventory]
-    inv_mean = mean(inv_vals) if inv_vals else None
-    inv_std = pstdev(inv_vals) if len(inv_vals) >= 2 else (0.0 if inv_vals else None)
     inv_mr = inventory_mean_reversion(series.inventory)
-    inv_max_abs = max((abs(x) for x in inv_vals), default=None)
 
     return AddressPairFeatures(
         address=series.address,
@@ -276,52 +272,50 @@ def compute_pair_features(series: PositionSeries) -> AddressPairFeatures:
         closed_share=_ratio(n_closed, sess_den),
         convergence_ratio=_ratio(conv_hits, conv_scored),
         n_convergence_scored=conv_scored,
-        inv_mean=inv_mean,
-        inv_std=inv_std,
         inv_mean_reversion=inv_mr,
-        inv_max_abs=inv_max_abs,
         final_inventory=series.final_inventory,
     )
 
 
 def aggregate_address_features(
-    pair_features: Sequence[AddressPairFeatures],
+    events: Sequence[InventoryEvent],
     *,
     address: str,
     is_contract: bool | None = None,
-) -> AddressFeatures:
+) -> DraftAddressFeatures:
+    """Aggregate features from raw ledger events (correct median / session)."""
     addr = address.lower()
-    rows = [p for p in pair_features if p.address.lower() == addr]
-    pairs = tuple(sorted({p.pair_id for p in rows if p.n_events > 0}))
-    n_amm = sum(p.n_amm for p in rows)
-    n_rfq_m = sum(p.n_rfq_maker for p in rows)
-    n_rfq_t = sum(p.n_rfq_taker for p in rows)
-    n_xfer = sum(p.n_transfer for p in rows)
-    n_buy = sum(p.n_buy for p in rows)
-    n_sell = sum(p.n_sell for p in rows)
-    notional = sum((p.notional_usd for p in rows), start=Decimal(0))
-    # recompute median/max from pair medians is wrong; use max of pair maxes /
-    # notional-weighted approx for draft — prefer raw events when available.
-    medians = [p.median_notional_usd for p in rows if p.n_amm + p.n_rfq_maker + p.n_rfq_taker > 0]
-    maxes = [p.max_notional_usd for p in rows]
-    # session / convergence: trade-count weighted
-    open_num = closed_num = 0
-    for p in rows:
-        den = p.n_amm + p.n_rfq_maker + p.n_rfq_taker
-        if den <= 0:
-            continue
-        if p.open_share is not None:
-            open_num += int(round(p.open_share * den))
-            closed_num += den - int(round(p.open_share * den))
-    sess_den = open_num + closed_num
-    conv_hits = 0
-    conv_scored = 0
-    for p in rows:
-        if p.convergence_ratio is not None and p.n_convergence_scored:
-            conv_hits += int(round(p.convergence_ratio * p.n_convergence_scored))
-            conv_scored += p.n_convergence_scored
-    mrs = [p.inv_mean_reversion for p in rows if p.inv_mean_reversion is not None]
-    return AddressFeatures(
+    rows = [e for e in events if e.address.lower() == addr]
+    pairs = tuple(sorted({e.pair_id for e in rows}))
+    n_amm = sum(1 for e in rows if e.kind is LedgerKind.AMM_SWAP)
+    n_rfq_m = sum(
+        1 for e in rows if e.kind is LedgerKind.RFQ_FILL and e.role == "maker"
+    )
+    n_rfq_t = sum(
+        1 for e in rows if e.kind is LedgerKind.RFQ_FILL and e.role == "taker"
+    )
+    n_xfer = sum(1 for e in rows if e.kind is LedgerKind.ERC20_TRANSFER)
+    n_buy = sum(1 for e in rows if e.direction == "buy_native")
+    n_sell = sum(1 for e in rows if e.direction == "sell_native")
+    notionals = [e.notional_usd for e in rows if e.notional_usd is not None]
+    notional = sum(notionals, start=Decimal(0))
+    trade_ev = [
+        e for e in rows if e.kind in (LedgerKind.AMM_SWAP, LedgerKind.RFQ_FILL)
+    ]
+    n_open = sum(1 for e in trade_ev if e.session == "open")
+    n_closed = sum(1 for e in trade_ev if e.session == "closed")
+    sess_den = n_open + n_closed
+    conv_hits = sum(1 for e in rows if e.converges is True)
+    conv_scored = sum(1 for e in rows if e.converges is not None)
+    align_hits = sum(1 for e in rows if e.bybit_align is True)
+    align_scored = sum(1 for e in rows if e.bybit_align is not None)
+    mrs: list[float] = []
+    for pid in pairs:
+        series = build_position_series(rows, address=addr, pair_id=pid)
+        mr = inventory_mean_reversion(series.inventory)
+        if mr is not None:
+            mrs.append(mr)
+    return DraftAddressFeatures(
         address=addr,
         n_pairs=len(pairs),
         n_amm=n_amm,
@@ -331,12 +325,14 @@ def aggregate_address_features(
         n_buy=n_buy,
         n_sell=n_sell,
         notional_usd=notional,
-        median_notional_usd=_median_decimal(medians),
-        max_notional_usd=max(maxes) if maxes else Decimal(0),
-        open_share=_ratio(open_num, sess_den),
-        closed_share=_ratio(closed_num, sess_den),
+        median_notional_usd=_median_decimal(notionals),
+        max_notional_usd=max(notionals) if notionals else Decimal(0),
+        open_share=_ratio(n_open, sess_den),
+        closed_share=_ratio(n_closed, sess_den),
         convergence_ratio=_ratio(conv_hits, conv_scored),
         n_convergence_scored=conv_scored,
+        bybit_align_ratio=_ratio(align_hits, align_scored),
+        n_bybit_align_scored=align_scored,
         both_directions=n_buy > 0 and n_sell > 0,
         pairs=pairs,
         inv_mean_reversion=(sum(mrs) / len(mrs)) if mrs else None,
@@ -345,7 +341,7 @@ def aggregate_address_features(
 
 
 def assign_draft_label(
-    features: AddressFeatures,
+    features: DraftAddressFeatures,
     *,
     thresholds: DraftThresholds | None = None,
     cex_touch_transfers: int = 0,
@@ -399,11 +395,19 @@ def assign_draft_label(
         and features.convergence_ratio is not None
         and features.convergence_ratio >= th.arb_min_convergence
     ):
-        reasons.append(
-            f"convergence={features.convergence_ratio:.2f} "
-            f"on {features.n_convergence_scored} scored"
+        align_ok = (
+            th.arb_min_bybit_align_ratio <= 0
+            or features.bybit_align_ratio is None
+            or features.bybit_align_ratio >= th.arb_min_bybit_align_ratio
         )
-        return LabeledAddress(features, DraftLabel.ARB_BOT, tuple(reasons))
+        if align_ok:
+            reasons.append(
+                f"convergence={features.convergence_ratio:.2f} "
+                f"on {features.n_convergence_scored} scored"
+            )
+            if features.bybit_align_ratio is not None:
+                reasons.append(f"bybit_align={features.bybit_align_ratio:.2f}")
+            return LabeledAddress(features, DraftLabel.ARB_BOT, tuple(reasons))
 
     # --- rebalancer ---
     if cex_touch_transfers >= th.reb_min_cex_touch_transfers:
@@ -755,23 +759,22 @@ def count_cex_touches(
     transfers: Sequence[TransferEdge],
     address: str,
     cex_wallets: Iterable[str],
+    *,
+    min_amount: Decimal = Decimal("0"),
 ) -> int:
+    """Count transfers between ``address`` and any CEX-cluster wallet.
+
+    ``min_amount`` filters dust (pass
+    ``DraftThresholds.reb_min_transfer_notional_native`` for the draft gate).
+    """
     addr = address.lower()
     cex = {c.lower() for c in cex_wallets}
     n = 0
     for t in transfers:
+        if t.amount < min_amount:
+            continue
         if t.frm.lower() == addr and t.to.lower() in cex:
             n += 1
         elif t.to.lower() == addr and t.frm.lower() in cex:
             n += 1
     return n
-
-
-@dataclass
-class AnalysisBundle:
-    """In-memory container the CLI fills; report consumes."""
-
-    events: list[InventoryEvent] = field(default_factory=list)
-    transfers: list[TransferEdge] = field(default_factory=list)
-    rfq_fills: list[DecodedRfqFill] = field(default_factory=list)
-    contract_flags: dict[str, bool] = field(default_factory=dict)

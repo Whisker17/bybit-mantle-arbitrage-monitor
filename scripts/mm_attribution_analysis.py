@@ -19,7 +19,6 @@ from __future__ import annotations
 
 import argparse
 import json
-import os
 import sys
 import time
 from collections import defaultdict
@@ -37,7 +36,11 @@ from eth_utils import keccak  # type: ignore[attr-defined]
 _REPO = Path(__file__).resolve().parents[1]
 sys.path.insert(0, str(_REPO / "src"))
 
-from monitor.attribution.convergence import is_converging  # noqa: E402
+from monitor.attribution.convergence import (  # noqa: E402
+    bybit_move_aligned,
+    is_converging,
+    resolve_bybit_mid_prev,
+)
 from monitor.attribution.mm_draft import (  # noqa: E402
     DraftThresholds,
     InventoryEvent,
@@ -45,13 +48,11 @@ from monitor.attribution.mm_draft import (  # noqa: E402
     TransferEdge,
     aggregate_address_features,
     assign_draft_label,
-    build_position_series,
     cluster_cex_candidates,
-    compute_pair_features,
     count_cex_touches,
     decode_rfq_fill_from_receipt,
 )
-from monitor.collector.config import resolve_mantle_rpc_url  # noqa: E402
+from monitor.collector.config import load_dotenv, resolve_mantle_rpc_url  # noqa: E402
 from monitor.fluxion.abi import (  # noqa: E402
     TOPIC0_ORDER_FILLED,
     TOPIC0_V3_SWAP,
@@ -491,11 +492,30 @@ def build_events(
         conv: bool | None = None
         if direction in ("buy_native", "sell_native") and flux_mid and bmid:
             conv = is_converging(direction, fluxion_mid=flux_mid, bybit_mid=bmid)
+        align: bool | None = None
+        series = bybit.get(s["pair_id"], [])
+        # lead-lag: mid ~5s before trade (M4 default lookback)
+        prev = None
+        if series:
+            # convert list of (ts, float) for resolve helper
+            mids = [(int(ts), Decimal(str(m))) for ts, m in series]
+            prev = resolve_bybit_mid_prev(ts_ms, mids, lookback_ms=5000)
+        if (
+            direction in ("buy_native", "sell_native")
+            and bmid is not None
+            and prev is not None
+        ):
+            align = bybit_move_aligned(
+                direction,
+                bybit_mid=bmid,
+                bybit_mid_prev=prev,
+                min_move_bps=Decimal("1"),
+            )
         # notional ≈ |wrapper_delta| * price
         try:
             delta = Decimal(s["taker_delta_wrapper"])
             notional = abs(delta) * flux_mid if flux_mid else None
-        except Exception:  # noqa: BLE001
+        except (ArithmeticError, ValueError, TypeError):
             delta = Decimal(0)
             notional = None
         events.append(
@@ -509,6 +529,7 @@ def build_events(
                 direction=direction if direction != "unknown" else None,
                 notional_usd=notional,
                 converges=conv,
+                bybit_align=align,
                 session=sess,
                 role="taker",
                 counterparty=s["sender"],
@@ -652,29 +673,25 @@ def run_analysis(
     # Never treat infra as a CEX wallet even if it slipped through.
     cex_addrs = [c.address for c in cex[:20] if c.address not in infra]
 
-    # address × pair series
-    keys = {(e.address.lower(), e.pair_id) for e in events}
-    pair_feats = []
-    for addr, pid in sorted(keys):
-        if addr in infra:
+    by_addr_n: dict[str, int] = defaultdict(int)
+    for e in events:
+        if e.address.lower() in infra:
             continue
-        series = build_position_series(events, address=addr, pair_id=pid)
-        if series.events:
-            pair_feats.append(compute_pair_features(series))
+        by_addr_n[e.address.lower()] += 1
 
-    by_addr: dict[str, list] = defaultdict(list)
-    for pf in pair_feats:
-        by_addr[pf.address].append(pf)
-
+    th = DraftThresholds()
     labeled = []
-    for addr, pfs in sorted(by_addr.items(), key=lambda kv: -sum(p.n_amm for p in kv[1])):
-        if addr in infra:
-            continue
+    for addr, _n in sorted(by_addr_n.items(), key=lambda kv: -kv[1]):
         feats = aggregate_address_features(
-            pfs, address=addr, is_contract=contract_flags.get(addr)
+            events, address=addr, is_contract=contract_flags.get(addr)
         )
-        touches = count_cex_touches(edges, addr, cex_addrs)
-        lab = assign_draft_label(feats, cex_touch_transfers=touches)
+        touches = count_cex_touches(
+            edges,
+            addr,
+            cex_addrs,
+            min_amount=th.reb_min_transfer_notional_native,
+        )
+        lab = assign_draft_label(feats, thresholds=th, cex_touch_transfers=touches)
         labeled.append(
             {
                 "address": addr,
@@ -716,6 +733,7 @@ def run_analysis(
         "reb_min_transfer_notional_native": str(th.reb_min_transfer_notional_native),
         "arb_min_scored": th.arb_min_scored,
         "arb_min_convergence": th.arb_min_convergence,
+        "arb_min_bybit_align_ratio": th.arb_min_bybit_align_ratio,
         "pk_min_trades": th.pk_min_trades,
         "pk_min_direction_share": th.pk_min_direction_share,
         "pk_max_median_notional_usd": str(th.pk_max_median_notional_usd),
@@ -929,13 +947,6 @@ def render_report(
                 f"[tx]({MANTLESCAN_TX}{f['tx_hash']}) |"
             )
         lines.append("")
-        # frequency of makers
-        maker_counts: dict[str, int] = defaultdict(int)
-        for f in result.get("rfq_sample") or []:
-            # use full list from labeled rfq if available — recompute from sample only
-            if f.get("maker"):
-                maker_counts[f["maker"]] += 1
-        # Better: scan all labeled? We only have sample in result — store full in analysis
     else:
         lines.append("_No RFQ fills in window._")
         lines.append("")
@@ -991,8 +1002,10 @@ def render_report(
     lines.append("## Draft machine-checkable rules (feed WHI-768)")
     lines.append("")
     lines.append(
-        "Priority order (first match wins). Thresholds are defaults in "
-        "`DraftThresholds` / `monitor.attribution.mm_draft`."
+        "Priority order (first match wins): market_maker → arb_bot → "
+        "rebalancer → price_keeper → retail → unknown. Thresholds are "
+        "defaults in `DraftThresholds` (M4 gates match "
+        "`config/attribution.yaml`)."
     )
     lines.append("")
     th = result["thresholds"]
@@ -1106,17 +1119,29 @@ def render_report(
         "convergence ratios over days, not for sub-second lead-lag."
     )
     lines.append(
-        "5. **CEX wallets are clustered, not labeled.** Manual Mantlescan / "
+        "5. **Address clustering is partial.** Contract vs EOA is probed for "
+        "up to 200 ledger addresses; deployer/funding-source traces and "
+        "behavior-similarity clustering are **not** implemented in this "
+        "pass (scope cut for WHI-767; WHI-768 may pick them up)."
+    )
+    lines.append(
+        "6. **CEX wallets are clustered, not labeled.** Manual Mantlescan / "
         "Bybit deposit address verification still required before shipping "
         "`rebalancer` as a product label."
     )
     lines.append(
-        "6. **LP Mint/Burn not pulled.** MM LP behavior is out of scope for "
+        "7. **LP Mint/Burn not pulled.** MM LP behavior is out of scope for "
         "this pass; only swap/fill/transfer inventory."
     )
     lines.append(
-        "7. **Pools without AMM** (AMZNx/COINx/MCDx) contribute Transfer-only "
+        "8. **Pools without AMM** (AMZNx/COINx/MCDx) contribute Transfer-only "
         "rows; no swap-based convergence."
+    )
+    lines.append(
+        "9. **Cross-pair MM inventory path** (bidirectional + mean-reversion "
+        "across ≥2 pairs) is implemented but did **not** fire in the 30d "
+        "sample — all five `market_maker` hits came from the RFQ-maker path. "
+        "Thresholds for that branch are unfitted on live xStock flow."
     )
     lines.append("")
     lines.append("## Relationship to M4")
@@ -1179,14 +1204,7 @@ def main() -> int:
     ap.add_argument("--pairs", type=Path, default=_REPO / "config" / "pairs.yaml")
     args = ap.parse_args()
 
-    # Load .env if present
-    env_path = _REPO / ".env"
-    if env_path.exists():
-        for line in env_path.read_text().splitlines():
-            if not line or line.startswith("#") or "=" not in line:
-                continue
-            k, v = line.split("=", 1)
-            os.environ.setdefault(k.strip(), v.strip())
+    load_dotenv(_REPO)
 
     cache = args.cache_dir
     cache.mkdir(parents=True, exist_ok=True)
@@ -1271,17 +1289,6 @@ def main() -> int:
         print("build events", flush=True)
         events, edges = build_events(swaps, rfq, transfers, bybit, metrics_cfg)
 
-        # contracts for top addresses by activity
-        addr_counts: dict[str, int] = defaultdict(int)
-        for e in events:
-            if e.kind is LedgerKind.AMM_SWAP or e.kind is LedgerKind.RFQ_FILL:
-                addr_counts[e.address.lower()] += 1
-        top_addrs = [
-            a for a, _ in sorted(addr_counts.items(), key=lambda kv: -kv[1])[:80]
-        ]
-        print(f"classify {len(top_addrs)} addresses", flush=True)
-        flags = classify_contracts(rpc, top_addrs)
-
         infra = {
             pairs_doc["contracts"]["usdc"].lower(),
             pairs_doc["contracts"]["limit_order_protocol"].lower(),
@@ -1302,6 +1309,13 @@ def main() -> int:
             amm = f.get("amm") or {}
             if amm.get("pool"):
                 infra.add(str(amm["pool"]).lower())
+
+        # Prefer addresses that will be labeled (non-infra ledger participants).
+        addr_set = sorted(
+            {e.address.lower() for e in events if e.address.lower() not in infra}
+        )
+        print(f"classify {min(len(addr_set), 200)} / {len(addr_set)} addresses", flush=True)
+        flags = classify_contracts(rpc, addr_set[:200])
 
         print("score", flush=True)
         result = run_analysis(events, edges, rfq, flags, infra=infra)
