@@ -32,11 +32,15 @@ def main(argv: list[str] | None = None) -> int:
     args = p.parse_args(argv)
 
     cfg = load_underlying_config(None if args.config is None else Path(args.config))
-    tickers = (
-        [t.strip() for t in args.tickers.split(",") if t.strip()]
-        if args.tickers
-        else cfg.covered_tickers()
-    )
+    if args.tickers:
+        requested = [t.strip() for t in args.tickers.split(",") if t.strip()]
+        unknown = [t for t in requested if t not in cfg.tickers]
+        if unknown:
+            print(f"# unknown tickers (not in config): {unknown}", file=sys.stderr)
+            return 2
+        tickers = requested
+    else:
+        tickers = cfg.covered_tickers()
     poller = UnderlyingPoller(cfg, tickers=tickers)
     try:
         ticks = poller.poll_once()
@@ -59,11 +63,17 @@ def main(argv: list[str] | None = None) -> int:
             )
         )
     got = {t.ticker for t in ticks}
-    missing = [t for t in tickers if t not in got and not cfg.tickers[t].uncovered]
+    missing = [
+        t
+        for t in tickers
+        if t not in got and t in cfg.tickers and not cfg.tickers[t].uncovered
+    ]
     if missing:
         print(f"# missing covered tickers: {missing}", file=sys.stderr)
         return 1
-    uncovered = cfg.uncovered_tickers()
+    uncovered = [t for t in tickers if t in cfg.tickers and cfg.tickers[t].uncovered]
+    if not args.tickers:
+        uncovered = cfg.uncovered_tickers()
     if uncovered:
         print(f"# uncovered (expected empty): {uncovered}", file=sys.stderr)
     return 0

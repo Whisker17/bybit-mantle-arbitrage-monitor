@@ -116,7 +116,7 @@ def load_underlying_config(path: Path | None = None) -> UnderlyingConfig:
         )
     try:
         raw = yaml.safe_load(config_path.read_text(encoding="utf-8"))
-    except OSError as exc:
+    except (OSError, yaml.YAMLError) as exc:
         raise UnderlyingConfigError(
             f"cannot read underlying config at {config_path}: {exc}"
         ) from exc

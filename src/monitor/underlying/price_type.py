@@ -64,7 +64,9 @@ def classify_price_type(
             return "live"
         return "close"
 
-    # RTH open now.
+    # RTH open now (NYSE). Non-US sources may still be closed — honor their hint.
+    if source_session_hint == "close":
+        return "close" if age_ms <= stale_after_closed_ms else "stale"
     if age_ms > stale_after_open_ms:
         return "stale"
     if source_session_hint in ("pre", "post"):
