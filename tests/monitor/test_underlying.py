@@ -453,6 +453,9 @@ def test_stamp_underlying_poll_meta_even_when_empty(tmp_path: Path) -> None:
     daemon._stamp_underlying_poll(0, error="poll error: boom", poll_ms=1_700_000_000_100)
     assert store.get_meta("underlying_last_n") == "0"
     assert store.get_meta("underlying_last_error") == "poll error: boom"
+    # Empty successful poll must NOT wipe the prior error trail.
+    daemon._stamp_underlying_poll(0, poll_ms=1_700_000_000_150)
+    assert store.get_meta("underlying_last_error") == "poll error: boom"
 
     daemon._stamp_underlying_poll(5, poll_ms=1_700_000_000_200)
     assert store.get_meta("underlying_last_n") == "5"

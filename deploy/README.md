@@ -71,11 +71,20 @@ sudo systemctl restart xstocks-collector@bybit-fluxion
 sudo systemctl restart xstocks-collector@binance-pancake   # if enabled
 sudo systemctl --no-pager status 'xstocks-collector@*'
 
-# Confirm underlying is alive (WHI-788):
-sqlite3 /opt/xstocks/app/data/monitor-bybit-fluxion.db \
-  "SELECT key, value FROM meta WHERE key LIKE 'underlying%';"
-# expect underlying_status=running, underlying_last_poll_ms advancing,
-# underlying_last_n > 0 after the first successful Hermes poll
+# Confirm underlying is alive on **both** markets (WHI-788 dual-market smoke):
+for m in bybit-fluxion binance-pancake; do
+  echo "=== $m ==="
+  sqlite3 /opt/xstocks/app/data/monitor-$m.db \
+    "SELECT key, value FROM meta WHERE key LIKE 'underlying%' ORDER BY key;"
+  sqlite3 /opt/xstocks/app/data/monitor-$m.db \
+    "SELECT ticker, COUNT(*), MAX(as_of_ms) FROM underlying_prices GROUP BY ticker;"
+done
+# While the collector is up: underlying_status=running, underlying_last_poll_ms
+# advancing, underlying_last_n > 0 after the first successful Hermes poll.
+# Public US tickers (AAPL, NVDA, TSLA, …) should have rows; SPCX stays empty
+# (uncovered / private — not a fake price).
+# Smoke without the full collector: `uv run python -m monitor.underlying \
+#   --tickers AAPL,TSLA,NVDA` (Hermes public; no journal write).
 ```
 
 Local dogfood: restart each collector process after `git pull` / feature merge
