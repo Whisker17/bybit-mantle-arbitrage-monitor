@@ -18,32 +18,11 @@ from monitor.tui.config import load_tui_config
 _REPO = Path(__file__).resolve().parents[2]
 _ENUM_SNAPSHOT = _REPO / "docs" / "references" / "m7-bstocks-enum-snapshot.json"
 
-# Authoritative collector-scope set from PCS V3 factory getPool (USDT) — WHI-790.
-_EXPECTED_AMM_IDS = frozenset(
-    {
-        "AAPLB",
-        "AMZNB",
-        "CRCLB",
-        "GOOGLB",
-        "INTCB",
-        "KORUB",
-        "METAB",
-        "MRVLB",
-        "MSFTB",
-        "MUB",
-        "MUUB",
-        "NOKB",
-        "NVDAB",
-        "ORCLB",
-        "QQQB",
-        "SKHYB",
-        "SNDKB",
-        "SOXLB",
-        "SPCXB",
-        "SPYB",
-        "TSLAB",
-    }
-)
+
+def _expected_amm_ids() -> frozenset[str]:
+    """Collector-scope set from the checked-in factory snapshot (single source)."""
+    snap = json.loads(_ENUM_SNAPSHOT.read_text(encoding="utf-8"))
+    return frozenset(snap["collector_scope_v3_usdt"])
 
 
 def test_load_checked_in_bstocks_inventory() -> None:
@@ -61,9 +40,10 @@ def test_load_checked_in_bstocks_inventory() -> None:
     assert tsla.pancake.amm.kind == "v3"
     mub = cfg.pair_by_id("MUB")
     assert mub.binance.ui_multiplier > 1
+    expected = _expected_amm_ids()
     amm_ids = {p.id for p in cfg.pairs_with_amm()}
-    assert amm_ids == _EXPECTED_AMM_IDS
-    assert len(cfg.pairs_dex_none()) == 55 - len(_EXPECTED_AMM_IDS)
+    assert amm_ids == expected
+    assert len(cfg.pairs_dex_none()) == 55 - len(expected)
     # QQQB was a DexScreener false-positive under the old method; factory enum
     # with Binance capital BEP-20 verifies a real high-TVL USDT V3 pool.
     qqq = cfg.pair_by_id("QQQB")
@@ -91,13 +71,13 @@ def test_enum_snapshot_matches_inventory_amm_set() -> None:
     assert _ENUM_SNAPSHOT.is_file(), "run scripts/enumerate_bstocks_pools.py"
     snap = json.loads(_ENUM_SNAPSHOT.read_text(encoding="utf-8"))
     scope = set(snap.get("collector_scope_v3_usdt") or [])
-    assert scope == _EXPECTED_AMM_IDS
+    assert scope == _expected_amm_ids()
     assert snap["base_count"] == 55
-    assert snap["collector_scope_count"] == len(_EXPECTED_AMM_IDS)
+    assert snap["collector_scope_count"] == len(scope)
     # Inventory pools must match snapshot addresses for scope pairs.
     cfg = load_bstocks_pairs_config()
     best = snap["best_by_base"]
-    for pid in _EXPECTED_AMM_IDS:
+    for pid in scope:
         pair = cfg.pair_by_id(pid)
         assert pair.pancake.amm is not None
         hit = best[pid]
@@ -186,7 +166,7 @@ def test_market_context_binance_pancake() -> None:
     assert ctx.pairs is None
     assert ctx.bstocks is not None
     assert len(ctx.bstocks.pairs) == 55
-    assert len(ctx.bstocks.pairs_with_amm()) == len(_EXPECTED_AMM_IDS)
+    assert len(ctx.bstocks.pairs_with_amm()) == len(_expected_amm_ids())
     assert ctx.collector is not None
     assert ctx.collector.is_binance_pancake
     assert ctx.sqlite_path.name == "monitor-binance-pancake.db"

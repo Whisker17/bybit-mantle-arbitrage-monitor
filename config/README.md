@@ -23,7 +23,7 @@ A **market** is `{ id, cex, dex, costs, inventory }` plus a dedicated SQLite jou
 | Path | Loader | Purpose |
 |------|--------|---------|
 | `markets/bybit-fluxion.yaml` | `monitor.markets.load_market_file` / `monitor.symbols.load_pairs_config` | Default market: Bybit ⇄ Fluxion xStocks inventory + RFQ mode + costs (M1 body under `inventory:`). |
-| `markets/binance-pancake.yaml` | `monitor.markets.load_market_file` | Binance ⇄ Pancake bStocks top-10 (M7-1). Multiplier semantics **multiply**. Collector runtime: M7-3. |
+| `markets/binance-pancake.yaml` | `monitor.markets.load_market_file` / `monitor.symbols.load_bstocks_pairs_config` | Binance ⇄ Pancake bStocks **full 55** (WHI-790; M7-1 was top-10). `pancake.amm: null` = dex:none. Multiplier **multiply**. Collector: M7-3. |
 | `collector.yaml` | `monitor.collector.load_collector_config(..., market_id=)` | **v2** shared `logging` / `retention` + `markets.{id}` venue blocks (RPC, poll, sqlite_path). |
 | `metrics.yaml` | `monitor.metrics.load_metrics_config` | Size ladder, session hours, PnL v2 search knobs. Venue fee/gas **overridden** at assembly from the market file `costs:`. |
 | `attribution.yaml` | `monitor.attribution.load_attribution_config` | Taker-label thresholds (M4). |

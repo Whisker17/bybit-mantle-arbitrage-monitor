@@ -103,7 +103,9 @@ def fetch_binance_bases() -> list[str]:
         b = s["baseAsset"]
         if b in CRYPTO_EXCL:
             continue
-        if b.endswith("B") or b == "MUB":
+        # bStock bases end with B (includes MUB). CRYPTO_EXCL drops crypto
+        # false positives (BNB, SHIB, …). Re-check when Binance adds listings.
+        if b.endswith("B"):
             bases.append(b)
     return sorted(set(bases))
 
@@ -305,12 +307,14 @@ def main() -> int:
 
     best: dict[str, dict] = {}
     for b, hits in by_base.items():
+        # Prefer USDT, then V3 over V2, then higher TVL, then lower fee.
+        # kind before TVL so a dusty V3 USDT is not displaced by a fat V2.
         hits_sorted = sorted(
             hits,
             key=lambda h: (
                 quote_rank[h["quote"]],
-                -h.get("est_tvl", 0),
                 kind_rank[h["kind"]],
+                -h.get("est_tvl", 0),
                 h.get("fee") or 10**9,
             ),
         )

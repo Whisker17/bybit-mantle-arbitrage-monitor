@@ -174,7 +174,7 @@ placeholders. Agents must not assume a module exists until its issue lands. -->
     Underlying Yahoo/uncovered map covers new tickers (`config/underlying.yaml`).
     Dynamic Top-N UI is WHI-791.
 
-- **Underlying dual-market ops (WHI-788) landed:** bybit blank Underlying
+  - **Underlying dual-market ops (WHI-788) landed:** bybit blank Underlying
     was a **stale collector process** (pre-778 binary; binance restarted later).
     Meta hardening: always write `underlying_last_poll_ms` / `underlying_last_n`
     (even when n=0) + `underlying_status` / `underlying_last_error`. Deploy

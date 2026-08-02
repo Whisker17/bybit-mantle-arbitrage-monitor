@@ -679,9 +679,12 @@ def test_uncovered_probe_skips_when_list_empty() -> None:
 def test_whi790_synthetic_bstock_underlyings_are_uncovered() -> None:
     """WHI-790: basket/unknown bStock labels stay uncovered (no single-name tape)."""
     cfg = load_underlying_config()
-    for t in ("DRAM", "CBRS", "INTW", "MVLL", "SNXX"):
+    for t in ("DRAM", "CBRS", "INTW", "SNXX"):
         assert t in cfg.tickers
         assert cfg.tickers[t].uncovered is True
+    # MVLL is the public GraniteShares 2x Long MRVL ETF — Yahoo gap-fill.
+    assert cfg.tickers["MVLL"].uncovered is False
+    assert cfg.tickers["MVLL"].prefer_yahoo is True
 
 
 def test_uncovered_probe_detects_yahoo_for_synthetic_uncovered(

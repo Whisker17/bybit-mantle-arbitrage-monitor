@@ -262,12 +262,13 @@ tickers:
     feed_id: null
     yahoo_symbol: "MUU"
     prefer_yahoo: true
+  # GraniteShares 2x Long MRVL Daily ETF (Nasdaq: MVLL) — public Yahoo tape.
   MVLL:
     currency: USD
     pyth_symbol: null
     feed_id: null
-    uncovered: true
-    uncovered_reason: "bStock label without confirmed public equity/ETF tape"
+    yahoo_symbol: "MVLL"
+    prefer_yahoo: true
   NBIS:
     currency: USD
     pyth_symbol: null
