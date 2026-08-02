@@ -64,10 +64,11 @@ def parse_book_ticker(
     if bid <= 0 or ask <= 0 or bid >= ask:
         return None
     recv = recv_ts_ms if recv_ts_ms is not None else now_ms()
-    # bookTicker has no event time in all forms; use u as weak watermark else recv.
-    exchange_ts = data.get("E") or data.get("T") or data.get("u") or recv
+    # Spot bookTicker has no event time (E/T); u is a sequence id, not ms epoch.
+    # Use wall-clock recv so journal exchange_ts_ms stays a real timestamp axis.
+    exchange_ts = data.get("E") or data.get("T")
     try:
-        exchange_ts_ms = int(exchange_ts)
+        exchange_ts_ms = int(exchange_ts) if exchange_ts is not None else recv
     except (TypeError, ValueError):
         exchange_ts_ms = recv
     return BybitBookTick(

@@ -210,18 +210,12 @@ def load_market_context(
                 else collector.resolved_sqlite_path(repo_root=root)
             )
         except CollectorConfigError as exc:
-            if mid == DEFAULT_MARKET_ID:
-                raise MarketConfigError(
-                    f"collector config for market {mid} failed: {exc}"
-                ) from exc
-            # Unknown / incomplete venue sections still fail soft for non-default
-            # markets so API/Web can open a journal-only context.
-            logger.warning("collector config for market %s unavailable: %s", mid, exc)
-            collector = None
-            rel = market_sqlite_relpath(mid)
-            configured_db = (
-                sqlite_path if sqlite_path is not None else (root / rel)
-            )
+            # Fail-fast for every known market (both bybit-fluxion and
+            # binance-pancake ship typed collector sections after M7-3).
+            # API/Web that only need journal paths should pass load_collector=False.
+            raise MarketConfigError(
+                f"collector config for market {mid} failed: {exc}"
+            ) from exc
     else:
         rel = market_sqlite_relpath(mid)
         configured_db = sqlite_path if sqlite_path is not None else (root / rel)

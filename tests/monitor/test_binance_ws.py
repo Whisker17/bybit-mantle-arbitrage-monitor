@@ -1,4 +1,4 @@
-"""Seam: BinanceWsCollector dispatch + reconnect gap window."""
+"""Seam: BinanceWsCollector topic dispatch (book / depth / trade)."""
 
 from __future__ import annotations
 

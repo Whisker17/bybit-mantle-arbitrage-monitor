@@ -126,10 +126,11 @@ class BinanceDepthTracker:
         self._bids[symbol] = bid_map
         self._asks[symbol] = ask_map
         recv = recv_ts_ms if recv_ts_ms is not None else now_ms()
+        # lastUpdateId is a sequence, not ms — never store it as exchange_ts_ms.
         book = BybitBookTick(
             pair_id=pair_id,
             symbol=symbol,
-            exchange_ts_ms=recv if last_id is None else last_id,
+            exchange_ts_ms=recv,
             recv_ts_ms=recv,
             bid=bid,
             ask=ask,
@@ -138,14 +139,14 @@ class BinanceDepthTracker:
             multiplier=mult,
             gap=gap,
         )
-        # Prefer bookTicker L1 when present (fresher); still update depth maps.
+        # Keep bookTicker L1 for the L1 journal when present, but always refresh
+        # timestamps so depth_tick does not stamp VWAP with a stalled bookTicker.
         ticker = self._last_book.get(symbol)
-        if ticker is not None and not gap:
-            # Keep ticker bid/ask for L1 journal; depth maps still from depth20.
+        if ticker is not None:
             book = BybitBookTick(
                 pair_id=pair_id,
                 symbol=symbol,
-                exchange_ts_ms=ticker.exchange_ts_ms,
+                exchange_ts_ms=recv,
                 recv_ts_ms=recv,
                 bid=ticker.bid,
                 ask=ticker.ask,

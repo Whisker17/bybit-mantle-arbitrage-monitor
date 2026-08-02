@@ -251,9 +251,10 @@ Planned `src/monitor/` packages (land with their issues; empty package until the
 | `monitor/markets` | market id, inventory/costs assembly, per-market SQLite paths | M7-2 (landed WHI-771) |
 | `monitor/symbols` | fixed xStock list, Bybit multiplier map | M1 |
 | `monitor/bybit` | live Bybit book/trades WS; orderbook.50 + `bybit_depth` VWAP | M2 (WHI-731); depth WHI-755 |
-| `monitor/fluxion` | AMM state/quotes + RFQ feed | M2 (landed WHI-731) |
+| `monitor/binance` | live Binance bookTicker / depth20 VWAP / aggTrade (bStocks) | M7-3 (landed WHI-772) |
+| `monitor/fluxion` | AMM state/quotes + RFQ feed; also BSC Pancake poll (parameterized) | M2 (landed WHI-731); M7-3 WHI-772 |
 | `monitor/storage` | SQLite journal for collector ticks + retention | M2 (landed WHI-731); retention WHI-751 |
-| `monitor/collector` | daemon orchestrating feeds → SQLite (+ retention loop) | M2 (landed WHI-731); retention WHI-751 |
+| `monitor/collector` | daemon orchestrating feeds → SQLite (+ retention loop); multi-market | M2 (landed WHI-731); M7-3 WHI-772 |
 | `monitor/retention` | thin CLI over `storage.retention` (`python -m monitor.retention`) | WHI-751 |
 | `monitor/metrics` | edge, wear, session stats | M3 (landed WHI-732) |
 | `monitor/attribution` | mechanism + behavior labels (+ MM/rebalancer, WHI-768) | M4 (landed WHI-733); MM productization WHI-768 |
@@ -284,9 +285,11 @@ decision, not M0).
 |---------------|--------|-------|
 | `MarketContext` / market file | `monitor.markets` | Explicit market assembly (M7-2): id, cex/dex, costs, inventory path, per-market SQLite (ADR-0001) |
 | `PairsConfig` / `Pair` | `monitor.symbols` | Bybit ⇄ Fluxion inventory from `config/markets/bybit-fluxion.yaml` `inventory:` (M1; path moved M7-2) |
+| `BStocksPairsConfig` / `BStocksPair` | `monitor.symbols` | Binance ⇄ Pancake inventory from `config/markets/binance-pancake.yaml` `inventory:` (M7-3) |
 | `de_multiplied_price` | `monitor.symbols` | `bybit_mid / xstock_multiplier` before venue compare (**divide** semantics — not for bStocks) |
+| `multiplied_price` | `monitor.symbols` | `binance_display * ui_multiplier` for raw/on-chain compare (**multiply** / BEP-677) |
 | RFQ mode | market inventory `rfq.mode` | **`pollable_quote`** on bybit-fluxion (M1); binance-pancake has no RFQ |
-| `BybitBookTick` / `BybitTradeTick` | `monitor.quotes` | De-multiplied L1 + trades from Bybit WS |
+| `BybitBookTick` / `BybitTradeTick` | `monitor.quotes` | CEX L1 + trades journal shape (Bybit or Binance; per-market SQLite) |
 | `FluxionPoolStateTick` / `FluxionSwapTick` | `monitor.quotes` | Per-block AMM mid (wrapper + native) + swaps |
 | `FluxionRfqQuoteTick` / `FluxionRfqFillTick` | `monitor.quotes` | Pollable RFQ quote + LOP settlement events |
 | `CollectorConfig` | `monitor.collector` | `config/collector.yaml` tunables (v2 per-market sections) |

@@ -494,21 +494,6 @@ def _merge_market_section(
         elif key in data:
             # Rare: shared venue block at root (not preferred).
             flat[key] = data[key]
-    # Normalize legacy scaffold keys → typed BinanceCollectorConfig fields.
-    if "binance" in flat and isinstance(flat["binance"], dict):
-        b = dict(flat["binance"])
-        # Scaffold used book_topic_prefix/trade_topic_prefix; typed uses *_stream.
-        if "book_stream" not in b and "book_topic_prefix" in b:
-            b["book_stream"] = b.pop("book_topic_prefix")
-        elif "book_topic_prefix" in b:
-            b.pop("book_topic_prefix")
-        if "trade_stream" not in b and "trade_topic_prefix" in b:
-            # "trade" scaffold → prefer aggTrade (issue WHI-772).
-            legacy = str(b.pop("trade_topic_prefix"))
-            b["trade_stream"] = "aggTrade" if legacy == "trade" else legacy
-        elif "trade_topic_prefix" in b:
-            b.pop("trade_topic_prefix")
-        flat["binance"] = b
     return flat
 
 

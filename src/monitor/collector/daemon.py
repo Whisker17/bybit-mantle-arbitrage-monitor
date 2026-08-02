@@ -50,6 +50,7 @@ from monitor.symbols import load_pairs_config
 from monitor.symbols.bstocks_load import load_bstocks_pairs_config
 from monitor.symbols.bstocks_models import BStocksPairsConfig
 from monitor.symbols.models import PairsConfig
+from monitor.symbols.multipliers import multiplier_map, ui_multiplier_map
 from monitor.symbols.token_map import (
     inventory_token_to_pair,
     native_token_decimals,
@@ -113,7 +114,7 @@ class CollectorDaemon:
         assert self.cfg.bybit is not None
         pair_id_by_symbol = {p.bybit.symbol.upper(): p.id for p in self.pairs.pairs}
         mult_by_symbol = {
-            p.bybit.symbol.upper(): p.bybit.multiplier for p in self.pairs.pairs
+            k.upper(): v for k, v in multiplier_map(self.pairs).items()
         }
         symbols = list(pair_id_by_symbol.keys())
         depth_cfg = self.cfg.bybit.depth
@@ -179,9 +180,7 @@ class CollectorDaemon:
         pair_id_by_symbol = {
             p.binance.symbol.upper(): p.id for p in self.bstocks.pairs
         }
-        mult_by_symbol = {
-            p.binance.symbol.upper(): p.binance.ui_multiplier for p in self.bstocks.pairs
-        }
+        mult_by_symbol = ui_multiplier_map(self.bstocks)
         symbols = list(pair_id_by_symbol.keys())
         depth_cfg = self.cfg.binance.depth
 

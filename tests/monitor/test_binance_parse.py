@@ -35,7 +35,7 @@ def test_parse_book_ticker_applies_ui_multiplier() -> None:
     payload = {
         "stream": "mubusdt@bookTicker",
         "data": {
-            "u": 1,
+            "u": 400_900_217,  # sequence id — must NOT become exchange_ts_ms
             "s": "MUBUSDT",
             "b": "100.0",
             "B": "1",
@@ -56,6 +56,8 @@ def test_parse_book_ticker_applies_ui_multiplier() -> None:
     assert tick.bid_de_multiplied == multiplied_price(
         Decimal("100.0"), MULTS["MUBUSDT"]
     )
+    # Spot bookTicker has no E/T — use recv, never the sequence id `u`.
+    assert tick.exchange_ts_ms == 1_700_000_000_010
     assert tick.gap is False
 
 

@@ -38,15 +38,6 @@ def multiplied_price(price: Decimal | str, ui_multiplier: Decimal | str) -> Deci
     return p * m
 
 
-def de_multiplied_size(size: Decimal | str, multiplier: Decimal | str) -> Decimal:
-    """Bybit: raw size → de-multiplied base so notional = price_dm * size_dm."""
-    s = Decimal(str(size))
-    m = Decimal(str(multiplier))
-    if m <= 0:
-        raise ValueError(f"multiplier must be > 0, got {m}")
-    return s * m
-
-
 def multiplied_size(size: Decimal | str, ui_multiplier: Decimal | str) -> Decimal:
     """Binance: display size → raw-space size so notional = price_dm * size_dm.
 
