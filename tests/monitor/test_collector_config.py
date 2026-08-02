@@ -45,6 +45,16 @@ def test_load_checked_in_collector_config() -> None:
     assert cfg.cex_volume.venue == "bybit"
     assert cfg.cex_volume.poll_interval_s == 60
     assert cfg.retention.cex_volume_24h_ms == 604_800_000
+    # WHI-778: underlying poller on (global toggle; per-market override possible).
+    assert cfg.underlying_enabled is True
+
+
+def test_underlying_enabled_both_markets() -> None:
+    """WHI-788: both market sections inherit underlying.enabled=true."""
+    bybit = load_collector_config(market_id="bybit-fluxion")
+    pancake = load_collector_config(market_id="binance-pancake")
+    assert bybit.underlying_enabled is True
+    assert pancake.underlying_enabled is True
 
 
 def test_reconnect_max_must_ge_min(tmp_path: Path) -> None:

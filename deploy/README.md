@@ -56,6 +56,51 @@ mv data/monitor.db data/monitor-bybit-fluxion.db
 The API and collector for a market must agree on the same journal path
 (`config/api.yaml` / `config/collector.yaml` `markets.<id>.sqlite_path`).
 
+### Restart collectors after collector code ships
+
+`./scripts/deploy-web.sh` restarts **only** `xstocks-api`. Long-running
+`xstocks-collector@*` units keep the in-memory binary from process start — they
+do **not** pick up new collector features (e.g. WHI-778 `underlying` poller)
+until restarted. After any deploy that changes `src/monitor/collector`,
+`src/monitor/underlying`, `src/monitor/bybit`, `src/monitor/binance`,
+`src/monitor/fluxion`, or `config/collector.yaml` / `config/underlying.yaml`:
+
+```bash
+# On the VPS — restart every market instance you run
+sudo systemctl restart xstocks-collector@bybit-fluxion
+sudo systemctl restart xstocks-collector@binance-pancake   # if enabled
+sudo systemctl --no-pager status 'xstocks-collector@*'
+
+# Confirm underlying is alive on **both** markets (WHI-788 dual-market smoke):
+for m in bybit-fluxion binance-pancake; do
+  echo "=== $m ==="
+  sqlite3 /opt/xstocks/app/data/monitor-$m.db \
+    "SELECT key, value FROM meta WHERE key LIKE 'underlying%' ORDER BY key;"
+  sqlite3 /opt/xstocks/app/data/monitor-$m.db \
+    "SELECT ticker, COUNT(*), MAX(as_of_ms) FROM underlying_prices GROUP BY ticker;"
+done
+# While the collector is up: underlying_status=running, underlying_last_poll_ms
+# advancing, underlying_last_n > 0 after the first successful Hermes poll.
+# Public US tickers (AAPL, NVDA, TSLA, …) should have rows; SPCX stays empty
+# (uncovered / private — not a fake price).
+# Smoke without the full collector: `uv run python -m monitor.underlying \
+#   --tickers AAPL,TSLA,NVDA` (Hermes public; no journal write).
+#
+# underlying_status values:
+#   running      — poll loop active
+#   stopped      — loop exited (process may still be up for other feeds)
+#   disabled     — collector.yaml underlying.enabled=false
+#   config_error — underlying.yaml failed to load (see underlying_last_error)
+#   no_tickers   — inventory produced an empty ticker set
+# underlying_last_poll_ms advances on every attempt (incl. empty/error);
+# underlying_last_n is the tick count of the last attempt; last_error holds
+# the most recent poll exception (not cleared by empty successful polls).
+```
+
+Local dogfood: restart each collector process after `git pull` / feature merge
+(`./scripts/dev-web.sh restart`, or kill + re-run
+`python -m monitor.collector --market …` for each market).
+
 ## Redeploy (one command from a laptop)
 
 ```bash
@@ -67,6 +112,9 @@ The API and collector for a market must agree on the same journal path
 ./scripts/deploy-web.sh xstocks@host --www-only     # static only
 ./scripts/deploy-web.sh xstocks@host --api-only     # Python only
 ```
+
+**Collector code is rsynced with the API tree, but units are not restarted.**
+See [Restart collectors after collector code ships](#restart-collectors-after-collector-code-ships).
 
 ## Local dogfood
 

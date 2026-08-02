@@ -65,6 +65,15 @@ from monitor.underlying.tickers import underlying_tickers_for_pairs
 
 logger = logging.getLogger(__name__)
 
+# Operator-visible underlying_status values (WHI-788). Keep literals stable —
+# deploy/README.md runbook documents the value → meaning table.
+UNDERLYING_STATUS_DISABLED = "disabled"
+UNDERLYING_STATUS_CONFIG_ERROR = "config_error"
+UNDERLYING_STATUS_NO_TICKERS = "no_tickers"
+UNDERLYING_STATUS_RUNNING = "running"
+UNDERLYING_STATUS_STOPPED = "stopped"
+_UNDERLYING_ERROR_MAX = 500
+
 
 class CollectorDaemon:
     """Long-running realtime collector (no historical backfill)."""
@@ -598,22 +607,80 @@ class CollectorDaemon:
             return underlying_tickers_for_pairs([p.id for p in self.bstocks.pairs])
         return []
 
+    def _set_underlying_error(self, error: str) -> None:
+        """Write ``underlying_last_error`` with a bounded length."""
+        self.store.set_meta(
+            "underlying_last_error", error[:_UNDERLYING_ERROR_MAX]
+        )
+
+    def _stamp_underlying_status(
+        self,
+        status: str,
+        *,
+        error: str | None = None,
+        tickers: list[str] | None = None,
+    ) -> None:
+        """Persist operator-visible underlying poller state (WHI-788).
+
+        Distinguishes not-running (disabled / config_error / no_tickers /
+        stopped) from running-but-empty polls so missing journal rows are
+        diagnosable via ``sqlite3 … meta``.
+        """
+        self.store.set_meta("underlying_status", status)
+        if tickers is not None:
+            self.store.set_meta("underlying_tickers", ",".join(tickers))
+        if error is not None:
+            # Empty string clears a prior error (e.g. when entering running).
+            self._set_underlying_error(error)
+
+    def _stamp_underlying_poll(
+        self,
+        n: int,
+        *,
+        error: str | None = None,
+        poll_ms: int | None = None,
+    ) -> None:
+        """Record a poll *attempt* — even when ``n == 0`` (WHI-788).
+
+        ``underlying_last_poll_ms`` means the loop is spinning (including on
+        exceptions / empty Hermes replies), not that rows were inserted.
+        Pair with ``underlying_last_n`` and ``underlying_last_error``.
+
+        Empty successful polls (``n == 0``, no error) leave a prior error in
+        place so a transient failure is not wiped by later silent empties.
+        """
+        ts = poll_ms if poll_ms is not None else now_ms()
+        self.store.set_meta("underlying_last_poll_ms", str(ts))
+        self.store.set_meta("underlying_last_n", str(n))
+        if error is not None:
+            self._set_underlying_error(error)
+        elif n > 0:
+            self._set_underlying_error("")
+
     async def _underlying_loop(self) -> None:
         """Poll Pyth Hermes (+ optional Yahoo) into underlying_prices (WHI-778)."""
         if not self.cfg.underlying_enabled:
             logger.info("underlying poller disabled (collector.yaml underlying.enabled)")
+            self._stamp_underlying_status(UNDERLYING_STATUS_DISABLED)
             return
         try:
             u_cfg = load_underlying_config()
         except UnderlyingConfigError as exc:
             logger.error("underlying config load failed: %s", exc)
+            self._stamp_underlying_status(
+                UNDERLYING_STATUS_CONFIG_ERROR, error=str(exc)
+            )
             return
 
         tickers = self._underlying_tickers_for_market()
         if not tickers:
             logger.info("underlying poller: no inventory tickers")
+            self._stamp_underlying_status(UNDERLYING_STATUS_NO_TICKERS)
             return
         poller = UnderlyingPoller(u_cfg, tickers=tickers)
+        self._stamp_underlying_status(
+            UNDERLYING_STATUS_RUNNING, error="", tickers=tickers
+        )
         logger.info(
             "underlying poller started tickers=%s open_s=%s closed_s=%s",
             tickers,
@@ -628,14 +695,11 @@ class CollectorDaemon:
                         await asyncio.to_thread(
                             self.store.insert_underlying_prices, ticks
                         )
-                        self.store.set_meta(
-                            "underlying_last_poll_ms", str(now_ms())
-                        )
-                        self.store.set_meta(
-                            "underlying_last_n", str(len(ticks))
-                        )
+                    # Always stamp poll meta (empty list ≠ not running).
+                    self._stamp_underlying_poll(len(ticks))
                 except Exception as exc:  # noqa: BLE001
                     logger.exception("underlying poll error: %s", exc)
+                    self._stamp_underlying_poll(0, error=f"poll error: {exc}")
                     await asyncio.to_thread(
                         self.store.insert_gap,
                         CollectorGap(
@@ -652,6 +716,8 @@ class CollectorDaemon:
                     pass
         finally:
             poller.close()
+            # Process may stay up after cancel; don't leave status stuck at running.
+            self._stamp_underlying_status(UNDERLYING_STATUS_STOPPED)
 
     async def _retention_loop(self) -> None:
         """Periodic prune under the store lock (WHI-751)."""

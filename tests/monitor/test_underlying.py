@@ -416,3 +416,136 @@ def test_invalid_underlying_config(tmp_path: Path) -> None:
     )
     with pytest.raises(UnderlyingConfigError):
         load_underlying_config(p)
+
+
+def test_bybit_inventory_underlying_tickers_nonempty() -> None:
+    """WHI-788: bybit-fluxion inventory must map to covered US underlyings."""
+    from monitor.symbols import load_pairs_config
+
+    pairs = load_pairs_config()
+    tickers = underlying_tickers_for_pairs([p.id for p in pairs.pairs])
+    assert tickers, "bybit inventory produced zero underlying tickers"
+    # Public US names the panel expects on overview Underlying / vs Und.
+    for expected in ("AAPL", "NVDA", "TSLA", "AMZN", "META"):
+        assert expected in tickers
+    assert "SPCX" in tickers  # uncovered private; poller skips, no fake price
+    cfg = load_underlying_config()
+    covered = [t for t in tickers if t in cfg.tickers and not cfg.tickers[t].uncovered]
+    assert covered, "no Hermes-covered tickers for bybit inventory"
+    # SPCX stays uncovered (no fake price) — covered list already checked above.
+    assert "SPCX" not in covered
+
+
+def test_binance_inventory_underlying_tickers_nonempty() -> None:
+    """WHI-788: binance-pancake inventory also registers underlyings (dual-market)."""
+    from monitor.symbols import load_bstocks_pairs_config
+
+    bstocks = load_bstocks_pairs_config()
+    tickers = underlying_tickers_for_pairs([p.id for p in bstocks.pairs])
+    assert tickers
+    for expected in ("AAPL", "NVDA", "TSLA"):
+        assert expected in tickers
+
+
+def test_daemon_underlying_tickers_both_markets(tmp_path: Path) -> None:
+    """WHI-788: both market shapes resolve inventory tickers for the poller path."""
+    from monitor.collector.config import load_collector_config
+    from monitor.collector.daemon import CollectorDaemon
+    from monitor.symbols import load_bstocks_pairs_config, load_pairs_config
+
+    pairs = load_pairs_config()
+    bybit_cfg = load_collector_config(market_id="bybit-fluxion")
+    assert bybit_cfg.underlying_enabled is True
+    assert bybit_cfg.is_bybit_fluxion
+    store_b = SqliteStore(tmp_path / "bybit.db")
+    bybit = CollectorDaemon(
+        pairs, bybit_cfg, store_b, market_id="bybit-fluxion"
+    )
+    bybit_tickers = bybit._underlying_tickers_for_market()
+    assert "AAPL" in bybit_tickers and "TSLA" in bybit_tickers
+    store_b.close()
+
+    bstocks = load_bstocks_pairs_config()
+    pancake_cfg = load_collector_config(market_id="binance-pancake")
+    assert pancake_cfg.underlying_enabled is True
+    assert pancake_cfg.is_binance_pancake
+    store_p = SqliteStore(tmp_path / "pancake.db")
+    pancake = CollectorDaemon(
+        None, pancake_cfg, store_p, bstocks=bstocks, market_id="binance-pancake"
+    )
+    pancake_tickers = pancake._underlying_tickers_for_market()
+    assert "AAPL" in pancake_tickers and "TSLA" in pancake_tickers
+    store_p.close()
+
+
+def test_stamp_underlying_poll_meta_even_when_empty(tmp_path: Path) -> None:
+    """WHI-788: empty poll still writes last_poll_ms / last_n (ops observability)."""
+    from monitor.collector.config import load_collector_config
+    from monitor.collector.daemon import (
+        UNDERLYING_STATUS_RUNNING,
+        CollectorDaemon,
+    )
+    from monitor.symbols import load_pairs_config
+
+    store = SqliteStore(tmp_path / "meta.db")
+    daemon = CollectorDaemon(
+        load_pairs_config(),
+        load_collector_config(market_id="bybit-fluxion"),
+        store,
+        market_id="bybit-fluxion",
+    )
+    daemon._stamp_underlying_status(
+        UNDERLYING_STATUS_RUNNING, error="", tickers=["AAPL", "TSLA"]
+    )
+    daemon._stamp_underlying_poll(0, poll_ms=1_700_000_000_000)
+    assert store.get_meta("underlying_status") == UNDERLYING_STATUS_RUNNING
+    assert store.get_meta("underlying_tickers") == "AAPL,TSLA"
+    assert store.get_meta("underlying_last_poll_ms") == "1700000000000"
+    assert store.get_meta("underlying_last_n") == "0"
+    assert store.get_meta("underlying_last_error") == ""
+
+    daemon._stamp_underlying_poll(0, error="poll error: boom", poll_ms=1_700_000_000_100)
+    assert store.get_meta("underlying_last_n") == "0"
+    assert store.get_meta("underlying_last_error") == "poll error: boom"
+    # Empty successful poll must NOT wipe the prior error trail.
+    daemon._stamp_underlying_poll(0, poll_ms=1_700_000_000_150)
+    assert store.get_meta("underlying_last_error") == "poll error: boom"
+
+    daemon._stamp_underlying_poll(5, poll_ms=1_700_000_000_200)
+    assert store.get_meta("underlying_last_n") == "5"
+    assert store.get_meta("underlying_last_error") == ""
+    store.close()
+
+
+def test_stamp_underlying_status_early_exits(tmp_path: Path) -> None:
+    """WHI-788: disabled / no_tickers / stopped leave meta for ops diagnosis."""
+    from monitor.collector.config import load_collector_config
+    from monitor.collector.daemon import (
+        UNDERLYING_STATUS_CONFIG_ERROR,
+        UNDERLYING_STATUS_DISABLED,
+        UNDERLYING_STATUS_NO_TICKERS,
+        UNDERLYING_STATUS_STOPPED,
+        CollectorDaemon,
+    )
+    from monitor.symbols import load_pairs_config
+
+    store = SqliteStore(tmp_path / "status.db")
+    daemon = CollectorDaemon(
+        load_pairs_config(),
+        load_collector_config(market_id="bybit-fluxion"),
+        store,
+        market_id="bybit-fluxion",
+    )
+    daemon._stamp_underlying_status(UNDERLYING_STATUS_DISABLED)
+    assert store.get_meta("underlying_status") == "disabled"
+    daemon._stamp_underlying_status(UNDERLYING_STATUS_NO_TICKERS)
+    assert store.get_meta("underlying_status") == "no_tickers"
+    daemon._stamp_underlying_status(
+        UNDERLYING_STATUS_CONFIG_ERROR, error="missing yaml"
+    )
+    assert store.get_meta("underlying_status") == "config_error"
+    assert store.get_meta("underlying_last_error") == "missing yaml"
+    # finally-path contract: loop exit must not leave status stuck at running.
+    daemon._stamp_underlying_status(UNDERLYING_STATUS_STOPPED)
+    assert store.get_meta("underlying_status") == "stopped"
+    store.close()

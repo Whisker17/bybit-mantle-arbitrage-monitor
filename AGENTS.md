@@ -163,6 +163,13 @@ placeholders. Agents must not assume a module exists until its issue lands. -->
     `tvl_poll_interval_s` on mantle/bsc; overview `tvl_usd` / `tvl_as_of_ms`
     + DEX-group TVL column; dynamic `low_liquidity` from live TVL (inventory
     flag is cold-start fallback). Capital size ≠ depth (PnL v2 buckets).
+  - **Underlying dual-market ops (WHI-788) landed:** bybit blank Underlying
+    was a **stale collector process** (pre-778 binary; binance restarted later).
+    Meta hardening: always write `underlying_last_poll_ms` / `underlying_last_n`
+    (even when n=0) + `underlying_status` / `underlying_last_error`. Deploy
+    notes: restart **both** `xstocks-collector@bybit-fluxion` and
+    `@binance-pancake` after collector code ships (`deploy/README.md`;
+    `deploy-web.sh` only restarts API).
 
 ## Build, test, run
 
