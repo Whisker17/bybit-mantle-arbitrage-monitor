@@ -7,7 +7,7 @@ window so downstream metrics can exclude or weight them.
 
 from __future__ import annotations
 
-SCHEMA_VERSION = 6
+SCHEMA_VERSION = 7
 
 DDL: tuple[str, ...] = (
     """
@@ -363,6 +363,32 @@ DDL: tuple[str, ...] = (
     """
     CREATE INDEX IF NOT EXISTS idx_cex_volume_24h_ts
         ON cex_volume_24h (poll_ts_ms)
+    """,
+    # WHI-782: live DEX pool TVL from balanceOf + AMM mid (throttled poll).
+    # V3 virtual liquidity L is NOT TVL — see DESIGN + monitor.fluxion.tvl.
+    """
+    CREATE TABLE IF NOT EXISTS dex_pool_tvl (
+        id              INTEGER PRIMARY KEY AUTOINCREMENT,
+        pair_id         TEXT    NOT NULL,
+        pool            TEXT    NOT NULL,
+        block_number    INTEGER NOT NULL,
+        block_ts        INTEGER NOT NULL,
+        recv_ts_ms      INTEGER NOT NULL,
+        base_bal        TEXT    NOT NULL,
+        quote_bal       TEXT    NOT NULL,
+        base_price      TEXT    NOT NULL,
+        tvl_usd         TEXT    NOT NULL,
+        gap             INTEGER NOT NULL DEFAULT 0,
+        UNIQUE (pool, block_number)
+    )
+    """,
+    """
+    CREATE INDEX IF NOT EXISTS idx_dex_pool_tvl_pair_recv
+        ON dex_pool_tvl (pair_id, recv_ts_ms)
+    """,
+    """
+    CREATE INDEX IF NOT EXISTS idx_dex_pool_tvl_recv
+        ON dex_pool_tvl (recv_ts_ms)
     """,
 )
 

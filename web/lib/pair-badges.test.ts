@@ -80,9 +80,9 @@ describe("badgePolicyForMarket", () => {
     assert.equal(p.topN, 5);
   });
 
-  it("enables Vol-only on bybit-fluxion", () => {
+  it("enables TVL+Vol on bybit-fluxion (WHI-782 live TVL)", () => {
     const p = badgePolicyForMarket("bybit-fluxion");
-    assert.equal(p.enableTvl, false);
+    assert.equal(p.enableTvl, true);
     assert.equal(p.enableVol, true);
   });
 });
@@ -134,15 +134,42 @@ describe("pairBadgesForRows", () => {
     assert.equal(dualBadges.get("SKHYB")?.hiVol, true);
   });
 
-  it("never sets hiTvl on bybit-fluxion", () => {
+  it("enables hiTvl on bybit-fluxion when live/est TVL ranks (WHI-782)", () => {
     const rows = [
       row({ pair_id: "AAPLx", est_liquidity_usd: "100000", cex_volume_24h: "5000" }),
       row({ pair_id: "TSLAx", est_liquidity_usd: "90000", cex_volume_24h: "4000" }),
     ];
     const badges = pairBadgesForRows(rows, badgePolicyForMarket("bybit-fluxion"));
-    assert.equal(badges.get("AAPLx")?.hiTvl, false);
+    // Only two pairs → both in top-5 TVL and Vol.
+    assert.equal(badges.get("AAPLx")?.hiTvl, true);
     assert.equal(badges.get("AAPLx")?.hiVol, true);
     assert.equal(badges.get("TSLAx")?.hiVol, true);
+  });
+
+  it("prefers live tvl_usd over est_liquidity_usd for rank", () => {
+    const rows = [
+      // High est, tiny live → loses to every mid live TVL (topN=5).
+      row({
+        pair_id: "EST_HI",
+        est_liquidity_usd: "9e9",
+        tvl_usd: "0.01",
+        cex_volume_24h: "1",
+      }),
+      row({
+        pair_id: "LIVE_HI",
+        est_liquidity_usd: "1",
+        tvl_usd: "9e9",
+        cex_volume_24h: "1",
+      }),
+      row({ pair_id: "C", est_liquidity_usd: "2", tvl_usd: "200", cex_volume_24h: "1" }),
+      row({ pair_id: "D", est_liquidity_usd: "3", tvl_usd: "300", cex_volume_24h: "1" }),
+      row({ pair_id: "E", est_liquidity_usd: "4", tvl_usd: "400", cex_volume_24h: "1" }),
+      row({ pair_id: "F", est_liquidity_usd: "5", tvl_usd: "500", cex_volume_24h: "1" }),
+    ];
+    const badges = pairBadgesForRows(rows, badgePolicyForMarket("binance-pancake"));
+    assert.equal(badges.get("LIVE_HI")?.hiTvl, true);
+    // EST_HI ranks last on live TVL — outside top-5.
+    assert.equal(badges.get("EST_HI")?.hiTvl, false);
   });
 
   it("ranks on the provided full set (caller must pass unfiltered rows)", () => {

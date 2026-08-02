@@ -64,8 +64,11 @@ class PairOverviewRow:
     rfq_premium_bps: Decimal | None = None
     premium_type_label: str | None = None
     # WHI-781: inventory snapshot pool TVL (DexScreener/est); not live journal.
-    # Web ranks this for the TVL badge (binance-pancake); null when no AMM.
+    # Fallback for badge ranking when live TVL has not sampled yet.
     est_liquidity_usd: Decimal | None = None
+    # WHI-782: live pool TVL from balanceOf + AMM mid (capital size, not depth).
+    tvl_usd: Decimal | None = None
+    tvl_as_of_ms: int | None = None
 
 
 @dataclass(frozen=True, slots=True)
@@ -163,6 +166,8 @@ class PairDetailModel:
     volume_compare: VolumeCompare | None = None
     # WHI-779: underlying premium panel.
     premium: PremiumPanel | None = None
+    # WHI-782: optional live TVL history for detail trend (ascending).
+    tvl_series: list[tuple[int, Decimal]] = field(default_factory=list)
     error: str | None = None
 
 

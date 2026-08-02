@@ -31,6 +31,7 @@ from monitor.attribution.events import (
     amm_trade_from_swap,
     swap_notional_usd,
 )
+from monitor.fluxion.tvl import is_low_liquidity
 from monitor.metrics import (
     EdgeStats,
     MetricsConfig,
@@ -54,6 +55,7 @@ from monitor.metrics.stats import Distribution
 from monitor.metrics.volume import VolumeCompare, build_volume_compare
 from monitor.quotes import (
     BybitBookTick,
+    DexPoolTvlTick,
     FluxionPoolStateTick,
     FluxionRfqQuoteTick,
     FluxionSwapTick,
@@ -394,6 +396,27 @@ def _est_liquidity_usd(pair: Pair | BStocksPair) -> Decimal | None:
     return Decimal(str(fluxion_amm.est_liquidity_usd))
 
 
+def _pair_has_amm(pair: Pair | BStocksPair) -> bool:
+    if isinstance(pair, BStocksPair):
+        return pair.pancake.amm is not None
+    return pair.fluxion.amm is not None
+
+
+def _resolve_row_low_liquidity(
+    pair: Pair | BStocksPair,
+    *,
+    tvl: DexPoolTvlTick | None,
+    threshold_usd: Decimal,
+) -> bool:
+    """Live TVL when present; inventory flag as cold-start fallback (WHI-782)."""
+    return is_low_liquidity(
+        tvl_usd=None if tvl is None else tvl.tvl_usd,
+        threshold_usd=threshold_usd,
+        inventory_low=pair.low_liquidity,
+        has_amm=_pair_has_amm(pair),
+    )
+
+
 def build_pair_overview_row(
     pair: Pair | BStocksPair,
     *,
@@ -408,6 +431,8 @@ def build_pair_overview_row(
     ts_ms: int | None = None,
     volume_compare: VolumeCompare | None = None,
     premium: PremiumSnapshot | None = None,
+    tvl: DexPoolTvlTick | None = None,
+    low_liquidity_threshold_usd: Decimal | None = None,
 ) -> PairOverviewRow:
     """Build one overview row. Pure: no I/O.
 
@@ -421,11 +446,19 @@ def build_pair_overview_row(
     )
     pfields = _premium_fields(prem)
     liq = _est_liquidity_usd(pair)
+    threshold = (
+        low_liquidity_threshold_usd
+        if low_liquidity_threshold_usd is not None
+        else Decimal("50000")
+    )
+    low_liq = _resolve_row_low_liquidity(pair, tvl=tvl, threshold_usd=threshold)
+    tvl_usd = None if tvl is None else tvl.tvl_usd
+    tvl_as_of = None if tvl is None else tvl.recv_ts_ms
     if bybit is None:
         return PairOverviewRow(
             pair_id=pair.id,
             name=pair.name,
-            low_liquidity=pair.low_liquidity,
+            low_liquidity=low_liq,
             session=None,
             bybit_bid=None,
             bybit_ask=None,
@@ -445,6 +478,8 @@ def build_pair_overview_row(
             trades_24h=trades_24h,
             stale=True,
             est_liquidity_usd=liq,
+            tvl_usd=tvl_usd,
+            tvl_as_of_ms=tvl_as_of,
             **vfields,  # type: ignore[arg-type]
             **pfields,  # type: ignore[arg-type]
         )
@@ -466,7 +501,7 @@ def build_pair_overview_row(
     return PairOverviewRow(
         pair_id=pair.id,
         name=pair.name,
-        low_liquidity=pair.low_liquidity,
+        low_liquidity=low_liq,
         session=spreads.session,
         bybit_bid=bybit.bid_de_multiplied,
         bybit_ask=bybit.ask_de_multiplied,
@@ -487,6 +522,8 @@ def build_pair_overview_row(
         trades_24h=trades_24h,
         stale=False,
         est_liquidity_usd=liq,
+        tvl_usd=tvl_usd,
+        tvl_as_of_ms=tvl_as_of,
         **vfields,  # type: ignore[arg-type]
         **pfields,  # type: ignore[arg-type]
     )
@@ -519,11 +556,13 @@ def build_overview(
     underlying_by = _reclassify_map(
         reader.latest_underlying_prices(tickers), now_ms=ts, cfg=u_cfg
     )
+    threshold = Decimal(str(pairs.low_liquidity_threshold_usd))
     rows: list[PairOverviewRow] = []
     for pair in pairs.pairs:
         bybit = reader.latest_bybit_book(pair.id)
         amm = reader.latest_pool_state(pair.id)
         rfq_buy, rfq_sell = reader.latest_rfq_sides(pair.id)
+        tvl = reader.latest_pool_tvl(pair.id)
         vol = reader.volume_stats(pair.id, since_ms=since)
         vcmp = _volume_compare_for_pair(
             pair,
@@ -580,6 +619,8 @@ def build_overview(
                 ts_ms=ts,
                 volume_compare=vcmp,
                 premium=prem,
+                tvl=tvl,
+                low_liquidity_threshold_usd=threshold,
             )
         )
     rows = sort_rows(rows, key=key, desc=desc)
@@ -1001,12 +1042,20 @@ def build_pair_detail(
     edge_state: RunningEdgeState,
     now: int | None = None,
     cold_start: bool = False,
+    low_liquidity_threshold_usd: Decimal | None = None,
 ) -> PairDetailModel:
     ts = now if now is not None else now_ms()
     since_vol = ts - tui.volume_window_ms
     bybit = reader.latest_bybit_book(pair.id)
     amm = reader.latest_pool_state(pair.id)
     rfq_buy, rfq_sell = reader.latest_rfq_sides(pair.id)
+    tvl = reader.latest_pool_tvl(pair.id)
+    # Inventory root threshold when caller has it; 50k matches market YAML defaults.
+    threshold = (
+        low_liquidity_threshold_usd
+        if low_liquidity_threshold_usd is not None
+        else Decimal("50000")
+    )
     vol = reader.volume_stats(pair.id, since_ms=since_vol)
     vcmp = _volume_compare_for_pair(
         pair,
@@ -1046,7 +1095,15 @@ def build_pair_detail(
         ts_ms=ts,
         volume_compare=vcmp,
         premium=prem,
+        tvl=tvl,
+        low_liquidity_threshold_usd=threshold,
     )
+    tvl_series = [
+        (t.recv_ts_ms, t.tvl_usd)
+        for t in reader.pool_tvl_series(
+            pair.id, since_ms=ts - tui.volume_window_ms, limit=tui.spread_history_max_points
+        )
+    ]
 
     books = reader.bybit_books(
         pair.id, limit=max(tui.spread_history_max_points, tui.edge_history_max_samples)
@@ -1177,7 +1234,7 @@ def build_pair_detail(
     return PairDetailModel(
         pair_id=pair.id,
         name=pair.name,
-        low_liquidity=pair.low_liquidity,
+        low_liquidity=overview.low_liquidity,
         generated_ts_ms=ts,
         session_now=_session_at(ts, metrics),
         overview=overview,
@@ -1193,4 +1250,5 @@ def build_pair_detail(
         rfq_mechanism_share=attr.mechanism.rfq_share,
         volume_compare=vcmp,
         premium=premium_panel,
+        tvl_series=tvl_series,
     )

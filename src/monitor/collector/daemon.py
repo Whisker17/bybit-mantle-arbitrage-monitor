@@ -41,6 +41,7 @@ from monitor.quotes import (
     BybitTradeTick,
     CexVolumeTick,
     CollectorGap,
+    DexPoolTvlTick,
     Erc20TransferTick,
     FluxionPoolStateTick,
     FluxionRfqFillTick,
@@ -385,7 +386,9 @@ class CollectorDaemon:
             transfer_decimals=native_token_decimals(self.pairs),
             enrich_rfq_fills=self.cfg.mantle.enrich_rfq_fills,
             gap_source="mantle_blocks",
+            tvl_poll_interval_s=self.cfg.mantle.tvl_poll_interval_s,
             on_pool_state=self._on_pool_state,
+            on_pool_tvl=self._on_pool_tvl,
             on_swaps=self._on_swaps,
             on_rfq_fills=self._on_rfq_fills,
             on_transfers=self._on_transfers if transfer_map else None,
@@ -438,7 +441,9 @@ class CollectorDaemon:
             enrich_rfq_fills=False,
             gap_source="bsc_blocks",
             pool_state_every_n_blocks=self.cfg.bsc.pool_state_every_n_blocks,
+            tvl_poll_interval_s=self.cfg.bsc.tvl_poll_interval_s,
             on_pool_state=self._on_pool_state,
+            on_pool_tvl=self._on_pool_tvl,
             on_swaps=self._on_swaps,
             on_gap=self._on_chain_gap,
             on_block_done=self._make_on_block_done(latency_tracker),
@@ -452,6 +457,9 @@ class CollectorDaemon:
 
     def _on_pool_state(self, ticks: list[FluxionPoolStateTick]) -> None:
         self.store.insert_pool_state(ticks)
+
+    def _on_pool_tvl(self, ticks: list[DexPoolTvlTick]) -> None:
+        self.store.insert_pool_tvl(ticks)
 
     def _on_swaps(self, ticks: list[FluxionSwapTick]) -> None:
         self.store.insert_swaps(ticks)

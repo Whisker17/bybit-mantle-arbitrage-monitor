@@ -24,6 +24,7 @@ from monitor.quotes import (
     BybitTradeTick,
     CexVolumeTick,
     CollectorGap,
+    DexPoolTvlTick,
     Erc20TransferTick,
     FluxionPoolStateTick,
     FluxionRfqFillTick,
@@ -337,6 +338,47 @@ class JournalReader:
             (pair_id,),
         ).fetchone()
         return None if row is None else _row_to_cex_volume(row)
+
+    def latest_pool_tvl(self, pair_id: str) -> DexPoolTvlTick | None:
+        """Most recent live DEX pool TVL sample (WHI-782).
+
+        None when the table is absent (pre-v7 journal) or no sample yet.
+        """
+        if "dex_pool_tvl" not in self._table_names():
+            return None
+        row = self._conn.execute(
+            """
+            SELECT * FROM dex_pool_tvl
+            WHERE pair_id = ?
+            ORDER BY recv_ts_ms DESC, id DESC
+            LIMIT 1
+            """,
+            (pair_id,),
+        ).fetchone()
+        return None if row is None else _row_to_pool_tvl(row)
+
+    def pool_tvl_series(
+        self,
+        pair_id: str,
+        *,
+        since_ms: int = 0,
+        limit: int = 500,
+    ) -> list[DexPoolTvlTick]:
+        """Ascending TVL history for a pair (detail trend; WHI-782)."""
+        if "dex_pool_tvl" not in self._table_names():
+            return []
+        rows = self._conn.execute(
+            """
+            SELECT * FROM dex_pool_tvl
+            WHERE pair_id = ? AND recv_ts_ms >= ?
+            ORDER BY recv_ts_ms DESC, id DESC
+            LIMIT ?
+            """,
+            (pair_id, since_ms, limit),
+        ).fetchall()
+        ticks = [_row_to_pool_tvl(r) for r in rows]
+        ticks.reverse()
+        return ticks
 
     def latest_underlying_price(self, ticker: str) -> UnderlyingPriceTick | None:
         """Most recent underlying equity print for a canonical ticker (WHI-778/779).
@@ -669,6 +711,21 @@ def _row_to_cex_volume(row: sqlite3.Row) -> CexVolumeTick:
         volume_quote_24h=_d(row["volume_quote_24h"]),
         trade_count_24h=None if count_raw is None else int(count_raw),
         source=src,  # type: ignore[arg-type]
+        gap=bool(row["gap"]),
+    )
+
+
+def _row_to_pool_tvl(row: sqlite3.Row) -> DexPoolTvlTick:
+    return DexPoolTvlTick(
+        pair_id=str(row["pair_id"]),
+        pool=str(row["pool"]),
+        block_number=int(row["block_number"]),
+        block_ts=int(row["block_ts"]),
+        recv_ts_ms=int(row["recv_ts_ms"]),
+        base_bal=_d(row["base_bal"]),
+        quote_bal=_d(row["quote_bal"]),
+        base_price=_d(row["base_price"]),
+        tvl_usd=_d(row["tvl_usd"]),
         gap=bool(row["gap"]),
     )
 

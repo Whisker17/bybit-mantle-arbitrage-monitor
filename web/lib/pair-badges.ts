@@ -5,9 +5,9 @@
  * interesting* along two independent dimensions; they do **not** mean the
  * inventory was rebuilt to CEX volume top-10 (see m7-bstocks-inventory.md).
  *
- * Defaults (product choice for this issue):
- * - binance-pancake: TVL + Vol, top-5 in-market each
- * - bybit-fluxion: Vol only (no PCS TVL inventory story), top-5
+ * Defaults (product choice; WHI-781 + WHI-782):
+ * - both markets: TVL + Vol, top-5 in-market each
+ * - TVL rank prefers live `tvl_usd`, else inventory `est_liquidity_usd`
  *
  * Rank on the **full market overview set**, not a UI-filtered subset.
  */
@@ -47,30 +47,29 @@ const VOL_TITLE =
 
 /**
  * Per-market badge policy. Pair *lists* are never hardcoded — ranks come from
- * overview row fields (`est_liquidity_usd`, `cex_volume_24h`). Policy itself is
- * a WHI-781 product choice on market id (binance-pancake TVL+Vol; other markets
- * Vol-only until a third market defines TVL).
+ * overview row fields (`tvl_usd` live preferred, else `est_liquidity_usd`,
+ * plus `cex_volume_24h`). WHI-782: both markets enable TVL once live journal
+ * samples exist; inventory est is the cold-start fallback only.
  */
 export function badgePolicyForMarket(marketId: string): BadgePolicy {
-  if (marketId === "binance-pancake") {
-    return {
-      enableTvl: true,
-      enableVol: true,
-      topN: DEFAULT_TOP_N,
-      tvlTitle:
-        "PCS USDT pool liquidity rank (inventory snapshot) — top 5 in this market",
-      volTitle: VOL_TITLE,
-    };
-  }
-  // bybit-fluxion and any future market without a PCS-style inventory rank:
-  // Vol-only until product defines a TVL dimension.
+  const tvlTitle =
+    marketId === "binance-pancake"
+      ? "DEX pool TVL rank (live balanceOf when available; else inventory est) — top 5"
+      : "DEX pool TVL rank (live balanceOf when available; else inventory est) — top 5";
   return {
-    enableTvl: false,
+    enableTvl: true,
     enableVol: true,
     topN: DEFAULT_TOP_N,
-    tvlTitle: "",
+    tvlTitle,
     volTitle: VOL_TITLE,
   };
+}
+
+/** Prefer live TVL; fall back to inventory est for cold start (WHI-782). */
+export function tvlRankValue(row: PairOverviewRow): number | null {
+  const live = parseNum(row.tvl_usd);
+  if (live != null) return live;
+  return parseNum(row.est_liquidity_usd);
 }
 
 /**
@@ -112,7 +111,7 @@ export function pairBadgesForRows(
     ? topRankedIds(
         rows.map((r) => ({
           id: r.pair_id,
-          value: parseNum(r.est_liquidity_usd),
+          value: tvlRankValue(r),
         })),
         policy.topN,
       )
