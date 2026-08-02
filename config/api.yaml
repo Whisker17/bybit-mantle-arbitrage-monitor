@@ -23,6 +23,11 @@ recent_gap_window_ms: 300000
 # the API itself is request/response only (no SSE in v1).
 poll_interval_s: 2.0
 
+# PnL v2 (WHI-766): process-local TTL for pair bucket/optimal snapshots.
+# Align with poll_interval_s so concurrent overview + detail polls share one
+# optimal-size search per pair. 0 = recompute every request (tests).
+pnl_cache_ttl_s: 2.0
+
 # CORS origins for local static-export dogfood. Production nginx serves UI +
 # /api same-origin, so empty list is correct on the VPS.
 # Example local: ["http://127.0.0.1:3000", "http://localhost:3000"]

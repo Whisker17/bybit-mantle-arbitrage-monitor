@@ -12,7 +12,10 @@ import {
   fmtPrice,
   fmtSession,
   fmtSignedBps,
+  fmtUsd,
+  usdTone,
 } from "@/lib/format";
+import { overviewPnlCell } from "@/lib/pnl";
 import type { PairOverviewRow, SortKey } from "@/lib/types";
 
 type Props = {
@@ -49,7 +52,7 @@ const COLS: Col[] = [
     key: null,
     label: "Bucket PnL",
     align: "right",
-    title: "Optimal / bucket PnL — lands with WHI-756",
+    title: "Optimal size net PnL (PnL v2) — hover for direction & notional",
   },
 ];
 
@@ -65,6 +68,31 @@ function BpsCell({ value }: { value: string | null }) {
       )}
     >
       {fmtSignedBps(value)}
+    </span>
+  );
+}
+
+function BucketPnlCell({ row }: { row: PairOverviewRow }) {
+  const cell = overviewPnlCell(row.pnl_v2);
+  if (cell.kind === "ok") {
+    const tone = usdTone(cell.pnlUsd);
+    return (
+      <span
+        className={cn(
+          "tabular-nums font-medium",
+          tone === "pos" && "text-positive",
+          tone === "neg" && "text-negative",
+          tone === "empty" && "text-muted-foreground",
+        )}
+        title={cell.title}
+      >
+        {fmtUsd(cell.pnlUsd)}
+      </span>
+    );
+  }
+  return (
+    <span className="text-muted-foreground" title={cell.title}>
+      {cell.label}
     </span>
   );
 }
@@ -219,11 +247,8 @@ export function PairsTable({ rows, sortKey, sortDesc, onSort }: Props) {
                   <td className="px-2 py-1.5 text-right tabular-nums">
                     {row.trades_24h}
                   </td>
-                  <td
-                    className="px-2 py-1.5 text-right text-muted-foreground"
-                    title="PnL v2 bucket table (WHI-756) not landed"
-                  >
-                    —
+                  <td className="px-2 py-1.5 text-right">
+                    <BucketPnlCell row={row} />
                   </td>
                 </tr>
               );

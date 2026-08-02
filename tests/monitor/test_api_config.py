@@ -17,6 +17,7 @@ def test_load_default_api_config() -> None:
     assert cfg.sqlite_path == "data/monitor.db"
     assert cfg.collector_stale_ms == 30_000
     assert cfg.poll_interval_s == 2.0
+    assert cfg.pnl_cache_ttl_s == 2.0
     assert cfg.cors_origins == []
 
 

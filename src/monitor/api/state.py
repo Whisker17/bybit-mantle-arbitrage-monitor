@@ -9,6 +9,7 @@ from pathlib import Path
 from fastapi import Request
 
 from monitor.api.config import ApiConfig
+from monitor.api.pnl_cache import PnlSnapshotCache
 from monitor.attribution.config import AttributionConfig
 from monitor.metrics.config import MetricsConfig
 from monitor.storage import JournalReader
@@ -36,6 +37,7 @@ class AppState:
     reader: JournalReader | None
     edge_state: RunningEdgeState = field(default_factory=RunningEdgeState)
     lock: threading.Lock = field(default_factory=threading.Lock)
+    pnl_cache: PnlSnapshotCache | None = None
 
     def ensure_reader(self) -> JournalReader | None:
         """Open the journal if it appeared after process start (collector race)."""

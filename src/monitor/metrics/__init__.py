@@ -6,6 +6,7 @@ Public seams (tests and TUI/Web depend on these, not internals):
 - ``spread_bps`` — Bybit mid vs AMM / RFQ mid
 - ``compute_edge`` / ``compute_edge_ladder`` — M3 net paper edge + cost breakdown
 - ``compute_pnl_usd`` / ``pnl_bucket_table`` / ``optimal_size`` — PnL v2 (WHI-756)
+- ``build_pnl_pair_snapshot`` — journal ticks → dual-direction tables (WHI-766)
 - ``is_us_rth_open`` / ``session_kind`` — NYSE open / closed / early-close
 - ``EdgeStats`` / ``OptimalPnlStats`` — time-weighted distributions + breaches
 - ``build_spread_snapshot`` / ``build_edge_snapshot`` — tick → panel model (M5 feeds)
@@ -30,6 +31,14 @@ from monitor.metrics.edge import (
     compute_edge_ladder,
     mid_from_bid_ask,
     spread_bps,
+)
+from monitor.metrics.pnl_snapshot import (
+    PnlOptimalSummary,
+    PnlPairSnapshot,
+    build_pnl_pair_snapshot,
+    levels_from_depth_curve,
+    overview_pnl_summary,
+    rfq_tick_to_poll_quote,
 )
 from monitor.metrics.pnl_v2 import (
     OptimalSizeResult,
@@ -70,6 +79,8 @@ __all__ = [
     "OptimalSizeResult",
     "PnlBucketTable",
     "PnlCostBreakdownUsd",
+    "PnlOptimalSummary",
+    "PnlPairSnapshot",
     "PnlResult",
     "PnlV2Config",
     "RfqPollQuote",
@@ -79,16 +90,20 @@ __all__ = [
     "VenueKind",
     "best_net_edge",
     "build_edge_snapshot",
+    "build_pnl_pair_snapshot",
     "build_spread_snapshot",
     "compute_edge",
     "compute_edge_ladder",
     "compute_pnl_usd",
     "default_metrics_path",
     "is_us_rth_open",
+    "levels_from_depth_curve",
     "load_metrics_config",
     "mid_from_bid_ask",
     "optimal_size",
+    "overview_pnl_summary",
     "pnl_bucket_table",
+    "rfq_tick_to_poll_quote",
     "session_kind",
     "spread_bps",
 ]
