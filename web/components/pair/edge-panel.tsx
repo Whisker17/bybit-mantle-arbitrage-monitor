@@ -311,19 +311,24 @@ function BucketPnlPanel({
       ) : (
         <>
           <BucketTable table={table} />
-          {table.optimal && (
-            <UsdCostWaterfall
-              title={`Costs at optimal Q*=$${fmtNotional(table.optimal.q_star_usd)}`}
-              row={table.optimal.result}
-            />
-          )}
+          {(() => {
+            const costRow =
+              table.optimal?.result ??
+              [...table.amm_buckets].reverse().find((b) => b.fillable) ??
+              null;
+            if (!costRow) return null;
+            const title = table.optimal
+              ? `Costs at optimal Q*=$${fmtNotional(table.optimal.q_star_usd)}`
+              : `Costs at Q=$${fmtNotional(costRow.size_usd)}`;
+            return <UsdCostWaterfall title={title} row={costRow} />;
+          })()}
           {table.rfq_rows.length > 0 && (
             <div className="space-y-1 pt-1 border-t border-border/60">
               <p className="text-[10px] font-medium uppercase tracking-wide text-muted-foreground">
                 RFQ poll reference
               </p>
-              {table.rfq_rows.map((r, i) => (
-                <p key={i} className="text-[11px] tabular-nums">
+              {table.rfq_rows.map((r) => (
+                <p key={`${r.venue}-${r.size_usd}`} className="text-[11px] tabular-nums">
                   Q=${fmtNotional(r.size_usd)} · PnL {fmtUsd(r.pnl_usd)}
                   {!r.fillable && r.reason ? ` · ${r.reason}` : ""}
                 </p>

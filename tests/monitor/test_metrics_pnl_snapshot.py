@@ -240,7 +240,7 @@ def test_rfq_tick_raw_to_human_buy() -> None:
         http_status=200,
         available=True,
     )
-    q = rfq_tick_to_poll_quote(tick)
+    q = rfq_tick_to_poll_quote(tick, native_decimals=18)
     assert q is not None
     assert q.fluxion_leg == "buy"
     assert q.amount_in == Decimal(100)
@@ -252,7 +252,7 @@ def test_snapshot_no_book() -> None:
     pool_tick = _pool_tick()
     amm = amm_pool_from_tick(pair, pool_tick)
     snap = build_pnl_pair_snapshot(
-        pair_id=pair.id,
+        pair=pair,
         bybit=None,
         amm=amm,
         amm_tick=pool_tick,
@@ -271,7 +271,7 @@ def test_snapshot_no_depth_hides_overview_optimal() -> None:
     pool_tick = _pool_tick(mid=Decimal("99.5"))
     amm = amm_pool_from_tick(pair, pool_tick)
     snap = build_pnl_pair_snapshot(
-        pair_id=pair.id,
+        pair=pair,
         bybit=_book(),
         amm=amm,
         amm_tick=pool_tick,
@@ -301,7 +301,7 @@ def test_snapshot_with_depth_matches_engine_bucket_pnl() -> None:
     amm = amm_pool_from_tick(pair, pool_tick)
     assert amm is not None
     snap = build_pnl_pair_snapshot(
-        pair_id=pair.id,
+        pair=pair,
         bybit=book,
         amm=amm,
         amm_tick=pool_tick,
@@ -341,7 +341,7 @@ def test_snapshot_stale_when_recv_old() -> None:
     pool_tick = _pool_tick(ts=old)
     amm = amm_pool_from_tick(pair, pool_tick)
     snap = build_pnl_pair_snapshot(
-        pair_id=pair.id,
+        pair=pair,
         bybit=_book(ts=old),
         amm=amm,
         amm_tick=pool_tick,
@@ -352,6 +352,27 @@ def test_snapshot_stale_when_recv_old() -> None:
     )
     assert snap.status == "stale"
     assert snap.tables == {}
+
+
+def test_empty_reconstructed_depth_is_no_depth() -> None:
+    """Journal depth row with all-None VWAPs must not claim has_depth."""
+    pair = _load_aapl_pair()
+    pool_tick = _pool_tick(mid=Decimal("99.5"))
+    amm = amm_pool_from_tick(pair, pool_tick)
+    depth = _depth(
+        bid_vwap=(None, None, None, None, None, None),
+        ask_vwap=(None, None, None, None, None, None),
+    )
+    snap = build_pnl_pair_snapshot(
+        pair=pair,
+        bybit=_book(),
+        amm=amm,
+        amm_tick=pool_tick,
+        config=_cfg(gas=Decimal("0.01")),
+        depth=depth,
+    )
+    assert snap.has_depth is False
+    assert snap.status == "no_depth"
 
 
 def test_checked_in_metrics_still_loads() -> None:

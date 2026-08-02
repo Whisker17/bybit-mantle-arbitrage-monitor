@@ -9,6 +9,7 @@ from fastapi import APIRouter, HTTPException, Request
 from monitor.api.serialize import to_json_dict, to_jsonable
 from monitor.api.state import AppState, app_state_from_request
 from monitor.metrics.pnl_snapshot import (
+    PnlOptimalSummary,
     PnlPairSnapshot,
     build_pnl_pair_snapshot,
     overview_pnl_summary,
@@ -59,7 +60,7 @@ def _pnl_snapshot_for_pair(
     rfq_buy, rfq_sell = reader.latest_rfq_sides(pair.id)
     amm = amm_pool_from_tick(pair, amm_tick) if amm_tick is not None else None
     snap = build_pnl_pair_snapshot(
-        pair_id=pair.id,
+        pair=pair,
         bybit=bybit,
         amm=amm,
         amm_tick=amm_tick,
@@ -114,15 +115,9 @@ def list_pairs(request: Request) -> dict[str, Any]:
             except KeyError:
                 # Builder rows should always be configured pairs; never 404 the list.
                 enriched = dict(row)
-                enriched["pnl_v2"] = {
-                    "status": "no_pool",
-                    "has_depth": False,
-                    "direction": None,
-                    "optimal_notional_usd": None,
-                    "optimal_net_pnl_usd": None,
-                    "optimal_net_pnl_bps": None,
-                    "bybit_depth_source": None,
-                }
+                enriched["pnl_v2"] = PnlOptimalSummary(
+                    status="no_pool", has_depth=False
+                ).to_dict()
                 rows_out.append(enriched)
                 continue
             snap = _pnl_snapshot_for_pair(state, pair=pair, reader=reader)

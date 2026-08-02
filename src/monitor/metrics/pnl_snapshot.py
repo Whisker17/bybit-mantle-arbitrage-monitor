@@ -16,7 +16,7 @@ from dataclasses import dataclass
 from decimal import Decimal
 from typing import Any, Literal
 
-from monitor.fluxion.abi import NATIVE_DECIMALS_DEFAULT, USDC_DECIMALS
+from monitor.fluxion.abi import USDC_DECIMALS
 from monitor.metrics.amm_pool import AmmPoolState
 from monitor.metrics.bybit_slip import BPS
 from monitor.metrics.config import MetricsConfig
@@ -35,6 +35,7 @@ from monitor.quotes import (
     FluxionRfqQuoteTick,
     rfq_side_leg,
 )
+from monitor.symbols.models import Pair
 
 PnlStatus = Literal[
     "ok",
@@ -143,8 +144,16 @@ def levels_from_depth_curve(
     return levels
 
 
-def rfq_tick_to_poll_quote(tick: FluxionRfqQuoteTick) -> RfqPollQuote | None:
-    """Convert a journal RFQ poll row (raw amounts) into engine human units."""
+def rfq_tick_to_poll_quote(
+    tick: FluxionRfqQuoteTick,
+    *,
+    native_decimals: int,
+    quote_decimals: int = USDC_DECIMALS,
+) -> RfqPollQuote | None:
+    """Convert a journal RFQ poll row (raw amounts) into engine human units.
+
+    ``native_decimals`` comes from ``Pair.fluxion.native_decimals`` (config).
+    """
     if not tick.available or tick.amount_out is None:
         return None
     leg = rfq_side_leg(tick.side)
@@ -159,12 +168,12 @@ def rfq_tick_to_poll_quote(tick: FluxionRfqQuoteTick) -> RfqPollQuote | None:
         return None
     if leg == "buy":
         # EXACT_INPUT USDC → base out
-        amount_in = raw_in / (Decimal(10) ** USDC_DECIMALS)
-        amount_out = raw_out / (Decimal(10) ** NATIVE_DECIMALS_DEFAULT)
+        amount_in = raw_in / (Decimal(10) ** quote_decimals)
+        amount_out = raw_out / (Decimal(10) ** native_decimals)
     else:
         # EXACT_INPUT base → USDC out
-        amount_in = raw_in / (Decimal(10) ** NATIVE_DECIMALS_DEFAULT)
-        amount_out = raw_out / (Decimal(10) ** USDC_DECIMALS)
+        amount_in = raw_in / (Decimal(10) ** native_decimals)
+        amount_out = raw_out / (Decimal(10) ** quote_decimals)
     if amount_in <= 0 or amount_out <= 0:
         return None
     return RfqPollQuote(amount_in=amount_in, amount_out=amount_out, fluxion_leg=leg)
@@ -216,7 +225,7 @@ def _ticks_stale(
 
 def build_pnl_pair_snapshot(
     *,
-    pair_id: str,
+    pair: Pair,
     bybit: BybitBookTick | None,
     amm: AmmPoolState | None,
     amm_tick: FluxionPoolStateTick | None,
@@ -233,49 +242,53 @@ def build_pnl_pair_snapshot(
     ``amm`` is the metrics pool geometry (caller builds via ``amm_pool_from_tick``
     so this module never imports ``monitor.tui``). ``amm_tick`` is only used for
     freshness. Overview consumers read ``.best``; detail consumers read
-    ``.tables``. When depth is missing, tables still compute on L1 but status
-    is ``no_depth`` so the overview can render that label.
+    ``.tables``. When depth is missing or reconstructs empty, tables still
+    compute on L1 but status is ``no_depth`` so the overview can render that
+    label.
     """
-    has_depth = depth is not None
+    pair_id = pair.id
 
     if bybit is None:
-        empty = _empty_summary(status="no_book", has_depth=has_depth)
+        empty = _empty_summary(status="no_book", has_depth=False)
         return PnlPairSnapshot(
-            status="no_book", has_depth=has_depth, best=empty, tables={}
+            status="no_book", has_depth=False, best=empty, tables={}
         )
     if bybit.bid_de_multiplied <= 0 or bybit.ask_de_multiplied <= 0:
-        empty = _empty_summary(status="no_book", has_depth=has_depth)
+        empty = _empty_summary(status="no_book", has_depth=False)
         return PnlPairSnapshot(
-            status="no_book", has_depth=has_depth, best=empty, tables={}
+            status="no_book", has_depth=False, best=empty, tables={}
         )
 
     if amm is None or amm_tick is None:
-        empty = _empty_summary(status="no_pool", has_depth=has_depth)
+        empty = _empty_summary(status="no_pool", has_depth=False)
         return PnlPairSnapshot(
-            status="no_pool", has_depth=has_depth, best=empty, tables={}
+            status="no_pool", has_depth=False, best=empty, tables={}
         )
 
     if _ticks_stale(bybit=bybit, amm=amm_tick, now_ms=now_ms, stale_ms=stale_ms):
-        empty = _empty_summary(status="stale", has_depth=has_depth)
+        empty = _empty_summary(status="stale", has_depth=False)
         return PnlPairSnapshot(
-            status="stale", has_depth=has_depth, best=empty, tables={}
+            status="stale", has_depth=False, best=empty, tables={}
         )
 
     bybit_bids: list[tuple[Decimal, Decimal]] | None = None
     bybit_asks: list[tuple[Decimal, Decimal]] | None = None
+    # Usable depth = reconstructed non-empty levels (not merely a journal row).
+    has_depth = False
     if depth is not None:
         bids = levels_from_depth_curve(depth, side="bid")
         asks = levels_from_depth_curve(depth, side="ask")
-        # Empty reconstructed curve → fall back to L1 (infinite) rather than
-        # treating the book as zero-depth unfillable.
-        bybit_bids = bids or None
-        bybit_asks = asks or None
+        if bids or asks:
+            has_depth = True
+            bybit_bids = bids or None
+            bybit_asks = asks or None
 
     rfq_quotes: list[RfqPollQuote] = []
+    native_dec = pair.fluxion.native_decimals
     for tick in (rfq_buy, rfq_sell):
         if tick is None:
             continue
-        q = rfq_tick_to_poll_quote(tick)
+        q = rfq_tick_to_poll_quote(tick, native_decimals=native_dec)
         if q is not None:
             rfq_quotes.append(q)
 

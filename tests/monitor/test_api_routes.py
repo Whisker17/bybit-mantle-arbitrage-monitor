@@ -213,15 +213,15 @@ def test_pairs_overview_with_depth_exposes_optimal(client_with_depth: TestClient
     assert r.status_code == 200
     aapl = next(row for row in r.json()["rows"] if row["pair_id"] == "AAPLx")
     pnl = aapl["pnl_v2"]
-    assert pnl["status"] in ("ok", "no_fillable")
+    # Seeded depth reconstructs fillable levels + deep AMM → live optimal.
     assert pnl["has_depth"] is True
-    if pnl["status"] == "ok":
-        assert pnl["optimal_net_pnl_usd"] is not None
-        assert pnl["optimal_notional_usd"] is not None
-        assert pnl["direction"] in (
-            "buy_fluxion_sell_bybit",
-            "buy_bybit_sell_fluxion",
-        )
+    assert pnl["status"] == "ok"
+    assert pnl["optimal_net_pnl_usd"] is not None
+    assert pnl["optimal_notional_usd"] is not None
+    assert pnl["direction"] in (
+        "buy_fluxion_sell_bybit",
+        "buy_bybit_sell_fluxion",
+    )
 
 
 def test_pair_detail_pnl_buckets_with_depth(client_with_depth: TestClient) -> None:

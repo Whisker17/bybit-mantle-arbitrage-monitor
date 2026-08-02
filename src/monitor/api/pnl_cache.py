@@ -2,8 +2,9 @@
 
 Process-local, single-worker safe (API runs one uvicorn worker). Keys are
 pair ids; values are full ``PnlPairSnapshot`` objects so overview + detail
-share one compute. TTL defaults to the client poll interval (2s) so a burst
-of concurrent polls amortizes optimal-size search across pairs.
+share one compute. TTL default is 2.5s (slightly above ``poll_interval_s``)
+so a steady poller still hits cache; concurrent overview + detail share one
+optimal-size search per pair.
 """
 
 from __future__ import annotations
