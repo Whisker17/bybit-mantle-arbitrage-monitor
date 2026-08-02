@@ -147,6 +147,8 @@ def build_pair_attribution(
     ``amm_trades`` / ``rfq_fills`` should already be scoped to ``pair_id``
     (RFQ fills with ``pair_id is None`` are ignored for pair views — use
     ``build_global_mechanism_share`` for unscoped RFQ counts).
+    When ``config.has_rfq`` is False (AMM-only markets), RFQ fills are dropped
+    so the mechanism layer is 100% AMM without a market-id branch.
     Time-period bucketing is the caller's window plus ``session`` filter
     (open / closed / all); there is no internal multi-bucket rollup.
     """
@@ -155,8 +157,11 @@ def build_pair_attribution(
     # Pair-scoped: only fills explicitly tagged with this pair_id (unscoped
     # RFQ fills contribute to global mechanism share only — see
     # docs/DEFERRED_ISSUES.md RFQ fill enrichment).
-    rfq = [f for f in rfq_fills if f.pair_id == pair_id]
-    rfq = filter_rfq_session(rfq, session)
+    if config.has_rfq:
+        rfq = [f for f in rfq_fills if f.pair_id == pair_id]
+        rfq = filter_rfq_session(rfq, session)
+    else:
+        rfq = []
 
     profiles = label_takers(
         amm,

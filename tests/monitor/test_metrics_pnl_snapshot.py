@@ -252,12 +252,13 @@ def test_snapshot_no_book() -> None:
     pool_tick = _pool_tick()
     amm = amm_pool_from_tick(pair, pool_tick)
     snap = build_pnl_pair_snapshot(
-        pair=pair,
+        pair_id=pair.id,
         bybit=None,
         amm=amm,
         amm_tick=pool_tick,
         config=_cfg(),
         depth=_depth(),
+        native_decimals=pair.fluxion.native_decimals,
     )
     assert snap.status == "no_book"
     assert snap.best.status == "no_book"
@@ -271,12 +272,13 @@ def test_snapshot_no_depth_hides_overview_optimal() -> None:
     pool_tick = _pool_tick(mid=Decimal("99.5"))
     amm = amm_pool_from_tick(pair, pool_tick)
     snap = build_pnl_pair_snapshot(
-        pair=pair,
+        pair_id=pair.id,
         bybit=_book(),
         amm=amm,
         amm_tick=pool_tick,
         config=cfg,
         depth=None,
+        native_decimals=pair.fluxion.native_decimals,
     )
     assert snap.status == "no_depth"
     assert snap.has_depth is False
@@ -301,12 +303,13 @@ def test_snapshot_with_depth_matches_engine_bucket_pnl() -> None:
     amm = amm_pool_from_tick(pair, pool_tick)
     assert amm is not None
     snap = build_pnl_pair_snapshot(
-        pair=pair,
+        pair_id=pair.id,
         bybit=book,
         amm=amm,
         amm_tick=pool_tick,
         config=cfg,
         depth=depth,
+        native_decimals=pair.fluxion.native_decimals,
     )
     assert snap.status == "ok"
     assert snap.has_depth is True
@@ -341,12 +344,13 @@ def test_snapshot_stale_when_recv_old() -> None:
     pool_tick = _pool_tick(ts=old)
     amm = amm_pool_from_tick(pair, pool_tick)
     snap = build_pnl_pair_snapshot(
-        pair=pair,
+        pair_id=pair.id,
         bybit=_book(ts=old),
         amm=amm,
         amm_tick=pool_tick,
         config=_cfg(),
         depth=_depth(ts=old),
+        native_decimals=pair.fluxion.native_decimals,
         now_ms=old + 60_000,
         stale_ms=30_000,
     )
@@ -364,12 +368,13 @@ def test_empty_reconstructed_depth_is_no_depth() -> None:
         ask_vwap=(None, None, None, None, None, None),
     )
     snap = build_pnl_pair_snapshot(
-        pair=pair,
+        pair_id=pair.id,
         bybit=_book(),
         amm=amm,
         amm_tick=pool_tick,
         config=_cfg(gas=Decimal("0.01")),
         depth=depth,
+        native_decimals=pair.fluxion.native_decimals,
     )
     assert snap.has_depth is False
     assert snap.status == "no_depth"

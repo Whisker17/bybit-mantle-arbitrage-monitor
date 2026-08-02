@@ -45,6 +45,9 @@ class DexSide(BaseModel):
     chain_id: int = Field(gt=0)
     pool_kind: str = Field(min_length=1)
     quote_asset: str = Field(min_length=1)
+    # ERC-20 decimals of the quote token in the pool (USDC=6 Mantle; USDT=18 BSC).
+    # Injected into AmmPoolState at tick lift (WHI-773) — not hardcoded in metrics.
+    quote_decimals: int = Field(default=6, ge=0, le=255)
     # True when the market has a pollable RFQ / quote vendor (Fluxion).
     has_rfq: bool = False
 

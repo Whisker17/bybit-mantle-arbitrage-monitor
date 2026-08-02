@@ -6,6 +6,10 @@
 
 version: 1
 
+# has_rfq is NOT set here — market assembly always injects dex.has_rfq via
+# apply_market_attribution (bybit-fluxion=true, binance-pancake=false).
+# AttributionConfig model default is True for non-market CLIs (refresh, scripts).
+
 # How many top AMM takers (by trade count) to surface for M5 detail pages.
 top_takers_n: 10
 

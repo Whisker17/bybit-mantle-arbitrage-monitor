@@ -35,7 +35,6 @@ from monitor.quotes import (
     FluxionRfqQuoteTick,
     rfq_side_leg,
 )
-from monitor.symbols.models import Pair
 
 PnlStatus = Literal[
     "ok",
@@ -225,7 +224,7 @@ def _ticks_stale(
 
 def build_pnl_pair_snapshot(
     *,
-    pair: Pair,
+    pair_id: str,
     bybit: BybitBookTick | None,
     amm: AmmPoolState | None,
     amm_tick: FluxionPoolStateTick | None,
@@ -233,21 +232,26 @@ def build_pnl_pair_snapshot(
     depth: BybitDepthTick | None = None,
     rfq_buy: FluxionRfqQuoteTick | None = None,
     rfq_sell: FluxionRfqQuoteTick | None = None,
+    native_decimals: int = 18,
+    rfq_enabled: bool = True,
     now_ms: int | None = None,
     stale_ms: int | None = None,
     include_optimal: bool = True,
 ) -> PnlPairSnapshot:
     """Build dual-direction PnL tables + best-of optimal summary.
 
-    ``amm`` is the metrics pool geometry (caller builds via ``amm_pool_from_tick``
-    so this module never imports ``monitor.tui``). ``amm_tick`` is only used for
-    freshness. Overview consumers read ``.best``; detail consumers read
-    ``.tables``. When depth is missing or reconstructs empty, tables still
-    compute on L1 but status is ``no_depth`` so the overview can render that
-    label.
-    """
-    pair_id = pair.id
+    ``amm`` is the metrics pool geometry (caller builds via
+    ``monitor.metrics.amm_pool.amm_pool_from_tick`` or the TUI wrapper).
+    ``amm_tick`` is only used for freshness. Overview consumers read
+    ``.best``; detail consumers read ``.tables``. When depth is missing or
+    reconstructs empty, tables still compute on L1 but status is ``no_depth``
+    so the overview can render that label.
 
+    Inventory-shape free: pass ``pair_id`` + optional RFQ ``native_decimals``.
+    When ``rfq_enabled`` is False (AMM-only markets), RFQ poll rows are ignored.
+    CEX bid/ask must already be in **comparable** space (journal
+    ``*_de_multiplied`` — divide for Bybit, multiply for Binance BEP-677).
+    """
     if bybit is None:
         empty = _empty_summary(status="no_book", has_depth=False)
         return PnlPairSnapshot(
@@ -284,13 +288,13 @@ def build_pnl_pair_snapshot(
             bybit_asks = asks or None
 
     rfq_quotes: list[RfqPollQuote] = []
-    native_dec = pair.fluxion.native_decimals
-    for tick in (rfq_buy, rfq_sell):
-        if tick is None:
-            continue
-        q = rfq_tick_to_poll_quote(tick, native_decimals=native_dec)
-        if q is not None:
-            rfq_quotes.append(q)
+    if rfq_enabled:
+        for tick in (rfq_buy, rfq_sell):
+            if tick is None:
+                continue
+            q = rfq_tick_to_poll_quote(tick, native_decimals=native_decimals)
+            if q is not None:
+                rfq_quotes.append(q)
 
     tables: dict[Direction, PnlBucketTable] = {}
     for direction in _DIRECTIONS:

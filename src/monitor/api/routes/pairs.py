@@ -19,6 +19,7 @@ from monitor.attribution.mm_panel import (
     mm_active_status,
     pair_active_addresses,
 )
+from monitor.metrics.amm_pool import amm_pool_from_pair_tick
 from monitor.metrics.pnl_snapshot import (
     PnlOptimalSummary,
     PnlPairSnapshot,
@@ -32,7 +33,6 @@ from monitor.symbols.models import Pair
 from monitor.symbols.token_map import quote_is_token0_by_pair
 from monitor.tui.builder import build_overview, build_pair_detail
 from monitor.tui.model import PairDetailModel
-from monitor.tui.pool import amm_pool_from_tick
 
 router = APIRouter(tags=["pairs"])
 
@@ -71,9 +71,15 @@ def _pnl_snapshot_for_pair(
     amm_tick = reader.latest_pool_state(pair.id)
     depth = reader.latest_bybit_depth(pair.id)
     rfq_buy, rfq_sell = reader.latest_rfq_sides(pair.id)
-    amm = amm_pool_from_tick(pair, amm_tick) if amm_tick is not None else None
+    amm = (
+        amm_pool_from_pair_tick(
+            pair, amm_tick, quote_decimals=state.quote_decimals
+        )
+        if amm_tick is not None
+        else None
+    )
     snap = build_pnl_pair_snapshot(
-        pair=pair,
+        pair_id=pair.id,
         bybit=bybit,
         amm=amm,
         amm_tick=amm_tick,
@@ -81,6 +87,9 @@ def _pnl_snapshot_for_pair(
         depth=depth,
         rfq_buy=rfq_buy,
         rfq_sell=rfq_sell,
+        native_decimals=pair.fluxion.native_decimals,
+        # Same config switch as attribution (market dex.has_rfq via assembly).
+        rfq_enabled=state.attribution.has_rfq,
         now_ms=now_ms(),
         stale_ms=state.api.collector_stale_ms,
     )

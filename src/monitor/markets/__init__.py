@@ -12,6 +12,7 @@ per-market SQLite path.
 
 from monitor.markets.context import (
     MarketContext,
+    apply_market_attribution,
     apply_market_costs,
     load_market_context,
     resolve_market_sqlite,
@@ -48,6 +49,7 @@ __all__ = [
     "MarketCosts",
     "MarketFile",
     "MultiplierSemantics",
+    "apply_market_attribution",
     "apply_market_costs",
     "default_markets_dir",
     "known_market_ids",
