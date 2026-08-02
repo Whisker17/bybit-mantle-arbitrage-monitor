@@ -17,6 +17,7 @@ from monitor.attribution.events import AmmTradeEvent, RfqFillEvent
 from monitor.fluxion.pools import mid_from_sqrt_price_x96
 from monitor.markets import apply_market_attribution, load_market_context
 from monitor.metrics import (
+    amm_pool_from_pair_tick,
     amm_pool_from_tick,
     build_pnl_pair_snapshot,
     compute_pnl_usd,
@@ -31,7 +32,6 @@ from monitor.quotes import (
     FluxionPoolStateTick,
 )
 from monitor.symbols.bstocks_models import BStocksPair
-from monitor.tui.pool import amm_pool_from_tick as pair_amm_pool_from_tick
 
 
 def _deep_pool_at_mid(
@@ -167,10 +167,11 @@ def test_amm_pool_from_bstocks_pair_uses_usdt_18_decimals() -> None:
         mid_usdc_per_native=mid,
         wrapper_assets_per_share=Decimal(1),
     )
-    amm = pair_amm_pool_from_tick(pair, tick)
+    q_dec = ctx.dex.quote_decimals
+    amm = amm_pool_from_pair_tick(pair, tick, quote_decimals=q_dec)
     assert amm is not None
     assert amm.pool_fee == pair.pancake.amm.fee  # TSLAB = 2500
-    assert amm.token0_decimals == 18
+    assert amm.token0_decimals == q_dec
     assert amm.token1_decimals == 18
     assert abs(amm.mid_quote_per_base() - mid) / mid < Decimal("0.01")
 
@@ -179,7 +180,7 @@ def test_amm_pool_from_bstocks_pair_uses_usdt_18_decimals() -> None:
         tick,
         quote_token_address=pair.pancake.quote_token_address,
         pool_fee=pair.pancake.amm.fee,
-        quote_decimals=18,
+        quote_decimals=q_dec,
         base_decimals=pair.pancake.native_decimals,
     )
     assert pure == amm
@@ -306,7 +307,9 @@ def test_binance_pancake_snapshot_with_depth_fixture() -> None:
         mid_usdc_per_native=amm_mid,
         wrapper_assets_per_share=Decimal(1),
     )
-    amm = pair_amm_pool_from_tick(pair, pool_tick)
+    amm = amm_pool_from_pair_tick(
+        pair, pool_tick, quote_decimals=ctx.dex.quote_decimals
+    )
     assert amm is not None
 
     snap = build_pnl_pair_snapshot(
@@ -316,7 +319,7 @@ def test_binance_pancake_snapshot_with_depth_fixture() -> None:
         amm_tick=pool_tick,
         config=cfg,
         depth=depth,
-        rfq_enabled=False,
+        rfq_enabled=ctx.attribution.has_rfq,
         native_decimals=pair.pancake.native_decimals,
     )
     assert snap.status == "ok"

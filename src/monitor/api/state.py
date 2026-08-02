@@ -60,6 +60,8 @@ class AppState:
     tui: TuiConfig
     db_path: Path
     reader: JournalReader | None
+    # From market dex.quote_decimals (USDC=6 / USDT=18) — never hardcode at call sites.
+    quote_decimals: int = 6
     edge_state: RunningEdgeState = field(default_factory=RunningEdgeState)
     lock: threading.Lock = field(default_factory=threading.Lock)
     pnl_cache: PnlSnapshotCache | None = None

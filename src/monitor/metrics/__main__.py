@@ -17,10 +17,14 @@ import argparse
 import json
 import sys
 from decimal import Decimal
+from typing import TYPE_CHECKING
 
 from monitor.metrics.amm_pool import AmmPoolState
 from monitor.metrics.edge import Direction
 from monitor.metrics.pnl_v2 import pnl_bucket_table
+
+if TYPE_CHECKING:
+    from monitor.markets.context import MarketContext
 
 
 def _pool(
@@ -45,7 +49,7 @@ def _pool(
 
 
 def _inventory_pool_fee_and_base_decimals(
-    ctx: object,
+    ctx: MarketContext,
     pair_id: str,
 ) -> tuple[int, int] | None:
     """Look up (pool_fee, base_decimals) from whichever inventory the market has.
@@ -53,9 +57,6 @@ def _inventory_pool_fee_and_base_decimals(
     Returns None when the pair id is absent or has no AMM — caller decides
     whether that is an error.
     """
-    from monitor.markets.context import MarketContext
-
-    assert isinstance(ctx, MarketContext)
     if ctx.bstocks is not None:
         try:
             bpair = ctx.bstocks.pair_by_id(pair_id)

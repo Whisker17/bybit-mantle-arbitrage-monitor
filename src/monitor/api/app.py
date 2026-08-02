@@ -68,6 +68,7 @@ def build_app_state(
         tui=tui,
         db_path=db_path,
         reader=reader,
+        quote_decimals=ctx.dex.quote_decimals,
         pnl_cache=PnlSnapshotCache(ttl_s=cfg.pnl_cache_ttl_s),
         inventory_cache=InventoryEventsCache(ttl_s=cfg.mm_inventory_cache_ttl_s),
     )

@@ -14,7 +14,11 @@ Public seams (tests and TUI/Web depend on these, not internals):
 Depends on ``monitor.quotes`` tick shapes only (DESIGN §4.3), not on WS/RPC clients.
 """
 
-from monitor.metrics.amm_pool import AmmPoolState, amm_pool_from_tick
+from monitor.metrics.amm_pool import (
+    AmmPoolState,
+    amm_pool_from_pair_tick,
+    amm_pool_from_tick,
+)
 from monitor.metrics.config import (
     MetricsConfig,
     MetricsConfigError,
@@ -88,6 +92,7 @@ __all__ = [
     "SessionKind",
     "SpreadSnapshot",
     "VenueKind",
+    "amm_pool_from_pair_tick",
     "amm_pool_from_tick",
     "best_net_edge",
     "build_edge_snapshot",

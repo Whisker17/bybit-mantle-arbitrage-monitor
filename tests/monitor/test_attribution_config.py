@@ -24,6 +24,7 @@ def test_default_attribution_path_points_at_repo_config() -> None:
 def test_load_checked_in_attribution_config() -> None:
     cfg = load_attribution_config()
     assert cfg.version == 1
+    # Model default True; market assembly overrides from dex.has_rfq.
     assert cfg.has_rfq is True
     assert cfg.top_takers_n == 10
     assert cfg.rpc_probe_batch_size == 50
