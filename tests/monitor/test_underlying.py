@@ -382,7 +382,8 @@ def test_bybit_inventory_underlying_tickers_nonempty() -> None:
     cfg = load_underlying_config()
     covered = [t for t in tickers if t in cfg.tickers and not cfg.tickers[t].uncovered]
     assert covered, "no Hermes-covered tickers for bybit inventory"
-    assert "SPCX" in cfg.uncovered_tickers()
+    # SPCX stays uncovered (no fake price) — covered list already checked above.
+    assert "SPCX" not in covered
 
 
 def test_binance_inventory_underlying_tickers_nonempty() -> None:
@@ -464,9 +465,15 @@ def test_stamp_underlying_poll_meta_even_when_empty(tmp_path: Path) -> None:
 
 
 def test_stamp_underlying_status_early_exits(tmp_path: Path) -> None:
-    """WHI-788: disabled / no_tickers leave meta so blank UI is diagnosable."""
+    """WHI-788: disabled / no_tickers / stopped leave meta for ops diagnosis."""
     from monitor.collector.config import load_collector_config
-    from monitor.collector.daemon import CollectorDaemon
+    from monitor.collector.daemon import (
+        UNDERLYING_STATUS_CONFIG_ERROR,
+        UNDERLYING_STATUS_DISABLED,
+        UNDERLYING_STATUS_NO_TICKERS,
+        UNDERLYING_STATUS_STOPPED,
+        CollectorDaemon,
+    )
     from monitor.symbols import load_pairs_config
 
     store = SqliteStore(tmp_path / "status.db")
@@ -476,11 +483,16 @@ def test_stamp_underlying_status_early_exits(tmp_path: Path) -> None:
         store,
         market_id="bybit-fluxion",
     )
-    daemon._stamp_underlying_status("disabled")
+    daemon._stamp_underlying_status(UNDERLYING_STATUS_DISABLED)
     assert store.get_meta("underlying_status") == "disabled"
-    daemon._stamp_underlying_status("no_tickers")
+    daemon._stamp_underlying_status(UNDERLYING_STATUS_NO_TICKERS)
     assert store.get_meta("underlying_status") == "no_tickers"
-    daemon._stamp_underlying_status("config_error", error="missing yaml")
+    daemon._stamp_underlying_status(
+        UNDERLYING_STATUS_CONFIG_ERROR, error="missing yaml"
+    )
     assert store.get_meta("underlying_status") == "config_error"
     assert store.get_meta("underlying_last_error") == "missing yaml"
+    # finally-path contract: loop exit must not leave status stuck at running.
+    daemon._stamp_underlying_status(UNDERLYING_STATUS_STOPPED)
+    assert store.get_meta("underlying_status") == "stopped"
     store.close()

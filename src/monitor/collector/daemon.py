@@ -64,6 +64,15 @@ from monitor.underlying.tickers import underlying_tickers_for_pairs
 
 logger = logging.getLogger(__name__)
 
+# Operator-visible underlying_status values (WHI-788). Keep literals stable —
+# deploy/README.md runbook documents the value → meaning table.
+UNDERLYING_STATUS_DISABLED = "disabled"
+UNDERLYING_STATUS_CONFIG_ERROR = "config_error"
+UNDERLYING_STATUS_NO_TICKERS = "no_tickers"
+UNDERLYING_STATUS_RUNNING = "running"
+UNDERLYING_STATUS_STOPPED = "stopped"
+_UNDERLYING_ERROR_MAX = 500
+
 
 class CollectorDaemon:
     """Long-running realtime collector (no historical backfill)."""
@@ -582,15 +591,6 @@ class CollectorDaemon:
             except Exception as exc:  # noqa: BLE001
                 logger.exception("attribution refresh error: %s", exc)
 
-    # Operator-visible underlying_status values (WHI-788). Greppable in
-    # deploy/README.md runbooks — keep these string literals stable.
-    _UNDERLYING_STATUS_DISABLED = "disabled"
-    _UNDERLYING_STATUS_CONFIG_ERROR = "config_error"
-    _UNDERLYING_STATUS_NO_TICKERS = "no_tickers"
-    _UNDERLYING_STATUS_RUNNING = "running"
-    _UNDERLYING_STATUS_STOPPED = "stopped"
-    _UNDERLYING_ERROR_MAX = 500
-
     def _underlying_tickers_for_market(self) -> list[str]:
         """Canonical underlyings present in this market's inventory."""
         if self.pairs is not None:
@@ -602,7 +602,7 @@ class CollectorDaemon:
     def _set_underlying_error(self, error: str) -> None:
         """Write ``underlying_last_error`` with a bounded length."""
         self.store.set_meta(
-            "underlying_last_error", error[: self._UNDERLYING_ERROR_MAX]
+            "underlying_last_error", error[:_UNDERLYING_ERROR_MAX]
         )
 
     def _stamp_underlying_status(
@@ -653,25 +653,25 @@ class CollectorDaemon:
         """Poll Pyth Hermes (+ optional Yahoo) into underlying_prices (WHI-778)."""
         if not self.cfg.underlying_enabled:
             logger.info("underlying poller disabled (collector.yaml underlying.enabled)")
-            self._stamp_underlying_status(self._UNDERLYING_STATUS_DISABLED)
+            self._stamp_underlying_status(UNDERLYING_STATUS_DISABLED)
             return
         try:
             u_cfg = load_underlying_config()
         except UnderlyingConfigError as exc:
             logger.error("underlying config load failed: %s", exc)
             self._stamp_underlying_status(
-                self._UNDERLYING_STATUS_CONFIG_ERROR, error=str(exc)
+                UNDERLYING_STATUS_CONFIG_ERROR, error=str(exc)
             )
             return
 
         tickers = self._underlying_tickers_for_market()
         if not tickers:
             logger.info("underlying poller: no inventory tickers")
-            self._stamp_underlying_status(self._UNDERLYING_STATUS_NO_TICKERS)
+            self._stamp_underlying_status(UNDERLYING_STATUS_NO_TICKERS)
             return
         poller = UnderlyingPoller(u_cfg, tickers=tickers)
         self._stamp_underlying_status(
-            self._UNDERLYING_STATUS_RUNNING, error="", tickers=tickers
+            UNDERLYING_STATUS_RUNNING, error="", tickers=tickers
         )
         logger.info(
             "underlying poller started tickers=%s open_s=%s closed_s=%s",
@@ -709,7 +709,7 @@ class CollectorDaemon:
         finally:
             poller.close()
             # Process may stay up after cancel; don't leave status stuck at running.
-            self._stamp_underlying_status(self._UNDERLYING_STATUS_STOPPED)
+            self._stamp_underlying_status(UNDERLYING_STATUS_STOPPED)
 
     async def _retention_loop(self) -> None:
         """Periodic prune under the store lock (WHI-751)."""

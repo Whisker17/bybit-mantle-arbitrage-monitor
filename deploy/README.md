@@ -85,6 +85,16 @@ done
 # (uncovered / private — not a fake price).
 # Smoke without the full collector: `uv run python -m monitor.underlying \
 #   --tickers AAPL,TSLA,NVDA` (Hermes public; no journal write).
+#
+# underlying_status values:
+#   running      — poll loop active
+#   stopped      — loop exited (process may still be up for other feeds)
+#   disabled     — collector.yaml underlying.enabled=false
+#   config_error — underlying.yaml failed to load (see underlying_last_error)
+#   no_tickers   — inventory produced an empty ticker set
+# underlying_last_poll_ms advances on every attempt (incl. empty/error);
+# underlying_last_n is the tick count of the last attempt; last_error holds
+# the most recent poll exception (not cleared by empty successful polls).
 ```
 
 Local dogfood: restart each collector process after `git pull` / feature merge
