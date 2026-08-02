@@ -6,8 +6,6 @@ from typing import Any
 
 from fastapi import APIRouter, Request
 
-from monitor.api.health import HealthStatus, build_health
-from monitor.api.serialize import to_json_dict
 from monitor.api.state import MarketRuntime, app_state_from_request
 
 router = APIRouter(tags=["markets"])
@@ -21,21 +19,14 @@ def market_summary(
     poll_interval_s: float,
 ) -> dict[str, Any]:
     """One market card for the switcher / discovery endpoint."""
-    reader = runtime.ensure_reader()
-    if reader is None:
-        health = HealthStatus.unavailable(
-            db_path=str(runtime.db_path),
-            poll_interval_s=poll_interval_s,
-            error=f"collector journal not found: {runtime.db_path}",
-        )
-    else:
-        with runtime.lock:
-            health = build_health(
-                reader,
-                stale_ms=stale_ms,
-                gap_window_ms=gap_window_ms,
-                poll_interval_s=poll_interval_s,
-            )
+    from monitor.api.routes.health import health_dict_for_runtime
+
+    health = health_dict_for_runtime(
+        runtime,
+        stale_ms=stale_ms,
+        gap_window_ms=gap_window_ms,
+        poll_interval_s=poll_interval_s,
+    )
     return {
         "id": runtime.market_id,
         "display_name": runtime.display_name,
@@ -45,7 +36,7 @@ def market_summary(
         "pair_count": runtime.pair_count,
         "data_status": runtime.data_status(),
         "db_path": str(runtime.db_path),
-        "health": to_json_dict(health),
+        "health": health,
     }
 
 

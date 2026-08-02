@@ -52,11 +52,12 @@ def _build_market_runtime(
         reader = JournalReader(db_path)
     else:
         reader = None
-    pair_count = (
-        len(ctx.pairs.pairs)
-        if ctx.pairs is not None
-        else _inventory_pair_count(ctx.market_file.inventory)
-    )
+    if ctx.pairs is not None:
+        pair_count = len(ctx.pairs.pairs)
+    elif ctx.bstocks is not None:
+        pair_count = len(ctx.bstocks.pairs)
+    else:
+        pair_count = _inventory_pair_count(ctx.market_file.inventory)
     return MarketRuntime(
         market_id=mid,
         display_name=ctx.display_name,

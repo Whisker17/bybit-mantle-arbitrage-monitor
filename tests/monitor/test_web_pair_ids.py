@@ -34,12 +34,12 @@ def test_web_pair_ids_ts_source_uses_market_inventory() -> None:
     assert "TSLAB" not in src
 
 
-def test_web_markets_ts_loads_from_config_markets() -> None:
-    """markets.ts must parse config/markets YAML — not a hand-typed market list."""
+def test_web_markets_client_module_has_no_fs() -> None:
+    """Client-safe markets.ts must not import node:fs (static export)."""
     root = Path(__file__).resolve().parents[2]
-    src = (root / "web" / "lib" / "markets.ts").read_text(encoding="utf-8")
-    assert "config" in src and "markets" in src
-    assert "loadKnownMarketsFromDisk" in src or "parseMarketYaml" in src
-    assert "marketOverviewPath" in src
-    # No hand-maintained display strings for a third market.
-    assert "Bybit ⇄ Fluxion" not in src
+    client = (root / "web" / "lib" / "markets.ts").read_text(encoding="utf-8")
+    server = (root / "web" / "lib" / "markets-server.ts").read_text(encoding="utf-8")
+    assert "from \"node:fs\"" not in client and "from 'node:fs'" not in client
+    assert "from \"node:fs\"" in server or "from 'node:fs'" in server
+    assert "loadKnownMarketsFromDisk" in server
+    assert "marketOverviewPath" in client

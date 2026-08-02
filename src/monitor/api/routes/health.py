@@ -14,25 +14,40 @@ from monitor.api.state import AppState, MarketRuntime, app_state_from_request
 router = APIRouter(tags=["health"])
 
 
-def _health_body(state: AppState, runtime: MarketRuntime) -> dict[str, Any]:
+def health_dict_for_runtime(
+    runtime: MarketRuntime,
+    *,
+    stale_ms: int,
+    gap_window_ms: int,
+    poll_interval_s: float,
+) -> dict[str, Any]:
+    """Shared health snapshot used by /health and /api/markets summaries."""
     reader = runtime.ensure_reader()
     if reader is None:
-        body = to_json_dict(
+        return to_json_dict(
             HealthStatus.unavailable(
                 db_path=str(runtime.db_path),
-                poll_interval_s=state.api.poll_interval_s,
+                poll_interval_s=poll_interval_s,
                 error=f"collector journal not found: {runtime.db_path}",
             )
         )
-    else:
-        with runtime.lock:
-            status = build_health(
-                reader,
-                stale_ms=state.api.collector_stale_ms,
-                gap_window_ms=state.api.recent_gap_window_ms,
-                poll_interval_s=state.api.poll_interval_s,
-            )
-        body = to_json_dict(status)
+    with runtime.lock:
+        status = build_health(
+            reader,
+            stale_ms=stale_ms,
+            gap_window_ms=gap_window_ms,
+            poll_interval_s=poll_interval_s,
+        )
+    return to_json_dict(status)
+
+
+def _health_body(state: AppState, runtime: MarketRuntime) -> dict[str, Any]:
+    body = health_dict_for_runtime(
+        runtime,
+        stale_ms=state.api.collector_stale_ms,
+        gap_window_ms=state.api.recent_gap_window_ms,
+        poll_interval_s=state.api.poll_interval_s,
+    )
     body["market_id"] = runtime.market_id
     body["display_name"] = runtime.display_name
     body["has_rfq"] = runtime.has_rfq
