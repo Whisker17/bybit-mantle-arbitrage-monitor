@@ -211,20 +211,17 @@ class BinanceWsCollector:
                     await ping_task
 
     async def _ping_loop(self, ws: Any) -> None:
-        # Binance servers send protocol pings (websockets auto-answers). Probe the
-        # socket periodically so a half-open connection fails into reconnect+gap
-        # (same intent as Bybit JSON ping — not a silent no-op).
+        # Probe half-open sockets: websockets.ping() returns an awaitable that
+        # resolves when the pong arrives; failure ends the session → reconnect+gap.
         while not self._stop.is_set():
             await asyncio.sleep(self.ping_interval_s)
             try:
                 ping = getattr(ws, "ping", None)
-                if callable(ping):
-                    await ping()
-                else:
-                    # Fallback: force a round-trip via pong frame if available.
-                    pong = getattr(ws, "pong", None)
-                    if callable(pong):
-                        await pong()
+                if not callable(ping):
+                    return
+                waiter = ping()
+                if hasattr(waiter, "__await__"):
+                    await waiter
             except Exception:  # noqa: BLE001
                 return
 

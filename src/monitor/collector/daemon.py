@@ -83,10 +83,12 @@ class CollectorDaemon:
         self.store = store
         self.market_id = market_id
         if collector.is_binance_pancake:
-            assert collector.bsc is not None
+            if collector.bsc is None:
+                raise ValueError("binance-pancake collector requires bsc config")
             self.rpc_url = rpc_url or resolve_bsc_rpc_url(collector.bsc.public_rpc_url)
         else:
-            assert collector.mantle is not None
+            if collector.mantle is None:
+                raise ValueError("bybit-fluxion collector requires mantle config")
             self.rpc_url = rpc_url or resolve_mantle_rpc_url(collector.mantle.public_rpc_url)
         self._stop = asyncio.Event()
         self._rfq_gap = False
@@ -110,8 +112,8 @@ class CollectorDaemon:
             await self._run_bybit_fluxion()
 
     async def _run_bybit_fluxion(self) -> None:
-        assert self.pairs is not None
-        assert self.cfg.bybit is not None
+        if self.pairs is None or self.cfg.bybit is None:
+            raise RuntimeError("bybit-fluxion run requires pairs + bybit config")
         pair_id_by_symbol = {p.bybit.symbol.upper(): p.id for p in self.pairs.pairs}
         mult_by_symbol = {
             k.upper(): v for k, v in multiplier_map(self.pairs).items()
@@ -174,9 +176,10 @@ class CollectorDaemon:
             self._finalize_stop("bybit_book")
 
     async def _run_binance_pancake(self) -> None:
-        assert self.bstocks is not None
-        assert self.cfg.binance is not None
-        assert self.cfg.bsc is not None
+        if self.bstocks is None or self.cfg.binance is None or self.cfg.bsc is None:
+            raise RuntimeError(
+                "binance-pancake run requires bstocks inventory + binance/bsc config"
+            )
         pair_id_by_symbol = {
             p.binance.symbol.upper(): p.id for p in self.bstocks.pairs
         }
@@ -292,8 +295,8 @@ class CollectorDaemon:
         )
 
     async def _chain_loop_mantle(self) -> None:
-        assert self.pairs is not None
-        assert self.cfg.mantle is not None
+        if self.pairs is None or self.cfg.mantle is None:
+            raise RuntimeError("mantle chain loop requires pairs + mantle config")
         pools = [
             PoolMeta(
                 pair_id=p.id,
@@ -348,8 +351,8 @@ class CollectorDaemon:
         )
 
     async def _chain_loop_bsc(self) -> None:
-        assert self.bstocks is not None
-        assert self.cfg.bsc is not None
+        if self.bstocks is None or self.cfg.bsc is None:
+            raise RuntimeError("bsc chain loop requires bstocks + bsc config")
         quote_dec = self.cfg.bsc.quote_decimals
         pools = [
             PoolMeta(
@@ -468,8 +471,8 @@ class CollectorDaemon:
             rpc.close()
 
     async def _rfq_loop(self) -> None:
-        assert self.pairs is not None
-        assert self.cfg.rfq is not None
+        if self.pairs is None or self.cfg.rfq is None:
+            raise RuntimeError("rfq loop requires pairs + rfq config")
         poller = RfqPoller(
             pairs=list(self.pairs.pairs),
             rfq=self.pairs.rfq,

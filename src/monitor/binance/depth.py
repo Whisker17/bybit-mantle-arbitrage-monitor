@@ -126,35 +126,31 @@ class BinanceDepthTracker:
         self._bids[symbol] = bid_map
         self._asks[symbol] = ask_map
         recv = recv_ts_ms if recv_ts_ms is not None else now_ms()
-        # lastUpdateId is a sequence, not ms — never store it as exchange_ts_ms.
+        # Prefer bookTicker L1 prices when present; always refresh timestamps so
+        # depth_tick does not stamp VWAP with a stalled bookTicker. lastUpdateId
+        # is a sequence, not ms — never store it as exchange_ts_ms.
+        ticker = self._last_book.get(symbol)
+        if ticker is not None:
+            l1_bid, l1_ask = ticker.bid, ticker.ask
+            l1_bid_dm, l1_ask_dm = ticker.bid_de_multiplied, ticker.ask_de_multiplied
+            tick_gap = gap or ticker.gap
+        else:
+            l1_bid, l1_ask = bid, ask
+            l1_bid_dm = multiplied_price(bid, mult)
+            l1_ask_dm = multiplied_price(ask, mult)
+            tick_gap = gap
         book = BybitBookTick(
             pair_id=pair_id,
             symbol=symbol,
             exchange_ts_ms=recv,
             recv_ts_ms=recv,
-            bid=bid,
-            ask=ask,
-            bid_de_multiplied=multiplied_price(bid, mult),
-            ask_de_multiplied=multiplied_price(ask, mult),
+            bid=l1_bid,
+            ask=l1_ask,
+            bid_de_multiplied=l1_bid_dm,
+            ask_de_multiplied=l1_ask_dm,
             multiplier=mult,
-            gap=gap,
+            gap=tick_gap,
         )
-        # Keep bookTicker L1 for the L1 journal when present, but always refresh
-        # timestamps so depth_tick does not stamp VWAP with a stalled bookTicker.
-        ticker = self._last_book.get(symbol)
-        if ticker is not None:
-            book = BybitBookTick(
-                pair_id=pair_id,
-                symbol=symbol,
-                exchange_ts_ms=recv,
-                recv_ts_ms=recv,
-                bid=ticker.bid,
-                ask=ticker.ask,
-                bid_de_multiplied=ticker.bid_de_multiplied,
-                ask_de_multiplied=ticker.ask_de_multiplied,
-                multiplier=mult,
-                gap=gap or ticker.gap,
-            )
         self._last_book[symbol] = book
         return book
 

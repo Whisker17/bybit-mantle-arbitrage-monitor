@@ -183,8 +183,9 @@ class BinanceCollectorConfig(BaseModel):
 
     model_config = ConfigDict(extra="forbid", frozen=True)
 
-    # REST base for optional probes; collector runtime is WS-first.
-    rest_base_url: str = Field(min_length=1)
+    # REST base (geo-safe vision host). Reserved for health probes / future REST;
+    # live path is WS-first. Optional so a missing key does not block WS-only runs.
+    rest_base_url: str | None = None
     ws_base_url: str = Field(min_length=1)
     book_stream: str = Field(default="bookTicker", min_length=1)
     trade_stream: str = Field(default="aggTrade", min_length=1)
@@ -442,8 +443,8 @@ def rpc_url_kind(url: str) -> Literal["keyed", "public"]:
         PUBLIC_BSC_RPC_URL.rstrip("/"),
     }:
         return "public"
-    # Known public BSC dataseeds.
-    if "bsc-dataseed" in url or "1rpc.io/bnb" in url:
+    # Public BSC dataseed family (no API key segment).
+    if "bsc-dataseed" in url:
         return "public"
     return "keyed" if "/v1/" in url else "public"
 

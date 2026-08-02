@@ -189,11 +189,15 @@ def parse_agg_trade_message(
         if not trade_id:
             trade_id = f"{item.get('T') or item.get('E')}:{price}:{size}:{side}"
         exchange_ts = item.get("T") or item.get("E") or payload.get("E") or recv
+        try:
+            exchange_ts_ms = int(exchange_ts)
+        except (TypeError, ValueError):
+            exchange_ts_ms = recv
         out.append(
             BybitTradeTick(
                 pair_id=pair_id,
                 symbol=symbol,
-                exchange_ts_ms=int(exchange_ts),
+                exchange_ts_ms=exchange_ts_ms,
                 recv_ts_ms=recv,
                 trade_id=trade_id,
                 price=price,
