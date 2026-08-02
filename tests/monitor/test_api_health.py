@@ -117,3 +117,61 @@ def test_unavailable_health() -> None:
     assert h.ok is False
     assert h.db_exists is False
     assert h.error == "missing"
+    assert h.uncovered_coverage_mismatches == []
+    assert h.uncovered_coverage_probe_ms is None
+    assert h.uncovered_coverage_probe_errors == []
+
+
+def test_build_health_exposes_uncovered_mismatches(tmp_path: Path) -> None:
+    """WHI-787: journal meta for stale uncovered flags surfaces on /api/health."""
+    from monitor.underlying.coverage_probe import (
+        META_MISMATCHES,
+        META_PROBE_ERRORS,
+        META_PROBE_MS,
+        ProbeError,
+        UncoveredMismatch,
+        errors_to_meta_json,
+        mismatches_to_meta_json,
+    )
+
+    db = tmp_path / "m.db"
+    store = SqliteStore(db)
+    ts = now_ms()
+    store.set_meta("collector_started_ms", str(ts - 60_000))
+    _seed_book(store, ts=ts - 1_000)
+    store.set_meta(
+        META_MISMATCHES,
+        mismatches_to_meta_json(
+            [
+                UncoveredMismatch(
+                    ticker="SPCX",
+                    sources=("yahoo",),
+                    detail="Yahoo chart returned a positive last price",
+                )
+            ]
+        ),
+    )
+    store.set_meta(
+        META_PROBE_ERRORS,
+        errors_to_meta_json(
+            [ProbeError(ticker="GHOST", source="yahoo", error="timeout")]
+        ),
+    )
+    store.set_meta(META_PROBE_MS, "1_700_000_000_000".replace("_", ""))
+    store.close()
+
+    with JournalReader(db) as reader:
+        health = build_health(
+            reader,
+            now=ts,
+            stale_ms=30_000,
+            gap_window_ms=300_000,
+        )
+    assert health.ok is True  # mismatches are advisory, not ok-flip
+    assert health.uncovered_coverage_probe_ms == 1_700_000_000_000
+    assert len(health.uncovered_coverage_mismatches) == 1
+    assert health.uncovered_coverage_mismatches[0]["ticker"] == "SPCX"
+    assert health.uncovered_coverage_mismatches[0]["sources"] == ["yahoo"]
+    assert health.uncovered_coverage_probe_errors == [
+        {"ticker": "GHOST", "source": "yahoo", "error": "timeout"}
+    ]

@@ -32,6 +32,40 @@ def market_state_hint(state: str | None) -> PriceType | None:
     return None
 
 
+def yahoo_chart_meta(body: dict[str, Any] | None) -> dict[str, Any] | None:
+    """Return Yahoo chart ``meta`` object, or None when the payload is unusable."""
+    if not body:
+        return None
+    try:
+        meta = body["chart"]["result"][0]["meta"]
+    except (KeyError, IndexError, TypeError):
+        return None
+    return meta if isinstance(meta, dict) else None
+
+
+def yahoo_meta_last_price(meta: dict[str, Any] | None) -> Decimal | None:
+    """Positive last price from Yahoo meta (regularMarketPrice, else previousClose)."""
+    if not meta:
+        return None
+    price_raw = meta.get("regularMarketPrice")
+    if price_raw is None:
+        price_raw = meta.get("previousClose")
+    if price_raw is None:
+        return None
+    try:
+        price = Decimal(str(price_raw))
+    except (InvalidOperation, ValueError):
+        return None
+    if price <= 0:
+        return None
+    return price
+
+
+def yahoo_chart_has_price(body: dict[str, Any] | None) -> bool:
+    """True when Yahoo chart JSON has a positive last/previous price (WHI-787)."""
+    return yahoo_meta_last_price(yahoo_chart_meta(body)) is not None
+
+
 def parse_yahoo_chart(
     body: dict[str, Any],
     *,
@@ -46,22 +80,12 @@ def parse_yahoo_chart(
     """Extract last price from Yahoo chart meta; optional KRW→USD conversion."""
     recv = recv_ts_ms if recv_ts_ms is not None else now_ms()
     now = now_ms_value if now_ms_value is not None else recv
-    try:
-        result = body["chart"]["result"][0]
-        meta = result["meta"]
-    except (KeyError, IndexError, TypeError):
+    meta = yahoo_chart_meta(body)
+    if meta is None:
         return None
 
-    price_raw = meta.get("regularMarketPrice")
-    if price_raw is None:
-        price_raw = meta.get("previousClose")
-    if price_raw is None:
-        return None
-    try:
-        price = Decimal(str(price_raw))
-    except (InvalidOperation, ValueError):
-        return None
-    if price <= 0:
+    price = yahoo_meta_last_price(meta)
+    if price is None:
         return None
 
     as_of_s = meta.get("regularMarketTime")

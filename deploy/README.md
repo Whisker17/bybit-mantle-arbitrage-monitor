@@ -81,10 +81,12 @@ for m in bybit-fluxion binance-pancake; do
 done
 # While the collector is up: underlying_status=running, underlying_last_poll_ms
 # advancing, underlying_last_n > 0 after the first successful Hermes poll.
-# Public US tickers (AAPL, NVDA, TSLA, …) should have rows; SPCX stays empty
-# (uncovered / private — not a fake price).
+# Public US tickers (AAPL, NVDA, TSLA, …) should have rows; SPCX/SKHY via Yahoo
+# gap-fill (source=yahoo). uncovered_coverage_mismatches on /api/health should
+# be empty unless a ticker is still marked uncovered but a public tape exists.
 # Smoke without the full collector: `uv run python -m monitor.underlying \
-#   --tickers AAPL,TSLA,NVDA` (Hermes public; no journal write).
+#   --tickers AAPL,TSLA,NVDA,SPCX,SKHY` (Hermes + Yahoo; no journal write).
+# Uncovered guardrail only: `uv run python -m monitor.underlying --probe-uncovered`
 #
 # underlying_status values:
 #   running      — poll loop active
@@ -95,6 +97,10 @@ done
 # underlying_last_poll_ms advances on every attempt (incl. empty/error);
 # underlying_last_n is the tick count of the last attempt; last_error holds
 # the most recent poll exception (not cleared by empty successful polls).
+# WHI-787 uncovered guardrail meta (also on GET /api/health):
+#   underlying_uncovered_mismatches   — JSON [{ticker, sources, detail}]
+#   underlying_uncovered_probe_errors — JSON [{ticker, source, error}]
+#   underlying_uncovered_probe_ms     — last probe attempt (ms)
 ```
 
 Local dogfood: restart each collector process after `git pull` / feature merge

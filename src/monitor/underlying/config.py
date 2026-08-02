@@ -56,6 +56,10 @@ class UnderlyingConfig(BaseModel):
     yahoo_fallback: bool = True
     yahoo_chart_base_url: str = Field(min_length=1)
     fx_usd_krw_feed_id: str | None = None
+    # WHI-787: how often the collector re-probes uncovered tickers for public
+    # Yahoo/Pyth coverage (stale "private" config guardrail). Required in YAML —
+    # no silent code default (config/README: checked-in file is the decision).
+    uncovered_probe_interval_s: float = Field(gt=0)
     session: SessionConfig
     tickers: dict[str, TickerFeedConfig] = Field(min_length=1)
 

@@ -60,6 +60,16 @@ from monitor.symbols.token_map import (
     native_token_to_pair,
 )
 from monitor.underlying.config import UnderlyingConfigError, load_underlying_config
+from monitor.underlying.coverage_probe import (
+    META_MISMATCHES,
+    META_PROBE_ERRORS,
+    META_PROBE_MS,
+    ProbeError,
+    ProbeOutcome,
+    UncoveredCoverageProbe,
+    errors_to_meta_json,
+    mismatches_to_meta_json,
+)
 from monitor.underlying.poller import UnderlyingPoller
 from monitor.underlying.tickers import underlying_tickers_for_pairs
 
@@ -657,6 +667,14 @@ class CollectorDaemon:
         elif n > 0:
             self._set_underlying_error("")
 
+    def _stamp_uncovered_probe(self, outcome: ProbeOutcome, *, probe_ms: int) -> None:
+        """Persist WHI-787 uncovered coverage probe outcome to journal meta."""
+        self.store.set_meta(
+            META_MISMATCHES, mismatches_to_meta_json(outcome.mismatches)
+        )
+        self.store.set_meta(META_PROBE_ERRORS, errors_to_meta_json(outcome.errors))
+        self.store.set_meta(META_PROBE_MS, str(probe_ms))
+
     async def _underlying_loop(self) -> None:
         """Poll Pyth Hermes (+ optional Yahoo) into underlying_prices (WHI-778)."""
         if not self.cfg.underlying_enabled:
@@ -678,14 +696,20 @@ class CollectorDaemon:
             self._stamp_underlying_status(UNDERLYING_STATUS_NO_TICKERS)
             return
         poller = UnderlyingPoller(u_cfg, tickers=tickers)
+        # Own clients: probe runs even when yahoo_fallback is off for collection.
+        coverage = UncoveredCoverageProbe(u_cfg)
+        # Force first probe promptly after start (WHI-787 guardrail).
+        last_uncovered_probe_ms = 0
         self._stamp_underlying_status(
             UNDERLYING_STATUS_RUNNING, error="", tickers=tickers
         )
         logger.info(
-            "underlying poller started tickers=%s open_s=%s closed_s=%s",
+            "underlying poller started tickers=%s open_s=%s closed_s=%s "
+            "uncovered_probe_s=%s",
             tickers,
             u_cfg.open_poll_interval_s,
             u_cfg.closed_poll_interval_s,
+            u_cfg.uncovered_probe_interval_s,
         )
         try:
             while not self._stop.is_set():
@@ -709,12 +733,42 @@ class CollectorDaemon:
                             detail=f"poll error: {exc}",
                         ),
                     )
+                # Uncovered coverage re-check (no network when uncovered list empty).
+                # Always advance the wall-clock throttle when due — including on
+                # outer failure — so a broken probe cannot hot-loop every poll.
+                now = now_ms()
+                probe_every_ms = int(u_cfg.uncovered_probe_interval_s * 1000)
+                if now - last_uncovered_probe_ms >= probe_every_ms:
+                    try:
+                        outcome = await asyncio.to_thread(coverage.probe_once)
+                        self._stamp_uncovered_probe(outcome, probe_ms=now)
+                    except Exception as exc:  # noqa: BLE001
+                        logger.warning("uncovered coverage probe failed: %s", exc)
+                        # Outer failure (to_thread / set_meta): stamp empty
+                        # mismatches + a probe-level error so health does not
+                        # keep a prior "all clear" forever.
+                        self._stamp_uncovered_probe(
+                            ProbeOutcome(
+                                mismatches=[],
+                                errors=[
+                                    ProbeError(
+                                        ticker="*",
+                                        source="probe",
+                                        error=str(exc)[:400],
+                                    )
+                                ],
+                            ),
+                            probe_ms=now,
+                        )
+                    finally:
+                        last_uncovered_probe_ms = now
                 interval = poller.poll_interval_s()
                 try:
                     await asyncio.wait_for(self._stop.wait(), timeout=interval)
                 except TimeoutError:
                     pass
         finally:
+            coverage.close()
             poller.close()
             # Process may stay up after cancel; don't leave status stuck at running.
             self._stamp_underlying_status(UNDERLYING_STATUS_STOPPED)

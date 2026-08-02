@@ -29,6 +29,11 @@ yahoo_chart_base_url: "https://query1.finance.yahoo.com"
 # listing, e.g. e539120487c29b4defdf9a53d337316ea022a2688978a468f9efd847201be7e3
 fx_usd_krw_feed_id: null
 
+# WHI-787: periodic re-check of tickers marked uncovered. When Yahoo/Pyth
+# later list a "private" name, WARN + /api/health surfaces a mismatch so the
+# config flag is not permanent without review.
+uncovered_probe_interval_s: 3600.0
+
 # NYSE RTH hours — keep in sync with config/metrics.yaml session (file-level
 # independence so underlying loads without metrics; DEFERRED_ISSUES WHI-778).
 session:
@@ -38,7 +43,7 @@ session:
   early_close: "13:00"
 
 # Canonical underlying tickers. pair_id mapping is code (strip x/B suffixes).
-# feed_id null + no yahoo_symbol → uncovered (SPCX).
+# uncovered: true only when neither Hermes nor Yahoo has a public tape.
 tickers:
   AAPL:
     currency: USD
@@ -105,10 +110,12 @@ tickers:
     feed_id: null
     yahoo_symbol: "SKHY"
     prefer_yahoo: true
-  # Private company — no public tape.
+  # SpaceX — Nasdaq: SPCX since 2026-06-12 IPO. Hermes has no Equity.US.SPCX/USD
+  # (probe 2026-08-02); Yahoo USD chart gap-fill (same path as SKHY). WHI-787
+  # corrected earlier false "private / uncovered" config.
   SPCX:
     currency: USD
     pyth_symbol: null
     feed_id: null
-    uncovered: true
-    uncovered_reason: "SpaceX is private; no public equity feed"
+    yahoo_symbol: "SPCX"
+    prefer_yahoo: true

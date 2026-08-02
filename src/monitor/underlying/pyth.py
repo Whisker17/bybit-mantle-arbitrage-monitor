@@ -103,6 +103,43 @@ def _extract_parsed(body: dict[str, Any] | list[Any]) -> list[Any]:
     return []
 
 
+def hermes_has_equity_feed(
+    feeds: list[Any] | None,
+    *,
+    ticker: str,
+) -> bool:
+    """True when Hermes ``price_feeds`` includes a usable equity for ``ticker``.
+
+    Accepts any non-extended-hours ``Equity.{REGION}.{BASE}/{QUOTE}`` whose
+    ``BASE`` equals the ticker (US RTH and future KR/HK listings).
+    """
+    if not feeds:
+        return False
+    t = ticker.upper()
+    for item in feeds:
+        if not isinstance(item, dict):
+            continue
+        attrs = item.get("attributes")
+        if not isinstance(attrs, dict):
+            continue
+        symbol = str(attrs.get("symbol") or "")
+        if not symbol.startswith("Equity."):
+            continue
+        # Ignore deprecated extended-hours suffixes.
+        if symbol.endswith((".PRE", ".POST", ".ON")):
+            continue
+        # Equity.{REGION}.{BASE}/{QUOTE} — match base to ticker.
+        try:
+            rest = symbol.removeprefix("Equity.")
+            base_quote = rest.split(".", 1)[1]  # after region
+            base = base_quote.split("/", 1)[0]
+        except IndexError:
+            continue
+        if base.upper() == t:
+            return True
+    return False
+
+
 class HermesClient:
     """Thin HTTP wrapper around Hermes latest price updates."""
 
@@ -137,4 +174,16 @@ class HermesClient:
         data = resp.json()
         if not isinstance(data, dict):
             raise ValueError(f"Hermes latest: expected object, got {type(data).__name__}")
+        return data
+
+    def search_price_feeds(self, query: str) -> list[Any]:
+        """Hermes ``/v2/price_feeds?query=…`` — used by uncovered coverage probe."""
+        url = f"{self.base_url}/v2/price_feeds"
+        resp = self._client.get(url, params={"query": query})
+        resp.raise_for_status()
+        data = resp.json()
+        if not isinstance(data, list):
+            raise ValueError(
+                f"Hermes price_feeds: expected list, got {type(data).__name__}"
+            )
         return data

@@ -314,10 +314,11 @@ ranked by DexScreener liq (SOXLB #11, MUUB #12 / broken mid).
 3. **uiMultiplier history** — no CEX websocket field; need event
    `UIMultiplierUpdated` log subscription for precise corporate-action timing.
 4. **Vision WS soak** — upgrade works; long-run disconnect/rate limits not measured here.
-5. **SPCXB** — SpaceX not a traditional public equity; treat as high-vol / special risk
-   despite top liquidity. **Session calendar:** M3 NYSE open/closed segmentation does
-   **not** apply cleanly — SPCXB (private SpaceX, no public tape) needs per-asset
-   session rules in M7 metrics, not a hard copy of xStocks NYSE hours.
+5. **SPCXB** — SpaceX is Nasdaq-listed (`SPCX`, IPO 2026-06-12); still high-vol /
+   special risk despite top liquidity. Underlying is Yahoo gap-fill (WHI-787;
+   Hermes has no `Equity.US.SPCX/USD`). Premium uses the same NYSE RTH
+   `price_type` labels as other US underlyings for now; revisit only if
+   SPCX-specific session quirks show up in soak.
 6. **PCS Swap topic0 on live bStock pool** — not re-decoded this PR (public RPC
    `eth_getLogs` limit); collector must confirm before production decode.
 7. **V2 / StableSwap exhaustiveness** — re-inventory may want PCS V2 factory
