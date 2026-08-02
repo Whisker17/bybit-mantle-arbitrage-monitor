@@ -549,7 +549,7 @@ Probe: `python -m monitor.collector.latency_probe`.
 | **Web skeleton** | WHI-757 | FastAPI read-only API + Next.js static export + nginx/systemd deploy on VPS |
 | **Web overview** | WHI-758 | Full overview table (TUI-parity columns, status/stale banner, sort/filter) |
 | **Web pair detail** | WHI-759 | Pair detail: spread chart, trade stream, edge stats, attribution |
-| **M7 multi-market (Binance ⇄ Pancake bStocks)** | WHI-770… | Second market beside Bybit⇄Fluxion. **M7-1…M7-4** landed (inventory, domain, collectors, metrics/attribution — DESIGN §2.7). **M7-5 Web/API bar** (WHI-774) landed: `/api/markets` + `/api/{market}/…`, Web `/m/{market}/` switcher, RFQ hide + accumulating empty state. |
+| **M7 multi-market (Binance ⇄ Pancake bStocks)** | WHI-770… | Second market beside Bybit⇄Fluxion. **M7-1…M7-4** landed (inventory, domain, collectors, metrics/attribution — DESIGN §2.7). **M7-5 Web/API bar** (WHI-774) landed: `/api/markets` + `/api/{market}/…`, Web `/m/{market}/` switcher, RFQ hide + accumulating empty state. **WHI-790** expands binance-pancake inventory from top-10 to all **55** Binance bStocks (21 factory-verified V3 USDT AMM + 34 dex:none). |
 
 Dependency chain: M0 → M1 → M2 → (M3 ∥ M4) → M5 → Web (WHI-757 → 758…).
 M7 is parallel product expansion after Web PnL v2; does not block Web polish.
@@ -582,3 +582,14 @@ M7 is parallel product expansion after Web PnL v2; does not block Web polish.
 | Mantle block ingest P95 / head_lag (LB not-found) | **Resolved WHI-749:** default `head_lag_blocks: 1`; SLO in §5.2; note `docs/references/m2-block-ingest-latency.md` |
 | Heuristic thresholds (80% / 20 trades) unvalidated on xStocks | M4 |
 | TUI library choice (textual vs rich) | **Resolved M5:** Textual |
+
+### WHI-790 — full bStocks inventory (binance-pancake)
+
+`config/markets/binance-pancake.yaml` inventories **all 55** Binance spot bStocks
+(not top-10). AMM membership is PCS **V3 factory `getPool` + on-chain `token0/1`**
+(USDT only, 21 pools at 2026-08-02); other bases are **dex:none** (CEX legs only).
+Enum script + snapshot: `scripts/enumerate_bstocks_pools.py`,
+`docs/references/m7-bstocks-enum-snapshot.json`. Capacity: WS 165 combined streams
+(under 1024 limit); CEX 24h volume one full `ticker/24hr`; chain multicall only on
+21 AMM pools; disk ~linear in CEX pairs. Dynamic Top-N display is WHI-791.
+

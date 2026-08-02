@@ -119,3 +119,248 @@ tickers:
     feed_id: null
     yahoo_symbol: "SPCX"
     prefer_yahoo: true
+
+# --- WHI-790: full binance-pancake underlying coverage -------------------
+# Yahoo gap-fill for names not yet on Hermes (or no feed_id pinned).
+# Leveraged ETFs (SOXL/SOXS/TQQQ/MUU/KORU) keep public Yahoo tapes.
+# Uncovered only when no single-name public tape is known.
+  AAOI:
+    currency: USD
+    pyth_symbol: null
+    feed_id: null
+    yahoo_symbol: "AAOI"
+    prefer_yahoo: true
+  AMAT:
+    currency: USD
+    pyth_symbol: null
+    feed_id: null
+    yahoo_symbol: "AMAT"
+    prefer_yahoo: true
+  AMD:
+    currency: USD
+    pyth_symbol: null
+    feed_id: null
+    yahoo_symbol: "AMD"
+    prefer_yahoo: true
+  ARM:
+    currency: USD
+    pyth_symbol: null
+    feed_id: null
+    yahoo_symbol: "ARM"
+    prefer_yahoo: true
+  AVGO:
+    currency: USD
+    pyth_symbol: null
+    feed_id: null
+    yahoo_symbol: "AVGO"
+    prefer_yahoo: true
+  AXTI:
+    currency: USD
+    pyth_symbol: null
+    feed_id: null
+    yahoo_symbol: "AXTI"
+    prefer_yahoo: true
+  BABA:
+    currency: USD
+    pyth_symbol: null
+    feed_id: null
+    yahoo_symbol: "BABA"
+    prefer_yahoo: true
+  BE:
+    currency: USD
+    pyth_symbol: null
+    feed_id: null
+    yahoo_symbol: "BE"
+    prefer_yahoo: true
+  CBRS:
+    currency: USD
+    pyth_symbol: null
+    feed_id: null
+    uncovered: true
+    uncovered_reason: "bStock label without confirmed public equity/ETF tape"
+  CRWV:
+    currency: USD
+    pyth_symbol: null
+    feed_id: null
+    yahoo_symbol: "CRWV"
+    prefer_yahoo: true
+  DELL:
+    currency: USD
+    pyth_symbol: null
+    feed_id: null
+    yahoo_symbol: "DELL"
+    prefer_yahoo: true
+  DRAM:
+    currency: USD
+    pyth_symbol: null
+    feed_id: null
+    uncovered: true
+    uncovered_reason: "bStock thematic DRAM basket — no single public equity ticker"
+  EWY:
+    currency: USD
+    pyth_symbol: null
+    feed_id: null
+    yahoo_symbol: "EWY"
+    prefer_yahoo: true
+  FLNC:
+    currency: USD
+    pyth_symbol: null
+    feed_id: null
+    yahoo_symbol: "FLNC"
+    prefer_yahoo: true
+  GLW:
+    currency: USD
+    pyth_symbol: null
+    feed_id: null
+    yahoo_symbol: "GLW"
+    prefer_yahoo: true
+  GS:
+    currency: USD
+    pyth_symbol: null
+    feed_id: null
+    yahoo_symbol: "GS"
+    prefer_yahoo: true
+  IBM:
+    currency: USD
+    pyth_symbol: null
+    feed_id: null
+    yahoo_symbol: "IBM"
+    prefer_yahoo: true
+  INTW:
+    currency: USD
+    pyth_symbol: null
+    feed_id: null
+    uncovered: true
+    uncovered_reason: "bStock label without confirmed public equity/ETF tape"
+  KORU:
+    currency: USD
+    pyth_symbol: null
+    feed_id: null
+    yahoo_symbol: "KORU"
+    prefer_yahoo: true
+  LITE:
+    currency: USD
+    pyth_symbol: null
+    feed_id: null
+    yahoo_symbol: "LITE"
+    prefer_yahoo: true
+  MRVL:
+    currency: USD
+    pyth_symbol: null
+    feed_id: null
+    yahoo_symbol: "MRVL"
+    prefer_yahoo: true
+  MSTR:
+    currency: USD
+    pyth_symbol: null
+    feed_id: null
+    yahoo_symbol: "MSTR"
+    prefer_yahoo: true
+  MUU:
+    currency: USD
+    pyth_symbol: null
+    feed_id: null
+    yahoo_symbol: "MUU"
+    prefer_yahoo: true
+  MVLL:
+    currency: USD
+    pyth_symbol: null
+    feed_id: null
+    uncovered: true
+    uncovered_reason: "bStock label without confirmed public equity/ETF tape"
+  NBIS:
+    currency: USD
+    pyth_symbol: null
+    feed_id: null
+    yahoo_symbol: "NBIS"
+    prefer_yahoo: true
+  NOK:
+    currency: USD
+    pyth_symbol: null
+    feed_id: null
+    yahoo_symbol: "NOK"
+    prefer_yahoo: true
+  ORCL:
+    currency: USD
+    pyth_symbol: null
+    feed_id: null
+    yahoo_symbol: "ORCL"
+    prefer_yahoo: true
+  PLTR:
+    currency: USD
+    pyth_symbol: null
+    feed_id: null
+    yahoo_symbol: "PLTR"
+    prefer_yahoo: true
+  PYPL:
+    currency: USD
+    pyth_symbol: null
+    feed_id: null
+    yahoo_symbol: "PYPL"
+    prefer_yahoo: true
+  QCOM:
+    currency: USD
+    pyth_symbol: null
+    feed_id: null
+    yahoo_symbol: "QCOM"
+    prefer_yahoo: true
+  QQQ:
+    currency: USD
+    pyth_symbol: null
+    feed_id: null
+    yahoo_symbol: "QQQ"
+    prefer_yahoo: true
+  RKLB:
+    currency: USD
+    pyth_symbol: null
+    feed_id: null
+    yahoo_symbol: "RKLB"
+    prefer_yahoo: true
+  SMH:
+    currency: USD
+    pyth_symbol: null
+    feed_id: null
+    yahoo_symbol: "SMH"
+    prefer_yahoo: true
+  SNDK:
+    currency: USD
+    pyth_symbol: null
+    feed_id: null
+    yahoo_symbol: "SNDK"
+    prefer_yahoo: true
+  SNXX:
+    currency: USD
+    pyth_symbol: null
+    feed_id: null
+    uncovered: true
+    uncovered_reason: "bStock label without confirmed public equity/ETF tape"
+  SOXL:
+    currency: USD
+    pyth_symbol: null
+    feed_id: null
+    yahoo_symbol: "SOXL"
+    prefer_yahoo: true
+  SOXS:
+    currency: USD
+    pyth_symbol: null
+    feed_id: null
+    yahoo_symbol: "SOXS"
+    prefer_yahoo: true
+  TQQQ:
+    currency: USD
+    pyth_symbol: null
+    feed_id: null
+    yahoo_symbol: "TQQQ"
+    prefer_yahoo: true
+  TSM:
+    currency: USD
+    pyth_symbol: null
+    feed_id: null
+    yahoo_symbol: "TSM"
+    prefer_yahoo: true
+  WDC:
+    currency: USD
+    pyth_symbol: null
+    feed_id: null
+    yahoo_symbol: "WDC"
+    prefer_yahoo: true

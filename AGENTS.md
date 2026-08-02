@@ -97,10 +97,11 @@ placeholders. Agents must not assume a module exists until its issue lands. -->
     timeline; pure builders in `monitor.attribution.mm_panel`. Empty
     states: accumulating / no_candidates / ok (no dashed placeholders).
   - **M7-1 inventory (WHI-770) landed:** `docs/references/m7-bstocks-inventory.md`
-    — top-10 Binance ⇄ Pancake V3 bStocks (on-chain-verified pools), BEP-677
-    `uiMultiplier` pricing (multiply Binance mid for raw compare; ≠ Bybit
-    divide), AMM-only Terminal (no RFQ), US VPS geo: `api.binance.com` 451 /
-    use `data-api.binance.vision` + `data-stream.binance.vision`.
+    — initial top-10 Binance ⇄ Pancake V3 bStocks (on-chain-verified pools),
+    BEP-677 `uiMultiplier` pricing (multiply Binance mid for raw compare; ≠
+    Bybit divide), AMM-only Terminal (no RFQ), US VPS geo: `api.binance.com`
+    451 / use `data-api.binance.vision` + `data-stream.binance.vision`.
+    **Superseded for set size by WHI-790** (full 55 + factory enum).
   - **M7-2 multi-market domain (WHI-771) landed:** explicit **market** assembly
     — `monitor/markets`, `config/markets/{id}.yaml` (bybit-fluxion +
     binance-pancake), `collector.yaml` v2 `markets:` sections, per-market
@@ -164,7 +165,16 @@ placeholders. Agents must not assume a module exists until its issue lands. -->
     `tvl_poll_interval_s` on mantle/bsc; overview `tvl_usd` / `tvl_as_of_ms`
     + DEX-group TVL column; dynamic `low_liquidity` from live TVL (inventory
     flag is cold-start fallback). Capital size ≠ depth (PnL v2 buckets).
-  - **Underlying dual-market ops (WHI-788) landed:** bybit blank Underlying
+  - **bStocks full inventory (WHI-790) landed:** authoritative PCS V3/V2 factory
+    enum (`scripts/enumerate_bstocks_pools.py` →
+    `docs/references/m7-bstocks-enum-snapshot.json`);
+    `config/markets/binance-pancake.yaml` expanded to **55** Binance bases with
+    **21** collector-scope V3 USDT AMM pools (`pancake.amm`) and **34** dex:none
+    (CEX-only; chain via `pairs_with_amm()`). QQQB restored as real high-TVL pool.
+    Underlying Yahoo/uncovered map covers new tickers (`config/underlying.yaml`).
+    Dynamic Top-N UI is WHI-791.
+
+- **Underlying dual-market ops (WHI-788) landed:** bybit blank Underlying
     was a **stale collector process** (pre-778 binary; binance restarted later).
     Meta hardening: always write `underlying_last_poll_ms` / `underlying_last_n`
     (even when n=0) + `underlying_status` / `underlying_last_error`. Deploy

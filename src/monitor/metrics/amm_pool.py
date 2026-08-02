@@ -96,9 +96,10 @@ def _pair_pool_parts(
     (Fluxion USDC=6, Pancake USDT=18). Prefer passing ``dex.quote_decimals``.
     """
     if isinstance(pair, BStocksPair):
-        pancake_amm = pair.pancake.amm
-        if pancake_amm is None:
+        # dex:none pairs (WHI-790) have no collector-scope AMM.
+        if not pair.has_amm() or pair.pancake.amm is None:
             return None
+        pancake_amm = pair.pancake.amm
         return (
             pair.pancake.quote_token_address,
             pancake_amm.fee,

@@ -57,7 +57,7 @@ def test_list_and_load_checked_in_markets() -> None:
     assert bp.cex.multiplier_semantics is MultiplierSemantics.MULTIPLY
     assert bp.dex.has_rfq is False
     assert bp.dex.chain_id == 56
-    assert len(bp.inventory["pairs"]) == 10
+    assert len(bp.inventory["pairs"]) == 55  # WHI-790 full bStocks universe
 
 
 def test_load_pairs_from_default_market() -> None:
@@ -242,7 +242,7 @@ def test_load_market_context_binance_has_inventory_no_pairs_shape() -> None:
     assert ctx.market_id == "binance-pancake"
     assert ctx.pairs is None  # Bybit-shaped inventory not used
     assert ctx.bstocks is not None  # M7-3 bStocks inventory
-    assert len(ctx.bstocks.pairs) == 10
+    assert len(ctx.bstocks.pairs) == 55  # WHI-790 full bStocks universe
     assert ctx.cex.multiplier_semantics is MultiplierSemantics.MULTIPLY
     assert ctx.metrics.gas_usd_per_swap == Decimal("0.05")
     assert "binance-pancake" in str(ctx.sqlite_path)

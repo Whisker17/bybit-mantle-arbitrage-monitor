@@ -636,11 +636,20 @@ def test_mismatches_meta_roundtrip() -> None:
     assert mismatches_from_meta_json("not-json") == []
 
 
-def test_uncovered_probe_empty_when_no_uncovered() -> None:
-    """Checked-in config has no uncovered tickers after WHI-787 — probe is no-op."""
+def test_uncovered_probe_skips_when_list_empty() -> None:
+    """Probe is a no-op when the config has zero uncovered tickers."""
+    from monitor.underlying.config import UnderlyingConfig
+
     cfg = load_underlying_config()
-    assert cfg.uncovered_tickers() == []
-    # Inject a fake hermes/yahoo so no network if list were non-empty.
+    # Build a zero-uncovered view: keep one covered ticker only.
+    covered = {
+        k: v for k, v in cfg.tickers.items() if not v.uncovered
+    }
+    assert covered, "need at least one covered ticker in underlying.yaml"
+    slim = UnderlyingConfig.model_validate(
+        {**cfg.model_dump(mode="python"), "tickers": covered}
+    )
+    assert slim.uncovered_tickers() == []
 
     class _BoomHermes:
         def search_price_feeds(self, query: str) -> list[object]:
@@ -657,7 +666,7 @@ def test_uncovered_probe_empty_when_no_uncovered() -> None:
             return None
 
     probe = UncoveredCoverageProbe(
-        cfg, hermes=_BoomHermes(), yahoo=_BoomYahoo()  # type: ignore[arg-type]
+        slim, hermes=_BoomHermes(), yahoo=_BoomYahoo()  # type: ignore[arg-type]
     )
     try:
         outcome = probe.probe_once()
@@ -665,6 +674,14 @@ def test_uncovered_probe_empty_when_no_uncovered() -> None:
         assert outcome.errors == []
     finally:
         probe.close()
+
+
+def test_whi790_synthetic_bstock_underlyings_are_uncovered() -> None:
+    """WHI-790: basket/unknown bStock labels stay uncovered (no single-name tape)."""
+    cfg = load_underlying_config()
+    for t in ("DRAM", "CBRS", "INTW", "MVLL", "SNXX"):
+        assert t in cfg.tickers
+        assert cfg.tickers[t].uncovered is True
 
 
 def test_uncovered_probe_detects_yahoo_for_synthetic_uncovered(
