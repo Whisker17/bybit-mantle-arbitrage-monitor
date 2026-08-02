@@ -161,8 +161,12 @@ export function PairDetail({ pairId }: Props) {
         <TradeStream trades={data.trades} />
       </Panel>
 
-      <Panel title="Arbitrage space" subtitle="paper edge · wear · distributions">
-        <EdgeStatsPanel amm={data.edge_amm} rfq={data.edge_rfq} />
+      <Panel title="Arbitrage space" subtitle="paper edge · wear · PnL v2 buckets">
+        <EdgeStatsPanel
+          amm={data.edge_amm}
+          rfq={data.edge_rfq}
+          pnl={data.pnl_v2}
+        />
       </Panel>
 
       <Panel title="Attribution" subtitle="M4 mechanism + top takers">

@@ -11,6 +11,7 @@ from fastapi import FastAPI
 from fastapi.middleware.cors import CORSMiddleware
 
 from monitor.api.config import ApiConfig, load_api_config
+from monitor.api.pnl_cache import PnlSnapshotCache
 from monitor.api.routes import health as health_routes
 from monitor.api.routes import pairs as pairs_routes
 from monitor.api.state import AppState
@@ -48,6 +49,7 @@ def build_app_state(
         tui=tui,
         db_path=db_path,
         reader=reader,
+        pnl_cache=PnlSnapshotCache(ttl_s=cfg.pnl_cache_ttl_s),
     )
 
 

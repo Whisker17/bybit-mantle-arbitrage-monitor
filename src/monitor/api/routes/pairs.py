@@ -8,10 +8,18 @@ from fastapi import APIRouter, HTTPException, Request
 
 from monitor.api.serialize import to_json_dict, to_jsonable
 from monitor.api.state import AppState, app_state_from_request
+from monitor.metrics.pnl_snapshot import (
+    PnlOptimalSummary,
+    PnlPairSnapshot,
+    build_pnl_pair_snapshot,
+    overview_pnl_summary,
+)
+from monitor.quotes import now_ms
 from monitor.storage import JournalReader
 from monitor.symbols.models import Pair
 from monitor.tui.builder import build_overview, build_pair_detail
 from monitor.tui.model import PairDetailModel
+from monitor.tui.pool import amm_pool_from_tick
 
 router = APIRouter(tags=["pairs"])
 
@@ -33,12 +41,47 @@ def _pair_or_404(state: AppState, pair_id: str) -> Pair:
         raise HTTPException(status_code=404, detail=f"unknown pair_id: {pair_id}") from exc
 
 
-def _detail_model(state: AppState, pair_id: str) -> PairDetailModel:
-    """Build detail under the process lock (shared by detail + trades routes)."""
+def _pnl_snapshot_for_pair(
+    state: AppState,
+    *,
+    pair: Pair,
+    reader: JournalReader,
+) -> PnlPairSnapshot:
+    """Load ticks + build PnL snapshot, with optional TTL cache (caller holds lock)."""
+    cache = state.pnl_cache
+    if cache is not None:
+        hit = cache.get(pair.id)
+        if hit is not None:
+            return hit
+
+    bybit = reader.latest_bybit_book(pair.id)
+    amm_tick = reader.latest_pool_state(pair.id)
+    depth = reader.latest_bybit_depth(pair.id)
+    rfq_buy, rfq_sell = reader.latest_rfq_sides(pair.id)
+    amm = amm_pool_from_tick(pair, amm_tick) if amm_tick is not None else None
+    snap = build_pnl_pair_snapshot(
+        pair=pair,
+        bybit=bybit,
+        amm=amm,
+        amm_tick=amm_tick,
+        config=state.metrics,
+        depth=depth,
+        rfq_buy=rfq_buy,
+        rfq_sell=rfq_sell,
+        now_ms=now_ms(),
+        stale_ms=state.api.collector_stale_ms,
+    )
+    if cache is not None:
+        cache.put(pair.id, snap)
+    return snap
+
+
+def _detail_model(state: AppState, pair_id: str) -> tuple[PairDetailModel, PnlPairSnapshot]:
+    """Build detail + PnL under the process lock (shared by detail + trades)."""
     reader = _require_reader(state)
     pair = _pair_or_404(state, pair_id)
     with state.lock:
-        return build_pair_detail(
+        model = build_pair_detail(
             pair=pair,
             reader=reader,
             metrics=state.metrics,
@@ -46,11 +89,13 @@ def _detail_model(state: AppState, pair_id: str) -> PairDetailModel:
             tui=state.tui,
             edge_state=state.edge_state,
         )
+        pnl = _pnl_snapshot_for_pair(state, pair=pair, reader=reader)
+        return model, pnl
 
 
 @router.get("/api/pairs")
 def list_pairs(request: Request) -> dict[str, Any]:
-    """Overview table model (one row per configured pair)."""
+    """Overview table model (one row per configured pair) + PnL v2 optimal summary."""
     state = app_state_from_request(request)
     reader = _require_reader(state)
     with state.lock:
@@ -61,14 +106,40 @@ def list_pairs(request: Request) -> dict[str, Any]:
             tui=state.tui,
             edge_state=state.edge_state,
         )
-    return to_json_dict(model)
+        body = to_json_dict(model)
+        rows_out: list[dict[str, Any]] = []
+        for row in body["rows"]:
+            pair_id = row["pair_id"]
+            try:
+                pair = state.pairs.pair_by_id(pair_id)
+            except KeyError:
+                # Builder rows should always be configured pairs; never 404 the list.
+                enriched = dict(row)
+                enriched["pnl_v2"] = PnlOptimalSummary(
+                    status="no_pool", has_depth=False
+                ).to_dict()
+                rows_out.append(enriched)
+                continue
+            snap = _pnl_snapshot_for_pair(state, pair=pair, reader=reader)
+            enriched = dict(row)
+            enriched["pnl_v2"] = overview_pnl_summary(snap).to_dict()
+            rows_out.append(enriched)
+        body["rows"] = rows_out
+        return body
 
 
 @router.get("/api/pairs/{pair_id}")
 def get_pair(pair_id: str, request: Request) -> dict[str, Any]:
-    """Detail model for one pair (overview + edges + trades + attribution)."""
+    """Detail model for one pair + full PnL v2 bucket tables (both directions)."""
     state = app_state_from_request(request)
-    return to_json_dict(_detail_model(state, pair_id))
+    model, pnl = _detail_model(state, pair_id)
+    body = to_json_dict(model)
+    body["pnl_v2"] = pnl.to_dict()
+    # Keep overview row in sync with the same snapshot (summary view).
+    if "overview" in body and isinstance(body["overview"], dict):
+        body["overview"] = dict(body["overview"])
+        body["overview"]["pnl_v2"] = overview_pnl_summary(pnl).to_dict()
+    return body
 
 
 @router.get("/api/pairs/{pair_id}/trades")
@@ -79,7 +150,7 @@ def get_pair_trades(pair_id: str, request: Request) -> dict[str, Any]:
     detail page; a cheaper path can land when poll load requires it.
     """
     state = app_state_from_request(request)
-    model = _detail_model(state, pair_id)
+    model, _pnl = _detail_model(state, pair_id)
     return {
         "pair_id": model.pair_id,
         "generated_ts_ms": model.generated_ts_ms,

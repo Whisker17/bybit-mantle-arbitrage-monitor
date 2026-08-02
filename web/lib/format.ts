@@ -42,6 +42,28 @@ export function fmtNotional(value: string | number | null | undefined): string {
   return v.toFixed(0);
 }
 
+/** Signed USD (PnL v2). Compact for overview cells. */
+export function fmtUsd(
+  value: string | number | null | undefined,
+  digits = 2,
+): string {
+  if (value === null || value === undefined || value === "") return DASH;
+  const n = typeof value === "number" ? value : Number(value);
+  if (!Number.isFinite(n)) return String(value);
+  const sign = n > 0 ? "+" : "";
+  const abs = Math.abs(n);
+  if (abs >= 1_000_000) return `${sign}${(n / 1_000_000).toFixed(2)}M`;
+  if (abs >= 1_000) return `${sign}${(n / 1_000).toFixed(2)}K`;
+  return `${sign}${n.toFixed(digits)}`;
+}
+
+/** Same positive/negative tone as bps, for USD PnL. */
+export function usdTone(
+  value: string | number | null | undefined,
+): "pos" | "neg" | "flat" | "empty" {
+  return bpsTone(value);
+}
+
 export function fmtDirection(direction: Direction | null | undefined): string {
   if (!direction) return DASH;
   if (direction === "buy_fluxion_sell_bybit") return "F→B";

@@ -152,12 +152,12 @@ invariant; matched base \(q\) shares that unit). Full algebra in research note
 | Path | Sizes | Owner |
 |------|-------|-------|
 | M3 TUI `edge_bps` (§2.3) | **$1 000 / $5 000 / $20 000** (`config/metrics.yaml`) | Live panel today |
-| PnL v2 AMM buckets + search (this section) | **$10 / $50 / $100 / $500 / $1 000 / $10 000** | WHI-756 engine / future consumers |
-| PnL v2 RFQ | Collector poll notionals only (not the AMM bucket list) | WHI-756 |
+| PnL v2 AMM buckets + search (this section) | **$10 / $50 / $100 / $500 / $1 000 / $10 000** | WHI-756 engine; Web/API WHI-766 |
+| PnL v2 RFQ | Collector poll notionals only (not the AMM bucket list) | WHI-756 / WHI-766 |
 
-PnL v2 **does not** change the M3 TUI ladder. The v2 bucket list is for the
-cash-flow engine (WHI-756) and any new serializable models — keep
-`OverviewModel` / M3 path on $1K/$5K/$20K until a later wiring issue.
+PnL v2 **does not** change the M3 TUI ladder. The v2 bucket list feeds the
+cash-flow engine (WHI-756) and Web/API serialization (WHI-766). M3
+`OverviewModel` / net-edge path stays on $1K/$5K/$20K.
 
 #### 2.6.4 Optimal size (AMM only)
 
@@ -190,7 +190,28 @@ not a proven continuous global max.
 | This research + DESIGN §2.6 | **WHI-754** (landed with the research note) |
 | Pure metrics engine + tests + bucket/optimal API | **WHI-756** (landed: `monitor/metrics/pnl_v2.py`, `config/metrics.yaml` `pnl_v2:`, CLI `python -m monitor.metrics`) |
 | Live Bybit multi-level depth journal | **WHI-755** (`bybit_depth` precomputed VWAPs @ PnL buckets; L1 still `bybit_book`) |
-| Engine consumes depth / L1 fallback | **WHI-756** (landed on the pure path: optional `bybit_bids`/`bybit_asks` → base-sized VWAP; L1 when omitted). M3 `compute_edge` TUI path remains L1 until a panel/API wiring issue (see `docs/DEFERRED_ISSUES.md`) |
+| Engine consumes depth / L1 fallback | **WHI-756** (landed on the pure path: optional `bybit_bids`/`bybit_asks` → base-sized VWAP; L1 when omitted). M3 `compute_edge` TUI path remains L1 (see `docs/DEFERRED_ISSUES.md`) |
+| Web/API serialization + UI | **WHI-766** (landed: `pnl_snapshot.py`, overview `pnl_v2` optimal card, detail dual-direction tables; `config/api.yaml` `pnl_cache_ttl_s`) |
+
+#### 2.6.7 API cache (WHI-766)
+
+Optimal-size search evaluates ~40 AMM samples per direction. To keep overview
+polls under ~500 ms P95 on the 1 GB VPS:
+
+- Process-local TTL cache (`monitor.api.pnl_cache.PnlSnapshotCache`) keyed by
+  `pair_id`, holding the full dual-direction `PnlPairSnapshot`.
+- TTL default **`pnl_cache_ttl_s: 2.5`** in `config/api.yaml` — slightly above
+  `poll_interval_s: 2.0` so a steady poller still hits cache on the next tick,
+  and concurrent overview + detail polls share one compute.
+- Set `pnl_cache_ttl_s: 0` to recompute every request (tests / debugging).
+- Single uvicorn worker is assumed (same as WHI-757); cache is not shared
+  across workers.
+- Depth: journal `bybit_depth` notional VWAP curves are reconstructed into
+  stepwise levels via cumulative base qty \(Q_i/V_i\) so sloped books round-trip
+  correctly. Missing depth → overview status `no_depth` (detail still shows L1
+  tables).
+- P95 target: keep overview+detail under ~500 ms with this cache; re-measure on
+  first VPS deploy (pair count × optimal samples under `state.lock`).
 
 ## 3. Cross-cutting Policies
 

@@ -1,9 +1,9 @@
 "use client";
 
 /**
- * Overview table (WHI-758): full TUI-parity columns + status / stale banner,
- * client sort/filter, 2s poll, row → /pair/{id}/. Bucket PnL column is a
- * placeholder until WHI-756 lands.
+ * Overview table (WHI-758 / WHI-766): full TUI-parity columns + status / stale
+ * banner, client sort/filter, 2s poll, row → /pair/{id}/. Bucket PnL shows
+ * PnL v2 optimal net USD (or "no depth").
  */
 
 import { useCallback, useEffect, useMemo, useRef, useState } from "react";
@@ -165,10 +165,11 @@ export default function HomePage() {
 
       <p className="mt-3 text-[10px] text-muted-foreground">
         Prices are de-multiplied Bybit L1 vs Fluxion AMM/RFQ (USDC). Net edge is
-        AMM-only at the reference notional (see status bar). Bucket PnL column
-        awaits WHI-756. Row opens pair detail (spread chart, fills, edge,
-        attribution). UI primitives follow shadcn-style patterns on Tailwind
-        (dark-first desk theme).
+        AMM-only at the reference notional (see status bar). Bucket PnL is PnL
+        v2 optimal cash-flow (hover for direction &amp; size; &quot;no depth&quot;
+        when the journal has no Bybit depth curve). Row opens pair detail
+        (spread chart, fills, edge, attribution). UI primitives follow
+        shadcn-style patterns on Tailwind (dark-first desk theme).
       </p>
     </main>
   );

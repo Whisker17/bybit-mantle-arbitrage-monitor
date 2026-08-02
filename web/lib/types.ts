@@ -12,6 +12,84 @@ export type Direction =
 
 export type VenueKind = "amm" | "rfq";
 
+/** PnL v2 overview / detail status from monitor.metrics.pnl_snapshot. */
+export type PnlStatus =
+  | "ok"
+  | "no_book"
+  | "no_pool"
+  | "no_depth"
+  | "no_fillable"
+  | "stale";
+
+export type PnlDepthSource = "l1" | "book";
+
+/** Compact optimal-size card on each overview row (WHI-766). */
+export type PnlOptimalSummary = {
+  status: PnlStatus;
+  has_depth: boolean;
+  direction: Direction | null;
+  optimal_notional_usd: string | null;
+  optimal_net_pnl_usd: string | null;
+  optimal_net_pnl_bps: string | null;
+  bybit_depth_source: PnlDepthSource | null;
+};
+
+export type PnlCostBreakdownUsd = {
+  bybit_fee_usd: string;
+  bybit_slip_usd: string;
+  fluxion_fee_usd: string;
+  fluxion_slip_usd: string;
+  gas_usd: string;
+  basis_usd: string;
+};
+
+export type PnlResult = {
+  pair_id: string;
+  venue: VenueKind;
+  direction: Direction;
+  size_usd: string;
+  q_base: string;
+  bybit_mid: string;
+  spent_usd: string;
+  recv_usd: string;
+  pnl_usd: string;
+  pnl_bps: string | null;
+  fillable: boolean;
+  reason?: string | null;
+  bybit_depth_source: PnlDepthSource;
+  meets_min_profit: boolean;
+  costs: PnlCostBreakdownUsd;
+};
+
+export type OptimalSizeResult = {
+  pair_id: string;
+  direction: Direction;
+  q_star_usd: string;
+  pnl_usd: string;
+  q_min_usd: string;
+  q_max_usd: string;
+  depth_cap_usd: string | null;
+  amm_cap_usd: string;
+  samples_evaluated: number;
+  result: PnlResult;
+};
+
+export type PnlBucketTable = {
+  pair_id: string;
+  direction: Direction;
+  amm_buckets: PnlResult[];
+  rfq_rows: PnlResult[];
+  optimal: OptimalSizeResult | null;
+};
+
+/** Full dual-direction snapshot on pair detail (WHI-766). */
+export type PnlPairSnapshot = {
+  status: PnlStatus;
+  has_depth: boolean;
+  best: PnlOptimalSummary;
+  tables: Partial<Record<Direction, PnlBucketTable>>;
+};
+
 export type PairOverviewRow = {
   pair_id: string;
   name: string;
@@ -32,6 +110,8 @@ export type PairOverviewRow = {
   volume_24h: string;
   trades_24h: number;
   stale: boolean;
+  /** Present after WHI-766; older APIs may omit. */
+  pnl_v2?: PnlOptimalSummary | null;
 };
 
 export type OverviewResponse = {
@@ -45,7 +125,7 @@ export type OverviewResponse = {
   error?: string | null;
 };
 
-/** Full pair detail model from GET /api/pairs/{id} (TUI PairDetailModel). */
+/** Full pair detail model from GET /api/pairs/{id} (TUI PairDetailModel + PnL v2). */
 export type PairDetailResponse = {
   pair_id: string;
   name: string;
@@ -61,6 +141,8 @@ export type PairDetailResponse = {
   arb_bot_trade_share: number | null;
   price_keeper_trade_share: number | null;
   rfq_mechanism_share: number | null;
+  /** Dual-direction bucket tables + optimal (WHI-766). */
+  pnl_v2?: PnlPairSnapshot | null;
   error?: string | null;
 };
 

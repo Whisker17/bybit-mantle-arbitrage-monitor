@@ -15,8 +15,10 @@ import {
   fmtPrice,
   fmtSession,
   fmtSignedBps,
+  fmtUsd,
   shortAddr,
   totalWearBps,
+  usdTone,
 } from "./format";
 
 describe("fmtPrice", () => {
@@ -39,6 +41,16 @@ describe("fmtNotional", () => {
     assert.equal(fmtNotional("1500"), "1.5K");
     assert.equal(fmtNotional("2500000"), "2.50M");
     assert.equal(fmtNotional("42"), "42");
+  });
+});
+
+describe("fmtUsd / usdTone", () => {
+  it("signs and tones PnL", () => {
+    assert.equal(fmtUsd("1.5"), "+1.50");
+    assert.equal(fmtUsd("-0.25"), "-0.25");
+    assert.equal(fmtUsd(null), "—");
+    assert.equal(usdTone("-1"), "neg");
+    assert.equal(usdTone("2"), "pos");
   });
 });
 
