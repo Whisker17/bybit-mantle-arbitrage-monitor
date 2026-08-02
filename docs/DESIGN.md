@@ -276,11 +276,12 @@ inventory threshold (`low_liquidity_threshold_usd`, still config) when a sample
 exists; falls back to the inventory-time flag until the first poll. Pairs
 without an AMM pool remain low-liquidity regardless of TVL.
 
-**API / Web:** overview rows expose `tvl_usd` + `tvl_as_of_ms`; detail includes
-`tvl_series` (asdict on the detail model). Web DEX column group shows TVL
-(`$K`/`$M` via the same notional formatter as volume). Until the first sample,
-the cell uses the project-wide empty glyph (`—`) — not a dashed *feature*
-placeholder; tooltip states “waiting for first sample”.
+**API / Web:** overview rows expose `tvl_usd` + `tvl_as_of_ms` (detail overview
+mirrors the same). History remains queryable via `JournalReader.pool_tvl_series`
+for a future chart — not embedded on the 2s detail poll. Web DEX column group
+shows TVL (`$K`/`$M` via the same notional formatter as volume). Until the first
+sample, the cell uses the project-wide empty glyph (`—`); tooltip states
+“waiting for first sample”.
 
 ## 3. Cross-cutting Policies
 

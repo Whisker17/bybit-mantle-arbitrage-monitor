@@ -52,24 +52,25 @@ const VOL_TITLE =
  * samples exist; inventory est is the cold-start fallback only.
  */
 export function badgePolicyForMarket(_marketId: string): BadgePolicy {
-  // Both markets share TVL+Vol top-N after WHI-782 live TVL (inventory est is
-  // cold-start fallback only). marketId kept for call-site symmetry / future
-  // per-market rank cuts.
+  // Both markets: TVL badge ranks on live journal TVL only (WHI-782). Vol
+  // unchanged. marketId reserved for call-site symmetry.
   return {
     enableTvl: true,
     enableVol: true,
     topN: DEFAULT_TOP_N,
-    tvlTitle:
-      "DEX pool TVL rank (live balanceOf when available; else inventory est) — top 5",
+    tvlTitle: "DEX pool TVL rank (live balanceOf journal) — top 5 in this market",
     volTitle: VOL_TITLE,
   };
 }
 
-/** Prefer live TVL; fall back to inventory est for cold start (WHI-782). */
+/**
+ * Live journal TVL only for badge rank (WHI-782).
+ * Do not mix inventory `est_liquidity_usd` into the same top-N — bases differ
+ * and cold-start would reintroduce WHI-781's Fluxion-est badge problem.
+ * Unsampled pairs are excluded until the first balanceOf poll.
+ */
 export function tvlRankValue(row: PairOverviewRow): number | null {
-  const live = parseNum(row.tvl_usd);
-  if (live != null) return live;
-  return parseNum(row.est_liquidity_usd);
+  return parseNum(row.tvl_usd);
 }
 
 /**

@@ -1091,12 +1091,8 @@ def build_pair_detail(
         tvl=tvl,
         low_liquidity_threshold_usd=low_liquidity_threshold_usd,
     )
-    tvl_series = [
-        (t.recv_ts_ms, t.tvl_usd)
-        for t in reader.pool_tvl_series(
-            pair.id, since_ms=ts - tui.volume_window_ms, limit=tui.spread_history_max_points
-        )
-    ]
+    # TVL history stays in the journal (reader.pool_tvl_series); not on the
+    # hot detail path — overview already exposes latest tvl_usd / tvl_as_of_ms.
 
     books = reader.bybit_books(
         pair.id, limit=max(tui.spread_history_max_points, tui.edge_history_max_samples)
@@ -1243,5 +1239,4 @@ def build_pair_detail(
         rfq_mechanism_share=attr.mechanism.rfq_share,
         volume_compare=vcmp,
         premium=premium_panel,
-        tvl_series=tvl_series,
     )

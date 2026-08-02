@@ -91,17 +91,19 @@ describe("pairBadgesForRows", () => {
   it("marks top-5 TVL and top-5 Vol independently (binance-pancake)", () => {
     // Inventory-like TVL order: SPCXB..MUB; CEX vol order inverted so
     // overlap is only the middle names when topN=5.
+    // Live tvl_usd order: SPCXB..MUB; CEX vol order inverted so
+    // overlap is only the middle names when topN=5.
     const rows = [
-      row({ pair_id: "SPCXB", est_liquidity_usd: "3000000", cex_volume_24h: "100" }),
-      row({ pair_id: "SKHYB", est_liquidity_usd: "500000", cex_volume_24h: "200" }),
-      row({ pair_id: "TSLAB", est_liquidity_usd: "260000", cex_volume_24h: "300" }),
-      row({ pair_id: "SPYB", est_liquidity_usd: "250000", cex_volume_24h: "400" }),
-      row({ pair_id: "NVDAB", est_liquidity_usd: "220000", cex_volume_24h: "500" }),
-      row({ pair_id: "AAPLB", est_liquidity_usd: "120000", cex_volume_24h: "600" }),
-      row({ pair_id: "GOOGLB", est_liquidity_usd: "70000", cex_volume_24h: "700" }),
-      row({ pair_id: "MSFTB", est_liquidity_usd: "40000", cex_volume_24h: "800" }),
-      row({ pair_id: "INTCB", est_liquidity_usd: "15000", cex_volume_24h: "900" }),
-      row({ pair_id: "MUB", est_liquidity_usd: "9000", cex_volume_24h: "1000" }),
+      row({ pair_id: "SPCXB", tvl_usd: "3000000", cex_volume_24h: "100" }),
+      row({ pair_id: "SKHYB", tvl_usd: "500000", cex_volume_24h: "200" }),
+      row({ pair_id: "TSLAB", tvl_usd: "260000", cex_volume_24h: "300" }),
+      row({ pair_id: "SPYB", tvl_usd: "250000", cex_volume_24h: "400" }),
+      row({ pair_id: "NVDAB", tvl_usd: "220000", cex_volume_24h: "500" }),
+      row({ pair_id: "AAPLB", tvl_usd: "120000", cex_volume_24h: "600" }),
+      row({ pair_id: "GOOGLB", tvl_usd: "70000", cex_volume_24h: "700" }),
+      row({ pair_id: "MSFTB", tvl_usd: "40000", cex_volume_24h: "800" }),
+      row({ pair_id: "INTCB", tvl_usd: "15000", cex_volume_24h: "900" }),
+      row({ pair_id: "MUB", tvl_usd: "9000", cex_volume_24h: "1000" }),
     ];
     const bp = badgePolicyForMarket("binance-pancake");
     const badges = pairBadgesForRows(rows, bp);
@@ -120,12 +122,12 @@ describe("pairBadgesForRows", () => {
 
     // Dual-badge example when a name ranks high on both dimensions.
     const dual = [
-      row({ pair_id: "SPCXB", est_liquidity_usd: "3e6", cex_volume_24h: "9e6" }),
-      row({ pair_id: "SKHYB", est_liquidity_usd: "5e5", cex_volume_24h: "8e6" }),
-      row({ pair_id: "MUB", est_liquidity_usd: "9e3", cex_volume_24h: "7e6" }),
-      row({ pair_id: "X", est_liquidity_usd: "1", cex_volume_24h: "1" }),
-      row({ pair_id: "Y", est_liquidity_usd: "2", cex_volume_24h: "2" }),
-      row({ pair_id: "Z", est_liquidity_usd: "3", cex_volume_24h: "3" }),
+      row({ pair_id: "SPCXB", tvl_usd: "3e6", cex_volume_24h: "9e6" }),
+      row({ pair_id: "SKHYB", tvl_usd: "5e5", cex_volume_24h: "8e6" }),
+      row({ pair_id: "MUB", tvl_usd: "9e3", cex_volume_24h: "7e6" }),
+      row({ pair_id: "X", tvl_usd: "1", cex_volume_24h: "1" }),
+      row({ pair_id: "Y", tvl_usd: "2", cex_volume_24h: "2" }),
+      row({ pair_id: "Z", tvl_usd: "3", cex_volume_24h: "3" }),
     ];
     const dualBadges = pairBadgesForRows(dual, bp);
     assert.equal(dualBadges.get("SPCXB")?.hiTvl, true);
@@ -134,25 +136,34 @@ describe("pairBadgesForRows", () => {
     assert.equal(dualBadges.get("SKHYB")?.hiVol, true);
   });
 
-  it("enables hiTvl on bybit-fluxion when live/est TVL ranks (WHI-782)", () => {
+  it("ranks TVL badge on live tvl_usd only (bybit-fluxion, WHI-782)", () => {
     const rows = [
-      row({ pair_id: "AAPLx", est_liquidity_usd: "100000", cex_volume_24h: "5000" }),
-      row({ pair_id: "TSLAx", est_liquidity_usd: "90000", cex_volume_24h: "4000" }),
+      row({
+        pair_id: "AAPLx",
+        est_liquidity_usd: "100000",
+        tvl_usd: "80000",
+        cex_volume_24h: "5000",
+      }),
+      row({
+        pair_id: "TSLAx",
+        est_liquidity_usd: "90000",
+        tvl_usd: "70000",
+        cex_volume_24h: "4000",
+      }),
     ];
     const badges = pairBadgesForRows(rows, badgePolicyForMarket("bybit-fluxion"));
-    // Only two pairs → both in top-5 TVL and Vol.
     assert.equal(badges.get("AAPLx")?.hiTvl, true);
     assert.equal(badges.get("AAPLx")?.hiVol, true);
     assert.equal(badges.get("TSLAx")?.hiVol, true);
   });
 
-  it("prefers live tvl_usd over est_liquidity_usd for rank", () => {
+  it("ignores inventory est_liquidity_usd for TVL badge rank", () => {
     const rows = [
-      // High est, tiny live → loses to every mid live TVL (topN=5).
+      // Huge est, no live sample → excluded from TVL rank.
       row({
-        pair_id: "EST_HI",
+        pair_id: "EST_ONLY",
         est_liquidity_usd: "9e9",
-        tvl_usd: "0.01",
+        tvl_usd: null,
         cex_volume_24h: "1",
       }),
       row({
@@ -168,19 +179,18 @@ describe("pairBadgesForRows", () => {
     ];
     const badges = pairBadgesForRows(rows, badgePolicyForMarket("binance-pancake"));
     assert.equal(badges.get("LIVE_HI")?.hiTvl, true);
-    // EST_HI ranks last on live TVL — outside top-5.
-    assert.equal(badges.get("EST_HI")?.hiTvl, false);
+    assert.equal(badges.get("EST_ONLY")?.hiTvl, false);
   });
 
   it("ranks on the provided full set (caller must pass unfiltered rows)", () => {
     // Simulates market top-5 TVL: only A is top when ranking the full set.
     const full = [
-      row({ pair_id: "A", est_liquidity_usd: "1000", cex_volume_24h: "1" }),
-      row({ pair_id: "B", est_liquidity_usd: "100", cex_volume_24h: "2" }),
-      row({ pair_id: "C", est_liquidity_usd: "50", cex_volume_24h: "3" }),
-      row({ pair_id: "D", est_liquidity_usd: "40", cex_volume_24h: "4" }),
-      row({ pair_id: "E", est_liquidity_usd: "30", cex_volume_24h: "5" }),
-      row({ pair_id: "F", est_liquidity_usd: "20", cex_volume_24h: "6" }),
+      row({ pair_id: "A", tvl_usd: "1000", cex_volume_24h: "1" }),
+      row({ pair_id: "B", tvl_usd: "100", cex_volume_24h: "2" }),
+      row({ pair_id: "C", tvl_usd: "50", cex_volume_24h: "3" }),
+      row({ pair_id: "D", tvl_usd: "40", cex_volume_24h: "4" }),
+      row({ pair_id: "E", tvl_usd: "30", cex_volume_24h: "5" }),
+      row({ pair_id: "F", tvl_usd: "20", cex_volume_24h: "6" }),
     ];
     const bp = badgePolicyForMarket("binance-pancake");
     const onFull = pairBadgesForRows(full, bp);

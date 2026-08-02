@@ -166,8 +166,6 @@ class PairDetailModel:
     volume_compare: VolumeCompare | None = None
     # WHI-779: underlying premium panel.
     premium: PremiumPanel | None = None
-    # WHI-782: optional live TVL history for detail trend (ascending).
-    tvl_series: list[tuple[int, Decimal]] = field(default_factory=list)
     error: str | None = None
 
 
