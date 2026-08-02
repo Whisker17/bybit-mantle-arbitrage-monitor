@@ -93,8 +93,6 @@ class JournalReader:
         uri = self.path.resolve().as_uri() + "?mode=ro"
         self._conn = sqlite3.connect(uri, uri=True, check_same_thread=False)
         self._conn.row_factory = sqlite3.Row
-        # Cached for optional tables (schema v5+); pre-v5 journals degrade cleanly.
-        self._tables: frozenset[str] | None = None
 
     def close(self) -> None:
         self._conn.close()
@@ -313,12 +311,19 @@ class JournalReader:
         )
 
     def _table_names(self) -> frozenset[str]:
-        if self._tables is None:
-            rows = self._conn.execute(
-                "SELECT name FROM sqlite_master WHERE type='table'"
-            ).fetchall()
-            self._tables = frozenset(str(r[0]) for r in rows)
-        return self._tables
+        """Current table set from sqlite_master (no process-lifetime cache).
+
+        Optional tables (underlying_prices / cex_volume_24h / dex_pool_tvl) may
+        appear after API start when the collector migrates a journal that was
+        empty or pre-schema at process boot. Memoizing the first negative
+        snapshot made those accessors permanently None until API restart
+        (WHI-789). Re-query is cheap: ``sqlite_master`` is tiny and almost
+        always already in the SQLite page cache.
+        """
+        rows = self._conn.execute(
+            "SELECT name FROM sqlite_master WHERE type='table'"
+        ).fetchall()
+        return frozenset(str(r[0]) for r in rows)
 
     def latest_cex_volume(self, pair_id: str) -> CexVolumeTick | None:
         """Most recent REST-polled CEX 24h volume for a pair (WHI-777).

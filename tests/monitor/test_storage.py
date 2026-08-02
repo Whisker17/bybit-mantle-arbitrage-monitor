@@ -2,6 +2,7 @@
 
 from __future__ import annotations
 
+import sqlite3
 from decimal import Decimal
 from pathlib import Path
 
@@ -9,15 +10,20 @@ from monitor.quotes import (
     BybitBookTick,
     BybitDepthTick,
     BybitTradeTick,
+    CexVolumeTick,
     CollectorGap,
     DexPoolTvlTick,
     FluxionPoolStateTick,
     FluxionRfqFillTick,
     FluxionRfqQuoteTick,
     FluxionSwapTick,
+    UnderlyingPriceTick,
 )
 from monitor.storage import JournalReader, SqliteStore
 from monitor.storage.schema import SCHEMA_VERSION
+
+# Optional tables guarded by JournalReader._table_names() (schema v5–v7).
+_OPTIONAL_TABLES = ("dex_pool_tvl", "cex_volume_24h", "underlying_prices")
 
 
 def test_schema_bootstrap_and_meta(tmp_path: Path) -> None:
@@ -26,6 +32,98 @@ def test_schema_bootstrap_and_meta(tmp_path: Path) -> None:
         assert store.get_meta("schema_version") == str(SCHEMA_VERSION)
         store.set_meta("last_block", "123")
         assert store.get_meta("last_block") == "123"
+
+
+def test_optional_table_accessors_refresh_after_late_create(tmp_path: Path) -> None:
+    """WHI-789: same JournalReader must see tables created after first probe.
+
+    API keeps one reader for the process life. If optional tables (dex_pool_tvl,
+    cex_volume_24h, underlying_prices) appear only after the collector migrates
+    a journal that was empty at API start, accessors must not stay stuck on the
+    first negative sqlite_master snapshot.
+    """
+    db = tmp_path / "late_tables.db"
+    with SqliteStore(db) as store:
+        assert store.get_meta("schema_version") == str(SCHEMA_VERSION)
+
+    # Simulate "table absent" at API start (the production failure mode). We
+    # DROP while leaving schema_version at current SCHEMA_VERSION — this is not
+    # a version-gated pre-v7 migration, but SqliteStore re-runs unconditional
+    # CREATE IF NOT EXISTS, so late recreate still matches the real collector path.
+    conn = sqlite3.connect(db)
+    try:
+        for name in _OPTIONAL_TABLES:
+            conn.execute(f"DROP TABLE IF EXISTS {name}")
+        conn.commit()
+    finally:
+        conn.close()
+
+    with JournalReader(db) as reader:
+        # First probes: tables absent → empty / None (and used to poison cache).
+        assert reader.latest_pool_tvl("TSLAx") is None
+        assert reader.pool_tvl_series("TSLAx") == []
+        assert reader.latest_cex_volume("TSLAx") is None
+        assert reader.latest_underlying_price("TSLA") is None
+        assert reader.latest_underlying_prices(["TSLA"]) == {}
+        assert reader.underlying_prices("TSLA") == []
+
+        # Collector restarts / migrates: recreate schema + insert samples.
+        with SqliteStore(db) as store:
+            tvl = DexPoolTvlTick(
+                pair_id="TSLAx",
+                pool="0x" + "ab" * 20,
+                block_number=42,
+                block_ts=1_700_000_000,
+                recv_ts_ms=1_700_000_000_500,
+                base_bal=Decimal("10"),
+                quote_bal=Decimal("1000"),
+                base_price=Decimal("250"),
+                tvl_usd=Decimal("3500"),
+                gap=False,
+            )
+            assert store.insert_pool_tvl([tvl]) == 1
+            cex = CexVolumeTick(
+                pair_id="TSLAx",
+                symbol="TSLAXUSDT",
+                poll_ts_ms=200,
+                recv_ts_ms=201,
+                volume_quote_24h=Decimal("99"),
+                trade_count_24h=3,
+                source="bybit",
+            )
+            assert store.insert_cex_volume([cex]) == 1
+            und = UnderlyingPriceTick(
+                ticker="TSLA",
+                price=Decimal("255"),
+                currency="USD",
+                price_type="live",
+                as_of_ms=2_000,
+                recv_ts_ms=2_010,
+                source="pyth_hermes",
+            )
+            assert store.insert_underlying_prices([und]) == 1
+
+        # Same reader instance must now surface the late-created tables.
+        got_tvl = reader.latest_pool_tvl("TSLAx")
+        assert got_tvl is not None
+        assert got_tvl.tvl_usd == Decimal("3500")
+        series = reader.pool_tvl_series("TSLAx")
+        assert len(series) == 1
+        assert series[0].tvl_usd == Decimal("3500")
+
+        got_cex = reader.latest_cex_volume("TSLAx")
+        assert got_cex is not None
+        assert got_cex.volume_quote_24h == Decimal("99")
+
+        got_und = reader.latest_underlying_price("TSLA")
+        assert got_und is not None
+        assert got_und.price == Decimal("255")
+        batch = reader.latest_underlying_prices(["TSLA", "AAPL"])
+        assert "TSLA" in batch
+        assert "AAPL" not in batch
+        hist = reader.underlying_prices("TSLA", limit=10)
+        assert len(hist) == 1
+        assert hist[0].price == Decimal("255")
 
 
 def test_insert_pool_tvl_and_reader(tmp_path: Path) -> None:

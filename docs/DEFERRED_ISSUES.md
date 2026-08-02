@@ -31,6 +31,14 @@ soon — anything touching key handling, RPC credentials defaults to at least Hi
 
 ## Open
 
+- **Optional-table name literals + sqlite_master probes duplicated** (Low, WHI-789).
+  `monitor/storage/reader.py::JournalReader._table_names` (six call-site string
+  guards) and a second `sqlite_master` shape in `monitor/storage/retention.py` —
+  same existence check, no shared `_has_table` / `OPTIONAL_TABLES` constant.
+  Deferred to keep the WHI-789 regression fix minimal (drop process-lifetime
+  memo only). Fix: one `_has_table(conn, name)` helper + a single optional-table
+  name constant consumed by reader guards and the late-create regression test.
+
 - **UncoveredCoverageProbe per-source try/except is a data clump** (Low, WHI-787).
   `monitor/underlying/coverage_probe.py::UncoveredCoverageProbe.probe_once` —
   `(yahoo_body, yahoo_err)` and `(hermes_feeds, hermes_err)` pairs are gathered

@@ -2,6 +2,7 @@
 
 from __future__ import annotations
 
+import sqlite3
 from decimal import Decimal
 from pathlib import Path
 
@@ -9,7 +10,13 @@ import pytest
 from fastapi.testclient import TestClient
 
 from monitor.api.app import create_app
-from monitor.quotes import BybitBookTick, BybitDepthTick, FluxionPoolStateTick, now_ms
+from monitor.quotes import (
+    BybitBookTick,
+    BybitDepthTick,
+    DexPoolTvlTick,
+    FluxionPoolStateTick,
+    now_ms,
+)
 from monitor.storage import SqliteStore
 
 USDC = "0x09Bc4E0D864854c6aFB6eB9A9cdF58aC190D0dF9"
@@ -106,17 +113,21 @@ def seeded_db_with_depth(tmp_path: Path) -> Path:
     return db
 
 
-def _make_client(
-    db: Path, tmp_path: Path, monkeypatch: pytest.MonkeyPatch
-) -> TestClient:
-    monkeypatch.chdir(tmp_path)
+def _write_api_yaml(
+    tmp_path: Path,
+    *,
+    sqlite_path: Path,
+    market: str = "bybit-fluxion",
+) -> Path:
+    """Minimal api.yaml for TestClient fixtures (cache TTLs off)."""
     api_yaml = tmp_path / "config" / "api.yaml"
     api_yaml.parent.mkdir(parents=True, exist_ok=True)
     api_yaml.write_text(
         f"""version: 1
 host: 127.0.0.1
 port: 8000
-sqlite_path: {db}
+market: {market}
+sqlite_path: {sqlite_path}
 collector_stale_ms: 30000
 recent_gap_window_ms: 300000
 poll_interval_s: 2.0
@@ -129,6 +140,14 @@ cors_origins: []
 """,
         encoding="utf-8",
     )
+    return api_yaml
+
+
+def _make_client(
+    db: Path, tmp_path: Path, monkeypatch: pytest.MonkeyPatch
+) -> TestClient:
+    monkeypatch.chdir(tmp_path)
+    api_yaml = _write_api_yaml(tmp_path, sqlite_path=db)
     app = create_app(api_config_path=api_yaml)
     return TestClient(app)
 
@@ -535,6 +554,110 @@ def test_unknown_market_404(client: TestClient) -> None:
     r = client.get("/api/not-a-market/pairs")
     assert r.status_code == 404
     assert "unknown market" in r.json()["detail"]
+
+
+def test_api_tvl_appears_after_late_table_create(
+    tmp_path: Path, monkeypatch: pytest.MonkeyPatch
+) -> None:
+    """WHI-789: API-first start still surfaces TVL once collector creates the table.
+
+    Mirrors production: journal open without ``dex_pool_tvl`` → overview probe →
+    collector migrates + inserts → same long-lived reader must expose ``tvl_usd``
+    on both markets without an API restart.
+    """
+    import monitor.markets.context as markets_context
+    from monitor.symbols import load_bstocks_pairs_config
+
+    data_dir = tmp_path / "data"
+    data_dir.mkdir()
+    bybit_db = data_dir / "monitor-bybit-fluxion.db"
+    pancake_db = data_dir / "monitor-binance-pancake.db"
+    _seed_store(bybit_db, with_depth=False)
+
+    bstocks = load_bstocks_pairs_config()
+    bpair = bstocks.pairs[0]
+    store = SqliteStore(pancake_db)
+    ts = now_ms()
+    store.set_meta("collector_started_ms", str(ts - 5_000))
+    store.set_meta("market_id", "binance-pancake")
+    store.insert_bybit_book(
+        [
+            BybitBookTick(
+                pair_id=bpair.id,
+                symbol=bpair.binance.symbol,
+                exchange_ts_ms=ts,
+                recv_ts_ms=ts,
+                bid=Decimal("100"),
+                ask=Decimal("100.20"),
+                bid_de_multiplied=Decimal("100"),
+                ask_de_multiplied=Decimal("100.20"),
+                multiplier=bpair.binance.ui_multiplier,
+            )
+        ]
+    )
+    store.close()
+
+    # Table-absent at API start (not a version-gated pre-v7 migration — see
+    # test_optional_table_accessors_refresh_after_late_create for the note).
+    for db_path in (bybit_db, pancake_db):
+        conn = sqlite3.connect(db_path)
+        try:
+            conn.execute("DROP TABLE IF EXISTS dex_pool_tvl")
+            conn.commit()
+        finally:
+            conn.close()
+
+    monkeypatch.setattr(markets_context, "_REPO_ROOT", tmp_path)
+    api_yaml = _write_api_yaml(tmp_path, sqlite_path=bybit_db)
+    app = create_app(api_config_path=api_yaml)
+    with TestClient(app) as client:
+        r0 = client.get("/api/bybit-fluxion/pairs")
+        assert r0.status_code == 200, r0.text
+        aapl0 = next(x for x in r0.json()["rows"] if x["pair_id"] == "AAPLx")
+        assert aapl0.get("tvl_usd") is None
+
+        r1 = client.get("/api/binance-pancake/pairs")
+        assert r1.status_code == 200, r1.text
+        b0 = next(x for x in r1.json()["rows"] if x["pair_id"] == bpair.id)
+        assert b0.get("tvl_usd") is None
+
+        # Collector migrates + inserts after the first API probe.
+        for pair_id, db_path, pool in (
+            ("AAPLx", bybit_db, AAPL_POOL),
+            (bpair.id, pancake_db, "0x" + "cd" * 20),
+        ):
+            with SqliteStore(db_path) as store:
+                assert (
+                    store.insert_pool_tvl(
+                        [
+                            DexPoolTvlTick(
+                                pair_id=pair_id,
+                                pool=pool,
+                                block_number=99,
+                                block_ts=ts // 1000,
+                                recv_ts_ms=ts,
+                                base_bal=Decimal("10"),
+                                quote_bal=Decimal("1000"),
+                                base_price=Decimal("100"),
+                                tvl_usd=Decimal("2000"),
+                                gap=False,
+                            )
+                        ]
+                    )
+                    == 1
+                )
+
+        r2 = client.get("/api/bybit-fluxion/pairs")
+        assert r2.status_code == 200, r2.text
+        aapl1 = next(x for x in r2.json()["rows"] if x["pair_id"] == "AAPLx")
+        assert aapl1.get("tvl_usd") is not None
+        assert Decimal(str(aapl1["tvl_usd"])) == Decimal("2000")
+
+        r3 = client.get("/api/binance-pancake/pairs")
+        assert r3.status_code == 200, r3.text
+        b1 = next(x for x in r3.json()["rows"] if x["pair_id"] == bpair.id)
+        assert b1.get("tvl_usd") is not None
+        assert Decimal(str(b1["tvl_usd"])) == Decimal("2000")
 
 
 def test_openapi_has_market_scoped_paths(client: TestClient) -> None:
