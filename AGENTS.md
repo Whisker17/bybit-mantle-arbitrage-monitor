@@ -22,13 +22,15 @@ placeholders. Agents must not assume a module exists until its issue lands. -->
   parquet under `data/`.
 - **Phase 2 (active):** Bybit ⇄ Fluxion xStocks live panel. Product decisions are in
   `docs/DESIGN.md`.
-  - **M1 (WHI-730) landed:** `config/pairs.yaml` + `monitor/symbols` (fixed overlap
-    list, Bybit multiplier map, RFQ mode `pollable_quote`). Research notes under
-    `docs/references/m1-*.md`.
+  - **M1 (WHI-730) landed:** Bybit ⇄ Fluxion inventory + `monitor/symbols`
+    (fixed overlap list, Bybit multiplier map, RFQ mode `pollable_quote`).
+    Research notes under `docs/references/m1-*.md`. Inventory path moved to
+    `config/markets/bybit-fluxion.yaml` in M7-2.
   - **M2 (WHI-731) landed:** live collectors — `monitor/bybit` (WS book+trades),
     `monitor/fluxion` (per-block pool state, swaps, RFQ poll + LOP fills),
     `monitor/storage` (SQLite), `monitor/collector` daemon
-    (`python -m monitor.collector`). Tunables in `config/collector.yaml`.
+    (`python -m monitor.collector`). Tunables in `config/collector.yaml`
+    (v2 per-market sections since M7-2).
     Block ingest SLO / `head_lag_blocks: 1` measured WHI-749
     (`docs/references/m2-block-ingest-latency.md`, DESIGN §5.2).
   - **M3 (WHI-732) landed:** `monitor/metrics` — spread bps (Bybit mid vs AMM /
@@ -86,11 +88,17 @@ placeholders. Agents must not assume a module exists until its issue lands. -->
     Transfer collector fields + attribution flags). Do not assume those
     labels exist in the live panel until that issue lands.
   - **M7-1 inventory (WHI-770) landed:** `docs/references/m7-bstocks-inventory.md`
-    + draft `config/binance_pancake_pairs.yaml` — top-10 Binance ⇄ Pancake V3
-    bStocks (on-chain-verified pools), BEP-677 `uiMultiplier` pricing (multiply
-    Binance mid for raw compare; ≠ Bybit divide), AMM-only Terminal (no RFQ),
-    US VPS geo: `api.binance.com` 451 / use `data-api.binance.vision` +
-    `data-stream.binance.vision`. Schema load deferred to M7-2.
+    — top-10 Binance ⇄ Pancake V3 bStocks (on-chain-verified pools), BEP-677
+    `uiMultiplier` pricing (multiply Binance mid for raw compare; ≠ Bybit
+    divide), AMM-only Terminal (no RFQ), US VPS geo: `api.binance.com` 451 /
+    use `data-api.binance.vision` + `data-stream.binance.vision`.
+  - **M7-2 multi-market domain (WHI-771) landed:** explicit **market** assembly
+    — `monitor/markets`, `config/markets/{id}.yaml` (bybit-fluxion +
+    binance-pancake), `collector.yaml` v2 `markets:` sections, per-market
+    SQLite `data/monitor-{market}.db` (ADR-0001), CLI `--market` (default
+    `bybit-fluxion`), metrics costs parameterized from market file, systemd
+    `xstocks-collector@.service` + `DEV_MARKET` in `scripts/dev-web.sh`.
+    Binance collector runtime is M7-3; Web multi-market bar is M7-5.
 
 ## Build, test, run
 
@@ -102,17 +110,17 @@ uv run mypy                                   # type check
 # Phase-1 pipeline (needs data/ parquet from a prior run):
 uv run python -u -m mba.m5_report             # regenerate report/ from local parquet
 # Phase-2 live collector (M2 / WHI-731); needs network + optional MANTLE_RPC_URL:
-uv run python -m monitor.collector
-# Phase-2 TUI (M5 / WHI-734); reads collector SQLite (default data/monitor.db):
-uv run python -m monitor.tui
-# Optional: uv run python -m monitor.tui --db /path/to/monitor.db
+uv run python -m monitor.collector --market bybit-fluxion
+# Phase-2 TUI (M5 / WHI-734); reads collector SQLite (default data/monitor-bybit-fluxion.db):
+uv run python -m monitor.tui --market bybit-fluxion
+# Optional: uv run python -m monitor.tui --db /path/to/monitor-bybit-fluxion.db
 # Journal retention (WHI-751); one-shot prune / growth report:
 uv run python -m monitor.retention --growth-only
 uv run python -m monitor.retention
 # Block ingest latency probe (WHI-749); chain-only, no Bybit/RFQ:
 uv run python -m monitor.collector.latency_probe --duration-s 600
 # Phase-2 read-only Web API (WHI-757); needs collector journal:
-uv run python -m monitor.api
+uv run python -m monitor.api --market bybit-fluxion
 # Optional: uv run python -m monitor.api --host 127.0.0.1 --port 8000
 # PnL v2 cash-flow engine demo (WHI-756); pure synthetic mids, no journal:
 uv run python -m monitor.metrics
@@ -142,10 +150,11 @@ Module layout is fixed by `docs/DESIGN.md` §4.2. Short mirror:
 
 - **`mba/`** — phase-1 offline WMNT/USDT0 backtest (archived, still runnable). Do not
   extend for xStocks.
-- **`monitor/`** — phase-2 live Bybit ⇄ Fluxion xStocks panel. All new product code.
-  - **`monitor/symbols`** (M1) — fixed pair list + Bybit multiplier helpers.
+- **`monitor/`** — phase-2 live multi-market panel (default Bybit ⇄ Fluxion). All new product code.
+  - **`monitor/markets`** (M7-2) — market id, inventory path, costs, SQLite path assembly.
+  - **`monitor/symbols`** (M1) — fixed pair list + Bybit multiplier helpers (default market inventory).
   - **`monitor/bybit`**, **`monitor/fluxion`**, **`monitor/storage`**,
-    **`monitor/collector`** (M2) — live feeds → SQLite.
+    **`monitor/collector`** (M2) — live feeds → per-market SQLite.
   - **`monitor/metrics`** (M3 + WHI-756 + WHI-766) — edge/wear (M3 ladder),
     session stats, PnL v2 cash-flow engine (`pnl_v2.py`) + journal snapshot
     assembly (`pnl_snapshot.py`).

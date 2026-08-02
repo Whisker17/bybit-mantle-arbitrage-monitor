@@ -281,13 +281,14 @@ decision, not M0).
 
 | Type / config | Module | Notes |
 |---------------|--------|-------|
-| `PairsConfig` / `Pair` | `monitor.symbols` | Fixed inventory from `config/pairs.yaml` (M1) |
-| `de_multiplied_price` | `monitor.symbols` | `bybit_mid / xstock_multiplier` before venue compare |
-| RFQ mode | `config/pairs.yaml` `rfq.mode` | **`pollable_quote`** (M1 decision; not fill-only degrade) |
+| `MarketContext` / market file | `monitor.markets` | Explicit market assembly (M7-2): id, cex/dex, costs, inventory path, per-market SQLite (ADR-0001) |
+| `PairsConfig` / `Pair` | `monitor.symbols` | Bybit ⇄ Fluxion inventory from `config/markets/bybit-fluxion.yaml` `inventory:` (M1; path moved M7-2) |
+| `de_multiplied_price` | `monitor.symbols` | `bybit_mid / xstock_multiplier` before venue compare (**divide** semantics — not for bStocks) |
+| RFQ mode | market inventory `rfq.mode` | **`pollable_quote`** on bybit-fluxion (M1); binance-pancake has no RFQ |
 | `BybitBookTick` / `BybitTradeTick` | `monitor.quotes` | De-multiplied L1 + trades from Bybit WS |
 | `FluxionPoolStateTick` / `FluxionSwapTick` | `monitor.quotes` | Per-block AMM mid (wrapper + native) + swaps |
 | `FluxionRfqQuoteTick` / `FluxionRfqFillTick` | `monitor.quotes` | Pollable RFQ quote + LOP settlement events |
-| `CollectorConfig` | `monitor.collector` | `config/collector.yaml` tunables |
+| `CollectorConfig` | `monitor.collector` | `config/collector.yaml` tunables (v2 per-market sections) |
 
 Strategy/metrics code should depend only on `monitor.quotes` shapes, not on WS/RPC
 client internals.
@@ -304,9 +305,10 @@ client internals.
 Collectors start from the live tip (no historical backfill). Restart leaves prior
 SQLite rows in place but does not re-fetch missed wall-clock gaps — reconnects and
 long block lag write explicit rows to `collector_gaps` and set per-row `gap=1` on
-the next ticks. Local journal: `data/monitor.db` via `monitor.storage.SqliteStore`
-(M2 / WHI-731). TUI (M5) may still keep an in-memory view derived from the same
-ticks.
+the next ticks. Local journal: **one SQLite file per market**
+`data/monitor-{market_id}.db` via `monitor.storage.SqliteStore` (M2 / WHI-731;
+per-market split M7-2 / WHI-771, ADR-0001). Default market `bybit-fluxion`.
+TUI (M5) may still keep an in-memory view derived from the same ticks.
 
 Mantle settled head uses `head_lag_blocks: 1` by default (WHI-749): process
 `eth_blockNumber() - 1` so load-balanced RPC read-your-writes does not emit
@@ -458,7 +460,7 @@ Probe: `python -m monitor.collector.latency_probe`.
 | **Web skeleton** | WHI-757 | FastAPI read-only API + Next.js static export + nginx/systemd deploy on VPS |
 | **Web overview** | WHI-758 | Full overview table (TUI-parity columns, status/stale banner, sort/filter) |
 | **Web pair detail** | WHI-759 | Pair detail: spread chart, trade stream, edge stats, attribution |
-| **M7 multi-market (Binance ⇄ Pancake bStocks)** | WHI-770… | Second market beside Bybit⇄Fluxion. **M7-1 inventory landed** (WHI-770): top-10 pairs, BEP-677 multiplier pricing, geo-block path — `docs/references/m7-bstocks-inventory.md`, draft `config/binance_pancake_pairs.yaml`. Schema/loaders M7-2+ |
+| **M7 multi-market (Binance ⇄ Pancake bStocks)** | WHI-770… | Second market beside Bybit⇄Fluxion. **M7-1 inventory** (WHI-770) + **M7-2 domain** (WHI-771) landed: `config/markets/`, `monitor.markets`, per-market SQLite (ADR-0001), CLI `--market`. Collectors M7-3; Web multi-market bar M7-5. |
 
 Dependency chain: M0 → M1 → M2 → (M3 ∥ M4) → M5 → Web (WHI-757 → 758…).
 M7 is parallel product expansion after Web PnL v2; does not block Web polish.

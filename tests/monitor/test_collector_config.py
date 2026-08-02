@@ -21,7 +21,7 @@ def test_load_checked_in_collector_config() -> None:
     path = default_collector_path()
     assert path.is_file()
     cfg = load_collector_config()
-    assert cfg.version == 1
+    assert cfg.version == 2
     assert cfg.bybit.book_topic_prefix == "orderbook.50"
     assert cfg.bybit.depth.enabled is True
     assert cfg.bybit.depth.buckets_usd[0] == Decimal("10")
@@ -31,7 +31,7 @@ def test_load_checked_in_collector_config() -> None:
     assert cfg.mantle.latency_window_blocks == 256
     assert cfg.rfq.amount_usdc_raw == "100000000"
     assert cfg.rfq.poll_both_sides is True
-    assert cfg.resolved_sqlite_path().name == "monitor.db"
+    assert cfg.resolved_sqlite_path().name == "monitor-bybit-fluxion.db"
     assert cfg.retention.enabled is True
     assert cfg.retention.bybit_book_raw_ms == 172_800_000
     assert cfg.retention.fluxion_swaps_ms is None

@@ -8,9 +8,13 @@ version: 1
 host: 127.0.0.1
 port: 8000
 
-# SQLite journal written by `python -m monitor.collector` (M2).
+# Default market journal (M7-2 / WHI-771). Per-market path:
+# data/monitor-{market}.db — override with --market / --sqlite.
 # Relative paths resolve against the process cwd (repo root / deploy root).
-sqlite_path: data/monitor.db
+# CLI default market is bybit-fluxion; legacy data/monitor.db still falls back
+# if the configured file is missing (see resolve_market_sqlite).
+market: bybit-fluxion
+sqlite_path: data/monitor-bybit-fluxion.db
 
 # Health: freshest recv_ts older than this → collector_alive=false.
 # 30s covers Bybit L1 (~1s) and RFQ poll stalls; chain can be quieter.

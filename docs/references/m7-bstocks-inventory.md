@@ -1,6 +1,6 @@
 # M7-1 bStocks × PancakeSwap inventory (WHI-770)
 
-Companion to `config/binance_pancake_pairs.yaml` (draft; schema finalizes in M7-2).
+Companion to `config/markets/binance-pancake.yaml` (M7-2 market schema; inventory under `inventory:`).
 Snapshot date: **2026-08-02**.
 
 ## Method
@@ -65,7 +65,7 @@ Ranked by DexScreener liquidity USD on the **on-chain-verified** best USDT pool.
 | 9 | INTCB | INTCBUSDT | `0xe614…5283` | `0x4dD8…2481` V3 | 2500 | ~16k | 1.0 | ~−9 bps |
 | 10 | MUB | MUBUSDT | `0xcdf2…2699` | `0x9E75…071e` V3 | 2500 | ~9k | **1.0001075…** | ~−12 bps |
 
-Full addresses and YAML: `config/binance_pancake_pairs.yaml`.
+Full addresses and YAML: `config/markets/binance-pancake.yaml`.
 
 **Quote asset:** all top pools are **BSC USDT**
 (`0x55d398326f99059fF775485246999027B3197955`, 18 decimals) — not BUSD-era.
@@ -261,7 +261,7 @@ Uni’s 500/3000).
 
 | Ticket | Input from this note |
 |--------|----------------------|
-| M7-2 domain/config | Draft `config/binance_pancake_pairs.yaml`; isomorphic to `pairs.yaml` with `binance:` + `pancake:` legs, `market: binance_pancake`, no RFQ block. |
+| M7-2 domain/config | **Landed WHI-771:** `config/markets/binance-pancake.yaml` + `monitor.markets`; costs/multiplier_semantics=multiply; collector scaffold under `collector.yaml` `markets.binance-pancake`. |
 | M7 collectors | Binance via **vision** hosts from US VPS; BSC poll budget ~4× Mantle if head-following every block; PCS Swap topic0; `uiMultiplier` refresh loop. |
 | M7 metrics | Multiplier: **multiply** Binance mid by UI mult for raw comparison; costs: 10 bps CEX + pool fee bps; no USDT/USDC basis. |
 | M7 attribution | AMM-only; drop RFQ mechanism axis or hard-code `mechanism=amm`. |

@@ -21,8 +21,16 @@ from monitor.storage.retention import disk_free_bytes
 
 
 def main(argv: list[str] | None = None) -> int:
+    from monitor.markets import DEFAULT_MARKET_ID
+    from monitor.markets.context import resolve_market_sqlite
+
     parser = argparse.ArgumentParser(
         description="Prune collector SQLite journal (WHI-751 retention policy)"
+    )
+    parser.add_argument(
+        "--market",
+        default=DEFAULT_MARKET_ID,
+        help=f"Market id (default: {DEFAULT_MARKET_ID})",
     )
     parser.add_argument(
         "--collector-config",
@@ -34,7 +42,7 @@ def main(argv: list[str] | None = None) -> int:
         "--sqlite",
         type=Path,
         default=None,
-        help="Override SQLite path (default: collector.yaml sqlite_path)",
+        help="Override SQLite path (default: markets.{id}.sqlite_path)",
     )
     parser.add_argument(
         "--growth-only",
@@ -55,8 +63,9 @@ def main(argv: list[str] | None = None) -> int:
     args = parser.parse_args(argv)
 
     load_dotenv()
-    collector = load_collector_config(args.collector_config)
-    db_path = args.sqlite or collector.resolved_sqlite_path()
+    collector = load_collector_config(args.collector_config, market_id=args.market)
+    configured = args.sqlite or collector.resolved_sqlite_path()
+    db_path = resolve_market_sqlite(market_id=args.market, configured=configured)
     logging.basicConfig(
         level=getattr(logging, collector.logging.level, logging.INFO),
         format="%(asctime)s %(levelname)s %(name)s: %(message)s",

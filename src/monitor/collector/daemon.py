@@ -392,15 +392,41 @@ def _configure_logging(level: str) -> None:
 
 def run_forever(
     *,
+    market_id: str | None = None,
     pairs_path: Path | None = None,
     collector_path: Path | None = None,
     sqlite_path: Path | None = None,
 ) -> None:
+    from monitor.markets import DEFAULT_MARKET_ID, load_market_context
+
     load_dotenv()
-    pairs = load_pairs_config(pairs_path)
-    collector = load_collector_config(collector_path)
+    mid = market_id or DEFAULT_MARKET_ID
+    if pairs_path is not None:
+        # Explicit inventory path (tests / overrides): still market-scope collector.
+        pairs = load_pairs_config(pairs_path)
+        collector = load_collector_config(collector_path, market_id=mid)
+        db_path = sqlite_path or collector.resolved_sqlite_path()
+    else:
+        ctx = load_market_context(
+            mid,
+            collector_path=collector_path,
+            sqlite_path=sqlite_path,
+        )
+        if ctx.pairs is None:
+            raise SystemExit(
+                f"market {mid!r} has no Bybit/Fluxion pairs inventory; "
+                "collector runtime for this market is not wired yet (see M7-3)"
+            )
+        if ctx.collector is None:
+            raise SystemExit(
+                f"market {mid!r} has no collector section in collector.yaml"
+            )
+        pairs = ctx.pairs
+        collector = ctx.collector
+        db_path = ctx.sqlite_path
+
     _configure_logging(collector.logging.level)
-    db_path = sqlite_path or collector.resolved_sqlite_path()
+    logger.info("collector market=%s sqlite=%s", mid, db_path)
     store = SqliteStore(db_path)
     daemon = CollectorDaemon(pairs, collector, store)
 
@@ -425,14 +451,21 @@ def run_forever(
 
 
 def main(argv: list[str] | None = None) -> None:
+    from monitor.markets import DEFAULT_MARKET_ID
+
     parser = argparse.ArgumentParser(
         description="M2 live collector: Bybit WS + Fluxion chain + RFQ → SQLite"
+    )
+    parser.add_argument(
+        "--market",
+        default=DEFAULT_MARKET_ID,
+        help=f"Market id (default: {DEFAULT_MARKET_ID})",
     )
     parser.add_argument(
         "--pairs",
         type=Path,
         default=None,
-        help="Path to pairs.yaml (default: config/pairs.yaml)",
+        help="Path to market/pairs inventory (default: config/markets/{market}.yaml)",
     )
     parser.add_argument(
         "--collector-config",
@@ -444,10 +477,11 @@ def main(argv: list[str] | None = None) -> None:
         "--sqlite",
         type=Path,
         default=None,
-        help="Override SQLite path (default: collector.yaml sqlite_path)",
+        help="Override SQLite path (default: markets.{id}.sqlite_path)",
     )
     args = parser.parse_args(argv)
     run_forever(
+        market_id=args.market,
         pairs_path=args.pairs,
         collector_path=args.collector_config,
         sqlite_path=args.sqlite,

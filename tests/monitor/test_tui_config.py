@@ -38,8 +38,9 @@ def test_invalid_config_fails(tmp_path: Path) -> None:
 
 def test_resolved_sqlite_path_relative(tmp_path: Path) -> None:
     cfg = load_tui_config()
+    assert cfg.market == "bybit-fluxion"
     resolved = cfg.resolved_sqlite_path(cwd=tmp_path)
-    assert resolved == (tmp_path / "data" / "monitor.db").resolve()
+    assert resolved == (tmp_path / "data" / "monitor-bybit-fluxion.db").resolve()
 
 
 def test_shipped_configs_agree_on_reference_size() -> None:

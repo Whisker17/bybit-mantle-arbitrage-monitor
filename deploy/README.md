@@ -8,9 +8,10 @@ box. Node is **not** a runtime dependency on the VPS.
 | Path | Role |
 |------|------|
 | `/opt/xstocks/app` | Git checkout / rsynced sources + `.venv` |
-| `/opt/xstocks/app/data/monitor.db` | Collector journal (WAL; shared read with API) |
+| `/opt/xstocks/app/data/monitor-{market}.db` | Per-market collector journal (WAL; API reads one market — ADR-0001) |
 | `/opt/xstocks/www` | Next.js static export (`web/out`) |
-| `xstocks-api.service` | `python -m monitor.api` (uvicorn, 1 process, MemoryMax 256M) |
+| `xstocks-api.service` | `python -m monitor.api --market bybit-fluxion` (uvicorn, 1 process) |
+| `xstocks-collector@.service` | Template: `xstocks-collector@bybit-fluxion` → `--market %i` |
 | nginx | Serves `/opt/xstocks/www` + reverse-proxies `/api/` → `127.0.0.1:8000` |
 
 ## One-time VPS setup
@@ -29,10 +30,14 @@ sudo -u xstocks -H bash -lc '
   uv sync --no-dev
 '
 
-# 3) systemd
+# 3) systemd (API + default-market collector)
 sudo cp /opt/xstocks/app/deploy/xstocks-api.service /etc/systemd/system/
+sudo cp /opt/xstocks/app/deploy/xstocks-collector@.service /etc/systemd/system/
 sudo systemctl daemon-reload
+sudo systemctl enable --now xstocks-collector@bybit-fluxion
 sudo systemctl enable --now xstocks-api
+# Optional second market (after M7-3 collector lands):
+# sudo systemctl enable --now xstocks-collector@binance-pancake
 
 # 4) nginx
 sudo cp /opt/xstocks/app/deploy/nginx-xstocks.conf /etc/nginx/sites-available/xstocks
@@ -41,9 +46,15 @@ sudo ln -sf /etc/nginx/sites-available/xstocks /etc/nginx/sites-enabled/xstocks
 sudo nginx -t && sudo systemctl reload nginx
 ```
 
-Collector continues as its existing process/unit; it must write
-`data/monitor.db` under the same path the API reads (`config/api.yaml` /
-`config/collector.yaml` `sqlite_path`).
+Collector is market-scoped (`--market bybit-fluxion` by default). It writes
+`data/monitor-bybit-fluxion.db` (see ADR-0001). Migrate a legacy journal once:
+
+```bash
+mv data/monitor.db data/monitor-bybit-fluxion.db
+```
+
+The API and collector for a market must agree on the same journal path
+(`config/api.yaml` / `config/collector.yaml` `markets.<id>.sqlite_path`).
 
 ## Redeploy (one command from a laptop)
 

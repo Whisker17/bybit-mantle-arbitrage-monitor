@@ -1,0 +1,244 @@
+# Market: Bybit ⇄ Fluxion xStocks — M7-2 / WHI-771 schema v2.
+# Inventory body under `inventory:` is the former config/pairs.yaml (M1 / WHI-730).
+# Multipliers: Bybit xstockMultiplier — apply with de_multiplied_price (divide).
+# Costs feed metrics/PnL v2 assembly (cex_taker_fee_bps → MetricsConfig.bybit_taker_fee_bps).
+# See docs/adr/0001-per-market-sqlite.md and docs/references/m1-xstocks-inventory.md.
+
+version: 2
+id: bybit-fluxion
+display_name: Bybit ⇄ Fluxion (xStocks)
+cex:
+  venue: bybit
+  quote_asset: USDT
+  multiplier_semantics: divide
+  rest_base_url: https://api.bybit.com
+  ws_base_url: wss://stream.bybit.com
+dex:
+  venue: fluxion
+  chain_id: 5000
+  pool_kind: v3
+  quote_asset: USDC
+  has_rfq: true
+costs:
+  cex_taker_fee_bps: 10
+  gas_usd_per_swap: 0.01
+  quote_basis_bps: 0
+inventory:
+  version: 1
+  inventory_as_of: '2026-07-31'
+  low_liquidity_threshold_usd: 50000
+  contracts:
+    chain_id: 5000
+    fluxion_v3_factory: '0xF883162Ed9c7E8EF604214c964c678E40c9B737C'
+    fluxion_v3_quoter: '0x3E4eE18Ac7280813236a1EB850679Da5322E14CE'
+    fluxion_v3_router: '0x5628a59dF0ECAC3f3171f877A94bEb26BA6DFAa0'
+    limit_order_protocol: '0x11de6011345586785810e52448a44c6595eedc18'
+    usdc: '0x09Bc4E0D864854c6aFB6eB9A9cdF58aC190D0dF9'
+    usdt0: '0x779Ded0c9e1022225f8E0630b35a9b54bE713736'
+  rfq:
+    mode: pollable_quote
+    quote_url: https://fluxion.network/api/limit-order/quote
+    proxy_quote_url: https://fluxion-proxy-api-production.up.railway.app/quote
+    request_type: EXACT_INPUT
+    quote_asset: USDC
+    rate_limit_per_minute: 60
+    min_poll_interval_s: 11
+    settlement: limit_order_protocol
+  pairs:
+  - id: AAPLx
+    name: Apple xStock
+    low_liquidity: false
+    bybit:
+      symbol: AAPLXUSDT
+      base_coin: AAPLX
+      multiplier: '1.0026642075893797'
+      multiplier_source: bybit_instruments_info.xstockMultiplier
+    fluxion:
+      native_token: '0x9d275685dc284c8eb1c79f6aba7a63dc75ec890a'
+      native_decimals: 18
+      quote_token: USDC
+      quote_token_address: '0x09Bc4E0D864854c6aFB6eB9A9cdF58aC190D0dF9'
+      wrapper_token: '0x5aa7649fdbda47de64a07ac81d64b682af9c0724'
+      amm:
+        kind: v3
+        pool: '0x2cc6a607f3445d826b9e29f507b3a2e3b9dae106'
+        fee: 3000
+        est_liquidity_usd: 112257.22
+  - id: CRCLx
+    name: Circle xStock
+    low_liquidity: false
+    bybit:
+      symbol: CRCLXUSDT
+      base_coin: CRCLX
+      multiplier: '1'
+      multiplier_source: bybit_instruments_info.xstockMultiplier
+    fluxion:
+      native_token: '0xfebded1b0986a8ee107f5ab1a1c5a813491deceb'
+      native_decimals: 18
+      quote_token: USDC
+      quote_token_address: '0x09Bc4E0D864854c6aFB6eB9A9cdF58aC190D0dF9'
+      wrapper_token: '0xa90872aca656ebe47bdebf3b19ec9dd9c5adc7f8'
+      amm:
+        kind: v3
+        pool: '0x43cf441f5949d52faa105060239543492193c87e'
+        fee: 3000
+        est_liquidity_usd: 79530.58
+  - id: GOOGLx
+    name: Alphabet xStock
+    low_liquidity: false
+    bybit:
+      symbol: GOOGLXUSDT
+      base_coin: GOOGLX
+      multiplier: '1.001926722393864'
+      multiplier_source: bybit_instruments_info.xstockMultiplier
+    fluxion:
+      native_token: '0xe92f673ca36c5e2efd2de7628f815f84807e803f'
+      native_decimals: 18
+      quote_token: USDC
+      quote_token_address: '0x09Bc4E0D864854c6aFB6eB9A9cdF58aC190D0dF9'
+      wrapper_token: '0x1630f08370917e79df0b7572395a5e907508bbbc'
+      amm:
+        kind: v3
+        pool: '0x66960ed892daf022c5f282c5316c38cb6f0c1333'
+        fee: 3000
+        est_liquidity_usd: 111166.88
+  - id: HOODx
+    name: Robinhood xStock
+    low_liquidity: false
+    bybit:
+      symbol: HOODXUSDT
+      base_coin: HOODX
+      multiplier: '1'
+      multiplier_source: bybit_instruments_info.xstockMultiplier
+    fluxion:
+      native_token: '0xe1385fdd5ffb10081cd52c56584f25efa9084015'
+      native_decimals: 18
+      quote_token: USDC
+      quote_token_address: '0x09Bc4E0D864854c6aFB6eB9A9cdF58aC190D0dF9'
+      wrapper_token: '0x953707d7a1cb30cc5c636bda8eaebe410341eb14'
+      amm:
+        kind: v3
+        pool: '0x4e23bb828e51cbc03c81d76c844228cc75f6a287'
+        fee: 3000
+        est_liquidity_usd: 111139.62
+  - id: METAx
+    name: Meta xStock
+    low_liquidity: false
+    bybit:
+      symbol: METAXUSDT
+      base_coin: METAX
+      multiplier: '1.002298265651938'
+      multiplier_source: bybit_instruments_info.xstockMultiplier
+    fluxion:
+      native_token: '0x96702be57cd9777f835117a809c7124fe4ec989a'
+      native_decimals: 18
+      quote_token: USDC
+      quote_token_address: '0x09Bc4E0D864854c6aFB6eB9A9cdF58aC190D0dF9'
+      wrapper_token: '0x4e41a262caa93c6575d336e0a4eb79f3c67caa06'
+      amm:
+        kind: v3
+        pool: '0x782bd3895a6ac561d0df11b02dd6f9e023f3a497'
+        fee: 3000
+        est_liquidity_usd: 99994.52
+  - id: NVDAx
+    name: NVIDIA xStock
+    low_liquidity: false
+    bybit:
+      symbol: NVDAXUSDT
+      base_coin: NVDAX
+      multiplier: '1.0009180758490996'
+      multiplier_source: bybit_instruments_info.xstockMultiplier
+    fluxion:
+      native_token: '0xc845b2894dbddd03858fd2d643b4ef725fe0849d'
+      native_decimals: 18
+      quote_token: USDC
+      quote_token_address: '0x09Bc4E0D864854c6aFB6eB9A9cdF58aC190D0dF9'
+      wrapper_token: '0x93e62845c1dd5822ebc807ab71a5fb750decd15a'
+      amm:
+        kind: v3
+        pool: '0xa875ac23d106394d1baaae5bc42b951268bc04e2'
+        fee: 3000
+        est_liquidity_usd: 106480.91
+  - id: TSLAx
+    name: Tesla xStock
+    low_liquidity: false
+    bybit:
+      symbol: TSLAXUSDT
+      base_coin: TSLAX
+      multiplier: '1'
+      multiplier_source: bybit_instruments_info.xstockMultiplier
+    fluxion:
+      native_token: '0x8ad3c73f833d3f9a523ab01476625f269aeb7cf0'
+      native_decimals: 18
+      quote_token: USDC
+      quote_token_address: '0x09Bc4E0D864854c6aFB6eB9A9cdF58aC190D0dF9'
+      wrapper_token: '0x43680abf18cf54898be84c6ef78237cfbd441883'
+      amm:
+        kind: v3
+        pool: '0x5e7935d70b5d14b6cf36fbde59944533fab96b3c'
+        fee: 3000
+        est_liquidity_usd: 93681.08
+  - id: SPCXx
+    name: SpaceX xStock
+    low_liquidity: true
+    bybit:
+      symbol: SPCXXUSDT
+      base_coin: SPCXX
+      multiplier: '1'
+      multiplier_source: bybit_instruments_info.xstockMultiplier
+    fluxion:
+      native_token: '0x68fa48b1c2fe52b3d776e1953e0e782b5044ce28'
+      native_decimals: 18
+      quote_token: USDC
+      quote_token_address: '0x09Bc4E0D864854c6aFB6eB9A9cdF58aC190D0dF9'
+      wrapper_token: '0x8e2eed8b8b5e13ea7bf38e50d7821d2c57309072'
+      amm:
+        kind: v3
+        pool: '0xdcc6578d509baa30463319409ff38642698056a5'
+        fee: 3000
+        est_liquidity_usd: 14.59
+  - id: AMZNx
+    name: Amazon.com xStock
+    low_liquidity: true
+    bybit:
+      symbol: AMZNXUSDT
+      base_coin: AMZNX
+      multiplier: '1'
+      multiplier_source: bybit_instruments_info.xstockMultiplier
+    fluxion:
+      native_token: '0x3557ba345b01efa20a1bddc61f573bfd87195081'
+      native_decimals: 18
+      quote_token: USDC
+      quote_token_address: '0x09Bc4E0D864854c6aFB6eB9A9cdF58aC190D0dF9'
+      wrapper_token: '0xac85d37acbadca37545e21ab0fb991bce8c1187c'
+      amm: null
+  - id: COINx
+    name: Coinbase xStock
+    low_liquidity: true
+    bybit:
+      symbol: COINXUSDT
+      base_coin: COINX
+      multiplier: '1'
+      multiplier_source: bybit_instruments_info.xstockMultiplier
+    fluxion:
+      native_token: '0x364f210f430ec2448fc68a49203040f6124096f0'
+      native_decimals: 18
+      quote_token: USDC
+      quote_token_address: '0x09Bc4E0D864854c6aFB6eB9A9cdF58aC190D0dF9'
+      wrapper_token: '0x44c7ed7ffdf8465c9d27f60aec845eed3d49d56e'
+      amm: null
+  - id: MCDx
+    name: McDonald's xStock
+    low_liquidity: true
+    bybit:
+      symbol: MCDXUSDT
+      base_coin: MCDX
+      multiplier: '1.0161604345481776'
+      multiplier_source: bybit_instruments_info.xstockMultiplier
+    fluxion:
+      native_token: '0x80a77a372c1e12accda84299492f404902e2da67'
+      native_decimals: 18
+      quote_token: USDC
+      quote_token_address: '0x09Bc4E0D864854c6aFB6eB9A9cdF58aC190D0dF9'
+      wrapper_token: '0x1717d8be2bcb27f4e8f36c817088fa6a2c0b3b30'
+      amm: null

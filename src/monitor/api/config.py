@@ -22,6 +22,8 @@ class ApiConfig(BaseModel):
     version: int = Field(ge=1)
     host: str = Field(min_length=1)
     port: int = Field(ge=1, le=65535)
+    # Default market id (M7-2). CLI --market overrides at process start.
+    market: str = Field(default="bybit-fluxion", min_length=1)
     sqlite_path: str = Field(min_length=1)
     collector_stale_ms: int = Field(ge=1_000)
     recent_gap_window_ms: int = Field(ge=1_000)

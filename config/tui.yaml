@@ -8,9 +8,11 @@ version: 1
 # Issue WHI-734: 1–2s refresh.
 refresh_interval_s: 1.5
 
-# SQLite journal written by `python -m monitor.collector` (M2).
+# Default market journal (M7-2 / WHI-771). Path convention: data/monitor-{market}.db.
 # Relative paths resolve against the process cwd (repo root when launched from there).
-sqlite_path: data/monitor.db
+# Override with --market / --db. Legacy data/monitor.db falls back for bybit-fluxion.
+market: bybit-fluxion
+sqlite_path: data/monitor-bybit-fluxion.db
 
 # Reference notional for overview "net edge" column AND EdgeStats series.
 # MUST equal metrics.breach_size_usd (and therefore lie on size_ladder_usd) —

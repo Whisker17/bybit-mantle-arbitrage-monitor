@@ -34,6 +34,8 @@ class TuiConfig(BaseModel):
 
     version: int = Field(ge=1)
     refresh_interval_s: float = Field(gt=0, le=60)
+    # Default market id (M7-2). CLI --market overrides at process start.
+    market: str = Field(default="bybit-fluxion", min_length=1)
     sqlite_path: str = Field(min_length=1)
     reference_size_usd: Decimal = Field(gt=0)
     default_sort: SortKey
