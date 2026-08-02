@@ -30,7 +30,7 @@ def build_app_state(
     """Load configs and open the journal reader when the DB file exists."""
     cfg = api if api is not None else load_api_config(api_config_path)
     # MONITOR_MARKET is process bootstrap for uvicorn --reload workers only
-    # (factory apps cannot take kwargs across reload). Not a general config knobs.
+    # (factory apps cannot take kwargs across reload). Not a general config knob.
     mid = normalize_market_id(
         market_id
         or os.environ.get("MONITOR_MARKET")

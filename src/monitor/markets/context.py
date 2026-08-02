@@ -107,17 +107,21 @@ def resolve_market_sqlite(
         return configured
 
     root = repo_root if repo_root is not None else _REPO_ROOT
-    convention = (root / market_sqlite_relpath(mid)).resolve()
+    rel = market_sqlite_relpath(mid)
+    convention = (root / rel).resolve()
     try:
         configured_resolved = configured.resolve()
     except OSError:
         configured_resolved = configured
-    # Only fall back when the missing path is the default convention (or equal
-    # under relative resolution) — never when the operator passed a custom path.
-    if configured_resolved != convention and configured != Path(market_sqlite_relpath(mid)):
-        # Also accept relative convention without resolve when cwd ≠ repo root.
-        if configured.as_posix() != market_sqlite_relpath(mid):
-            return configured
+    # Only fall back when the missing path *is* the convention path — never for
+    # an operator-supplied custom --sqlite / --db.
+    is_convention = (
+        configured_resolved == convention
+        or configured == Path(rel)
+        or configured.as_posix() == rel
+    )
+    if not is_convention:
+        return configured
 
     legacy = root / LEGACY_SQLITE_RELPATH
     if legacy.is_file():
@@ -127,7 +131,7 @@ def resolve_market_sqlite(
             mid,
             configured,
             legacy,
-            root / market_sqlite_relpath(mid),
+            root / rel,
         )
         return legacy.resolve()
     return configured
@@ -180,7 +184,6 @@ def load_market_context(
 
     collector: CollectorConfig | None = None
     configured_db: Path
-    explicit_sqlite = sqlite_path is not None
     if load_collector:
         try:
             collector = load_collector_config(collector_path, market_id=mid)
@@ -205,11 +208,14 @@ def load_market_context(
         rel = market_sqlite_relpath(mid)
         configured_db = sqlite_path if sqlite_path is not None else (root / rel)
 
+    # Legacy fallback is gated inside resolve_market_sqlite to the *convention*
+    # path only, so config-derived paths (api/tui yaml) still migrate while a
+    # custom --sqlite /tmp/foo.db never redirects to data/monitor.db.
     db = resolve_market_sqlite(
         market_id=mid,
         configured=configured_db,
         repo_root=root,
-        allow_legacy_fallback=not explicit_sqlite,
+        allow_legacy_fallback=True,
     )
 
     return MarketContext(

@@ -183,9 +183,41 @@ def test_explicit_sqlite_does_not_legacy_fallback(tmp_path: Path) -> None:
         market_id="bybit-fluxion",
         configured=custom,
         repo_root=tmp_path,
-        allow_legacy_fallback=False,
+        allow_legacy_fallback=True,  # still no redirect: custom ≠ convention
     )
     assert resolved == custom
+
+
+def test_convention_path_falls_back_to_legacy(tmp_path: Path) -> None:
+    """Config-derived convention path must still migrate from data/monitor.db."""
+    legacy = tmp_path / "data" / "monitor.db"
+    legacy.parent.mkdir(parents=True)
+    legacy.write_bytes(b"x")
+    convention = tmp_path / "data" / "monitor-bybit-fluxion.db"
+    resolved = resolve_market_sqlite(
+        market_id="bybit-fluxion",
+        configured=convention,
+        repo_root=tmp_path,
+        allow_legacy_fallback=True,
+    )
+    assert resolved == legacy.resolve()
+
+
+def test_load_market_context_legacy_with_config_path(tmp_path: Path) -> None:
+    """API/TUI pass yaml sqlite_path; legacy must still work mid-migration."""
+    # Build a minimal market file + collector is heavy; exercise resolve via context
+    # by pointing sqlite_path at convention under tmp_path with only legacy present.
+    legacy = tmp_path / "data" / "monitor.db"
+    legacy.parent.mkdir(parents=True)
+    legacy.write_bytes(b"")
+    convention = tmp_path / "data" / "monitor-bybit-fluxion.db"
+    ctx = load_market_context(
+        "bybit-fluxion",
+        sqlite_path=convention,
+        repo_root=tmp_path,
+        load_collector=False,
+    )
+    assert ctx.sqlite_path == legacy.resolve()
 
 
 def test_load_market_context_binance_has_inventory_no_pairs_shape() -> None:

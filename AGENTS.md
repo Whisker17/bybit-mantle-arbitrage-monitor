@@ -115,8 +115,8 @@ uv run python -m monitor.collector --market bybit-fluxion
 uv run python -m monitor.tui --market bybit-fluxion
 # Optional: uv run python -m monitor.tui --db /path/to/monitor-bybit-fluxion.db
 # Journal retention (WHI-751); one-shot prune / growth report:
-uv run python -m monitor.retention --growth-only
-uv run python -m monitor.retention
+uv run python -m monitor.retention --market bybit-fluxion --growth-only
+uv run python -m monitor.retention --market bybit-fluxion
 # Block ingest latency probe (WHI-749); chain-only, no Bybit/RFQ:
 uv run python -m monitor.collector.latency_probe --duration-s 600
 # Phase-2 read-only Web API (WHI-757); needs collector journal:

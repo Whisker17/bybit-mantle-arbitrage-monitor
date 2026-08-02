@@ -10,17 +10,14 @@ DEFAULT_MARKET_ID = "bybit-fluxion"
 # the per-market file is missing so a live VPS journal is not orphaned on deploy.
 LEGACY_SQLITE_RELPATH = "data/monitor.db"
 
-# Markets with a checked-in inventory under config/markets/.
-_KNOWN: frozenset[str] = frozenset(
-    {
-        "bybit-fluxion",
-        "binance-pancake",
-    }
-)
-
-
 def known_market_ids() -> frozenset[str]:
-    return _KNOWN
+    """Market ids that have a checked-in ``config/markets/{id}.yaml``.
+
+    Derived from disk (not a hand list) so adding a market is config-only.
+    """
+    from monitor.markets.load import list_market_ids
+
+    return frozenset(list_market_ids())
 
 
 def normalize_market_id(raw: str) -> str:

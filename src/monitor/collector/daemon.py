@@ -407,11 +407,8 @@ def run_forever(
         pairs = load_pairs_config(pairs_path)
         collector = load_collector_config(collector_path, market_id=mid)
         configured = sqlite_path or collector.resolved_sqlite_path()
-        db_path = resolve_market_sqlite(
-            market_id=mid,
-            configured=configured,
-            allow_legacy_fallback=sqlite_path is None,
-        )
+        # Convention-path-only legacy fallback (custom --sqlite never redirects).
+        db_path = resolve_market_sqlite(market_id=mid, configured=configured)
     else:
         ctx = load_market_context(
             mid,
