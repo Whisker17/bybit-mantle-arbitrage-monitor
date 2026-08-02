@@ -88,8 +88,10 @@ type Col = {
 };
 
 /**
- * Leaf column order (WHI-780): CEX Vol sits with CEX L1; DEX Vol with DEX quotes.
- * WHI-779 Underlying/Premium live in the Reference group after Result.
+ * Leaf column order (WHI-780 + WHI-783):
+ * CEX Vol + vs Und with CEX L1; DEX Vol with DEX quotes; vs CEX / vs Und
+ * explicitly name the basis so DEX vs CEX and DEX vs Und cannot be confused.
+ * Underlying group is reference price only (premium lives inside venue groups).
  * To add a group later: append a ColGroup + COLS entries; group row is derived.
  */
 const COLS: Col[] = [
@@ -117,6 +119,14 @@ const COLS: Col[] = [
     group: "cex",
     align: "right",
     title: "CEX rolling 24h quote volume (exchange REST)",
+  },
+  {
+    id: "cex_vs_und",
+    key: "premium_bps",
+    label: "vs Und",
+    group: "cex",
+    align: "right",
+    title: "CEX de-multiplied mid vs underlying equity (bps)",
   },
   {
     id: "amm",
@@ -147,17 +157,28 @@ const COLS: Col[] = [
   {
     id: "amm_bps",
     key: "amm_spread",
-    label: "AMM bps",
+    label: "vs CEX",
     group: "dex",
     align: "right",
+    title: "AMM mid relative to CEX mid (bps) — core arb spread",
   },
   {
     id: "rfq_bps",
     key: "rfq_spread",
-    label: "RFQ bps",
+    label: "RFQ vs CEX",
     group: "dex",
     align: "right",
+    title: "RFQ mid relative to CEX mid (bps)",
     rfq: true,
+  },
+  {
+    id: "dex_vs_und",
+    key: "amm_premium",
+    label: "vs Und",
+    group: "dex",
+    align: "right",
+    title:
+      "AMM mid vs underlying equity (bps). Hover for RFQ vs underlying when RFQ exists",
   },
   {
     id: "dex_vol",
@@ -211,19 +232,10 @@ const COLS: Col[] = [
   {
     id: "underlying",
     key: "underlying_price",
-    label: "Underlying",
+    label: "Price",
     group: "reference",
     align: "right",
     title: "Underlying equity reference (Pyth/Yahoo) + price_type badge",
-  },
-  {
-    id: "premium",
-    key: "premium_bps",
-    label: "Premium",
-    group: "reference",
-    align: "right",
-    title:
-      "CEX de-multiplied mid vs underlying (bps). Hover for AMM/RFQ premiums",
   },
 ];
 
@@ -386,15 +398,20 @@ function UnderlyingCell({ row }: { row: PairOverviewRow }) {
   );
 }
 
-function PremiumCell({ row }: { row: PairOverviewRow }) {
+/** CEX group "vs Und": CEX equity-eq mid vs underlying (WHI-783). */
+function CexVsUndCell({ row }: { row: PairOverviewRow }) {
   if (row.underlying_empty === "private") {
     return (
-      <span className="text-muted-foreground" title="Private underlying — no premium">
+      <span
+        className="text-muted-foreground"
+        title="Private underlying — no premium"
+      >
         n/a
       </span>
     );
   }
-  if (row.premium_bps == null) {
+  const value = row.cex_premium_bps ?? row.premium_bps ?? null;
+  if (value == null) {
     return (
       <span
         className="text-muted-foreground"
@@ -405,30 +422,61 @@ function PremiumCell({ row }: { row: PairOverviewRow }) {
     );
   }
   const title = [
-    `CEX vs underlying: ${fmtSignedBps(row.premium_bps)} bps`,
-    row.amm_premium_bps != null
-      ? `AMM vs underlying: ${fmtSignedBps(row.amm_premium_bps)} bps`
-      : null,
-    row.rfq_premium_bps != null
-      ? `RFQ vs underlying: ${fmtSignedBps(row.rfq_premium_bps)} bps`
+    `CEX mid vs underlying: ${fmtSignedBps(value)} bps`,
+    row.premium_type_label ? `Underlying: ${row.premium_type_label}` : null,
+  ]
+    .filter(Boolean)
+    .join(" · ");
+  return (
+    <span title={title}>
+      <BpsCell value={value} />
+    </span>
+  );
+}
+
+/**
+ * DEX group "vs Und": AMM mid vs underlying; RFQ vs Und in hover when present
+ * (no empty RFQ column — WHI-783).
+ */
+function DexVsUndCell({
+  row,
+  hasRfq,
+}: {
+  row: PairOverviewRow;
+  hasRfq: boolean;
+}) {
+  if (row.underlying_empty === "private") {
+    return (
+      <span
+        className="text-muted-foreground"
+        title="Private underlying — no premium"
+      >
+        n/a
+      </span>
+    );
+  }
+  if (row.amm_premium_bps == null) {
+    return (
+      <span
+        className="text-muted-foreground"
+        title="Needs AMM mid + underlying print"
+      >
+        —
+      </span>
+    );
+  }
+  const title = [
+    `AMM mid vs underlying: ${fmtSignedBps(row.amm_premium_bps)} bps`,
+    hasRfq && row.rfq_premium_bps != null
+      ? `RFQ mid vs underlying: ${fmtSignedBps(row.rfq_premium_bps)} bps`
       : null,
     row.premium_type_label ? `Underlying: ${row.premium_type_label}` : null,
   ]
     .filter(Boolean)
     .join(" · ");
   return (
-    <span className="inline-flex items-center justify-end gap-1" title={title}>
-      <BpsCell value={row.premium_bps} />
-      {row.premium_type_label &&
-        row.underlying_price_type &&
-        row.underlying_price_type !== "live" && (
-          <Badge
-            variant={priceTypeBadgeVariant(row.underlying_price_type)}
-            className="normal-case"
-          >
-            {row.premium_type_label}
-          </Badge>
-        )}
+    <span title={title}>
+      <BpsCell value={row.amm_premium_bps} />
     </span>
   );
 }
@@ -483,7 +531,8 @@ export function PairsTable({
       <table
         className={cn(
           "w-full border-collapse text-xs",
-          hasRfq ? "min-w-[1320px]" : "min-w-[1140px]",
+          // WHI-783: +1 vs Und in CEX, +1 vs Und in DEX; Premium column removed.
+          hasRfq ? "min-w-[1400px]" : "min-w-[1220px]",
         )}
       >
         <thead>
@@ -655,7 +704,10 @@ export function PairsTable({
                   >
                     {fmtNotional(row.cex_volume_24h)}
                   </td>
-                  {/* DEX: AMM RFQ* bps DEX Vol */}
+                  <td className="px-2 py-1.5 text-right">
+                    <CexVsUndCell row={row} />
+                  </td>
+                  {/* DEX: AMM RFQ* vs CEX / vs Und / DEX Vol */}
                   <td
                     className={cn(
                       "px-2 py-1.5 text-right tabular-nums",
@@ -674,14 +726,23 @@ export function PairsTable({
                       </td>
                     </>
                   )}
-                  <td className="px-2 py-1.5 text-right">
+                  <td
+                    className="px-2 py-1.5 text-right"
+                    title="AMM mid vs CEX mid (bps)"
+                  >
                     <BpsCell value={row.amm_spread_bps} />
                   </td>
                   {hasRfq && (
-                    <td className="px-2 py-1.5 text-right">
+                    <td
+                      className="px-2 py-1.5 text-right"
+                      title="RFQ mid vs CEX mid (bps)"
+                    >
                       <BpsCell value={row.rfq_spread_bps} />
                     </td>
                   )}
+                  <td className="px-2 py-1.5 text-right">
+                    <DexVsUndCell row={row} hasRfq={hasRfq} />
+                  </td>
                   <td
                     className="px-2 py-1.5 text-right tabular-nums"
                     title={dexVolumeTitle(row)}
@@ -742,7 +803,7 @@ export function PairsTable({
                   <td className="px-2 py-1.5">
                     <MmActiveCell status={row.mm_active} />
                   </td>
-                  {/* Reference: Underlying, Premium (WHI-779) */}
+                  {/* Underlying group: reference price only (WHI-783) */}
                   <td
                     className={cn(
                       "px-2 py-1.5 text-right",
@@ -750,9 +811,6 @@ export function PairsTable({
                     )}
                   >
                     <UnderlyingCell row={row} />
-                  </td>
-                  <td className="px-2 py-1.5 text-right">
-                    <PremiumCell row={row} />
                   </td>
                 </tr>
               );

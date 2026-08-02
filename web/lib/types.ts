@@ -133,7 +133,10 @@ export type PairOverviewRow = {
   underlying_source?: string | null;
   /** Explicit empty: no_data | private (never a dashed placeholder alone). */
   underlying_empty?: "no_data" | "private" | null;
-  /** Default Premium column = CEX mid vs underlying (bps). */
+  /**
+   * Legacy alias for CEX mid vs underlying (bps); same as cex_premium_bps.
+   * Overview "vs Und" under CEX prefers cex_premium_bps (WHI-783).
+   */
   premium_bps?: string | null;
   cex_premium_bps?: string | null;
   amm_premium_bps?: string | null;
@@ -259,12 +262,18 @@ export type PremiumPanel = {
 
 export type SpreadPoint = {
   ts_ms: number;
+  /** DEX AMM mid vs CEX mid (bps). UI label: vs CEX. */
   amm_spread_bps: string | null;
   session: SessionKind;
+  /** RFQ mid vs CEX mid (bps). UI label: RFQ vs CEX. */
   rfq_spread_bps?: string | null;
   bybit_mid?: string | null;
-  /** WHI-779: CEX tokenized mid vs underlying (bps). */
+  /** CEX equity-eq mid vs underlying (bps). UI: CEX vs Und. */
   cex_premium_bps?: string | null;
+  /** AMM equity-eq mid vs underlying (bps). UI: DEX vs Und. */
+  amm_premium_bps?: string | null;
+  /** RFQ mid vs underlying (bps); hover / optional chart series. */
+  rfq_premium_bps?: string | null;
 };
 
 export type TradeStreamRow = {
@@ -506,4 +515,5 @@ export type SortKey =
   | "dex_volume_24h"
   | "volume_ratio"
   | "premium_bps"
+  | "amm_premium"
   | "underlying_price";

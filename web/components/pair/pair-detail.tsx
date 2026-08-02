@@ -206,17 +206,35 @@ export function PairDetail({ marketId, pairId }: Props) {
             />
           )}
           <Field
-            label="AMM bps"
+            label="vs CEX"
             value={fmtSignedBps(o.amm_spread_bps)}
             tone={bpsTone(o.amm_spread_bps)}
+            title="AMM mid vs CEX mid (bps)"
           />
           {hasRfq && (
             <Field
-              label="RFQ bps"
+              label="RFQ vs CEX"
               value={fmtSignedBps(o.rfq_spread_bps)}
               tone={bpsTone(o.rfq_spread_bps)}
+              title="RFQ mid vs CEX mid (bps)"
             />
           )}
+          <Field
+            label="CEX vs Und"
+            value={fmtSignedBps(o.cex_premium_bps ?? o.premium_bps)}
+            tone={bpsTone(o.cex_premium_bps ?? o.premium_bps ?? null)}
+            title="CEX equity-eq mid vs underlying (bps)"
+          />
+          <Field
+            label="DEX vs Und"
+            value={fmtSignedBps(o.amm_premium_bps)}
+            tone={bpsTone(o.amm_premium_bps ?? null)}
+            title={
+              hasRfq && o.rfq_premium_bps != null
+                ? `AMM vs Und ${fmtSignedBps(o.amm_premium_bps)} · RFQ vs Und ${fmtSignedBps(o.rfq_premium_bps)}`
+                : "AMM mid vs underlying (bps)"
+            }
+          />
           <Field
             label="Net edge"
             value={fmtSignedBps(o.net_edge_bps)}
@@ -253,11 +271,7 @@ export function PairDetail({ marketId, pairId }: Props) {
                     }`
                   : "—"
             }
-          />
-          <Field
-            label="CEX premium"
-            value={fmtSignedBps(o.premium_bps)}
-            tone={bpsTone(o.premium_bps ?? null)}
+            title="Reference equity price only — venue premiums live above"
           />
         </dl>
       </section>
@@ -270,8 +284,8 @@ export function PairDetail({ marketId, pairId }: Props) {
       </Panel>
 
       <Panel
-        title="Underlying premium"
-        subtitle="tokenized mid vs equity · CEX / AMM / RFQ"
+        title="Premium vs underlying"
+        subtitle="CEX / AMM / RFQ tokenized mid vs equity reference"
       >
         <PremiumPanelView premium={data.premium} hasRfq={hasRfq} />
       </Panel>
@@ -280,8 +294,8 @@ export function PairDetail({ marketId, pairId }: Props) {
         title="Spread history"
         subtitle={
           hasRfq
-            ? "AMM + RFQ vs Bybit mid · CEX premium · session bands"
-            : "AMM vs CEX mid · CEX premium · session bands"
+            ? "DEX vs CEX · CEX/DEX vs Und · session bands"
+            : "AMM vs CEX · CEX/DEX vs Und · session bands"
         }
       >
         <SpreadChart points={data.spread_series} showRfq={hasRfq} />

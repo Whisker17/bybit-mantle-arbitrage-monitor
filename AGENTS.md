@@ -133,9 +133,9 @@ placeholders. Agents must not assume a module exists until its issue lands. -->
     `collector.yaml` `underlying.enabled`.
   - **Underlying premium panel (WHI-779) landed:**
     `monitor/metrics/premium.py` (de-multiplied mid / underlying − 1 → bps);
-    overview Underlying + Premium columns (price_type badge, hover CEX/AMM/RFQ);
-    detail premium panel + CEX-premium series on spread chart; API fields on
-    pairs/detail (`underlying_*`, `premium_bps`, nested `premium` panel).
+    API fields on pairs/detail (`underlying_*`, `premium_bps` /
+    `cex|amm|rfq_premium_bps`, nested `premium` panel). Layout revised in
+    WHI-783.
   - **CEX/DEX 24h volume (WHI-777) landed:** CEX REST poll (Bybit
     `turnover24h` / Binance `quoteVolume`, 60s) → journal `cex_volume_24h`
     (schema v6); DEX volume from collected swaps with truncation label when
@@ -152,6 +152,11 @@ placeholders. Agents must not assume a module exists until its issue lands. -->
     `low-liq` badge removed (filter kept); binance-pancake TVL+Vol,
     bybit-fluxion Vol-only; `est_liquidity_usd` on overview rows;
     pure helpers `web/lib/pair-badges.ts`.
+  - **Premium column split (WHI-783) landed:** overview moves vs-underlying
+    into CEX/DEX groups (`vs Und`); renames AMM/RFQ bps → `vs CEX` /
+    `RFQ vs CEX`; Underlying group is reference price only; detail chart
+    series by basis (DEX vs CEX, CEX vs Und, DEX vs Und); `SpreadPoint`
+    gains `amm_premium_bps` / `rfq_premium_bps`.
 
 ## Build, test, run
 

@@ -1,8 +1,9 @@
 "use client";
 
 /**
- * Detail-page premium panel (WHI-779): current CEX/AMM/RFQ vs underlying +
- * journal-window distributions. Explicit empty states for private / no_data.
+ * Detail-page premium panel (WHI-779 / WHI-783): current CEX/AMM/RFQ vs
+ * underlying + journal-window CEX distributions. Labels name the basis
+ * (venue vs Und). Explicit empty states for private / no_data.
  */
 
 import { Badge } from "@/components/ui/badge";
@@ -117,14 +118,14 @@ export function PremiumPanelView({ premium, hasRfq = true }: Props) {
       </div>
 
       <dl className="grid grid-cols-2 gap-x-4 gap-y-1.5 sm:grid-cols-3">
-        <PremValue label="CEX premium" value={cur.cex_premium_bps} />
-        <PremValue label="AMM premium" value={cur.amm_premium_bps} />
-        {hasRfq && <PremValue label="RFQ premium" value={cur.rfq_premium_bps} />}
+        <PremValue label="CEX vs Und" value={cur.cex_premium_bps} />
+        <PremValue label="AMM vs Und" value={cur.amm_premium_bps} />
+        {hasRfq && <PremValue label="RFQ vs Und" value={cur.rfq_premium_bps} />}
       </dl>
 
       <div>
         <h3 className="mb-1 text-[10px] font-semibold uppercase tracking-wide text-muted-foreground">
-          CEX premium distribution (journal window)
+          CEX vs Und distribution (journal window)
         </h3>
         <table className="w-full text-[11px]">
           <thead>

@@ -776,11 +776,21 @@ def build_spread_series(
         )
         und = _as_of(und_by_ts, book.exchange_ts_ms, get_ts=lambda u: u.as_of_ms)
         cex_prem: Decimal | None = None
+        amm_prem: Decimal | None = None
+        rfq_prem: Decimal | None = None
         if und is not None and und.price > 0:
+            u = und.price
             cex_eq = equity_equivalent_mid(
                 snap.bybit_mid, ui_multiplier=ui_multiplier
             )
-            cex_prem = premium_bps(cex_eq, und.price)
+            amm_eq = equity_equivalent_mid(
+                snap.amm_mid, ui_multiplier=ui_multiplier
+            )
+            # RFQ is Fluxion-only (no ui_multiplier rebasing).
+            rfq_eq = mean_mid(snap.rfq_buy_mid, snap.rfq_sell_mid)
+            cex_prem = premium_bps(cex_eq, u)
+            amm_prem = premium_bps(amm_eq, u)
+            rfq_prem = premium_bps(rfq_eq, u)
         points.append(
             SpreadPoint(
                 ts_ms=book.exchange_ts_ms,
@@ -792,6 +802,8 @@ def build_spread_series(
                 ),
                 bybit_mid=snap.bybit_mid,
                 cex_premium_bps=cex_prem,
+                amm_premium_bps=amm_prem,
+                rfq_premium_bps=rfq_prem,
             )
         )
     if len(points) > max_points:
