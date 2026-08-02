@@ -1,0 +1,109 @@
+# Underlying equity price feeds — WHI-778.
+# Research + decision: docs/references/underlying-price-source.md
+# Secrets: none for Pyth Hermes. Optional future keys stay in .env.
+
+version: 1
+
+# Hermes public HTTP (no API key). Override only for mirrors / staging.
+hermes_base_url: "https://hermes.pyth.network"
+
+# Poll cadence (collector loop). Open uses RTH calendar from metrics session.
+open_poll_interval_s: 30.0
+closed_poll_interval_s: 300.0
+http_timeout_s: 20.0
+
+# price_type thresholds (ms).
+# During RTH: as_of older than this → stale (missed updates).
+stale_after_open_ms: 120000
+# Absolute max age ever: dead feeds (e.g. abandoned KR print) → stale always.
+stale_after_abs_ms: 604800000  # 7d
+# When classifying close vs stale outside RTH: last close older than this → stale.
+stale_after_closed_ms: 432000000  # 5d (covers long weekends + one holiday)
+
+# Yahoo chart API fallback for tickers Pyth cannot serve (SKHY today).
+# Unofficial; disable for compliance-strict deploys.
+yahoo_fallback: true
+yahoo_chart_base_url: "https://query1.finance.yahoo.com"
+# Convert Yahoo KRW → USD using Pyth FX.USD/KRW when set.
+fx_usd_krw_feed_id: "e539120487c29b4defdf9a53d337316ea022a2688978a468f9efd847201be7e3"
+
+# NYSE RTH hours — must match config/metrics.yaml session (America/New_York).
+session:
+  timezone: America/New_York
+  open: "09:30"
+  close: "16:00"
+  early_close: "13:00"
+
+# Canonical underlying tickers. pair_id mapping is code (strip x/B suffixes).
+# feed_id null + no yahoo_symbol → uncovered (SPCX).
+tickers:
+  AAPL:
+    currency: USD
+    pyth_symbol: Equity.US.AAPL/USD
+    feed_id: "49f6b65cb1de6b10eaf75e7c03ca029c306d0357e91b5311b175084a5ad55688"
+  CRCL:
+    currency: USD
+    pyth_symbol: Equity.US.CRCL/USD
+    feed_id: "92b8527aabe59ea2b12230f7b532769b133ffb118dfbd48ff676f14b273f1365"
+  GOOGL:
+    currency: USD
+    pyth_symbol: Equity.US.GOOGL/USD
+    feed_id: "5a48c03e9b9cb337801073ed9d166817473697efff0d138874e0f6a33d6d5aa6"
+  HOOD:
+    currency: USD
+    pyth_symbol: Equity.US.HOOD/USD
+    feed_id: "306736a4035846ba15a3496eed57225b64cc19230a50d14f3ed20fd7219b7849"
+  META:
+    currency: USD
+    pyth_symbol: Equity.US.META/USD
+    feed_id: "78a3e3b8e676a8f73c439f5d749737034b139bbbe899ba5775216fba596607fe"
+  NVDA:
+    currency: USD
+    pyth_symbol: Equity.US.NVDA/USD
+    feed_id: "b1073854ed24cbc755dc527418f52b7d271f6cc967bbf8d8129112b18860a593"
+  TSLA:
+    currency: USD
+    pyth_symbol: Equity.US.TSLA/USD
+    feed_id: "16dad506d7db8da01c87581c87ca897a012a153557d4d578c3b9c9e1bc0632f1"
+  AMZN:
+    currency: USD
+    pyth_symbol: Equity.US.AMZN/USD
+    feed_id: "b5d0e0fa58a1f8b81498ae670ce93c872d14434b72c364885d4fa1b257cbb07a"
+  COIN:
+    currency: USD
+    pyth_symbol: Equity.US.COIN/USD
+    feed_id: "fee33f2a978bf32dd6b662b65ba8083c6773b494f8401194ec1870c640860245"
+  MCD:
+    currency: USD
+    pyth_symbol: Equity.US.MCD/USD
+    feed_id: "d3178156b7c0f6ce10d6da7d347952a672467b51708baaf1a57ffe1fb005824a"
+  SPY:
+    currency: USD
+    pyth_symbol: Equity.US.SPY/USD
+    feed_id: "19e09bb805456ada3979a7d1cbb4b6d63babc3a0f8e8a9509f68afa5c4c11cd5"
+  MSFT:
+    currency: USD
+    pyth_symbol: Equity.US.MSFT/USD
+    feed_id: "d0ca23c1cc005e004ccf1db5bf76aeb6a49218f43dac3d4b275e92de12ded4d1"
+  INTC:
+    currency: USD
+    pyth_symbol: Equity.US.INTC/USD
+    feed_id: "c1751e085ee292b8b3b9dd122a135614485a201c35dfc653553f0e28c1baf3ff"
+  MU:
+    currency: USD
+    pyth_symbol: Equity.US.MU/USD
+    feed_id: "152244dc24665ca7dd3f257b8f442dc449b6346f48235b7b229268cb770dda2d"
+  # Pyth KR feed exists but is stale; yahoo_symbol drives the live path.
+  SKHY:
+    currency: USD
+    pyth_symbol: Equity.KR.000660/KRW
+    feed_id: "189f0b6276a37a09fa9d4305525d074d753b30d83f1d748ae12330b9c86622c2"
+    yahoo_symbol: "000660.KS"
+    prefer_yahoo: true
+  # Private company — no public tape.
+  SPCX:
+    currency: USD
+    pyth_symbol: null
+    feed_id: null
+    uncovered: true
+    uncovered_reason: "SpaceX is private; no public equity feed"

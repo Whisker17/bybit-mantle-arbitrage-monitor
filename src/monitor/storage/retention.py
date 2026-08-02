@@ -47,6 +47,8 @@ _TABLE_POLICIES: tuple[tuple[str, str, str], ...] = (
     ("erc20_transfers", "recv_ts_ms", "erc20_transfers_ms"),
     ("rebalance_events", "recv_ts_ms", "rebalance_events_ms"),
     ("collector_gaps", "gap_start_ms", "collector_gaps_ms"),
+    # WHI-778 underlying equity reference (shared by ticker).
+    ("underlying_prices", "recv_ts_ms", "underlying_prices_ms"),
 )
 
 _PRUNE_TABLES = frozenset(t for t, _, _ in _TABLE_POLICIES)
@@ -69,6 +71,7 @@ class EffectiveTtls:
     erc20_transfers_ms: int | None
     rebalance_events_ms: int | None
     collector_gaps_ms: int | None
+    underlying_prices_ms: int | None
 
     def get(self, attr: str) -> int | None:
         return getattr(self, attr)  # type: ignore[no-any-return]
@@ -152,6 +155,7 @@ def effective_ttls(cfg: RetentionConfig, level: DiskLevel) -> EffectiveTtls:
         erc20_transfers_ms=cfg.erc20_transfers_ms,
         rebalance_events_ms=cfg.rebalance_events_ms,
         collector_gaps_ms=s(cfg.collector_gaps_ms),
+        underlying_prices_ms=s(cfg.underlying_prices_ms),
     )
 
 

@@ -289,6 +289,8 @@ class RetentionConfig(BaseModel):
     erc20_transfers_ms: int | None = Field(default=None, ge=1)
     rebalance_events_ms: int | None = Field(default=None, ge=1)
     collector_gaps_ms: int | None = Field(default=2_592_000_000, ge=1)  # 30d
+    # WHI-778 underlying equity reference (recv_ts_ms).
+    underlying_prices_ms: int | None = Field(default=604_800_000, ge=1)  # 7d
     delete_batch_size: int = Field(default=5000, ge=1, le=100_000)
     incremental_vacuum_pages: int = Field(default=1000, ge=0)
     full_vacuum: bool = False
@@ -346,6 +348,8 @@ class CollectorConfig(BaseModel):
     retention: RetentionConfig = Field(default_factory=default_retention_config)
     # WHI-768: in-collector address_labels refresh interval (0 = CLI-only).
     attribution_refresh_interval_s: float = Field(default=3600.0, ge=0)
+    # WHI-778: underlying equity poller (shared tickers; config/underlying.yaml).
+    underlying_enabled: bool = True
 
     @model_validator(mode="after")
     def _venue_shape(self) -> CollectorConfig:
@@ -489,6 +493,15 @@ def _merge_market_section(
     # Shared process-level knobs (not venue-specific).
     if "attribution_refresh_interval_s" in data:
         flat["attribution_refresh_interval_s"] = data["attribution_refresh_interval_s"]
+    # WHI-778: enable/disable underlying poller (feed map lives in underlying.yaml).
+    if "underlying" in data and isinstance(data["underlying"], dict):
+        en = data["underlying"].get("enabled")
+        if en is not None:
+            flat["underlying_enabled"] = bool(en)
+    if "underlying" in section and isinstance(section["underlying"], dict):
+        en = section["underlying"].get("enabled")
+        if en is not None:
+            flat["underlying_enabled"] = bool(en)
     for key in ("bybit", "mantle", "rfq", "binance", "bsc"):
         if key in section:
             flat[key] = section[key]

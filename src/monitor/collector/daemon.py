@@ -150,6 +150,7 @@ class CollectorDaemon:
             asyncio.create_task(
                 self._attribution_refresh_loop(), name="attribution_refresh"
             ),
+            asyncio.create_task(self._underlying_loop(), name="underlying"),
         ]
         self.store.set_meta("collector_started_ms", str(now_ms()))
         self.store.set_meta("market_id", self.market_id)
@@ -213,6 +214,7 @@ class CollectorDaemon:
             asyncio.create_task(binance.run(), name="binance_ws"),
             asyncio.create_task(self._chain_loop_bsc(), name="bsc_chain"),
             asyncio.create_task(self._retention_loop(), name="retention"),
+            asyncio.create_task(self._underlying_loop(), name="underlying"),
             # No RFQ / MM attribution refresh for AMM-only pancake market.
         ]
         self.store.set_meta("collector_started_ms", str(now_ms()))
@@ -532,6 +534,80 @@ class CollectorDaemon:
                 logger.info("attribution refresh: %s", stats)
             except Exception as exc:  # noqa: BLE001
                 logger.exception("attribution refresh error: %s", exc)
+
+    def _underlying_tickers_for_market(self) -> list[str]:
+        """Canonical underlyings present in this market's inventory."""
+        from monitor.underlying.tickers import underlying_tickers_for_pairs
+
+        if self.pairs is not None:
+            return underlying_tickers_for_pairs([p.id for p in self.pairs.pairs])
+        if self.bstocks is not None:
+            return underlying_tickers_for_pairs([p.id for p in self.bstocks.pairs])
+        return []
+
+    async def _underlying_loop(self) -> None:
+        """Poll Pyth Hermes (+ optional Yahoo) into underlying_prices (WHI-778)."""
+        if not self.cfg.underlying_enabled:
+            logger.info("underlying poller disabled (collector.yaml underlying.enabled)")
+            return
+        try:
+            from monitor.underlying.config import (
+                UnderlyingConfigError,
+                load_underlying_config,
+            )
+            from monitor.underlying.poller import UnderlyingPoller
+        except ImportError as exc:
+            logger.error("underlying module unavailable: %s", exc)
+            return
+        try:
+            u_cfg = load_underlying_config()
+        except UnderlyingConfigError as exc:
+            logger.error("underlying config load failed: %s", exc)
+            return
+
+        tickers = self._underlying_tickers_for_market()
+        if not tickers:
+            logger.info("underlying poller: no inventory tickers")
+            return
+        poller = UnderlyingPoller(u_cfg, tickers=tickers)
+        logger.info(
+            "underlying poller started tickers=%s open_s=%s closed_s=%s",
+            tickers,
+            u_cfg.open_poll_interval_s,
+            u_cfg.closed_poll_interval_s,
+        )
+        try:
+            while not self._stop.is_set():
+                try:
+                    ticks = await asyncio.to_thread(poller.poll_once)
+                    if ticks:
+                        await asyncio.to_thread(
+                            self.store.insert_underlying_prices, ticks
+                        )
+                        self.store.set_meta(
+                            "underlying_last_poll_ms", str(now_ms())
+                        )
+                        self.store.set_meta(
+                            "underlying_last_n", str(len(ticks))
+                        )
+                except Exception as exc:  # noqa: BLE001
+                    logger.exception("underlying poll error: %s", exc)
+                    await asyncio.to_thread(
+                        self.store.insert_gap,
+                        CollectorGap(
+                            source="underlying",
+                            gap_start_ms=now_ms(),
+                            gap_end_ms=now_ms(),
+                            detail=f"poll error: {exc}",
+                        ),
+                    )
+                interval = poller.poll_interval_s()
+                try:
+                    await asyncio.wait_for(self._stop.wait(), timeout=interval)
+                except TimeoutError:
+                    pass
+        finally:
+            poller.close()
 
     async def _retention_loop(self) -> None:
         """Periodic prune under the store lock (WHI-751)."""
