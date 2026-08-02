@@ -113,17 +113,21 @@ def seeded_db_with_depth(tmp_path: Path) -> Path:
     return db
 
 
-def _make_client(
-    db: Path, tmp_path: Path, monkeypatch: pytest.MonkeyPatch
-) -> TestClient:
-    monkeypatch.chdir(tmp_path)
+def _write_api_yaml(
+    tmp_path: Path,
+    *,
+    sqlite_path: Path,
+    market: str = "bybit-fluxion",
+) -> Path:
+    """Minimal api.yaml for TestClient fixtures (cache TTLs off)."""
     api_yaml = tmp_path / "config" / "api.yaml"
     api_yaml.parent.mkdir(parents=True, exist_ok=True)
     api_yaml.write_text(
         f"""version: 1
 host: 127.0.0.1
 port: 8000
-sqlite_path: {db}
+market: {market}
+sqlite_path: {sqlite_path}
 collector_stale_ms: 30000
 recent_gap_window_ms: 300000
 poll_interval_s: 2.0
@@ -136,6 +140,14 @@ cors_origins: []
 """,
         encoding="utf-8",
     )
+    return api_yaml
+
+
+def _make_client(
+    db: Path, tmp_path: Path, monkeypatch: pytest.MonkeyPatch
+) -> TestClient:
+    monkeypatch.chdir(tmp_path)
+    api_yaml = _write_api_yaml(tmp_path, sqlite_path=db)
     app = create_app(api_config_path=api_yaml)
     return TestClient(app)
 
@@ -596,26 +608,7 @@ def test_api_tvl_appears_after_late_table_create(
             conn.close()
 
     monkeypatch.setattr(markets_context, "_REPO_ROOT", tmp_path)
-    api_yaml = tmp_path / "config" / "api.yaml"
-    api_yaml.parent.mkdir(parents=True, exist_ok=True)
-    api_yaml.write_text(
-        f"""version: 1
-host: 127.0.0.1
-port: 8000
-market: bybit-fluxion
-sqlite_path: {bybit_db}
-collector_stale_ms: 30000
-recent_gap_window_ms: 300000
-poll_interval_s: 2.0
-pnl_cache_ttl_s: 0
-mm_active_window_ms: 86400000
-mm_series_max_points: 500
-mm_rebalance_limit: 100
-mm_inventory_cache_ttl_s: 0
-cors_origins: []
-""",
-        encoding="utf-8",
-    )
+    api_yaml = _write_api_yaml(tmp_path, sqlite_path=bybit_db)
     app = create_app(api_config_path=api_yaml)
     with TestClient(app) as client:
         r0 = client.get("/api/bybit-fluxion/pairs")
