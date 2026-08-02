@@ -9,6 +9,7 @@ from typing import Any, Literal
 import yaml
 from pydantic import BaseModel, ConfigDict, Field, field_validator
 
+from monitor.markets.ids import DEFAULT_MARKET_ID
 from monitor.metrics.config import MetricsConfig
 
 _REPO_ROOT = Path(__file__).resolve().parents[3]
@@ -35,7 +36,7 @@ class TuiConfig(BaseModel):
     version: int = Field(ge=1)
     refresh_interval_s: float = Field(gt=0, le=60)
     # Default market id (M7-2). CLI --market overrides at process start.
-    market: str = Field(default="bybit-fluxion", min_length=1)
+    market: str = Field(default=DEFAULT_MARKET_ID, min_length=1)
     sqlite_path: str = Field(min_length=1)
     reference_size_usd: Decimal = Field(gt=0)
     default_sort: SortKey

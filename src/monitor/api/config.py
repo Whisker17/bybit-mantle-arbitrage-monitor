@@ -8,6 +8,8 @@ from typing import Any, Self
 import yaml
 from pydantic import BaseModel, ConfigDict, Field, field_validator, model_validator
 
+from monitor.markets.ids import DEFAULT_MARKET_ID
+
 _REPO_ROOT = Path(__file__).resolve().parents[3]
 _DEFAULT_API_PATH = _REPO_ROOT / "config" / "api.yaml"
 
@@ -23,7 +25,7 @@ class ApiConfig(BaseModel):
     host: str = Field(min_length=1)
     port: int = Field(ge=1, le=65535)
     # Default market id (M7-2). CLI --market overrides at process start.
-    market: str = Field(default="bybit-fluxion", min_length=1)
+    market: str = Field(default=DEFAULT_MARKET_ID, min_length=1)
     sqlite_path: str = Field(min_length=1)
     collector_stale_ms: int = Field(ge=1_000)
     recent_gap_window_ms: int = Field(ge=1_000)

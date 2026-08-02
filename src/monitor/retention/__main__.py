@@ -15,15 +15,13 @@ import sys
 from pathlib import Path
 
 from monitor.collector.config import load_collector_config, load_dotenv
+from monitor.markets import DEFAULT_MARKET_ID, resolve_market_sqlite
 from monitor.quotes import now_ms
 from monitor.storage import SqliteStore, format_growth_report
 from monitor.storage.retention import disk_free_bytes
 
 
 def main(argv: list[str] | None = None) -> int:
-    from monitor.markets import DEFAULT_MARKET_ID
-    from monitor.markets.context import resolve_market_sqlite
-
     parser = argparse.ArgumentParser(
         description="Prune collector SQLite journal (WHI-751 retention policy)"
     )

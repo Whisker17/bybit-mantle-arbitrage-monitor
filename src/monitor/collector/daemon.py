@@ -24,6 +24,7 @@ from monitor.fluxion.chain import ChainPoller
 from monitor.fluxion.pools import PoolMeta
 from monitor.fluxion.rfq import RfqPoller
 from monitor.fluxion.rpc import Rpc
+from monitor.markets import DEFAULT_MARKET_ID, load_market_context, resolve_market_sqlite
 from monitor.quotes import (
     BybitBookTick,
     BybitDepthTick,
@@ -397,9 +398,6 @@ def run_forever(
     collector_path: Path | None = None,
     sqlite_path: Path | None = None,
 ) -> None:
-    from monitor.markets import DEFAULT_MARKET_ID, load_market_context
-    from monitor.markets.context import resolve_market_sqlite
-
     load_dotenv()
     mid = market_id or DEFAULT_MARKET_ID
     if pairs_path is not None:
@@ -454,8 +452,6 @@ def run_forever(
 
 
 def main(argv: list[str] | None = None) -> None:
-    from monitor.markets import DEFAULT_MARKET_ID
-
     parser = argparse.ArgumentParser(
         description="M2 live collector: Bybit WS + Fluxion chain + RFQ → SQLite"
     )

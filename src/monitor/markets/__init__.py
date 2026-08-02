@@ -14,6 +14,7 @@ from monitor.markets.context import (
     MarketContext,
     apply_market_costs,
     load_market_context,
+    resolve_market_sqlite,
 )
 from monitor.markets.ids import (
     DEFAULT_MARKET_ID,
@@ -56,4 +57,5 @@ __all__ = [
     "market_file_path",
     "market_sqlite_relpath",
     "normalize_market_id",
+    "resolve_market_sqlite",
 ]
