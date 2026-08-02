@@ -285,7 +285,69 @@ def rpc_url_kind(url: str) -> Literal["keyed", "public"]:
     return "keyed" if "/v1/" in url else "public"
 
 
-def load_collector_config(path: Path | None = None) -> CollectorConfig:
+def _merge_market_section(
+    data: dict[str, Any],
+    market_id: str,
+) -> dict[str, Any]:
+    """Flatten a v2 ``markets.{id}`` section into a v1-shaped CollectorConfig dict.
+
+    Shared top-level keys (``logging``, ``retention``) apply unless the market
+    section overrides ``retention``. Market-local keys: ``sqlite_path``,
+    ``bybit``, ``mantle``, ``rfq`` (Bybit⇄Fluxion runtime). Other markets may
+    only declare ``sqlite_path`` (+ future venue blocks) until their collector
+    lands — those raise here if required Bybit fields are missing.
+    """
+    from monitor.markets.ids import market_sqlite_relpath, normalize_market_id
+
+    mid = normalize_market_id(market_id)
+    markets = data.get("markets")
+    if not isinstance(markets, dict):
+        raise CollectorConfigError(
+            f"collector config version>={data.get('version')} requires a "
+            f"'markets' mapping (looking up {mid!r})"
+        )
+    # Allow underscore form in YAML keys for convenience.
+    section = markets.get(mid)
+    if section is None:
+        section = markets.get(mid.replace("-", "_"))
+    if not isinstance(section, dict):
+        raise CollectorConfigError(
+            f"collector config has no markets.{mid!r} section "
+            f"(known: {sorted(markets.keys())})"
+        )
+
+    flat: dict[str, Any] = {
+        "version": int(data.get("version", 2)),
+        "logging": data.get("logging", {"level": "INFO"}),
+        "retention": section.get("retention", data.get("retention")),
+        "sqlite_path": section.get("sqlite_path") or market_sqlite_relpath(mid),
+    }
+    # Shared process-level knobs (not venue-specific).
+    if "attribution_refresh_interval_s" in data:
+        flat["attribution_refresh_interval_s"] = data["attribution_refresh_interval_s"]
+    for key in ("bybit", "mantle", "rfq"):
+        if key in section:
+            flat[key] = section[key]
+        elif key in data:
+            # Rare: shared venue block at root (not preferred).
+            flat[key] = data[key]
+    return flat
+
+
+def load_collector_config(
+    path: Path | None = None,
+    *,
+    market_id: str | None = None,
+) -> CollectorConfig:
+    """Load collector tunables.
+
+    * **v1** (flat ``bybit`` / ``mantle`` / ``rfq`` / ``sqlite_path``): used by
+      unit tests and older fixtures; ``market_id`` is ignored.
+    * **v2** (``markets:`` map): selects the section for ``market_id``
+      (default ``bybit-fluxion``).
+    """
+    from monitor.markets.ids import DEFAULT_MARKET_ID
+
     config_path = path if path is not None else default_collector_path()
     if not config_path.is_file():
         raise CollectorConfigError(
@@ -303,6 +365,19 @@ def load_collector_config(path: Path | None = None) -> CollectorConfig:
         raise CollectorConfigError(
             f"collector config root must be a mapping, got {type(data).__name__}"
         )
+
+    version = int(data.get("version", 1))
+    mid = market_id if market_id is not None else DEFAULT_MARKET_ID
+    if version >= 2 or "markets" in data:
+        try:
+            data = _merge_market_section(data, mid)
+        except CollectorConfigError:
+            raise
+        except Exception as exc:
+            raise CollectorConfigError(
+                f"invalid multi-market collector config at {config_path}: {exc}"
+            ) from exc
+
     try:
         return CollectorConfig.model_validate(data)
     except Exception as exc:  # pydantic ValidationError

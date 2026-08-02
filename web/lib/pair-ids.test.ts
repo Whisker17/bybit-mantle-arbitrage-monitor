@@ -4,7 +4,7 @@ import { describe, it } from "node:test";
 import { loadPairIdsFromConfig } from "./pair-ids";
 
 describe("loadPairIdsFromConfig", () => {
-  it("parses the 11 monitor pair ids from config/pairs.yaml", () => {
+  it("parses the 11 monitor pair ids from config/markets/bybit-fluxion.yaml", () => {
     // process.cwd() is web/ when npm test runs from web/
     const ids = loadPairIdsFromConfig();
     assert.equal(ids.length, 11);

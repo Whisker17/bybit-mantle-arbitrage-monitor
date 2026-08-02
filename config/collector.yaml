@@ -1,71 +1,12 @@
-# Live collector tunables — M2 / WHI-731.
+# Live collector tunables — M2 / WHI-731; multi-market sections M7-2 / WHI-771.
 # Secrets (RPC key) stay in .env; this file is checked-in non-secret config.
+#
+# Schema v2: shared logging/retention + per-market venue blocks under `markets:`.
+# CLI: `python -m monitor.collector --market bybit-fluxion` (default).
+# Journal path convention: data/monitor-{market}.db (ADR-0001). Legacy
+# data/monitor.db is still accepted as a fallback for the default market only.
 
-version: 1
-
-sqlite_path: data/monitor.db
-
-bybit:
-  # Public spot multiplexed stream.
-  ws_url: "wss://stream.bybit.com/v5/public/spot"
-  # Multi-level book (WHI-755). L1 still derived from best bid/ask and written
-  # to bybit_book; precomputed bucket VWAPs go to bybit_depth. orderbook.1 still
-  # works if you need L1-only (depth.enabled false).
-  book_topic_prefix: "orderbook.50"
-  trade_topic_prefix: "publicTrade"
-  reconnect_min_s: 1.0
-  reconnect_max_s: 60.0
-  # After reconnect, mark book/trade ticks as gap=1 for this many seconds.
-  post_reconnect_gap_s: 5.0
-  # Ping interval recommended by Bybit (~20s).
-  ping_interval_s: 20.0
-  depth:
-    enabled: true
-    # Throttle depth journal rows per symbol (L1 bybit_book is unthrottled).
-    emit_interval_ms: 1000
-    # Also flush when mid moves by ≥ this many bps since last depth row.
-    mid_change_bps: 1
-    # PnL v2 AMM ladder (DESIGN §2.6.3) — de-multiplied USD notional.
-    buckets_usd: ["10", "50", "100", "500", "1000", "10000"]
-
-mantle:
-  public_rpc_url: "https://rpc.mantle.xyz"
-  multicall3: "0xca11bde05977b3631167028862be2a173976ca11"
-  # Poll head; Mantle block time ≈ 2s. 0.25s is the measured sweet spot (WHI-749);
-  # 0.10s increases block-not-found retries without a useful P95 win.
-  block_poll_interval_s: 0.25
-  # Stay 1 block behind tip to cut lag=0 catch-up P95 tails (WHI-749 / phase-1
-  # HEAD_LAG lesson). Transient "block N not found" can still occur on multi-
-  # backend keyed LB; poller retries the same N (no skip). Raise to 2 if gap
-  # noise is operationally loud. Cost: ~+2s systematic block_ts→recv lag.
-  head_lag_blocks: 1
-  # If head advances more than this beyond last processed, flag gap on subsequent rows.
-  max_block_gap: 1
-  # Far-behind jump window (no historical backfill beyond this many tip blocks).
-  max_catchup_blocks: 15
-  rpc_min_interval_s: 0.05
-  rpc_timeout_s: 30.0
-  rpc_retries: 5
-  # Fetch gasUsed + effectiveGasPrice for swap txs (xStock pools are quiet).
-  fetch_swap_receipts: true
-  # WHI-768: receipt-enrich RFQ fills (maker/taker/pair/amounts); RFQ volume is tiny.
-  enrich_rfq_fills: true
-  # WHI-768: native xStock ERC-20 Transfer stream (permanent; low volume).
-  collect_erc20_transfers: true
-  # Equal-weight samples for meta block_ingest_latency_{p50,p95,p99}_ms.
-  latency_window_blocks: 256
-
-rfq:
-  # Notional for EXACT_INPUT quote polls (USDC has 6 decimals). 100 USDC.
-  amount_usdc_raw: "100000000"
-  # Sell-native leg size in native raw (18 dec). 0.1 token ≈ mid-size RFQ sample.
-  amount_native_raw: "100000000000000000"
-  # Prefer same-origin proxy; fall back to upstream on non-2xx / transport error.
-  prefer_primary_url: true
-  # Poll both buy (USDC→native) and sell (native→USDC) legs for each pair.
-  poll_both_sides: true
-  # HTTP timeout for quote POSTs.
-  http_timeout_s: 20.0
+version: 2
 
 logging:
   level: INFO
@@ -74,8 +15,8 @@ logging:
 # 0 disables the in-collector loop (CLI still works: python -m monitor.attribution.refresh).
 attribution_refresh_interval_s: 3600
 
-# Data retention (WHI-751). Bounds SQLite growth on small VPS disks.
-# Derivation + consumer windows: docs/DESIGN.md §5.1.
+# Default retention (WHI-751). Per-market override: markets.<id>.retention.
+# Bounds SQLite growth on small VPS disks. Derivation: docs/DESIGN.md §5.1.
 retention:
   enabled: true
   # Collector background interval; also run once via `python -m monitor.retention`.
@@ -105,3 +46,99 @@ retention:
     warn_ttl_factor: 0.25
     critical_ttl_factor: 0.05
     pause_book_writes_on_critical: true
+
+markets:
+  # --- Bybit ⇄ Fluxion xStocks (default / live today) ---
+  bybit-fluxion:
+    sqlite_path: data/monitor-bybit-fluxion.db
+    bybit:
+      # Public spot multiplexed stream.
+      ws_url: "wss://stream.bybit.com/v5/public/spot"
+      # Multi-level book (WHI-755). L1 still derived from best bid/ask and written
+      # to bybit_book; precomputed bucket VWAPs go to bybit_depth. orderbook.1 still
+      # works if you need L1-only (depth.enabled false).
+      book_topic_prefix: "orderbook.50"
+      trade_topic_prefix: "publicTrade"
+      reconnect_min_s: 1.0
+      reconnect_max_s: 60.0
+      # After reconnect, mark book/trade ticks as gap=1 for this many seconds.
+      post_reconnect_gap_s: 5.0
+      # Ping interval recommended by Bybit (~20s).
+      ping_interval_s: 20.0
+      depth:
+        enabled: true
+        # Throttle depth journal rows per symbol (L1 bybit_book is unthrottled).
+        emit_interval_ms: 1000
+        # Also flush when mid moves by ≥ this many bps since last depth row.
+        mid_change_bps: 1
+        # PnL v2 AMM ladder (DESIGN §2.6.3) — de-multiplied USD notional.
+        buckets_usd: ["10", "50", "100", "500", "1000", "10000"]
+
+    mantle:
+      public_rpc_url: "https://rpc.mantle.xyz"
+      multicall3: "0xca11bde05977b3631167028862be2a173976ca11"
+      # Poll head; Mantle block time ≈ 2s. 0.25s is the measured sweet spot (WHI-749);
+      # 0.10s increases block-not-found retries without a useful P95 win.
+      block_poll_interval_s: 0.25
+      # Stay 1 block behind tip to cut lag=0 catch-up P95 tails (WHI-749 / phase-1
+      # HEAD_LAG lesson). Transient "block N not found" can still occur on multi-
+      # backend keyed LB; poller retries the same N (no skip). Raise to 2 if gap
+      # noise is operationally loud. Cost: ~+2s systematic block_ts→recv lag.
+      head_lag_blocks: 1
+      # If head advances more than this beyond last processed, flag gap on subsequent rows.
+      max_block_gap: 1
+      # Far-behind jump window (no historical backfill beyond this many tip blocks).
+      max_catchup_blocks: 15
+      rpc_min_interval_s: 0.05
+      rpc_timeout_s: 30.0
+      rpc_retries: 5
+      # Fetch gasUsed + effectiveGasPrice for swap txs (xStock pools are quiet).
+      fetch_swap_receipts: true
+      # WHI-768: receipt-enrich RFQ fills (maker/taker/pair/amounts); RFQ volume is tiny.
+      enrich_rfq_fills: true
+      # WHI-768: native xStock ERC-20 Transfer stream (permanent; low volume).
+      collect_erc20_transfers: true
+      # Equal-weight samples for meta block_ingest_latency_{p50,p95,p99}_ms.
+      latency_window_blocks: 256
+
+    rfq:
+      # Notional for EXACT_INPUT quote polls (USDC has 6 decimals). 100 USDC.
+      amount_usdc_raw: "100000000"
+      # Sell-native leg size in native raw (18 dec). 0.1 token ≈ mid-size RFQ sample.
+      amount_native_raw: "100000000000000000"
+      # Prefer same-origin proxy; fall back to upstream on non-2xx / transport error.
+      prefer_primary_url: true
+      # Poll both buy (USDC→native) and sell (native→USDC) legs for each pair.
+      poll_both_sides: true
+      # HTTP timeout for quote POSTs.
+      http_timeout_s: 20.0
+
+  # --- Binance ⇄ PancakeSwap bStocks (scaffold for M7-3 / WHI-772) ---
+  # Inventory: config/markets/binance-pancake.yaml. Collector process not wired yet.
+  binance-pancake:
+    sqlite_path: data/monitor-binance-pancake.db
+    # Venue blocks below are loadable hints for M7-3; not consumed by
+    # load_collector_config → CollectorConfig (Bybit-shaped) until that issue.
+    binance:
+      # US VPS: api.binance.com returns 451 — use vision hosts (WHI-770).
+      rest_base_url: "https://data-api.binance.vision"
+      ws_base_url: "wss://data-stream.binance.vision"
+      book_topic_prefix: "depth"
+      trade_topic_prefix: "trade"
+      reconnect_min_s: 1.0
+      reconnect_max_s: 60.0
+      post_reconnect_gap_s: 5.0
+      ping_interval_s: 20.0
+    bsc:
+      public_rpc_url: "https://bsc-dataseed.binance.org"
+      multicall3: "0xcA11bde05977b3631167028862bE2a173976CA11"
+      # BSC ~3s blocks; poll budget ~4× Mantle if head-following every block.
+      block_poll_interval_s: 0.5
+      head_lag_blocks: 1
+      max_block_gap: 1
+      max_catchup_blocks: 15
+      rpc_min_interval_s: 0.05
+      rpc_timeout_s: 30.0
+      rpc_retries: 5
+      fetch_swap_receipts: true
+      latency_window_blocks: 256

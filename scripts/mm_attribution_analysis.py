@@ -73,7 +73,15 @@ BYBIT_KLINE = "https://api.bybit.com/v5/market/kline"
 
 
 def _load_pairs(path: Path) -> dict[str, Any]:
-    return yaml.safe_load(path.read_text())
+    """Load Bybit/Fluxion inventory (market file v2 or legacy flat pairs body)."""
+    raw = yaml.safe_load(path.read_text())
+    if not isinstance(raw, dict):
+        raise ValueError(f"pairs config root must be a mapping: {path}")
+    # M7-2 market files nest the former pairs.yaml under inventory:.
+    inv = raw.get("inventory")
+    if isinstance(inv, dict):
+        return inv
+    return raw
 
 
 def _pool_metas(pairs_doc: dict[str, Any]) -> list[PoolMeta]:
@@ -1205,7 +1213,12 @@ def main() -> int:
         action="store_true",
         help="rebuild markdown from result.json only",
     )
-    ap.add_argument("--pairs", type=Path, default=_REPO / "config" / "pairs.yaml")
+    ap.add_argument(
+        "--pairs",
+        type=Path,
+        default=_REPO / "config" / "markets" / "bybit-fluxion.yaml",
+        help="Market inventory (default: config/markets/bybit-fluxion.yaml)",
+    )
     args = ap.parse_args()
 
     load_dotenv(_REPO)

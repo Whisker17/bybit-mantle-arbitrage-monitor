@@ -10,9 +10,9 @@
 [Unit]
 Description=xStocks arbitrage monitor API (read-only FastAPI)
 After=network.target
-# Optional: start after the collector if you co-manage both units.
-# After=network.target xstocks-collector.service
-# Wants=xstocks-collector.service
+# Optional: start after the default-market collector if you co-manage both units.
+# After=network.target xstocks-collector@bybit-fluxion.service
+# Wants=xstocks-collector@bybit-fluxion.service
 
 [Service]
 Type=simple
@@ -23,7 +23,8 @@ WorkingDirectory=/opt/xstocks/app
 Environment=PATH=/opt/xstocks/app/.venv/bin:/usr/local/bin:/usr/bin
 Environment=PYTHONUNBUFFERED=1
 # Optional keyed Mantle RPC is not required for the API (read-only journal).
-ExecStart=/opt/xstocks/app/.venv/bin/python -m monitor.api
+# Market selection is the typed --market flag (api.yaml market is the default).
+ExecStart=/opt/xstocks/app/.venv/bin/python -m monitor.api --market bybit-fluxion
 Restart=on-failure
 RestartSec=3
 # Hard caps — leave headroom for collector + nginx + OS on a 1GB VPS.

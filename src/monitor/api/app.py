@@ -2,6 +2,7 @@
 
 from __future__ import annotations
 
+import os
 from collections.abc import AsyncIterator
 from contextlib import asynccontextmanager
 from pathlib import Path
@@ -15,10 +16,8 @@ from monitor.api.pnl_cache import PnlSnapshotCache
 from monitor.api.routes import health as health_routes
 from monitor.api.routes import pairs as pairs_routes
 from monitor.api.state import AppState
-from monitor.attribution.config import load_attribution_config
-from monitor.metrics.config import load_metrics_config
+from monitor.markets import DEFAULT_MARKET_ID, load_market_context, normalize_market_id
 from monitor.storage import JournalReader
-from monitor.symbols import load_pairs_config
 from monitor.tui.config import load_tui_config, validate_tui_against_metrics
 
 
@@ -26,16 +25,36 @@ def build_app_state(
     *,
     api_config_path: Path | None = None,
     api: ApiConfig | None = None,
+    market_id: str | None = None,
 ) -> AppState:
     """Load configs and open the journal reader when the DB file exists."""
     cfg = api if api is not None else load_api_config(api_config_path)
-    pairs = load_pairs_config()
-    metrics = load_metrics_config()
-    attribution = load_attribution_config()
+    # MONITOR_MARKET is process bootstrap for uvicorn --reload workers only
+    # (factory apps cannot take kwargs across reload). Not a general config knob.
+    mid = normalize_market_id(
+        market_id
+        or os.environ.get("MONITOR_MARKET")
+        or cfg.market
+        or DEFAULT_MARKET_ID
+    )
+    # When the selected market matches api.yaml, honour api.sqlite_path (ops
+    # override). Otherwise derive the journal strictly from the market context.
+    sqlite_override: Path | None = None
+    if mid == normalize_market_id(cfg.market):
+        sqlite_override = cfg.resolved_sqlite_path()
+    ctx = load_market_context(mid, sqlite_path=sqlite_override, load_collector=True)
+    if ctx.pairs is None:
+        raise RuntimeError(
+            f"market {mid!r} has no pairs inventory suitable for the API "
+            "(Bybit/Fluxion shape required until M7-5 multi-market web)"
+        )
+    pairs = ctx.pairs
+    metrics = ctx.metrics
+    attribution = ctx.attribution
     tui = load_tui_config()
     # Builder reference size / history windows come from tui.yaml (single source).
     validate_tui_against_metrics(tui, metrics)
-    db_path = cfg.resolved_sqlite_path()
+    db_path = ctx.sqlite_path
     reader: JournalReader | None
     if db_path.is_file():
         reader = JournalReader(db_path)
@@ -58,6 +77,7 @@ def create_app(
     api_config_path: Path | None = None,
     api: ApiConfig | None = None,
     state: AppState | None = None,
+    market_id: str | None = None,
 ) -> FastAPI:
     """Build the ASGI app. Prefer ``python -m monitor.api`` for production."""
 
@@ -74,7 +94,11 @@ def create_app(
     async def lifespan(app: FastAPI) -> AsyncIterator[None]:
         nonlocal app_state
         if app_state is None:
-            app_state = build_app_state(api_config_path=api_config_path, api=resolved_api)
+            app_state = build_app_state(
+                api_config_path=api_config_path,
+                api=resolved_api,
+                market_id=market_id,
+            )
         app.state.app_state = app_state
         try:
             yield

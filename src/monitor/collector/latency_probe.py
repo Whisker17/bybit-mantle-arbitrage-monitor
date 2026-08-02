@@ -235,6 +235,11 @@ def main(argv: list[str] | None = None) -> int:
         help="Force public https://rpc.mantle.xyz instead of MANTLE_RPC_URL",
     )
     parser.add_argument(
+        "--market",
+        default=None,
+        help="Market id (default: bybit-fluxion)",
+    )
+    parser.add_argument(
         "--collector-config",
         type=Path,
         default=None,
@@ -244,7 +249,7 @@ def main(argv: list[str] | None = None) -> int:
         "--pairs-config",
         type=Path,
         default=None,
-        help="Path to pairs.yaml",
+        help="Path to market inventory (default: config/markets/{market}.yaml)",
     )
     parser.add_argument(
         "--out",
@@ -279,9 +284,12 @@ def main(argv: list[str] | None = None) -> int:
     # httpx logs full request URLs — keyed Mantle paths embed the API key.
     logging.getLogger("httpx").setLevel(logging.WARNING)
     logging.getLogger("httpcore").setLevel(logging.WARNING)
+    from monitor.markets import DEFAULT_MARKET_ID
+
     load_dotenv()
-    cfg = load_collector_config(args.collector_config)
-    pairs = load_pairs_config(args.pairs_config)
+    mid = args.market or DEFAULT_MARKET_ID
+    cfg = load_collector_config(args.collector_config, market_id=mid)
+    pairs = load_pairs_config(args.pairs_config, market_id=mid)
 
     if args.analyze_db is not None:
         samples, gaps = analyze_db(args.analyze_db)
