@@ -425,17 +425,22 @@ function VsUndCell({
       </span>
     );
   }
+  const parts = titleParts.filter(Boolean) as string[];
+  // When the primary bps is missing, always keep the empty-state explanation
+  // (do not replace it with a lone "Underlying: vs close" label).
   const title =
-    titleParts.filter(Boolean).join(" · ") || emptyTitle;
+    value == null
+      ? [...parts, emptyTitle].filter(Boolean).join(" · ")
+      : parts.join(" · ");
   if (value == null) {
     return (
-      <span className="text-muted-foreground" title={title}>
+      <span className="text-muted-foreground" title={title || emptyTitle}>
         —
       </span>
     );
   }
   return (
-    <span title={title}>
+    <span title={title || undefined}>
       <BpsCell value={value} />
     </span>
   );

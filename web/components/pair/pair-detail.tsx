@@ -220,42 +220,20 @@ export function PairDetail({ marketId, pairId }: Props) {
               title="RFQ mid vs CEX mid (bps)"
             />
           )}
-          <Field
+          <VsUndField
             label="CEX vs Und"
-            value={
-              o.underlying_empty === "private"
-                ? "n/a"
-                : fmtSignedBps(cexPremiumBps(o))
-            }
-            tone={
-              o.underlying_empty === "private"
-                ? "empty"
-                : bpsTone(cexPremiumBps(o))
-            }
-            title={
-              o.underlying_empty === "private"
-                ? "Private underlying — no premium"
-                : "CEX equity-eq mid vs underlying (bps)"
-            }
+            privateUnderlying={o.underlying_empty === "private"}
+            value={cexPremiumBps(o)}
+            title="CEX equity-eq mid vs underlying (bps)"
           />
-          <Field
+          <VsUndField
             label="DEX vs Und"
-            value={
-              o.underlying_empty === "private"
-                ? "n/a"
-                : fmtSignedBps(o.amm_premium_bps)
-            }
-            tone={
-              o.underlying_empty === "private"
-                ? "empty"
-                : bpsTone(o.amm_premium_bps ?? null)
-            }
+            privateUnderlying={o.underlying_empty === "private"}
+            value={o.amm_premium_bps ?? null}
             title={
-              o.underlying_empty === "private"
-                ? "Private underlying — no premium"
-                : hasRfq && o.rfq_premium_bps != null
-                  ? `AMM vs Und ${fmtSignedBps(o.amm_premium_bps)} · RFQ vs Und ${fmtSignedBps(o.rfq_premium_bps)}`
-                  : "AMM mid vs underlying (bps)"
+              hasRfq && o.rfq_premium_bps != null
+                ? `AMM vs Und ${fmtSignedBps(o.amm_premium_bps)} · RFQ vs Und ${fmtSignedBps(o.rfq_premium_bps)}`
+                : "AMM mid vs underlying (bps)"
             }
           />
           <Field
@@ -423,5 +401,37 @@ function Field({
         {value}
       </dd>
     </div>
+  );
+}
+
+/** Detail header premium field with private-underlying n/a (WHI-783). */
+function VsUndField({
+  label,
+  privateUnderlying,
+  value,
+  title,
+}: {
+  label: string;
+  privateUnderlying: boolean;
+  value: string | null | undefined;
+  title: string;
+}) {
+  if (privateUnderlying) {
+    return (
+      <Field
+        label={label}
+        value="n/a"
+        tone="empty"
+        title="Private underlying — no premium"
+      />
+    );
+  }
+  return (
+    <Field
+      label={label}
+      value={fmtSignedBps(value)}
+      tone={bpsTone(value ?? null)}
+      title={title}
+    />
   );
 }

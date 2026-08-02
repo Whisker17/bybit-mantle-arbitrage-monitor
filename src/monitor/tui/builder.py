@@ -728,6 +728,30 @@ def rebuild_edge_history(
         )
 
 
+def _venue_premiums_vs_underlying(
+    *,
+    cex_mid: Decimal | None,
+    amm_mid: Decimal | None,
+    rfq_buy_mid: Decimal | None,
+    rfq_sell_mid: Decimal | None,
+    underlying_price: Decimal | None,
+    ui_multiplier: Decimal | None = None,
+) -> tuple[Decimal | None, Decimal | None, Decimal | None]:
+    """CEX / AMM / RFQ equity-eq premiums vs one underlying print (WHI-783).
+
+    Same rebasing rules as ``_premium_for_pair``: CEX and AMM go through
+    ``equity_equivalent_mid``; RFQ is Fluxion-only (no ui_multiplier).
+    Returns ``(cex, amm, rfq)`` bps, each None when undefined.
+    """
+    if underlying_price is None or underlying_price <= 0:
+        return None, None, None
+    u = underlying_price
+    cex_eq = equity_equivalent_mid(cex_mid, ui_multiplier=ui_multiplier)
+    amm_eq = equity_equivalent_mid(amm_mid, ui_multiplier=ui_multiplier)
+    rfq_eq = mean_mid(rfq_buy_mid, rfq_sell_mid)
+    return premium_bps(cex_eq, u), premium_bps(amm_eq, u), premium_bps(rfq_eq, u)
+
+
 def build_spread_series(
     *,
     books: Sequence[BybitBookTick],
@@ -775,22 +799,14 @@ def build_spread_series(
             ts_ms=book.exchange_ts_ms,
         )
         und = _as_of(und_by_ts, book.exchange_ts_ms, get_ts=lambda u: u.as_of_ms)
-        cex_prem: Decimal | None = None
-        amm_prem: Decimal | None = None
-        rfq_prem: Decimal | None = None
-        if und is not None and und.price > 0:
-            u = und.price
-            cex_eq = equity_equivalent_mid(
-                snap.bybit_mid, ui_multiplier=ui_multiplier
-            )
-            amm_eq = equity_equivalent_mid(
-                snap.amm_mid, ui_multiplier=ui_multiplier
-            )
-            # RFQ is Fluxion-only (no ui_multiplier rebasing).
-            rfq_eq = mean_mid(snap.rfq_buy_mid, snap.rfq_sell_mid)
-            cex_prem = premium_bps(cex_eq, u)
-            amm_prem = premium_bps(amm_eq, u)
-            rfq_prem = premium_bps(rfq_eq, u)
+        cex_prem, amm_prem, rfq_prem = _venue_premiums_vs_underlying(
+            cex_mid=snap.bybit_mid,
+            amm_mid=snap.amm_mid,
+            rfq_buy_mid=snap.rfq_buy_mid,
+            rfq_sell_mid=snap.rfq_sell_mid,
+            underlying_price=None if und is None else und.price,
+            ui_multiplier=ui_multiplier,
+        )
         points.append(
             SpreadPoint(
                 ts_ms=book.exchange_ts_ms,
