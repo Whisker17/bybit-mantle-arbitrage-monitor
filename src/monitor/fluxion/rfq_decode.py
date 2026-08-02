@@ -285,9 +285,15 @@ def apply_decoded_rfq_enrichment(
             else None
         )
     )
-    making_token = decoded.token if decoded.maker_side == "sell_native" else usdc_l
-    taking_token = usdc_l if decoded.maker_side == "sell_native" else decoded.token
-    resolved = bool(decoded.maker is not None or decoded.pair_id is not None)
+    making_token: str | None = None
+    taking_token: str | None = None
+    if decoded.maker_side == "sell_native":
+        making_token = decoded.token
+        taking_token = usdc_l
+    elif decoded.maker_side == "buy_native":
+        making_token = usdc_l
+        taking_token = decoded.token
+    # side unknown → leave making/taking tokens null (do not invent buy_native).
     return replace(
         base,
         pair_id=decoded.pair_id,
@@ -304,6 +310,6 @@ def apply_decoded_rfq_enrichment(
         stock_amount=(
             None if decoded.stock_amount is None else str(decoded.stock_amount)
         ),
-        # Attempted receipt decode → do not re-queue; partial fills still enriched.
-        enriched=mark_attempted or resolved,
+        # Attempted receipt decode → do not re-queue (even when maker/pair null).
+        enriched=mark_attempted,
     )

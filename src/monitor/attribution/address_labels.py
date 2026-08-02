@@ -353,17 +353,19 @@ def label_addresses_from_journal(
         quote_is_token0_by_pair=quote_is_token0_by_pair,
     )
     edges = transfer_edges_from_ticks(transfers)
-    addresses = sorted({e.address.lower() for e in events})
+    by_addr: dict[str, list[InventoryEvent]] = {}
+    for e in events:
+        by_addr.setdefault(e.address.lower(), []).append(e)
     flags = {k.lower(): v for k, v in (contract_flags or {}).items()}
     min_amt = config.rebalancer.min_transfer_notional_native
     cex = config.rebalancer.cex_wallets
     results: list[AddressLabelResult] = []
-    for addr in addresses:
+    for addr in sorted(by_addr):
+        addr_events = by_addr[addr]
         feats = aggregate_address_features(
-            events, address=addr, is_contract=flags.get(addr)
+            addr_events, address=addr, is_contract=flags.get(addr)
         )
         touches = count_cex_touches(edges, addr, cex, min_amount=min_amt)
-        addr_events = [e for e in events if e.address.lower() == addr]
         first_ms = min((e.ts_ms for e in addr_events), default=None)
         last_ms = max((e.ts_ms for e in addr_events), default=None)
         results.append(

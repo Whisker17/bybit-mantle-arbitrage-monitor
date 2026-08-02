@@ -14,6 +14,7 @@ from __future__ import annotations
 import argparse
 import logging
 import sys
+from dataclasses import replace
 from pathlib import Path
 
 from monitor.collector.config import (
@@ -78,16 +79,35 @@ def run_backfill(
     updated = 0
     for row in rows:
         txh = str(row["tx_hash"])
+        base = FluxionRfqFillTick(
+            block_number=int(row["block_number"]),
+            block_ts=int(row["block_ts"]),
+            recv_ts_ms=int(row["recv_ts_ms"]),
+            tx_hash=txh,
+            log_index=int(row["log_index"]),
+            order_hash=str(row["order_hash"]),
+            remaining_making_amount=int(str(row["remaining_making_amount"])),
+            gap=bool(int(row.get("gap") or 0)),
+        )
         try:
             rcpt = rpc.get_transaction_receipt(txh)
         except Exception as exc:  # noqa: BLE001
-            logger.warning("receipt %s failed: %s", txh, exc)
+            logger.warning("receipt %s failed: %s — marking attempted", txh, exc)
+            # Outside RPC window / transient fail: stop re-queuing this row.
+            if store.update_rfq_fill_enrichment(
+                replace(base, enriched=True)
+            ):
+                updated += 1
             continue
         if not rcpt:
-            logger.warning("receipt %s missing", txh)
+            logger.warning("receipt %s missing — marking attempted", txh)
+            if store.update_rfq_fill_enrichment(replace(base, enriched=True)):
+                updated += 1
             continue
         logs = rcpt.get("logs") or []
         if not isinstance(logs, list):
+            if store.update_rfq_fill_enrichment(replace(base, enriched=True)):
+                updated += 1
             continue
         tick = enrich_fill_from_receipt(
             row=row,

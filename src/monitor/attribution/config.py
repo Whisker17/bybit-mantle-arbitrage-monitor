@@ -131,6 +131,7 @@ class AddressOverride(BaseModel):
     model_config = ConfigDict(extra="forbid", frozen=True)
 
     address: str
+    # Must be a BehaviorLabel value (validated at load).
     label: str
     note: str = ""
 
@@ -139,6 +140,23 @@ class AddressOverride(BaseModel):
     def _lower_addr(cls, value: object) -> object:
         if isinstance(value, str):
             return value.lower()
+        return value
+
+    @field_validator("label")
+    @classmethod
+    def _known_label(cls, value: str) -> str:
+        allowed = {
+            "market_maker",
+            "arb_bot",
+            "rebalancer",
+            "price_keeper",
+            "retail",
+            "unknown",
+        }
+        if value not in allowed:
+            raise ValueError(
+                f"address_overrides.label must be one of {sorted(allowed)}, got {value!r}"
+            )
         return value
 
 

@@ -71,9 +71,8 @@ market_maker:
 rebalancer:
   min_cex_touch_transfers: 3
   min_transfer_notional_native: 1
-  # Research seed from WHI-767 high-degree clustering — verify on Mantlescan /
-  # Bybit deposit labels before trusting product rebalancer labels in production.
-  # Empty list disables rebalancer auto-labels until wallets are confirmed.
+  # WHI-767 high-degree cluster seeds (not Mantlescan-verified exchange labels).
+  # Treat as provisional; empty the list to disable rebalancer auto-labels.
   cex_wallets:
     - "0xd14b0dcd319551ae4d7b12787c00ee1c1f9e1d2e"
     - "0x1a43997eb0513300ef9bb7111a836870598a427f"

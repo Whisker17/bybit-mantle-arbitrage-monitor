@@ -424,9 +424,13 @@ latency_ms = max(0, recv_ts_ms - block_ts * 1000)
 ```
 
 `block_ts` is the on-chain block timestamp; `recv_ts_ms` is local wall clock
-**after** all per-block RPC (getBlock + Multicall3 + logs + optional receipts).
-The value therefore includes host clock skew vs chain time, tip visibility on
-the RPC LB, and processing — not “RPC RTT alone.”
+**after** all per-block RPC (getBlock + Multicall3 + pool/LOP logs + optional
+swap receipts + WHI-768 RFQ receipt enrich when fills present + optional
+native Transfer `getLogs`). The value therefore includes host clock skew vs
+chain time, tip visibility on the RPC LB, and processing — not “RPC RTT alone.”
+Transfer stream + RFQ enrich are config-gated (`mantle.collect_erc20_transfers`,
+`mantle.enrich_rfq_fills`); re-measure P95 after enabling on the VPS if the
+latency SLO is tight.
 
 **Defaults** (`config/collector.yaml`):
 
