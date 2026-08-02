@@ -18,6 +18,7 @@ dex:
   chain_id: 56
   pool_kind: v3
   quote_asset: USDT
+  quote_decimals: 18
   has_rfq: false
 costs:
   cex_taker_fee_bps: 10

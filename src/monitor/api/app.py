@@ -71,6 +71,7 @@ def _build_market_runtime(
         tui=tui,
         db_path=db_path,
         reader=reader,
+        quote_decimals=ctx.dex.quote_decimals,
         pnl_cache=PnlSnapshotCache(ttl_s=api.pnl_cache_ttl_s),
         inventory_cache=InventoryEventsCache(ttl_s=api.mm_inventory_cache_ttl_s),
     )

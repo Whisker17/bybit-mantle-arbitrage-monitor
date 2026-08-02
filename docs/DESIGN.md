@@ -213,6 +213,34 @@ polls under ~500 ms P95 on the 1 GB VPS:
 - P95 target: keep overview+detail under ~500 ms with this cache; re-measure on
   first VPS deploy (pair count × optimal samples under `state.lock`).
 
+### 2.7 Multi-market metrics & attribution (WHI-773 / M7-4)
+
+**Invariant:** one metrics/attribution code path for every market. Venue
+parameters are injected at assembly time (`monitor.markets.MarketContext`);
+algorithms under `monitor.metrics` / `monitor.attribution` stay market-agnostic.
+
+| Concern | Source | Notes |
+|---------|--------|-------|
+| CEX taker fee | market `costs.cex_taker_fee_bps` → `MetricsConfig.bybit_taker_fee_bps` | Field name is historical; value is the active CEX venue fee (Bybit 10, Binance 10). |
+| Gas per AMM swap | market `costs.gas_usd_per_swap` | Mantle ~$0.01; BSC inventory default $0.05 (non-zero constant). |
+| Quote basis wear | market `costs.quote_basis_bps` → `usdt_usdc_basis_bps` | 0 when CEX and DEX share the same quote (Binance USDT ⇄ Pancake USDT). |
+| Pool fee | inventory per-pool `amm.fee` (UniV3 units) | Injected into `AmmPoolState.pool_fee` at tick lift — not a global YAML. |
+| Quote token decimals | market `dex.quote_decimals` | Mantle USDC=6; BSC USDT=18. API/CLI pass this into `amm_pool_from_pair_tick`. Pure `amm_pool_from_tick` always requires explicit decimals. Pair-wrapper defaults (6/18) remain only for frozen TUI call sites that omit the arg (Bybit-only until M7-5). |
+| CEX depth VWAP | journal `bybit_depth` (table name reused per ADR-0001) | M7-3 Binance depth20 precomputes the same bucket curve shape. |
+| Multiplier / comparable mids | collector writes `*_de_multiplied` | **divide** (Bybit xstock) vs **multiply** (BEP-677 uiMultiplier). Metrics always consume comparable columns; do not re-apply the formula. Historical series keep the mult stamped on each tick (no retroactive rebase of the journal). |
+| Session open/closed | shared NYSE calendar (`metrics.session`) | Same for both markets (US equity underlyings). |
+| Cumulative distributions | per-market SQLite | `data/monitor-{market_id}.db` isolates “since go-live” stats. |
+| Mechanism RFQ/AMM | `AttributionConfig.has_rfq` from `dex.has_rfq` | Config switch via `apply_market_attribution` — **not** `if market_id == …`. When false, RFQ fills are dropped and mechanism share is 100% AMM (Pancake). |
+| Behavior labels | shared `config/attribution.yaml` thresholds | Per-market retune: pass `attribution_path` into `load_market_context`. MM `market_maker` rules that require RFQ maker fills stay inactive without RFQ data. |
+
+**CLI:** `python -m monitor.metrics --market binance-pancake` uses market costs
+and optional inventory pool fee when `--pair-id` matches. Synthetic demo only
+(no journal); Web multi-market surface is M7-5.
+
+**Pool geometry:** pure `monitor.metrics.amm_pool.amm_pool_from_tick` takes
+explicit quote/base decimals (USDC=6 on Mantle, USDT=18 on BSC). TUI/API pair
+wrappers accept `Pair` or `BStocksPair`.
+
 ## 3. Cross-cutting Policies
 
 - **No secrets in git.** RPC keys and Linear API keys only in `.env`.
@@ -474,7 +502,7 @@ Probe: `python -m monitor.collector.latency_probe`.
 | **Web skeleton** | WHI-757 | FastAPI read-only API + Next.js static export + nginx/systemd deploy on VPS |
 | **Web overview** | WHI-758 | Full overview table (TUI-parity columns, status/stale banner, sort/filter) |
 | **Web pair detail** | WHI-759 | Pair detail: spread chart, trade stream, edge stats, attribution |
-| **M7 multi-market (Binance ⇄ Pancake bStocks)** | WHI-770… | Second market beside Bybit⇄Fluxion. **M7-1 inventory** (WHI-770) + **M7-2 domain** (WHI-771) + **M7-3 collectors** (WHI-772) landed: `config/markets/`, `monitor.markets`, per-market SQLite (ADR-0001), CLI `--market`, `monitor/binance` + BSC Pancake chain poll → `data/monitor-binance-pancake.db`. **M7-5 Web/API bar** (WHI-774) landed: `/api/markets` + `/api/{market}/…`, Web `/m/{market}/` switcher, RFQ hide + accumulating empty state. Metrics for this market M7-4. |
+| **M7 multi-market (Binance ⇄ Pancake bStocks)** | WHI-770… | Second market beside Bybit⇄Fluxion. **M7-1…M7-4** landed (inventory, domain, collectors, metrics/attribution — DESIGN §2.7). **M7-5 Web/API bar** (WHI-774) landed: `/api/markets` + `/api/{market}/…`, Web `/m/{market}/` switcher, RFQ hide + accumulating empty state. |
 
 Dependency chain: M0 → M1 → M2 → (M3 ∥ M4) → M5 → Web (WHI-757 → 758…).
 M7 is parallel product expansion after Web PnL v2; does not block Web polish.

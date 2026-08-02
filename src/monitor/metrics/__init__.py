@@ -11,10 +11,16 @@ Public seams (tests and TUI/Web depend on these, not internals):
 - ``EdgeStats`` / ``OptimalPnlStats`` — time-weighted distributions + breaches
 - ``build_spread_snapshot`` / ``build_edge_snapshot`` — tick → panel model (M5 feeds)
 
-Depends on ``monitor.quotes`` tick shapes only (DESIGN §4.3), not on WS/RPC clients.
+Depends on ``monitor.quotes`` tick shapes (DESIGN §4.3), not on WS/RPC clients.
+Pair-shaped pool helpers also read inventory models (``Pair`` / ``BStocksPair``);
+the pure ``amm_pool_from_tick`` stays inventory-free.
 """
 
-from monitor.metrics.amm_pool import AmmPoolState
+from monitor.metrics.amm_pool import (
+    AmmPoolState,
+    amm_pool_from_pair_tick,
+    amm_pool_from_tick,
+)
 from monitor.metrics.config import (
     MetricsConfig,
     MetricsConfigError,
@@ -88,6 +94,8 @@ __all__ = [
     "SessionKind",
     "SpreadSnapshot",
     "VenueKind",
+    "amm_pool_from_pair_tick",
+    "amm_pool_from_tick",
     "best_net_edge",
     "build_edge_snapshot",
     "build_pnl_pair_snapshot",
