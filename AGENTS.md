@@ -125,9 +125,10 @@ placeholders. Agents must not assume a module exists until its issue lands. -->
     `/m/{market}/` and `/m/{market}/pair/{id}/` (root + legacy `/pair/{id}/`
     redirect to default market); RFQ columns hidden when `has_rfq` is false;
     explicit accumulating empty state when a market journal is not ready.
-  - **Underlying price source (WHI-778) landed:** research note
+  - **Underlying price source (WHI-778 / WHI-787) landed:** research note
     `docs/references/underlying-price-source.md` (Pyth Hermes primary +
-    Yahoo gap-fill for SKHY US ADR; SPCX uncovered/private); journal table
+    Yahoo gap-fill for SKHY US ADR and Nasdaq SPCX; uncovered guardrail
+    probes stale `uncovered` flags → WARN + `/api/health`); journal table
     `underlying_prices` (schema v5); `monitor/underlying` poller wired into
     both collectors; config `config/underlying.yaml` +
     `collector.yaml` `underlying.enabled`.

@@ -50,7 +50,7 @@ soon — anything touching key handling, RPC credentials defaults to at least Hi
   Local Hermes/Yahoo smoke covers all public tickers; VPS soak needs both
   collectors up ≥30m then
   `SELECT ticker, COUNT(*), MAX(as_of_ms) FROM underlying_prices GROUP BY ticker`.
-  SPCX remains uncovered (private). Checklist in
+  SPCX is public Nasdaq via Yahoo (WHI-787) — include it in the soak. Checklist in
   `docs/references/underlying-price-source.md`.
 
 - **WHI-778 session hours duplicated in underlying.yaml vs metrics.yaml** (Low, WHI-778).

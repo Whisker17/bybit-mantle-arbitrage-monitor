@@ -81,10 +81,11 @@ for m in bybit-fluxion binance-pancake; do
 done
 # While the collector is up: underlying_status=running, underlying_last_poll_ms
 # advancing, underlying_last_n > 0 after the first successful Hermes poll.
-# Public US tickers (AAPL, NVDA, TSLA, …) should have rows; SPCX stays empty
-# (uncovered / private — not a fake price).
+# Public US tickers (AAPL, NVDA, TSLA, …) should have rows; SPCX/SKHY via Yahoo
+# gap-fill (source=yahoo). uncovered_coverage_mismatches on /api/health should
+# be empty unless a ticker is still marked uncovered but a public tape exists.
 # Smoke without the full collector: `uv run python -m monitor.underlying \
-#   --tickers AAPL,TSLA,NVDA` (Hermes public; no journal write).
+#   --tickers AAPL,TSLA,NVDA,SPCX,SKHY` (Hermes + Yahoo; no journal write).
 #
 # underlying_status values:
 #   running      — poll loop active

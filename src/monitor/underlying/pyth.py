@@ -138,3 +138,15 @@ class HermesClient:
         if not isinstance(data, dict):
             raise ValueError(f"Hermes latest: expected object, got {type(data).__name__}")
         return data
+
+    def search_price_feeds(self, query: str) -> list[Any]:
+        """Hermes ``/v2/price_feeds?query=…`` — used by uncovered coverage probe."""
+        url = f"{self.base_url}/v2/price_feeds"
+        resp = self._client.get(url, params={"query": query})
+        resp.raise_for_status()
+        data = resp.json()
+        if not isinstance(data, list):
+            raise ValueError(
+                f"Hermes price_feeds: expected list, got {type(data).__name__}"
+            )
+        return data

@@ -2,10 +2,16 @@
 
 from __future__ import annotations
 
-from dataclasses import dataclass
+from dataclasses import dataclass, field
+from typing import Any
 
 from monitor.quotes import CollectorGap, now_ms
 from monitor.storage import JournalReader
+from monitor.underlying.coverage_probe import (
+    META_MISMATCHES,
+    META_PROBE_MS,
+    mismatches_from_meta_json,
+)
 
 
 @dataclass(frozen=True, slots=True)
@@ -27,6 +33,9 @@ class HealthStatus:
     recent_gaps: list[CollectorGap]
     poll_interval_s: float | None = None
     error: str | None = None
+    # WHI-787: config marked uncovered but Yahoo/Pyth now has a public print.
+    uncovered_coverage_mismatches: list[dict[str, Any]] = field(default_factory=list)
+    uncovered_coverage_probe_ms: int | None = None
 
     @classmethod
     def unavailable(
@@ -55,6 +64,8 @@ class HealthStatus:
             recent_gaps=[],
             poll_interval_s=poll_interval_s,
             error=error,
+            uncovered_coverage_mismatches=[],
+            uncovered_coverage_probe_ms=None,
         )
 
 
@@ -107,8 +118,11 @@ def build_health(
 
     since = ts - gap_window_ms
     gaps = reader.recent_gaps(since_ms=since, limit=20)
+    mismatches = mismatches_from_meta_json(reader.get_meta(META_MISMATCHES))
+    probe_ms = _meta_int(reader, META_PROBE_MS)
     # ``ok`` is the UI banner aggregate (alive today). Wider criteria (e.g.
     # !gap_recent) can fold in later without renaming the wire field.
+    # Uncovered mismatches are advisory (WARN / field) — they do not flip ok.
     return HealthStatus(
         ok=alive,
         generated_ts_ms=ts,
@@ -124,4 +138,6 @@ def build_health(
         gap_recent=bool(gaps),
         recent_gaps=gaps,
         poll_interval_s=poll_interval_s,
+        uncovered_coverage_mismatches=mismatches,
+        uncovered_coverage_probe_ms=probe_ms,
     )

@@ -17,6 +17,14 @@ from monitor.underlying.config import (
     UnderlyingConfigError,
     load_underlying_config,
 )
+from monitor.underlying.coverage_probe import (
+    UncoveredCoverageProbe,
+    evaluate_uncovered_probe,
+    hermes_has_us_equity_feed,
+    mismatches_from_meta_json,
+    mismatches_to_meta_json,
+    yahoo_chart_has_price,
+)
 from monitor.underlying.price_type import classify_price_type
 from monitor.underlying.pyth import parse_hermes_latest, scale_pyth_price
 from monitor.underlying.tickers import (
@@ -54,7 +62,13 @@ def test_load_checked_in_underlying_config() -> None:
     assert cfg.version == 1
     assert "AAPL" in cfg.tickers
     assert cfg.tickers["AAPL"].feed_id is not None
-    assert cfg.tickers["SPCX"].uncovered is True
+    # WHI-787: SPCX is Nasdaq-listed; Yahoo gap-fill (not uncovered/private).
+    spcx = cfg.tickers["SPCX"]
+    assert spcx.uncovered is False
+    assert spcx.prefer_yahoo is True
+    assert spcx.yahoo_symbol == "SPCX"
+    assert spcx.feed_id is None
+    assert spcx.pyth_symbol is None
     # WHI-785: SKHY is Nasdaq ADR (USD Yahoo), not KRX 000660.KS.
     skhy = cfg.tickers["SKHY"]
     assert skhy.prefer_yahoo is True
@@ -64,7 +78,9 @@ def test_load_checked_in_underlying_config() -> None:
     assert cfg.fx_usd_krw_feed_id is None
     assert cfg.needs_fx({"SKHY"}) is False
     assert "AAPL" in cfg.covered_tickers()
-    assert "SPCX" in cfg.uncovered_tickers()
+    assert "SPCX" in cfg.covered_tickers()
+    assert "SPCX" not in cfg.uncovered_tickers()
+    assert cfg.uncovered_probe_interval_s > 0
 
 
 def test_scale_pyth_price() -> None:
@@ -428,12 +444,12 @@ def test_bybit_inventory_underlying_tickers_nonempty() -> None:
     # Public US names the panel expects on overview Underlying / vs Und.
     for expected in ("AAPL", "NVDA", "TSLA", "AMZN", "META"):
         assert expected in tickers
-    assert "SPCX" in tickers  # uncovered private; poller skips, no fake price
+    assert "SPCX" in tickers  # WHI-787: Yahoo gap-fill, not uncovered/private
     cfg = load_underlying_config()
     covered = [t for t in tickers if t in cfg.tickers and not cfg.tickers[t].uncovered]
-    assert covered, "no Hermes-covered tickers for bybit inventory"
-    # SPCX stays uncovered (no fake price) — covered list already checked above.
-    assert "SPCX" not in covered
+    assert covered, "no covered tickers for bybit inventory"
+    assert "SPCX" in covered
+    assert cfg.tickers["SPCX"].prefer_yahoo is True
 
 
 def test_binance_inventory_underlying_tickers_nonempty() -> None:
@@ -476,6 +492,215 @@ def test_daemon_underlying_tickers_both_markets(tmp_path: Path) -> None:
     pancake_tickers = pancake._underlying_tickers_for_market()
     assert "AAPL" in pancake_tickers and "TSLA" in pancake_tickers
     store_p.close()
+
+
+# --- WHI-787 uncovered coverage guardrail ---
+
+
+def test_yahoo_chart_has_price() -> None:
+    assert yahoo_chart_has_price(None) is False
+    assert yahoo_chart_has_price({"chart": {"result": []}}) is False
+    assert (
+        yahoo_chart_has_price(
+            {"chart": {"result": [{"meta": {"regularMarketPrice": 108.37}}]}}
+        )
+        is True
+    )
+    assert (
+        yahoo_chart_has_price(
+            {"chart": {"result": [{"meta": {"previousClose": 115.0}}]}}
+        )
+        is True
+    )
+    assert (
+        yahoo_chart_has_price(
+            {"chart": {"result": [{"meta": {"regularMarketPrice": 0}}]}}
+        )
+        is False
+    )
+
+
+def test_hermes_has_us_equity_feed() -> None:
+    feeds = [
+        {"attributes": {"symbol": "Equity.US.AAPL/USD.PRE"}},
+        {"attributes": {"symbol": "Equity.US.AAPL/USD"}},
+        {"attributes": {"symbol": "Crypto.AAPLX/AAPL.RR"}},
+    ]
+    assert hermes_has_us_equity_feed(feeds, ticker="AAPL") is True
+    assert hermes_has_us_equity_feed(feeds, ticker="SPCX") is False
+    assert hermes_has_us_equity_feed([], ticker="AAPL") is False
+    # PRE alone is not RTH coverage for the guardrail.
+    assert (
+        hermes_has_us_equity_feed(
+            [{"attributes": {"symbol": "Equity.US.SPCX/USD.PRE"}}],
+            ticker="SPCX",
+        )
+        is False
+    )
+
+
+def test_evaluate_uncovered_probe_yahoo_hits() -> None:
+    """Config uncovered but Yahoo has a print → mismatch (the SPCX bug class)."""
+    chart = {
+        "chart": {
+            "result": [
+                {
+                    "meta": {
+                        "regularMarketPrice": 108.37,
+                        "currency": "USD",
+                        "shortName": "Space Exploration Technologies",
+                    }
+                }
+            ]
+        }
+    }
+    hit = evaluate_uncovered_probe(
+        "SPCX",
+        yahoo_chart=chart,
+        yahoo_error=None,
+        hermes_feeds=[],
+        hermes_error=None,
+    )
+    assert hit is not None
+    assert hit.ticker == "SPCX"
+    assert hit.sources == ("yahoo",)
+    assert "Yahoo" in hit.detail
+
+
+def test_evaluate_uncovered_probe_hermes_hits() -> None:
+    feeds = [{"attributes": {"symbol": "Equity.US.FAKE/USD"}}]
+    hit = evaluate_uncovered_probe(
+        "FAKE",
+        yahoo_chart=None,
+        yahoo_error="timeout",
+        hermes_feeds=feeds,
+        hermes_error=None,
+    )
+    assert hit is not None
+    assert "pyth_hermes" in hit.sources
+
+
+def test_evaluate_uncovered_probe_no_false_positive_on_errors() -> None:
+    """Network errors must not invent coverage."""
+    assert (
+        evaluate_uncovered_probe(
+            "GHOST",
+            yahoo_chart=None,
+            yahoo_error="timeout",
+            hermes_feeds=None,
+            hermes_error="timeout",
+        )
+        is None
+    )
+    assert (
+        evaluate_uncovered_probe(
+            "GHOST",
+            yahoo_chart={"chart": {"result": [{"meta": {}}]}},
+            yahoo_error=None,
+            hermes_feeds=[],
+            hermes_error=None,
+        )
+        is None
+    )
+
+
+def test_mismatches_meta_roundtrip() -> None:
+    from monitor.underlying.coverage_probe import UncoveredMismatch
+
+    ms = [
+        UncoveredMismatch(
+            ticker="SPCX", sources=("yahoo",), detail="Yahoo has price"
+        )
+    ]
+    raw = mismatches_to_meta_json(ms)
+    back = mismatches_from_meta_json(raw)
+    assert back == [
+        {"ticker": "SPCX", "sources": ["yahoo"], "detail": "Yahoo has price"}
+    ]
+    assert mismatches_from_meta_json(None) == []
+    assert mismatches_from_meta_json("not-json") == []
+
+
+def test_uncovered_probe_empty_when_no_uncovered() -> None:
+    """Checked-in config has no uncovered tickers after WHI-787 — probe is no-op."""
+    cfg = load_underlying_config()
+    assert cfg.uncovered_tickers() == []
+    # Inject a fake hermes/yahoo so no network if list were non-empty.
+
+    class _BoomHermes:
+        def search_price_feeds(self, query: str) -> list[object]:
+            raise AssertionError("should not call hermes when uncovered empty")
+
+        def close(self) -> None:
+            return None
+
+    class _BoomYahoo:
+        def fetch_chart(self, symbol: str) -> dict[str, object]:
+            raise AssertionError("should not call yahoo when uncovered empty")
+
+        def close(self) -> None:
+            return None
+
+    probe = UncoveredCoverageProbe(
+        cfg, hermes=_BoomHermes(), yahoo=_BoomYahoo()  # type: ignore[arg-type]
+    )
+    try:
+        assert probe.probe_once() == []
+    finally:
+        probe.close()
+
+
+def test_uncovered_probe_detects_yahoo_for_synthetic_uncovered(
+    tmp_path: Path,
+) -> None:
+    """Live seam: uncovered config + Yahoo chart body → WARN-class mismatch."""
+    from monitor.underlying.config import UnderlyingConfig
+    from monitor.underlying.coverage_probe import UncoveredMismatch
+
+    base = load_underlying_config()
+    # Build a tiny config with one synthetic uncovered ticker.
+    raw = base.model_dump()
+    raw["tickers"] = {
+        "SYNTH": {
+            "currency": "USD",
+            "pyth_symbol": None,
+            "feed_id": None,
+            "uncovered": True,
+            "uncovered_reason": "test fixture",
+        }
+    }
+    cfg = UnderlyingConfig.model_validate(raw)
+
+    class FakeYahoo:
+        def fetch_chart(self, symbol: str) -> dict[str, object]:
+            assert symbol == "SYNTH"
+            return {
+                "chart": {
+                    "result": [{"meta": {"regularMarketPrice": 42.0, "currency": "USD"}}]
+                }
+            }
+
+        def close(self) -> None:
+            return None
+
+    class FakeHermes:
+        def search_price_feeds(self, query: str) -> list[object]:
+            return []
+
+        def close(self) -> None:
+            return None
+
+    probe = UncoveredCoverageProbe(
+        cfg, hermes=FakeHermes(), yahoo=FakeYahoo()  # type: ignore[arg-type]
+    )
+    try:
+        hits = probe.probe_once()
+    finally:
+        probe.close()
+    assert len(hits) == 1
+    assert isinstance(hits[0], UncoveredMismatch)
+    assert hits[0].ticker == "SYNTH"
+    assert hits[0].sources == ("yahoo",)
 
 
 def test_stamp_underlying_poll_meta_even_when_empty(tmp_path: Path) -> None:

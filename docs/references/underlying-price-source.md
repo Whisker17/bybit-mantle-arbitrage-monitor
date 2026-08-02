@@ -18,7 +18,7 @@ Inventory underlyings (union of Bybit xStocks + Binance bStocks top sets):
 | CRCL, HOOD, META, AMZN, COIN, MCD | bybit-fluxion | US equities |
 | SPY, MSFT, INTC, MU | binance-pancake | US / ETF |
 | SKHY (Nasdaq ADR) | binance-pancake | SK hynix **US ADR** (`SKHY`); USD tape for bStock premium |
-| SPCX | both | **private** SpaceX — no public equity print |
+| SPCX | both | SpaceX — **Nasdaq SPCX** since 2026-06-12 IPO; Yahoo gap-fill (no Hermes) |
 
 **WHI-785 correction:** WHI-778 originally mapped SKHY → KRX `000660` / Yahoo
 `000660.KS` + KRW→USD FX. That was wrong for bStock product semantics: Binance
@@ -32,7 +32,7 @@ is Nasdaq `SKHY` (permanent ticker as of 2026-07-13; prior SKHYV / OTC HXSCL).
 |-----------|------------------|----------------------------------|------------|---------|---------------|--------------------------|
 | **US coverage (our 14 liquid names)** | **All 14** `Equity.US.{T}/USD` | Equity feeds sparse; **none** confirmed on Mantle/BSC for our set without paid nets | Broad US | Broad US | Broad US | Broad US |
 | **SKHY (Nasdaq ADR)** | **No** `Equity.US.SKHY/USD` on Hermes (probe 2026-08-02). Stale KR feed `Equity.KR.000660/KRW` is **not** the product underlying | Unlikely free on our chains | Paid | Free tier | Free tier | Live **USD** ADR quote (`SKHY`) |
-| **SPCX (SpaceX)** | None | None | None | None | None | None (not public) |
+| **SPCX (SpaceX)** | **No** `Equity.US.SPCX/USD` (probe 2026-08-02) | None | Paid likely | Free tier | Free tier | Live **USD** Nasdaq quote (`SPCX`) |
 | **Update cadence** | ~5s publish interval on RTH schedule | On-chain heartbeat (varies) | Realtime on paid | Free ~60/min | Free very tight | ~1m bars / last trade |
 | **Closed-session semantics** | RTH feed freezes `publish_time` at last close — usable as **close** | Last on-chain update | Explicit session fields | `t` timestamp | Daily bars | `marketState` + last trade |
 | **Pre/post** | Separate `.PRE`/`.POST`/`.ON` feeds marked **DEPRECATED** | N/A | Yes (paid) | Limited free | No | Pre/post fields when open |
@@ -47,6 +47,11 @@ is Nasdaq `SKHY` (permanent ticker as of 2026-07-13; prior SKHYV / OTC HXSCL).
 - Hermes has **no** `Equity.US.SKHY/USD` (or SKHY/Hynix query hit) as of 2026-08-02 → Yahoo ADR path required until Pyth lists it.
 - Yahoo `SKHY` (NMS, EQUITY) ≈ **143.73 USD** (probe 2026-08-02) — correct ADR level for premium vs bStock USD.
 - *(Historical WHI-778 mistake)* Yahoo `000660.KS` ~1.72M KRW + Pyth KR feed stale publish_time — do **not** use for SKHYB premium.
+- **SPCX is public.** SpaceX listed on Nasdaq as `SPCX` on **2026-06-12** (IPO ~$135). Yahoo chart returns
+  `symbol=SPCX, fullExchangeName=NasdaqGS, shortName="Space Exploration Technologies",
+  regularMarketPrice≈108.37` (probe 2026-08-02). Hermes `/v2/price_feeds?query=SPCX|SPACEX`
+  returns `[]` — no Pyth equity feed yet. WHI-778 incorrectly marked SPCX
+  `uncovered: true` as "private"; **WHI-787** corrects that to Yahoo gap-fill.
 
 ## Decision
 
@@ -56,8 +61,8 @@ is Nasdaq `SKHY` (permanent ticker as of 2026-07-13; prior SKHYV / OTC HXSCL).
 |--------|-----|
 | Hermes over on-chain Pyth/Chainlink | Same oracle-grade numbers, **web2 latency and $0 RPC**; no Mantle/BSC feed deployment dependency |
 | Hermes over paid web2 | Covers every liquid US name in inventory **without keys**; free tier rate limits never gate a 15–60s poll of ~14 IDs |
-| Hybrid allowed | **Yahoo chart fallback** only for tickers Pyth cannot serve (**SKHY US ADR** today); optional — disable via config |
-| SPCX | **No public underlying.** Collector skips; journal has no rows; UI (WHI-779) must show “n/a / private” |
+| Hybrid allowed | **Yahoo chart fallback** for tickers Pyth cannot serve (**SKHY US ADR**, **SPCX** today); optional — disable via config |
+| SPCX | **Public Nasdaq equity.** No Hermes feed → Yahoo `SPCX` gap-fill (same path as SKHY). UI shows real premium vs Und |
 
 **Rejected as primary:**
 
@@ -70,8 +75,8 @@ is Nasdaq `SKHY` (permanent ticker as of 2026-07-13; prior SKHYV / OTC HXSCL).
 | Source | Use here |
 |--------|----------|
 | **Pyth Hermes** | Allowed for private monitoring and panel display. No API key. Pin feed IDs in config; do not scrape arbitrary Hermes endpoints beyond price reads. |
-| **Yahoo chart API** | Unofficial, no redistributable commercial license assumed. Used **only** as optional SKHY ADR (and similar) gap-fill inside this private monitor. If compliance tightens, set `yahoo_fallback: false` and leave SKHY empty. |
-| **SPCX** | No licensed public tape exists; do not synthesize prices. |
+| **Yahoo chart API** | Unofficial, no redistributable commercial license assumed. Used **only** as optional gap-fill (SKHY ADR, SPCX, …) inside this private monitor. If compliance tightens, set `yahoo_fallback: false` and leave those tickers empty. |
+| **SPCX** | Public Nasdaq tape via Yahoo (Hermes gap). Do **not** mark `uncovered` again without re-probing both sources. |
 
 ## Session / corporate-action semantics (implementation contract)
 
@@ -113,7 +118,7 @@ Table `underlying_prices` (schema v5), dual-market shared **by ticker** (not `pa
 | `price_type` | `live` / `pre` / `post` / `close` / `stale` |
 | `as_of_ms` | Source time |
 | `recv_ts_ms` | Collector receive time |
-| `source` | `pyth_hermes` / `yahoo` / `yahoo+pyth_fx` (SKHY ADR → `yahoo`) |
+| `source` | `pyth_hermes` / `yahoo` / `yahoo+pyth_fx` (SKHY ADR / SPCX → `yahoo`) |
 | `feed_id` | Pyth price feed id when applicable |
 | `gap` | Post-error flag |
 
@@ -145,13 +150,48 @@ uv run python -m monitor.underlying --tickers SKHY
 
 Config: `config/underlying.yaml` + `underlying:` block in `config/collector.yaml`.
 
-**WHI-785 deploy:** `underlying.yaml` is loaded at collector start. After shipping the
-SKHY ADR retarget, **restart** the `binance-pancake` collector (and any other
-process that polls underlyings) so new rows use Yahoo `SKHY` USD. Historical
-`yahoo+pyth_fx` KR-derived SKHY rows age out via retention — no backfill.
+**WHI-785 / WHI-787 deploy:** `underlying.yaml` is loaded at collector start.
+After shipping SPCX Yahoo wiring (or any ticker map change), **restart both**
+`xstocks-collector@bybit-fluxion` and `@binance-pancake` so journals pick up the
+new path. Historical empty SPCX columns fill on the next open/closed poll.
 
 ```sql
 SELECT ticker, price, currency, source, as_of_ms
-FROM underlying_prices WHERE ticker='SKHY' ORDER BY as_of_ms DESC LIMIT 5;
--- expect source like 'yahoo', price ~ADR USD level
+FROM underlying_prices WHERE ticker IN ('SKHY','SPCX') ORDER BY as_of_ms DESC LIMIT 10;
+-- expect source like 'yahoo', price ~ADR / Nasdaq USD level
 ```
+
+## Coverage audit (WHI-787, probe 2026-08-02)
+
+Live re-check of **every** inventory underlying against Hermes + Yahoo. Config
+must match “actual available source”.
+
+| Ticker | Hermes `Equity.US.{T}/USD` | Yahoo chart | Config (post-WHI-787) | Match? |
+|--------|----------------------------|-------------|------------------------|--------|
+| AAPL, CRCL, GOOGL, HOOD, META, NVDA, TSLA, AMZN, COIN, MCD, SPY, MSFT, INTC, MU | yes (pinned `feed_id`) | yes (unused) | Hermes primary | yes |
+| SKHY | no (`query=SKHY` → `[]`) | yes (~143.73 USD ADR) | `prefer_yahoo` + `yahoo_symbol: SKHY` | yes |
+| SPCX | no (`query=SPCX\|SPACEX` → `[]`) | yes (~108.37 USD, NasdaqGS) | `prefer_yahoo` + `yahoo_symbol: SPCX` | yes (fixed) |
+| *(none)* | — | — | `uncovered: true` | n/a — no uncovered remain |
+
+Cross-check (tokenized premium sanity): de-multiplied CEX mid for SPCXx ≈
+108.73 vs Yahoo 108.37 → ~+33 bps, a plausible tokenized premium (mapping
+`SPCXx`/`SPCXB` → `SPCX` is correct).
+
+## Uncovered guardrail (WHI-787)
+
+Bug class: a one-time “private / no feed” human judgment freezes in
+`config/underlying.yaml` and never gets revisited.
+
+1. **Collection path** — tickers with `uncovered: true` are still skipped by the
+   price poller (no fake prints). UI empty reason remains `private` for any
+   future truly-uncovered name.
+2. **Periodic probe** — every `uncovered_probe_interval_s` (default 3600s) the
+   collector runs `UncoveredCoverageProbe` against Yahoo chart + Hermes
+   `price_feeds` for each uncovered ticker. On a hit: **WARN** log + journal
+   meta `underlying_uncovered_mismatches` / `underlying_uncovered_probe_ms`.
+3. **Health** — `GET /api/health` (and per-market health) exposes
+   `uncovered_coverage_mismatches` + `uncovered_coverage_probe_ms`. Advisory
+   only — does **not** flip `ok`.
+4. **Empty uncovered list** — probe is a no-op (no network). After WHI-787 the
+   checked-in map has zero uncovered; the path stays for the next private or
+   pre-IPO name.

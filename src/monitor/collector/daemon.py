@@ -60,6 +60,12 @@ from monitor.symbols.token_map import (
     native_token_to_pair,
 )
 from monitor.underlying.config import UnderlyingConfigError, load_underlying_config
+from monitor.underlying.coverage_probe import (
+    META_MISMATCHES,
+    META_PROBE_MS,
+    UncoveredCoverageProbe,
+    mismatches_to_meta_json,
+)
 from monitor.underlying.poller import UnderlyingPoller
 from monitor.underlying.tickers import underlying_tickers_for_pairs
 
@@ -678,14 +684,20 @@ class CollectorDaemon:
             self._stamp_underlying_status(UNDERLYING_STATUS_NO_TICKERS)
             return
         poller = UnderlyingPoller(u_cfg, tickers=tickers)
+        # Own clients: probe runs even when yahoo_fallback is off for collection.
+        coverage = UncoveredCoverageProbe(u_cfg)
+        # Force first probe promptly after start (WHI-787 guardrail).
+        last_uncovered_probe_ms = 0
         self._stamp_underlying_status(
             UNDERLYING_STATUS_RUNNING, error="", tickers=tickers
         )
         logger.info(
-            "underlying poller started tickers=%s open_s=%s closed_s=%s",
+            "underlying poller started tickers=%s open_s=%s closed_s=%s "
+            "uncovered_probe_s=%s",
             tickers,
             u_cfg.open_poll_interval_s,
             u_cfg.closed_poll_interval_s,
+            u_cfg.uncovered_probe_interval_s,
         )
         try:
             while not self._stop.is_set():
@@ -709,12 +721,26 @@ class CollectorDaemon:
                             detail=f"poll error: {exc}",
                         ),
                     )
+                # Uncovered coverage re-check (no network when uncovered list empty).
+                now = now_ms()
+                probe_every_ms = int(u_cfg.uncovered_probe_interval_s * 1000)
+                if now - last_uncovered_probe_ms >= probe_every_ms:
+                    try:
+                        mismatches = await asyncio.to_thread(coverage.probe_once)
+                        self.store.set_meta(
+                            META_MISMATCHES, mismatches_to_meta_json(mismatches)
+                        )
+                        self.store.set_meta(META_PROBE_MS, str(now))
+                        last_uncovered_probe_ms = now
+                    except Exception as exc:  # noqa: BLE001
+                        logger.warning("uncovered coverage probe failed: %s", exc)
                 interval = poller.poll_interval_s()
                 try:
                     await asyncio.wait_for(self._stop.wait(), timeout=interval)
                 except TimeoutError:
                     pass
         finally:
+            coverage.close()
             poller.close()
             # Process may stay up after cancel; don't leave status stuck at running.
             self._stamp_underlying_status(UNDERLYING_STATUS_STOPPED)
