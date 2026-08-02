@@ -96,10 +96,120 @@ export function usdTone(
   return bpsTone(value);
 }
 
-export function fmtDirection(direction: Direction | null | undefined): string {
+/**
+ * Venue pair for market-aware direction labels (WHI-780).
+ * Wire enums stay historical (`buy_fluxion_sell_bybit` = buy DEX sell CEX).
+ */
+export type DirectionVenues = {
+  /** CEX venue id, e.g. ``bybit`` / ``binance``. */
+  cex: string;
+  /** DEX venue id, e.g. ``fluxion`` / ``pancake``. */
+  dex: string;
+};
+
+const DEFAULT_VENUES: DirectionVenues = { cex: "bybit", dex: "fluxion" };
+
+/** Short single-letter codes for dense Dir cells. */
+const VENUE_CODE: Record<string, string> = {
+  bybit: "B",
+  binance: "B",
+  fluxion: "F",
+  pancake: "P",
+};
+
+/** Human venue names for group headers / tooltips. */
+const VENUE_LABEL: Record<string, string> = {
+  bybit: "Bybit",
+  binance: "Binance",
+  fluxion: "Fluxion",
+  pancake: "Pancake",
+};
+
+export function venueCode(venue: string): string {
+  const key = venue.trim().toLowerCase();
+  if (VENUE_CODE[key]) return VENUE_CODE[key];
+  const c = key.charAt(0).toUpperCase();
+  return c || "?";
+}
+
+export function venueLabel(venue: string): string {
+  const key = venue.trim().toLowerCase();
+  if (VENUE_LABEL[key]) return VENUE_LABEL[key];
+  if (!key) return venue;
+  return key.charAt(0).toUpperCase() + key.slice(1);
+}
+
+/**
+ * Derive venues from a market id (`bybit-fluxion` → bybit/fluxion).
+ * Prefer API ``cex_venue``/``dex_venue`` when available.
+ */
+export function venuesFromMarketId(
+  marketId: string | null | undefined,
+): DirectionVenues {
+  if (!marketId) return { ...DEFAULT_VENUES };
+  const parts = marketId.split("-").filter(Boolean);
+  if (parts.length >= 2) {
+    return { cex: parts[0]!.toLowerCase(), dex: parts[1]!.toLowerCase() };
+  }
+  return { ...DEFAULT_VENUES };
+}
+
+export function resolveVenues(
+  venues?: DirectionVenues | null,
+  marketId?: string | null,
+): DirectionVenues {
+  if (venues?.cex && venues?.dex) {
+    return { cex: venues.cex.toLowerCase(), dex: venues.dex.toLowerCase() };
+  }
+  return venuesFromMarketId(marketId);
+}
+
+/**
+ * Short direction label: buy DEX→CEX or CEX→DEX using venue codes.
+ * Defaults to Bybit⇄Fluxion (``F→B`` / ``B→F``) when venues omitted.
+ */
+export function fmtDirection(
+  direction: Direction | null | undefined,
+  venues?: DirectionVenues | null,
+  marketId?: string | null,
+): string {
   if (!direction) return DASH;
-  if (direction === "buy_fluxion_sell_bybit") return "F→B";
-  return "B→F";
+  const v = resolveVenues(venues, marketId);
+  const cex = venueCode(v.cex);
+  const dex = venueCode(v.dex);
+  // Wire: buy_fluxion_sell_bybit = buy DEX, sell CEX.
+  if (direction === "buy_fluxion_sell_bybit") return `${dex}→${cex}`;
+  return `${cex}→${dex}`;
+}
+
+/** Full-words tooltip for Dir cells (acceptance: tooltips explain direction). */
+export function fmtDirectionTitle(
+  direction: Direction | null | undefined,
+  venues?: DirectionVenues | null,
+  marketId?: string | null,
+): string | undefined {
+  if (!direction) return undefined;
+  const v = resolveVenues(venues, marketId);
+  const cex = venueLabel(v.cex);
+  const dex = venueLabel(v.dex);
+  if (direction === "buy_fluxion_sell_bybit") {
+    return `Buy ${dex}, sell ${cex} (wire: buy_fluxion_sell_bybit)`;
+  }
+  return `Buy ${cex}, sell ${dex} (wire: buy_bybit_sell_fluxion)`;
+}
+
+/** Direction toggle labels for pair-detail edge panel. */
+export function directionToggleLabel(
+  direction: Direction,
+  venues?: DirectionVenues | null,
+  marketId?: string | null,
+): string {
+  const short = fmtDirection(direction, venues, marketId);
+  const v = resolveVenues(venues, marketId);
+  if (direction === "buy_fluxion_sell_bybit") {
+    return `${short} (buy ${venueLabel(v.dex)})`;
+  }
+  return `${short} (buy ${venueLabel(v.cex)})`;
 }
 
 export function fmtSession(session: SessionKind | null | undefined): string {

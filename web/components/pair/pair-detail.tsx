@@ -20,6 +20,7 @@ import { fetchJson } from "@/lib/api";
 import {
   bpsTone,
   fmtDirection,
+  fmtDirectionTitle,
   fmtNotional,
   fmtPrice,
   fmtSession,
@@ -211,7 +212,11 @@ export function PairDetail({ marketId, pairId }: Props) {
             value={fmtSignedBps(o.net_edge_bps)}
             tone={bpsTone(o.net_edge_bps)}
           />
-          <Field label="Direction" value={fmtDirection(o.net_edge_direction)} />
+          <Field
+            label="Direction"
+            value={fmtDirection(o.net_edge_direction, null, marketId)}
+            title={fmtDirectionTitle(o.net_edge_direction, null, marketId)}
+          />
           <Field label="Venue" value={o.net_edge_venue ?? "—"} />
           <Field
             label="CEX Vol 24h"
@@ -276,7 +281,7 @@ export function PairDetail({ marketId, pairId }: Props) {
         title={hasRfq ? "Fluxion fills" : "DEX fills"}
         subtitle={`latest ${data.trades.length}`}
       >
-        <TradeStream trades={data.trades} />
+        <TradeStream trades={data.trades} marketId={marketId} />
       </Panel>
 
       <Panel title="Arbitrage space" subtitle="paper edge · wear · PnL v2 buckets">
@@ -285,6 +290,7 @@ export function PairDetail({ marketId, pairId }: Props) {
           rfq={data.edge_rfq}
           pnl={data.pnl_v2}
           hasRfq={hasRfq}
+          marketId={marketId}
         />
       </Panel>
 
@@ -348,13 +354,15 @@ function Field({
   label,
   value,
   tone,
+  title,
 }: {
   label: string;
   value: string;
   tone?: "pos" | "neg" | "flat" | "empty";
+  title?: string;
 }) {
   return (
-    <div>
+    <div title={title}>
       <dt className="text-muted-foreground">{label}</dt>
       <dd
         className={cn(

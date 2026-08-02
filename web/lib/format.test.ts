@@ -8,8 +8,10 @@ import { describe, it } from "node:test";
 
 import {
   bpsTone,
+  directionToggleLabel,
   explorerTxUrl,
   fmtDirection,
+  fmtDirectionTitle,
   fmtNotional,
   fmtPct,
   fmtPrice,
@@ -21,6 +23,9 @@ import {
   shortAddr,
   totalWearBps,
   usdTone,
+  venueCode,
+  venueLabel,
+  venuesFromMarketId,
 } from "./format";
 
 describe("fmtPrice", () => {
@@ -57,14 +62,58 @@ describe("fmtUsd / usdTone", () => {
 });
 
 describe("fmtDirection / session / tone", () => {
-  it("maps known enums", () => {
+  it("defaults to Bybit⇄Fluxion short codes", () => {
     assert.equal(fmtDirection("buy_fluxion_sell_bybit"), "F→B");
     assert.equal(fmtDirection("buy_bybit_sell_fluxion"), "B→F");
+    assert.equal(fmtDirection(null), "—");
     assert.equal(fmtSession("open"), "OPEN");
     assert.equal(fmtSession("closed"), "CLOSED");
     assert.equal(bpsTone("3"), "pos");
     assert.equal(bpsTone("-1"), "neg");
     assert.equal(bpsTone(null), "empty");
+  });
+
+  it("is market-aware for binance-pancake (WHI-780)", () => {
+    const bp = { cex: "binance", dex: "pancake" };
+    assert.equal(fmtDirection("buy_fluxion_sell_bybit", bp), "P→B");
+    assert.equal(fmtDirection("buy_bybit_sell_fluxion", bp), "B→P");
+    assert.equal(fmtDirection("buy_fluxion_sell_bybit", null, "binance-pancake"), "P→B");
+    assert.equal(fmtDirection("buy_bybit_sell_fluxion", null, "binance-pancake"), "B→P");
+  });
+
+  it("keeps F→B on bybit-fluxion venues", () => {
+    const bf = { cex: "bybit", dex: "fluxion" };
+    assert.equal(fmtDirection("buy_fluxion_sell_bybit", bf), "F→B");
+    assert.equal(fmtDirection("buy_bybit_sell_fluxion", bf), "B→F");
+    assert.equal(fmtDirection("buy_fluxion_sell_bybit", null, "bybit-fluxion"), "F→B");
+  });
+
+  it("tooltips use full venue words", () => {
+    assert.match(
+      fmtDirectionTitle("buy_fluxion_sell_bybit", { cex: "binance", dex: "pancake" }) ?? "",
+      /Buy Pancake, sell Binance/,
+    );
+    assert.match(
+      fmtDirectionTitle("buy_bybit_sell_fluxion", { cex: "bybit", dex: "fluxion" }) ?? "",
+      /Buy Bybit, sell Fluxion/,
+    );
+  });
+
+  it("venuesFromMarketId / venue labels", () => {
+    assert.deepEqual(venuesFromMarketId("binance-pancake"), {
+      cex: "binance",
+      dex: "pancake",
+    });
+    assert.deepEqual(venuesFromMarketId("bybit-fluxion"), {
+      cex: "bybit",
+      dex: "fluxion",
+    });
+    assert.equal(venueCode("pancake"), "P");
+    assert.equal(venueLabel("fluxion"), "Fluxion");
+    assert.match(
+      directionToggleLabel("buy_fluxion_sell_bybit", { cex: "binance", dex: "pancake" }),
+      /P→B \(buy Pancake\)/,
+    );
   });
 });
 

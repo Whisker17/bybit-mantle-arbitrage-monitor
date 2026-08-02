@@ -12,7 +12,13 @@ import type {
   PnlResult,
   PnlStatus,
 } from "./types";
-import { fmtDirection, fmtNotional, fmtUsd, parseNum } from "./format";
+import {
+  fmtDirection,
+  fmtNotional,
+  fmtUsd,
+  parseNum,
+  type DirectionVenues,
+} from "./format";
 
 export type OverviewPnlCell =
   | {
@@ -36,6 +42,8 @@ const STATUS_LABEL: Record<PnlStatus, string> = {
 
 export function overviewPnlCell(
   pnl: PnlOptimalSummary | null | undefined,
+  venues?: DirectionVenues | null,
+  marketId?: string | null,
 ): OverviewPnlCell {
   if (pnl == null) {
     return {
@@ -70,7 +78,7 @@ export function overviewPnlCell(
   const notional = pnl.optimal_notional_usd ?? "—";
   const title =
     dir != null
-      ? `Optimal ${fmtDirection(dir)} @ $${fmtNotional(notional)} · ${fmtUsd(pnl.optimal_net_pnl_usd)} USD` +
+      ? `Optimal ${fmtDirection(dir, venues, marketId)} @ $${fmtNotional(notional)} · ${fmtUsd(pnl.optimal_net_pnl_usd)} USD` +
         (pnl.optimal_net_pnl_bps != null
           ? ` (${Number(pnl.optimal_net_pnl_bps).toFixed(1)} bps)`
           : "")
