@@ -164,15 +164,13 @@ def labels_by_address(
 def pair_active_addresses(
     inventory_events: Sequence[InventoryEvent],
     pair_id: str,
-    *,
-    trade_only: bool = False,
 ) -> set[str]:
-    """Addresses with ledger activity on ``pair_id``."""
+    """Addresses with AMM/RFQ activity on ``pair_id`` (same trade kinds as badge)."""
     out: set[str] = set()
     for e in inventory_events:
         if e.pair_id != pair_id:
             continue
-        if trade_only and e.kind not in _TRADE_KINDS:
+        if e.kind not in _TRADE_KINDS:
             continue
         out.add(e.address.lower())
     return out
@@ -342,7 +340,7 @@ def build_mm_pair_snapshot(
     addrs_with_events = {e.address.lower() for e in pair_events}
     chart_rows = [r for r in mm_rows if r.address in addrs_with_events]
 
-    if not mm_rows or not chart_rows:
+    if not chart_rows:
         return MmPairSnapshot(
             pair_id=pair_id,
             status="no_candidates",

@@ -17,8 +17,9 @@ describe("mm helpers", () => {
     assert.equal(mmEmptyMessage("ok"), "");
   });
 
-  it("titles explain badge", () => {
-    assert.match(mmActiveTitle("active"), /24h/);
+  it("titles explain badge without hardcoding window length", () => {
+    assert.match(mmActiveTitle("active"), /lookback/i);
+    assert.doesNotMatch(mmActiveTitle("active"), /24h/);
     assert.match(mmActiveTitle("unknown"), /pending/i);
   });
 });

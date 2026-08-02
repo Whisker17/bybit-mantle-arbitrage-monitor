@@ -408,28 +408,23 @@ class JournalReader:
 
     def address_labels(self, *, label: str | None = None) -> list[AddressLabelRow]:
         """All persisted address labels (WHI-768); optional label filter."""
-        if label is None:
-            rows = self._conn.execute(
-                """
-                SELECT address, label, evidence_summary, first_seen_ms, last_seen_ms,
-                       source, is_rebalancer, n_rfq_maker, n_amm, cex_touch_transfers,
-                       updated_at_ms
-                FROM address_labels
-                ORDER BY (last_seen_ms IS NULL), last_seen_ms DESC, address
-                """
-            ).fetchall()
-        else:
-            rows = self._conn.execute(
-                """
-                SELECT address, label, evidence_summary, first_seen_ms, last_seen_ms,
-                       source, is_rebalancer, n_rfq_maker, n_amm, cex_touch_transfers,
-                       updated_at_ms
-                FROM address_labels
-                WHERE label = ?
-                ORDER BY (last_seen_ms IS NULL), last_seen_ms DESC, address
-                """,
-                (label,),
-            ).fetchall()
+        clauses: list[str] = []
+        params: list[object] = []
+        if label is not None:
+            clauses.append("label = ?")
+            params.append(label)
+        where = f"WHERE {' AND '.join(clauses)}" if clauses else ""
+        rows = self._conn.execute(
+            f"""
+            SELECT address, label, evidence_summary, first_seen_ms, last_seen_ms,
+                   source, is_rebalancer, n_rfq_maker, n_amm, cex_touch_transfers,
+                   updated_at_ms
+            FROM address_labels
+            {where}
+            ORDER BY (last_seen_ms IS NULL), last_seen_ms DESC, address
+            """,
+            params,
+        ).fetchall()
         return [_row_to_address_label(r) for r in rows]
 
     def address_label_count(self) -> int:

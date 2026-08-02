@@ -58,7 +58,8 @@ const COLS: Col[] = [
   {
     key: null,
     label: "MM",
-    title: "Market-maker activity (last 24h): active / inactive / unknown",
+    title:
+      "Market-maker trade activity in lookback window: active / inactive / unknown",
   },
 ];
 

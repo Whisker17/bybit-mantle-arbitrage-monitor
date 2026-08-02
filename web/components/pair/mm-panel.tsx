@@ -87,7 +87,10 @@ export function MmPanel({ pairId, pollMs }: Props) {
         </p>
       )}
       {showEmpty ? (
-        <EmptyPanel message={mmEmptyMessage(data.status)} />
+        <EmptyPanel
+          variant="solid"
+          message={mmEmptyMessage(data.status)}
+        />
       ) : (
         <InventoryChart addresses={data.addresses} />
       )}
@@ -220,7 +223,10 @@ function RebalanceTimeline({
         Rebalance events
       </h3>
       {events.length === 0 ? (
-        <EmptyPanel message="No CEX-touch rebalance events recorded for this pair." />
+        <EmptyPanel
+          variant="solid"
+          message="No CEX-touch rebalance events recorded for this pair."
+        />
       ) : (
         <div className="overflow-x-auto rounded-md border border-border">
           <table className="w-full min-w-[560px] border-collapse text-xs">

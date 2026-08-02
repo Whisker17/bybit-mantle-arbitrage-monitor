@@ -112,30 +112,20 @@ def _inventory_events(
 
 def _mm_active_for(
     state: AppState,
-    reader: JournalReader,
     *,
     pair_id: str,
-    label_count: int | None = None,
-    mm_labels: list[AddressLabelRow] | None = None,
-    inv_events: list[InventoryEvent] | None = None,
-    now: int | None = None,
+    label_count: int,
+    mm_labels: list[AddressLabelRow],
+    inv_events: list[InventoryEvent],
+    now: int,
 ) -> MmActiveStatus:
     """Shared overview badge path for list + detail (caller holds lock)."""
-    n = reader.address_label_count() if label_count is None else label_count
-    labels = (
-        mm_labels
-        if mm_labels is not None
-        else (reader.address_labels(label=MM_LABEL) if n > 0 else [])
-    )
-    events = inv_events
-    if events is None:
-        events = _inventory_events(state, reader) if n > 0 and labels else []
     return mm_active_status(
-        label_count=n,
-        mm_labels=labels,
-        inventory_events=events,
+        label_count=label_count,
+        mm_labels=mm_labels,
+        inventory_events=inv_events,
         pair_id=pair_id,
-        now_ms=now if now is not None else now_ms(),
+        now_ms=now,
         window_ms=state.api.mm_active_window_ms,
     )
 
@@ -187,6 +177,7 @@ def list_pairs(request: Request) -> dict[str, Any]:
             try:
                 pair = state.pairs.pair_by_id(pair_id)
             except KeyError:
+                # Builder rows should always be configured pairs; never 404 the list.
                 enriched = dict(row)
                 enriched["pnl_v2"] = PnlOptimalSummary(
                     status="no_pool", has_depth=False
@@ -199,7 +190,6 @@ def list_pairs(request: Request) -> dict[str, Any]:
             enriched["pnl_v2"] = overview_pnl_summary(snap).to_dict()
             enriched["mm_active"] = _mm_active_for(
                 state,
-                reader,
                 pair_id=pair_id,
                 label_count=label_count,
                 mm_labels=mm_labels,
@@ -234,11 +224,11 @@ def get_pair(pair_id: str, request: Request) -> dict[str, Any]:
             body["overview"]["pnl_v2"] = overview_pnl_summary(pnl).to_dict()
             body["overview"]["mm_active"] = _mm_active_for(
                 state,
-                reader,
                 pair_id=pair_id,
                 label_count=label_count,
                 mm_labels=mm_labels,
                 inv_events=inv,
+                now=now_ms(),
             )
         labels = labels_by_address(all_labels)
         active = pair_active_addresses(inv, pair_id) if inv else set()

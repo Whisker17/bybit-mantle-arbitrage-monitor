@@ -13,11 +13,12 @@ export function mmActiveLabel(status: MmActiveStatus | null | undefined): string
 export function mmActiveTitle(
   status: MmActiveStatus | null | undefined,
 ): string {
+  // Window length is config/api.yaml mm_active_window_ms — do not hardcode "24h".
   if (status === "active") {
-    return "Market maker activity on this pair in the last 24h";
+    return "Market maker trade activity on this pair inside the configured lookback window";
   }
   if (status === "inactive") {
-    return "No market_maker activity on this pair in the last 24h";
+    return "No market_maker trade activity on this pair inside the configured lookback window";
   }
   return "MM labels not yet available (attribution refresh pending)";
 }
