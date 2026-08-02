@@ -25,9 +25,12 @@ TOPIC0_V3_SWAP_PCS = "0x" + keccak(
 
 SWAP_TOPIC0S = frozenset({TOPIC0_V3_SWAP, TOPIC0_V3_SWAP_PCS})
 
-# 1inch LOP v4 — signature-derived (M1); not fill-observed yet.
+# 1inch LOP v4 — signature-derived (M1); fill-observed + receipt-enriched (WHI-768).
 TOPIC0_ORDER_FILLED = "0x" + keccak(text="OrderFilled(bytes32,uint256)").hex()
 TOPIC0_ORDER_CANCELLED = "0x" + keccak(text="OrderCancelled(bytes32)").hex()
+
+# ERC-20 Transfer (xStock inventory stream, WHI-768).
+TOPIC0_TRANSFER = "0x" + keccak(text="Transfer(address,address,uint256)").hex()
 
 USDC_DECIMALS = 6
 WRAPPER_DECIMALS_DEFAULT = 18

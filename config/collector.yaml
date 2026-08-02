@@ -48,6 +48,10 @@ mantle:
   rpc_retries: 5
   # Fetch gasUsed + effectiveGasPrice for swap txs (xStock pools are quiet).
   fetch_swap_receipts: true
+  # WHI-768: receipt-enrich RFQ fills (maker/taker/pair/amounts); RFQ volume is tiny.
+  enrich_rfq_fills: true
+  # WHI-768: native xStock ERC-20 Transfer stream (permanent; low volume).
+  collect_erc20_transfers: true
   # Equal-weight samples for meta block_ingest_latency_{p50,p95,p99}_ms.
   latency_window_blocks: 256
 
@@ -66,6 +70,10 @@ rfq:
 logging:
   level: INFO
 
+# WHI-768: recompute address_labels + rebalance_events from the journal.
+# 0 disables the in-collector loop (CLI still works: python -m monitor.attribution.refresh).
+attribution_refresh_interval_s: 3600
+
 # Data retention (WHI-751). Bounds SQLite growth on small VPS disks.
 # Derivation + consumer windows: docs/DESIGN.md §5.1.
 retention:
@@ -82,6 +90,8 @@ retention:
   fluxion_rfq_quotes_ms: 259200000  # 3 days
   fluxion_swaps_ms: null            # permanent — M4 attribution feedstock
   fluxion_rfq_fills_ms: null        # permanent — M4 attribution feedstock
+  erc20_transfers_ms: null          # permanent — WHI-768 inventory Transfer stream
+  rebalance_events_ms: null         # permanent — WHI-768 CEX-touch rebalance events
   collector_gaps_ms: 2592000000     # 30 days
   delete_batch_size: 5000
   # After DELETE, free pages for reuse; pages=0 skips. Full VACUUM is opt-in.

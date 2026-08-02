@@ -169,7 +169,11 @@ def rfq_side_leg(side: str | None) -> RfqSideLeg | None:
 
 @dataclass(frozen=True, slots=True)
 class FluxionRfqFillTick:
-    """Limit Order Protocol fill event (RFQ settlement; signature-derived topics)."""
+    """Limit Order Protocol fill event (RFQ settlement; signature-derived topics).
+
+    WHI-768 enriches maker/taker/pair/amounts from the fill receipt Transfer
+    graph. Unenriched rows keep the legacy order_hash + remaining fields only.
+    """
 
     block_number: int
     block_ts: int
@@ -178,6 +182,36 @@ class FluxionRfqFillTick:
     log_index: int
     order_hash: str
     remaining_making_amount: int
+    gap: bool = False
+    # Receipt enrichment (nullable until live enrich / backfill).
+    pair_id: str | None = None
+    maker: str | None = None
+    taker: str | None = None
+    direction: str | None = None  # maker side: buy_native | sell_native
+    making_token: str | None = None
+    taking_token: str | None = None
+    making_amount: str | None = None
+    taking_amount: str | None = None
+    usdc_amount: str | None = None
+    stock_amount: str | None = None
+    enriched: bool = False
+
+
+@dataclass(frozen=True, slots=True)
+class Erc20TransferTick:
+    """xStock native ERC-20 Transfer (inventory asset; WHI-768)."""
+
+    pair_id: str
+    token: str
+    block_number: int
+    block_ts: int
+    recv_ts_ms: int
+    tx_hash: str
+    log_index: int
+    frm: str
+    to_addr: str
+    amount: Decimal  # human units (18 dec for xStocks)
+    amount_raw: int
     gap: bool = False
 
 

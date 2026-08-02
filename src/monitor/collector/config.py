@@ -106,6 +106,10 @@ class MantleCollectorConfig(BaseModel):
     rpc_timeout_s: float = Field(gt=0)
     rpc_retries: int = Field(ge=1)
     fetch_swap_receipts: bool
+    # WHI-768: per-fill LOP receipt enrich (maker/taker/pair). Cheap when RFQ is quiet.
+    enrich_rfq_fills: bool = True
+    # WHI-768: native xStock ERC-20 Transfer stream (inventory / rebalance feedstock).
+    collect_erc20_transfers: bool = True
     # Rolling window for block_ingest_latency_{p50,p95,p99}_ms meta (WHI-749).
     # Required in collector.yaml (no silent default — fail-fast like sibling fields).
     latency_window_blocks: int = Field(ge=1, le=10_000)
@@ -179,6 +183,9 @@ class RetentionConfig(BaseModel):
     fluxion_rfq_quotes_ms: int | None = Field(default=259_200_000, ge=1)  # 3d
     fluxion_swaps_ms: int | None = Field(default=None, ge=1)
     fluxion_rfq_fills_ms: int | None = Field(default=None, ge=1)
+    # WHI-768 permanent inventory Transfer stream + rebalance events.
+    erc20_transfers_ms: int | None = Field(default=None, ge=1)
+    rebalance_events_ms: int | None = Field(default=None, ge=1)
     collector_gaps_ms: int | None = Field(default=2_592_000_000, ge=1)  # 30d
     delete_batch_size: int = Field(default=5000, ge=1, le=100_000)
     incremental_vacuum_pages: int = Field(default=1000, ge=0)
@@ -225,6 +232,8 @@ class CollectorConfig(BaseModel):
     rfq: RfqCollectorConfig
     logging: LoggingConfig
     retention: RetentionConfig = Field(default_factory=default_retention_config)
+    # WHI-768: in-collector address_labels refresh interval (0 = CLI-only).
+    attribution_refresh_interval_s: float = Field(default=3600.0, ge=0)
 
     def resolved_sqlite_path(self, repo_root: Path | None = None) -> Path:
         root = repo_root if repo_root is not None else _REPO_ROOT

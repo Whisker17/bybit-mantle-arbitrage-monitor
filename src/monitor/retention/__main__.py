@@ -96,6 +96,8 @@ def main(argv: list[str] | None = None) -> int:
                         "fluxion_rfq_quotes_ms": None,
                         "fluxion_swaps_ms": None,
                         "fluxion_rfq_fills_ms": None,
+                        "erc20_transfers_ms": None,
+                        "rebalance_events_ms": None,
                         "collector_gaps_ms": None,
                         "incremental_vacuum_pages": 0,
                     }
