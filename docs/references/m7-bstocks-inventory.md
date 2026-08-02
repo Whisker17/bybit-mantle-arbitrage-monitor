@@ -12,9 +12,13 @@ Snapshot date: **2026-08-02**.
    pairs at inventory time. PR/AUM notes claim “46+ listings”; the exchangeInfo set is the
    operational universe for collectors.
 2. **PancakeSwap pools** — DexScreener search per base on `chainId=bsc`, `dexId` containing
-   `pancake`, prefer USDT quote. **Every candidate pool was re-verified on-chain** via
-   `token0()` / `token1()` against the BEP-20 address (DexScreener occasionally attaches
-   a high-TVL pool to the wrong token — QQQB and SNDKB were false positives and dropped).
+   `pancake` (covers V2 + V3 labels in the API). Prefer USDT quote. **Every candidate pool
+   was re-verified on-chain** via `token0()` / `token1()` against the BEP-20 address
+   (DexScreener occasionally attaches a high-TVL pool to the wrong token — QQQB and SNDKB
+   were false positives and dropped). **No StableSwap pool** appeared in DexScreener
+   results for these symbols; surviving verified USDT pools are all **V3** (`fee()`
+   present). V2 pairs that showed up were either non-USDT (WBNB) or dust and lost the
+   USDT-prefer rank.
 3. **Liquidity rank** — DexScreener `liquidity.usd` on the verified best USDT pool.
    Top **10** by that metric form the monitor set. Est. TVL is an inventory snapshot, not
    live journal data.
@@ -139,8 +143,10 @@ spread uses (amm_mid - comparable_binance_as_raw) / …
 
 At `uiMultiplier == 1.0` (almost all names today), raw mid ≈ Binance mid — confirmed
 empirically within a few to tens of bps on liquid names (TSLAB ~−1 bps, SPCXB ~−1 bps).
-**Do not reuse Bybit’s divide formula** without flipping the model; the direction is
-**multiply** Binance mid by UI mult to get raw-comparable price.
+**Do not reuse Bybit’s divide formula** (`monitor.symbols.de_multiplied_price`) without
+flipping the model; the direction is **multiply** Binance mid by UI mult to get
+raw-comparable price. Draft YAML uses field name **`ui_multiplier`** (not `multiplier`)
+so M7-2 cannot silently wire the Bybit helper.
 
 When mult moves (splits), failing to apply this will look like a 10× “arb.”
 
@@ -197,7 +203,7 @@ Research host in **Singapore** reaches `api.binance.com` with 200.
 | Item | Value | Notes |
 |------|-------|-------|
 | Chain id | **56** | |
-| Block time (live sample) | **~0.45 s avg** over 30 blocks (0/1 s timestamps) | Fermi path after Maxwell 0.75s; issue text’s 0.75s is outdated for cost math. vs Mantle ~2s → **~4.4×** more blocks/hour if polling every block. |
+| Block time (live sample) | **~0.45 s avg** over 30 consecutive blocks (RPC timestamps are 1 s resolution → 0/1 s steps; treat as coarse) | Post-Maxwell/Fermi era (public posts: Maxwell 0.75s, Fermi ~0.45s). vs Mantle ~2s → on the order of **~4×** more blocks/hour if polling every block — re-measure on keyed RPC before locking collector SLO. |
 | Public RPC | `https://bsc-dataseed.binance.org`, `bsc-dataseed1…4`, `https://1rpc.io/bnb` | Ankr public needs API key (Unauthorized). Prefer keyed (QuickNode/Ankr paid) for collector SLO. |
 | Multicall3 | `0xcA11bde05977b3631167028862bE2a173976CA11` | Code present (~3.8 KB). |
 | PCS V3 factory | `0x0BFbCF9fa4f9C56B0F40a671Ad40E0805A091865` | Official PCS addresses. |
@@ -219,6 +225,12 @@ topic0 = 0xc42079f94a6350d7e6235f29174924f928cc2ac818eb64fed8004e115fbcca67
 
 Code: `src/monitor/fluxion/abi.py` (`TOPIC0_V3_SWAP_PCS`), phase-1 `src/mba/m1_scan_events.py`.
 **M7 BSC collector should subscribe to the PCS topic0 first**, same dual-accept pattern.
+
+**Live log decode:** public bsc-dataseed `eth_getLogs` returned `limit exceeded` for the
+TSLAB pool during inventory; topic0 above is therefore **lineage-asserted** (PCS V3 +
+in-repo Agni constants), not re-decoded from a fresh bStock swap receipt in this PR.
+M7 collector work must re-verify on a keyed RPC with one live swap before trusting
+decoding.
 
 Fee tiers observed on bStock pools: **100 / 2500 / 10000** (PCS includes 2500; not only
 Uni’s 500/3000).
@@ -242,6 +254,27 @@ Uni’s 500/3000).
 | M7 attribution | AMM-only; drop RFQ mechanism axis or hard-code `mechanism=amm`. |
 | M7-6 deploy | Prefer vision endpoints on existing VPS; optional non-US sidecar if vision insufficient. |
 
+## Appendix A — Full Binance spot bStock candidates (55)
+
+Heuristic at 2026-08-02 (`exchangeInfo`, TRADING, quote=USDT, base ends with `B` or
+`MUB`, minus crypto: BNB/DGB/TRB/CKB/SHIB/ARB/BB/YB/QNT/QNTB). **Not** an official
+Binance “bStocks product” flag — re-check when listings change.
+
+```
+MUBUSDT, CRCLBUSDT, NVDABUSDT, SNDKBUSDT, TSLABUSDT, SPCXBUSDT, AMDBUSDT,
+EWYBUSDT, INTCBUSDT, MSTRBUSDT, LITEBUSDT, METABUSDT, MSFTBUSDT, PLTRBUSDT,
+QQQBUSDT, CBRSBUSDT, COINBUSDT, DRAMBUSDT, GLWBUSDT, GOOGLBUSDT, NBISBUSDT,
+QCOMBUSDT, SOXLBUSDT, SPYBUSDT, WDCBUSDT, SKHYBUSDT, AAOIBUSDT, ARMBUSDT,
+AVGOBUSDT, BABABUSDT, HOODBUSDT, IBMBUSDT, MRVLBUSDT, NOKBUSDT, TSMBUSDT,
+RKLBBUSDT, AXTIBUSDT, CRWVBUSDT, INTWBUSDT, KORUBUSDT, MUUBUSDT, MVLLBUSDT,
+ORCLBUSDT, SNXXBUSDT, TQQQBUSDT, AAPLBUSDT, AMATBUSDT, AMZNBUSDT, BEBUSDT,
+DELLBUSDT, FLNCBUSDT, GSBUSDT, PYPLBUSDT, SMHBUSDT, SOXSBUSDT
+```
+
+**On-chain-verified Pancake USDT pool (any liq):** SPCXB, SKHYB, TSLAB, SPYB, NVDAB,
+AAPLB, GOOGLB, MSFTB, INTCB, MUB, SOXLB, MUUB (12). **Top 10** = first 10 of that set
+ranked by DexScreener liq (SOXLB #11, MUUB #12 / broken mid).
+
 ## Open risks / follow-ups
 
 1. **Token address registry** — no single public machine-readable Binance “all bStock
@@ -253,15 +286,23 @@ Uni’s 500/3000).
 4. **Vision WS soak** — upgrade works; long-run disconnect/rate limits not measured here.
 5. **SPCXB** — SpaceX not a traditional public equity; treat as high-vol / special risk
    despite top liquidity.
+6. **PCS Swap topic0 on live bStock pool** — not re-decoded this PR (public RPC
+   `eth_getLogs` limit); collector must confirm before production decode.
 
 ## Evidence index
 
-- Binance Academy bStocks guide  
-- Binance FAQ multiplier + deposit/withdraw  
-- Binance intro + 2026-07-29 add-10 announcements  
-- PancakeSwap “bStocks Are Live” blog + `/stocks` terminal  
-- BEP-677 Scaled UI Amount  
-- BNB Maxwell/Fermi block-time posts (live probe ~0.45s)  
-- VPS probe log 2026-08-02 (451 vs vision 200)  
-- On-chain `fee`/`slot0`/`uiMultiplier` via bsc-dataseed  
-- DexScreener liquidity snapshots (inventory-time)
+| Claim area | Primary link / artifact |
+|------------|-------------------------|
+| Product / 1:1 backing | https://www.binance.com/en/academy/articles/what-are-bstocks-a-guide-to-tokenized-stocks-on-binance |
+| Multiplier FAQ | https://www.binance.com/en/support/faq/detail/f0c03cd6509a4085b4cce1636f16be38 |
+| Deposit/withdraw BSC | https://www.binance.com/en/support/faq/detail/f0d41139fadc4790bf9a4c0c7bce2e88 |
+| Intro listing | https://www.binance.com/en/support/announcement/detail/2c0c92ed15ac42d1b14bb1eac00d22bb |
+| Add-10 contracts | https://www.binance.com/en/support/announcement/detail/fd3c0f17a7504eb5be1cb1911c6da0cd |
+| Pancake Terminal | https://blog.pancakeswap.finance/articles/bstocks-on-pancakeswap · https://pancakeswap.finance/stocks |
+| BEP-677 | https://github.com/bnb-chain/BEPs/blob/master/BEPs/BEP-677.md |
+| Maxwell 0.75s | https://www.bnbchain.org/en/blog/bnb-chain-announces-maxwell-hardfork-bsc-moves-to-0-75-second-block-times |
+| Fermi ~0.45s (context) | public BNB Chain Fermi notes; live sample via `eth_getBlockByNumber` on bsc-dataseed 2026-08-02 |
+| Geo probe | SSH `whi715-vps` / `107.175.234.202` 2026-08-02: `api.binance.com` → 451; `data-api.binance.vision` → 200 bookTicker; `data-stream.binance.vision` → WS 101; `stream.binance.com` → 451 |
+| On-chain reads | `uiMultiplier()`, `fee()`, `slot0()`, `token0/1` via `https://bsc-dataseed.binance.org` |
+| Liquidity | DexScreener `api.dexscreener.com/latest/dex/search?q=<BASE>` inventory-time |
+| Spot universe | `GET https://api.binance.com/api/v3/exchangeInfo` (SG host) → Appendix A |
