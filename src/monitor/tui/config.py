@@ -29,6 +29,7 @@ SortKey = Literal[
     "volume_ratio",
     "premium_bps",
     "underlying_price",
+    "tvl_usd",
 ]
 
 

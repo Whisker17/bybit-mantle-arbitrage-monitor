@@ -33,6 +33,8 @@ function rawValue(
       return parseNum(row.amm_premium_bps ?? null);
     case "underlying_price":
       return parseNum(row.underlying_price ?? null);
+    case "tvl_usd":
+      return parseNum(row.tvl_usd ?? null);
   }
 }
 
@@ -91,6 +93,7 @@ export const SORT_KEYS: { key: SortKey; label: string }[] = [
   { key: "amm_premium", label: "DEX vs Und" },
   { key: "underlying_price", label: "Underlying" },
   { key: "cex_volume_24h", label: "CEX Vol" },
+  { key: "tvl_usd", label: "TVL" },
   { key: "dex_volume_24h", label: "DEX Vol" },
   { key: "volume_ratio", label: "CEX/DEX" },
   { key: "bybit_mid", label: "Bybit mid" },

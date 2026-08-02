@@ -10,6 +10,7 @@ from monitor.quotes import (
     BybitDepthTick,
     BybitTradeTick,
     CollectorGap,
+    DexPoolTvlTick,
     FluxionPoolStateTick,
     FluxionRfqFillTick,
     FluxionRfqQuoteTick,
@@ -25,6 +26,38 @@ def test_schema_bootstrap_and_meta(tmp_path: Path) -> None:
         assert store.get_meta("schema_version") == str(SCHEMA_VERSION)
         store.set_meta("last_block", "123")
         assert store.get_meta("last_block") == "123"
+
+
+def test_insert_pool_tvl_and_reader(tmp_path: Path) -> None:
+    db = tmp_path / "tvl.db"
+    store = SqliteStore(db)
+    tick = DexPoolTvlTick(
+        pair_id="TSLAx",
+        pool="0x" + "ab" * 20,
+        block_number=100,
+        block_ts=1_700_000_000,
+        recv_ts_ms=1_700_000_000_500,
+        base_bal=Decimal("10"),
+        quote_bal=Decimal("1000"),
+        base_price=Decimal("250"),
+        tvl_usd=Decimal("3500"),
+        gap=False,
+    )
+    assert store.insert_pool_tvl([tick]) == 1
+    assert store.count("dex_pool_tvl") == 1
+    # duplicate (pool, block) ignored
+    assert store.insert_pool_tvl([tick]) == 1
+    assert store.count("dex_pool_tvl") == 1
+    store.close()
+
+    with JournalReader(db) as reader:
+        got = reader.latest_pool_tvl("TSLAx")
+        assert got is not None
+        assert got.tvl_usd == Decimal("3500")
+        assert got.base_bal == Decimal("10")
+        series = reader.pool_tvl_series("TSLAx")
+        assert len(series) == 1
+        assert series[0].tvl_usd == Decimal("3500")
 
 
 def test_insert_bybit_depth_and_reader_vwap(tmp_path: Path) -> None:

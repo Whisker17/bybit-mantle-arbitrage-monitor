@@ -5,9 +5,9 @@
  * interesting* along two independent dimensions; they do **not** mean the
  * inventory was rebuilt to CEX volume top-10 (see m7-bstocks-inventory.md).
  *
- * Defaults (product choice for this issue):
- * - binance-pancake: TVL + Vol, top-5 in-market each
- * - bybit-fluxion: Vol only (no PCS TVL inventory story), top-5
+ * Defaults (product choice; WHI-781 + WHI-782):
+ * - both markets: TVL + Vol, top-5 in-market each
+ * - TVL rank prefers live `tvl_usd`, else inventory `est_liquidity_usd`
  *
  * Rank on the **full market overview set**, not a UI-filtered subset.
  */
@@ -47,30 +47,30 @@ const VOL_TITLE =
 
 /**
  * Per-market badge policy. Pair *lists* are never hardcoded — ranks come from
- * overview row fields (`est_liquidity_usd`, `cex_volume_24h`). Policy itself is
- * a WHI-781 product choice on market id (binance-pancake TVL+Vol; other markets
- * Vol-only until a third market defines TVL).
+ * overview row fields (`tvl_usd` live preferred, else `est_liquidity_usd`,
+ * plus `cex_volume_24h`). WHI-782: both markets enable TVL once live journal
+ * samples exist; inventory est is the cold-start fallback only.
  */
-export function badgePolicyForMarket(marketId: string): BadgePolicy {
-  if (marketId === "binance-pancake") {
-    return {
-      enableTvl: true,
-      enableVol: true,
-      topN: DEFAULT_TOP_N,
-      tvlTitle:
-        "PCS USDT pool liquidity rank (inventory snapshot) — top 5 in this market",
-      volTitle: VOL_TITLE,
-    };
-  }
-  // bybit-fluxion and any future market without a PCS-style inventory rank:
-  // Vol-only until product defines a TVL dimension.
+export function badgePolicyForMarket(_marketId: string): BadgePolicy {
+  // Both markets: TVL badge ranks on live journal TVL only (WHI-782). Vol
+  // unchanged. marketId reserved for call-site symmetry.
   return {
-    enableTvl: false,
+    enableTvl: true,
     enableVol: true,
     topN: DEFAULT_TOP_N,
-    tvlTitle: "",
+    tvlTitle: "DEX pool TVL rank (live balanceOf journal) — top 5 in this market",
     volTitle: VOL_TITLE,
   };
+}
+
+/**
+ * Live journal TVL only for badge rank (WHI-782).
+ * Do not mix inventory `est_liquidity_usd` into the same top-N — bases differ
+ * and cold-start would reintroduce WHI-781's Fluxion-est badge problem.
+ * Unsampled pairs are excluded until the first balanceOf poll.
+ */
+export function tvlRankValue(row: PairOverviewRow): number | null {
+  return parseNum(row.tvl_usd);
 }
 
 /**
@@ -112,7 +112,7 @@ export function pairBadgesForRows(
     ? topRankedIds(
         rows.map((r) => ({
           id: r.pair_id,
-          value: parseNum(r.est_liquidity_usd),
+          value: tvlRankValue(r),
         })),
         policy.topN,
       )

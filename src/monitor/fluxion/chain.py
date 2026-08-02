@@ -25,8 +25,10 @@ from monitor.fluxion.rfq_decode import (
     decode_rfq_fill_from_receipt,
 )
 from monitor.fluxion.rpc import Rpc, encode_call
+from monitor.fluxion.tvl import fetch_pool_tvls
 from monitor.quotes import (
     CollectorGap,
+    DexPoolTvlTick,
     Erc20TransferTick,
     FluxionPoolStateTick,
     FluxionRfqFillTick,
@@ -64,7 +66,10 @@ class ChainPoller:
         # Fetch slot0/liquidity only every N blocks (1 = every block). Swaps still
         # every block. BSC ~0.45s blocks may want 2 (M7-1 / WHI-772).
         pool_state_every_n_blocks: int = 1,
+        # WHI-782: wall-clock throttle for balanceOf TVL (0 = disabled).
+        tvl_poll_interval_s: float = 0.0,
         on_pool_state: Callable[[list[FluxionPoolStateTick]], None] | None = None,
+        on_pool_tvl: Callable[[list[DexPoolTvlTick]], None] | None = None,
         on_swaps: Callable[[list[FluxionSwapTick]], None] | None = None,
         on_rfq_fills: Callable[[list[FluxionRfqFillTick]], None] | None = None,
         on_transfers: Callable[[list[Erc20TransferTick]], None] | None = None,
@@ -75,6 +80,8 @@ class ChainPoller:
     ) -> None:
         if pool_state_every_n_blocks < 1:
             raise ValueError("pool_state_every_n_blocks must be >= 1")
+        if tvl_poll_interval_s < 0:
+            raise ValueError("tvl_poll_interval_s must be >= 0")
         self.rpc = rpc
         self.pools = list(pools)
         self.lop_address = (lop_address or "").strip()
@@ -95,7 +102,9 @@ class ChainPoller:
         self.enrich_rfq_fills = enrich_rfq_fills
         self.gap_source = gap_source
         self.pool_state_every_n_blocks = pool_state_every_n_blocks
+        self.tvl_poll_interval_s = tvl_poll_interval_s
         self.on_pool_state = on_pool_state
+        self.on_pool_tvl = on_pool_tvl
         self.on_swaps = on_swaps
         self.on_rfq_fills = on_rfq_fills
         self.on_transfers = on_transfers
@@ -104,6 +113,7 @@ class ChainPoller:
         self._last_block: int | None = None
         self._token_order: dict[str, tuple[str, str]] = {}
         self._gap_pending = False
+        self._last_tvl_poll_ms: int | None = None
 
     @property
     def last_block(self) -> int | None:
@@ -181,13 +191,16 @@ class ChainPoller:
         block_ts = int(blk["timestamp"], 16)
 
         states: list[FluxionPoolStateTick] = []
+        tvl_ticks: list[DexPoolTvlTick] = []
         # Always sample until every pool has token0/1 cached (needed for swap decode);
         # then honor pool_state_every_n_blocks (BSC may use 2 — M7-1).
         need_token_bootstrap = self.pools and any(
             p.pool.lower() not in self._token_order for p in self.pools
         )
+        want_tvl = bool(self.pools) and self._tvl_due()
         want_pool_state = bool(self.pools) and (
             need_token_bootstrap
+            or want_tvl  # mid required to value balances
             or self.pool_state_every_n_blocks == 1
             or (block % self.pool_state_every_n_blocks == 0)
         )
@@ -206,6 +219,25 @@ class ChainPoller:
             if self.pools and not states:
                 logger.warning(
                     "block %s: all %d pool state decodes failed", block, len(self.pools)
+                )
+
+        if want_tvl:
+            # Always advance the wall-clock throttle when TVL is due — including
+            # when pool-state decode fails — so BSC free-seed rate limits do not
+            # re-force full slot0 every block via want_tvl → want_pool_state.
+            self._last_tvl_poll_ms = now_ms()
+            if states:
+                # Mid for the token held in the pool: wrapper share (Fluxion) or
+                # native (Pancake, where wrapper==native and assets/share=1).
+                mid_by_pair = {s.pair_id: s.mid_usdc_per_wrapper for s in states}
+                tvl_ticks = fetch_pool_tvls(
+                    self.rpc,
+                    self.pools,
+                    mid_by_pair,
+                    block_number=block,
+                    block_ts=block_ts,
+                    recv_ts_ms=0,
+                    gap=gap,
                 )
 
         pool_by_addr = {p.pool.lower(): p for p in self.pools}
@@ -315,6 +347,8 @@ class ChainPoller:
         recv = now_ms()
         if states and self.on_pool_state:
             self.on_pool_state([replace(s, recv_ts_ms=recv) for s in states])
+        if tvl_ticks and self.on_pool_tvl:
+            self.on_pool_tvl([replace(t, recv_ts_ms=recv) for t in tvl_ticks])
         if swaps and self.on_swaps:
             self.on_swaps([replace(t, recv_ts_ms=recv) for t in swaps])
         if fills and self.on_rfq_fills:
@@ -325,6 +359,15 @@ class ChainPoller:
             # miss_ts = discovery wall clock (pre-getBlock); see latency probe WHI-749.
             self.on_block_done(block, block_ts, miss_ts, recv)
         return True
+
+    def _tvl_due(self) -> bool:
+        """True when wall-clock throttle says we should sample balanceOf TVL."""
+        if self.tvl_poll_interval_s <= 0 or self.on_pool_tvl is None:
+            return False
+        if self._last_tvl_poll_ms is None:
+            return True
+        elapsed_ms = now_ms() - self._last_tvl_poll_ms
+        return elapsed_ms >= int(self.tvl_poll_interval_s * 1000)
 
     def _rfq_known_infra(self) -> list[str]:
         """Pools + inventory tokens excluded from RFQ maker/taker external set."""

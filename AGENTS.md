@@ -158,6 +158,11 @@ placeholders. Agents must not assume a module exists until its issue lands. -->
     series by basis (DEX vs CEX, CEX vs Und, DEX vs Und). `SpreadPoint`
     gains `amm_premium_bps` / `rfq_premium_bps` (RFQ vs Und for API/hover;
     chart plots CEX + AMM only).
+  - **DEX TVL column (WHI-782) landed:** live pool TVL via throttled
+    `balanceOf` + AMM mid → journal `dex_pool_tvl` (schema v7);
+    `tvl_poll_interval_s` on mantle/bsc; overview `tvl_usd` / `tvl_as_of_ms`
+    + DEX-group TVL column; dynamic `low_liquidity` from live TVL (inventory
+    flag is cold-start fallback). Capital size ≠ depth (PnL v2 buckets).
 
 ## Build, test, run
 

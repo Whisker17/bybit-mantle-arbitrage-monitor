@@ -254,6 +254,27 @@ class CexVolumeTick:
 
 
 @dataclass(frozen=True, slots=True)
+class DexPoolTvlTick:
+    """Live DEX pool TVL from balanceOf + AMM mid (WHI-782).
+
+    ``base_bal`` is the non-quote token held by the pool (wrapper share on
+    Fluxion, native on Pancake). ``base_price`` is the mid used for
+    valuation (quote per base). ``tvl_usd`` is capital size, not depth.
+    """
+
+    pair_id: str
+    pool: str
+    block_number: int
+    block_ts: int
+    recv_ts_ms: int
+    base_bal: Decimal
+    quote_bal: Decimal
+    base_price: Decimal
+    tvl_usd: Decimal
+    gap: bool = False
+
+
+@dataclass(frozen=True, slots=True)
 class CollectorGap:
     """Explicit gap window after disconnect / missed blocks / poll stall."""
 
