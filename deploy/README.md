@@ -56,6 +56,32 @@ mv data/monitor.db data/monitor-bybit-fluxion.db
 The API and collector for a market must agree on the same journal path
 (`config/api.yaml` / `config/collector.yaml` `markets.<id>.sqlite_path`).
 
+### Restart collectors after collector code ships
+
+`./scripts/deploy-web.sh` restarts **only** `xstocks-api`. Long-running
+`xstocks-collector@*` units keep the in-memory binary from process start — they
+do **not** pick up new collector features (e.g. WHI-778 `underlying` poller)
+until restarted. After any deploy that changes `src/monitor/collector`,
+`src/monitor/underlying`, `src/monitor/bybit`, `src/monitor/binance`,
+`src/monitor/fluxion`, or `config/collector.yaml` / `config/underlying.yaml`:
+
+```bash
+# On the VPS — restart every market instance you run
+sudo systemctl restart xstocks-collector@bybit-fluxion
+sudo systemctl restart xstocks-collector@binance-pancake   # if enabled
+sudo systemctl --no-pager status 'xstocks-collector@*'
+
+# Confirm underlying is alive (WHI-788):
+sqlite3 /opt/xstocks/app/data/monitor-bybit-fluxion.db \
+  "SELECT key, value FROM meta WHERE key LIKE 'underlying%';"
+# expect underlying_status=running, underlying_last_poll_ms advancing,
+# underlying_last_n > 0 after the first successful Hermes poll
+```
+
+Local dogfood: restart each collector process after `git pull` / feature merge
+(`./scripts/dev-web.sh restart`, or kill + re-run
+`python -m monitor.collector --market …` for each market).
+
 ## Redeploy (one command from a laptop)
 
 ```bash
@@ -67,6 +93,9 @@ The API and collector for a market must agree on the same journal path
 ./scripts/deploy-web.sh xstocks@host --www-only     # static only
 ./scripts/deploy-web.sh xstocks@host --api-only     # Python only
 ```
+
+**Collector code is rsynced with the API tree, but units are not restarted.**
+See [Restart collectors after collector code ships](#restart-collectors-after-collector-code-ships).
 
 ## Local dogfood
 

@@ -131,6 +131,13 @@ placeholders. Agents must not assume a module exists until its issue lands. -->
     `underlying_prices` (schema v5); `monitor/underlying` poller wired into
     both collectors; config `config/underlying.yaml` +
     `collector.yaml` `underlying.enabled`.
+  - **Underlying dual-market ops (WHI-788) landed:** bybit blank Underlying
+    was a **stale collector process** (pre-778 binary; binance restarted later).
+    Meta hardening: always write `underlying_last_poll_ms` / `underlying_last_n`
+    (even when n=0) + `underlying_status` / `underlying_last_error`. Deploy
+    notes: restart **both** `xstocks-collector@bybit-fluxion` and
+    `@binance-pancake` after collector code ships (`deploy/README.md`;
+    `deploy-web.sh` only restarts API).
   - **Underlying premium panel (WHI-779) landed:**
     `monitor/metrics/premium.py` (de-multiplied mid / underlying − 1 → bps);
     API fields on pairs/detail (`underlying_*`, `premium_bps` /

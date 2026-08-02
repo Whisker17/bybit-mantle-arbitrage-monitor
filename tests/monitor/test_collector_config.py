@@ -45,6 +45,11 @@ def test_load_checked_in_collector_config() -> None:
     assert cfg.cex_volume.venue == "bybit"
     assert cfg.cex_volume.poll_interval_s == 60
     assert cfg.retention.cex_volume_24h_ms == 604_800_000
+    # WHI-778 / WHI-788: underlying poller on for both markets (global toggle).
+    assert cfg.underlying_enabled is True
+    assert cfg.retention.underlying_prices_ms == 604_800_000
+    pancake = load_collector_config(market_id="binance-pancake")
+    assert pancake.underlying_enabled is True
 
 
 def test_reconnect_max_must_ge_min(tmp_path: Path) -> None:
