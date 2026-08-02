@@ -90,8 +90,12 @@ placeholders. Agents must not assume a module exists until its issue lands. -->
     `market_maker` / `rebalancer` via `monitor.attribution.address_labels`
     + config thresholds / `cex_wallets` / manual overrides; CLIs
     `python -m monitor.collector.backfill_rfq` and
-    `python -m monitor.attribution.refresh`. Schema v4. UI surface for
-    labels is WHI-769 (not this issue).
+    `python -m monitor.attribution.refresh`. Schema v4.
+  - **MM panel UI (WHI-769) landed:** API + Web full wiring — overview
+    `mm_active` three-state badge; detail `address_panel` (labels +
+    evidence hover); `GET /api/pairs/{id}/mm` inventory curves + rebalance
+    timeline; pure builders in `monitor.attribution.mm_panel`. Empty
+    states: accumulating / no_candidates / ok (no dashed placeholders).
   - **M7-1 inventory (WHI-770) landed:** `docs/references/m7-bstocks-inventory.md`
     — top-10 Binance ⇄ Pancake V3 bStocks (on-chain-verified pools), BEP-677
     `uiMultiplier` pricing (multiply Binance mid for raw compare; ≠ Bybit
