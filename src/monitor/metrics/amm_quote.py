@@ -6,7 +6,8 @@ and comparing it to CEX produces phantom spreads (e.g. +1016 bps / −10000 bps)
 
 All consumers that surface AMM mid for price, spread, premium, net edge, or
 bucket PnL must go through :func:`quotable_amm_mid` so columns cannot disagree
-with fillability.
+with fillability. Attribution pre-trade mids (e.g. ``_pool_mid_pre``) may still
+read raw ``mid_usdc_per_native`` — a swap implies liquidity existed.
 """
 
 from __future__ import annotations

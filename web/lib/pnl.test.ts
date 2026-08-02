@@ -91,7 +91,13 @@ describe("overviewPnlCell", () => {
   });
 
   it("does not collapse no_book/stale into no depth", () => {
-    for (const status of ["no_book", "no_pool", "empty_pool", "stale"] as const) {
+    for (const status of [
+      "no_book",
+      "no_pool",
+      "empty_pool",
+      "invalid_mid",
+      "stale",
+    ] as const) {
       const cell = overviewPnlCell({
         status,
         has_depth: false,
@@ -104,14 +110,23 @@ describe("overviewPnlCell", () => {
       assert.equal(cell.kind, "status");
       if (cell.kind === "status") {
         assert.notEqual(cell.label, "no depth");
-        assert.match(cell.label, /book|pool|stale/);
+        assert.match(cell.label, /book|pool|stale|mid/);
       }
     }
   });
 
-  it("labels empty_pool distinctly from no_pool", () => {
+  it("labels empty_pool / invalid_mid distinctly from no_pool", () => {
     const empty = overviewPnlCell({
       status: "empty_pool",
+      has_depth: false,
+      direction: null,
+      optimal_notional_usd: null,
+      optimal_net_pnl_usd: null,
+      optimal_net_pnl_bps: null,
+      bybit_depth_source: null,
+    });
+    const invalid = overviewPnlCell({
+      status: "invalid_mid",
       has_depth: false,
       direction: null,
       optimal_notional_usd: null,
@@ -129,9 +144,15 @@ describe("overviewPnlCell", () => {
       bybit_depth_source: null,
     });
     assert.equal(empty.kind, "status");
+    assert.equal(invalid.kind, "status");
     assert.equal(none.kind, "status");
-    if (empty.kind === "status" && none.kind === "status") {
+    if (
+      empty.kind === "status" &&
+      invalid.kind === "status" &&
+      none.kind === "status"
+    ) {
       assert.equal(empty.label, "empty pool");
+      assert.equal(invalid.label, "invalid mid");
       assert.equal(none.label, "no pool");
     }
   });

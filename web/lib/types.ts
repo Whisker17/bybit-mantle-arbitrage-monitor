@@ -18,6 +18,7 @@ export type PnlStatus =
   | "no_book"
   | "no_pool"
   | "empty_pool"
+  | "invalid_mid"
   | "no_depth"
   | "no_fillable"
   | "stale";

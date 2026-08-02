@@ -113,12 +113,21 @@ def test_empty_pool_spread_is_na_not_phantom_bps() -> None:
     bybit = _bybit(mid=Decimal("60.72"), ts_ms=ts)
     amm = _pool(mid=residual, liquidity=0, ts_ms=ts)
     snap = build_spread_snapshot(bybit=bybit, amm=amm, config=cfg, ts_ms=ts)
+    assert snap.amm_quote_reason == "empty_pool"
+    # Residual mid without the gate would be large; with the gate mid is None.
+    from monitor.metrics.edge import mid_from_bid_ask, spread_bps
+
+    phantom = spread_bps(
+        mid_from_bid_ask(bybit.bid_de_multiplied, bybit.ask_de_multiplied),
+        residual,
+    )
+    assert abs(phantom) > Decimal(500)
+    if snap.amm_spread_bps is not None:
+        # Regression path: residual mid leaked into bps — magnitude guardrail.
+        assert_sane_bps(snap.amm_spread_bps)
+        raise AssertionError("empty pool must not produce amm_spread_bps")
     assert snap.amm_mid is None
     assert snap.amm_spread_bps is None
-    assert snap.amm_quote_reason == "empty_pool"
-    # Guard: if a regression re-introduces residual mid math, this fails loudly.
-    if snap.amm_spread_bps is not None:
-        assert_sane_bps(snap.amm_spread_bps)
 
 
 def test_empty_pool_korub_shaped_minus_100pct_suppressed() -> None:
@@ -126,17 +135,30 @@ def test_empty_pool_korub_shaped_minus_100pct_suppressed() -> None:
     cfg = load_metrics_config()
     ts = _open_ts_ms()
     bybit = _bybit(mid=Decimal("15.575"), ts_ms=ts)
+    residual = Decimal("0.0001")
     # After de-multiply display can look ~0; residual native mid still non-zero.
     amm = _pool(
         pair_id="KORUB",
-        mid=Decimal("0.0001"),
+        mid=residual,
         liquidity=0,
         ts_ms=ts,
     )
     snap = build_spread_snapshot(bybit=bybit, amm=amm, config=cfg, ts_ms=ts)
+    assert snap.amm_quote_reason == "empty_pool"
+    from monitor.metrics.edge import mid_from_bid_ask, spread_bps
+
+    phantom = spread_bps(
+        mid_from_bid_ask(bybit.bid_de_multiplied, bybit.ask_de_multiplied),
+        residual,
+    )
+    # ~−100% → −10000 bps trips the magnitude guardrail.
+    with pytest.raises(AssertionError):
+        assert_sane_bps(phantom)
+    if snap.amm_spread_bps is not None:
+        assert_sane_bps(snap.amm_spread_bps)
+        raise AssertionError("empty pool must not produce amm_spread_bps")
     assert snap.amm_mid is None
     assert snap.amm_spread_bps is None
-    assert snap.amm_quote_reason == "empty_pool"
 
 
 def test_empty_pool_edge_snapshot_skips_amm_edges() -> None:
