@@ -35,6 +35,8 @@ describe("prepareSpreadSeries", () => {
         bybit_mid: "100.1",
         cex_premium_bps: "50.0",
         amm_premium_bps: "-20.0",
+        // rfq_premium_bps may be on the API point but is not a chart series
+        // (overview hover only — WHI-783 req 3/5).
         rfq_premium_bps: "-15.0",
         session: "open",
       },
@@ -45,7 +47,6 @@ describe("prepareSpreadSeries", () => {
         bybit_mid: "100.2",
         cex_premium_bps: null,
         amm_premium_bps: null,
-        rfq_premium_bps: null,
         session: "closed",
       },
     ];
@@ -57,13 +58,11 @@ describe("prepareSpreadSeries", () => {
     assert.equal(s.bybitMid[1], 100.2);
     assert.equal(s.cexPremium[0], 50.0);
     assert.equal(s.ammPremium[0], -20.0);
-    assert.equal(s.rfqPremium[0], -15.0);
     assert.equal(s.hasAmm, true);
     assert.equal(s.hasRfq, true);
     assert.equal(s.hasMid, true);
     assert.equal(s.hasCexPremium, true);
     assert.equal(s.hasAmmPremium, true);
-    assert.equal(s.hasRfqPremium, true);
     assert.equal(s.hasPremium, true);
     assert.deepEqual(s.openBands, [[0, 0]]);
   });

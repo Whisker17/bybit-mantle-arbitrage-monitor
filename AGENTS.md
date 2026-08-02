@@ -155,8 +155,9 @@ placeholders. Agents must not assume a module exists until its issue lands. -->
   - **Premium column split (WHI-783) landed:** overview moves vs-underlying
     into CEX/DEX groups (`vs Und`); renames AMM/RFQ bps → `vs CEX` /
     `RFQ vs CEX`; Underlying group is reference price only; detail chart
-    series by basis (DEX vs CEX, CEX vs Und, DEX vs Und); `SpreadPoint`
-    gains `amm_premium_bps` / `rfq_premium_bps`.
+    series by basis (DEX vs CEX, CEX vs Und, DEX vs Und). `SpreadPoint`
+    gains `amm_premium_bps` / `rfq_premium_bps` (RFQ vs Und for API/hover;
+    chart plots CEX + AMM only).
 
 ## Build, test, run
 

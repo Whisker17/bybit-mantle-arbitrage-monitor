@@ -8,6 +8,7 @@ import { Badge } from "@/components/ui/badge";
 import { cn } from "@/lib/cn";
 import {
   bpsTone,
+  cexPremiumBps,
   fmtDirection,
   fmtDirectionTitle,
   fmtNotional,
@@ -398,7 +399,34 @@ function UnderlyingCell({ row }: { row: PairOverviewRow }) {
   );
 }
 
-/** CEX group "vs Und": CEX equity-eq mid vs underlying (WHI-783). */
+/**
+ * Venue vs-underlying bps cell (WHI-783). Shared empty/private handling;
+ * titleParts name who-vs-whom for the hover line.
+ */
+function VsUndCell({
+  value,
+  emptyTitle,
+  titleParts,
+}: {
+  value: string | null;
+  emptyTitle: string;
+  titleParts: Array<string | null | false | undefined>;
+}) {
+  if (value == null) {
+    return (
+      <span className="text-muted-foreground" title={emptyTitle}>
+        —
+      </span>
+    );
+  }
+  return (
+    <span title={titleParts.filter(Boolean).join(" · ")}>
+      <BpsCell value={value} />
+    </span>
+  );
+}
+
+/** CEX group "vs Und": CEX equity-eq mid vs underlying. */
 function CexVsUndCell({ row }: { row: PairOverviewRow }) {
   if (row.underlying_empty === "private") {
     return (
@@ -410,27 +438,18 @@ function CexVsUndCell({ row }: { row: PairOverviewRow }) {
       </span>
     );
   }
-  const value = row.cex_premium_bps ?? row.premium_bps ?? null;
-  if (value == null) {
-    return (
-      <span
-        className="text-muted-foreground"
-        title="Needs de-multiplied CEX mid + underlying print"
-      >
-        —
-      </span>
-    );
-  }
-  const title = [
-    `CEX mid vs underlying: ${fmtSignedBps(value)} bps`,
-    row.premium_type_label ? `Underlying: ${row.premium_type_label}` : null,
-  ]
-    .filter(Boolean)
-    .join(" · ");
+  const value = cexPremiumBps(row);
   return (
-    <span title={title}>
-      <BpsCell value={value} />
-    </span>
+    <VsUndCell
+      value={value}
+      emptyTitle="Needs de-multiplied CEX mid + underlying print"
+      titleParts={[
+        value != null
+          ? `CEX mid vs underlying: ${fmtSignedBps(value)} bps`
+          : null,
+        row.premium_type_label ? `Underlying: ${row.premium_type_label}` : null,
+      ]}
+    />
   );
 }
 
@@ -455,29 +474,20 @@ function DexVsUndCell({
       </span>
     );
   }
-  if (row.amm_premium_bps == null) {
-    return (
-      <span
-        className="text-muted-foreground"
-        title="Needs AMM mid + underlying print"
-      >
-        —
-      </span>
-    );
-  }
-  const title = [
-    `AMM mid vs underlying: ${fmtSignedBps(row.amm_premium_bps)} bps`,
-    hasRfq && row.rfq_premium_bps != null
-      ? `RFQ mid vs underlying: ${fmtSignedBps(row.rfq_premium_bps)} bps`
-      : null,
-    row.premium_type_label ? `Underlying: ${row.premium_type_label}` : null,
-  ]
-    .filter(Boolean)
-    .join(" · ");
   return (
-    <span title={title}>
-      <BpsCell value={row.amm_premium_bps} />
-    </span>
+    <VsUndCell
+      value={row.amm_premium_bps ?? null}
+      emptyTitle="Needs AMM mid + underlying print"
+      titleParts={[
+        row.amm_premium_bps != null
+          ? `AMM mid vs underlying: ${fmtSignedBps(row.amm_premium_bps)} bps`
+          : null,
+        hasRfq && row.rfq_premium_bps != null
+          ? `RFQ mid vs underlying: ${fmtSignedBps(row.rfq_premium_bps)} bps`
+          : null,
+        row.premium_type_label ? `Underlying: ${row.premium_type_label}` : null,
+      ]}
+    />
   );
 }
 
@@ -726,17 +736,11 @@ export function PairsTable({
                       </td>
                     </>
                   )}
-                  <td
-                    className="px-2 py-1.5 text-right"
-                    title="AMM mid vs CEX mid (bps)"
-                  >
+                  <td className="px-2 py-1.5 text-right">
                     <BpsCell value={row.amm_spread_bps} />
                   </td>
                   {hasRfq && (
-                    <td
-                      className="px-2 py-1.5 text-right"
-                      title="RFQ mid vs CEX mid (bps)"
-                    >
+                    <td className="px-2 py-1.5 text-right">
                       <BpsCell value={row.rfq_spread_bps} />
                     </td>
                   )}

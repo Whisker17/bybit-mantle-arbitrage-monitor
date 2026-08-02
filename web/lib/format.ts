@@ -2,6 +2,20 @@ import type { Direction, SessionKind } from "./types";
 
 const DASH = "—";
 
+/**
+ * CEX mid vs underlying (bps). Prefers explicit cex field; falls back to
+ * legacy ``premium_bps`` alias from WHI-779 (WHI-783 overview CEX vs Und).
+ */
+export function cexPremiumBps(
+  row: {
+    cex_premium_bps?: string | null;
+    premium_bps?: string | null;
+  } | null | undefined,
+): string | null {
+  if (!row) return null;
+  return row.cex_premium_bps ?? row.premium_bps ?? null;
+}
+
 /** Badge variant for underlying price_type (WHI-779). */
 export function priceTypeBadgeVariant(
   pt: string | null | undefined,

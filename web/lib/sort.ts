@@ -1,4 +1,4 @@
-import { parseNum } from "./format";
+import { cexPremiumBps, parseNum } from "./format";
 import type { PairOverviewRow, SortKey } from "./types";
 
 function rawValue(
@@ -27,8 +27,8 @@ function rawValue(
     case "volume_ratio":
       return parseNum(row.volume_ratio ?? null);
     case "premium_bps":
-      // CEX vs Und — prefer explicit cex field, fall back to legacy alias.
-      return parseNum(row.cex_premium_bps ?? row.premium_bps ?? null);
+      // Sort key id kept as premium_bps (API-compat); value is CEX vs Und.
+      return parseNum(cexPremiumBps(row));
     case "amm_premium":
       return parseNum(row.amm_premium_bps ?? null);
     case "underlying_price":

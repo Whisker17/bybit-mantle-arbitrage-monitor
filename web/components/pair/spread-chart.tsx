@@ -228,7 +228,6 @@ export function SpreadChart({ points, className, showRfq = true }: Props) {
     series.hasMid,
     series.hasCexPremium,
     series.hasAmmPremium,
-    series.hasPremium,
   ]);
 
   // Push new samples without destroying the plot (keeps zoom/cursor).
@@ -252,7 +251,6 @@ export function SpreadChart({ points, className, showRfq = true }: Props) {
     series.hasRfq,
     series.hasCexPremium,
     series.hasAmmPremium,
-    series.hasPremium,
   ]);
 
   if (empty) {

@@ -19,6 +19,7 @@ import { EmptyPanel } from "@/components/ui/empty-panel";
 import { fetchJson } from "@/lib/api";
 import {
   bpsTone,
+  cexPremiumBps,
   fmtDirection,
   fmtDirectionTitle,
   fmtNotional,
@@ -221,8 +222,8 @@ export function PairDetail({ marketId, pairId }: Props) {
           )}
           <Field
             label="CEX vs Und"
-            value={fmtSignedBps(o.cex_premium_bps ?? o.premium_bps)}
-            tone={bpsTone(o.cex_premium_bps ?? o.premium_bps ?? null)}
+            value={fmtSignedBps(cexPremiumBps(o))}
+            tone={bpsTone(cexPremiumBps(o))}
             title="CEX equity-eq mid vs underlying (bps)"
           />
           <Field

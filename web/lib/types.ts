@@ -272,7 +272,10 @@ export type SpreadPoint = {
   cex_premium_bps?: string | null;
   /** AMM equity-eq mid vs underlying (bps). UI: DEX vs Und. */
   amm_premium_bps?: string | null;
-  /** RFQ mid vs underlying (bps); hover / optional chart series. */
+  /**
+   * RFQ mid vs underlying (bps). Overview hover only (not a chart series);
+   * chart plots CEX/AMM vs Und per WHI-783.
+   */
   rfq_premium_bps?: string | null;
 };
 
