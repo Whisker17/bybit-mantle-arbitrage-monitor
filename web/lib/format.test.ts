@@ -21,6 +21,7 @@ import {
   fmtUsd,
   fmtUtcHm,
   fmtVolumeRatio,
+  isRealUnderlyingPrint,
   shortAddr,
   totalWearBps,
   usdTone,
@@ -51,6 +52,15 @@ describe("fmtPrice", () => {
     assert.equal(fmtPrice("0"), "—");
     assert.equal(fmtPrice("0.0000"), "—");
     assert.equal(fmtPrice(-1), "—");
+  });
+});
+
+describe("isRealUnderlyingPrint", () => {
+  it("rejects zero price and epoch as_of (WHI-794)", () => {
+    assert.equal(isRealUnderlyingPrint("114.72", 1_700_000_000_000), true);
+    assert.equal(isRealUnderlyingPrint("0", 0), false);
+    assert.equal(isRealUnderlyingPrint("100", 0), false);
+    assert.equal(isRealUnderlyingPrint(null, 1), false);
   });
 });
 

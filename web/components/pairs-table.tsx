@@ -18,6 +18,7 @@ import {
   fmtUsd,
   fmtUtcHm,
   fmtVolumeRatio,
+  isRealUnderlyingPrint,
   priceTypeBadgeVariant,
   resolveVenues,
   usdTone,
@@ -372,15 +373,7 @@ function UnderlyingCell({ row }: { row: PairOverviewRow }) {
     );
   }
   // WHI-794: price<=0 or as_of_ms==0 is not a real equity print.
-  const undPx =
-    row.underlying_price == null ? null : Number(row.underlying_price);
-  const undAsOf = row.underlying_as_of_ms ?? null;
-  const undValid =
-    undPx != null &&
-    Number.isFinite(undPx) &&
-    undPx > 0 &&
-    (undAsOf == null || undAsOf > 0);
-  if (!undValid) {
+  if (!isRealUnderlyingPrint(row.underlying_price, row.underlying_as_of_ms)) {
     return (
       <span
         className="text-muted-foreground"
@@ -394,6 +387,7 @@ function UnderlyingCell({ row }: { row: PairOverviewRow }) {
       </span>
     );
   }
+  const undAsOf = row.underlying_as_of_ms ?? null;
   const badge = row.underlying_price_type ?? row.premium_type_label;
   return (
     <span

@@ -26,6 +26,21 @@ export function priceTypeBadgeVariant(
   return "muted";
 }
 
+/**
+ * True when an underlying print is usable for display / vs-Und (WHI-794).
+ * Rejects null, non-finite, ≤0, and epoch-zero as_of.
+ */
+export function isRealUnderlyingPrint(
+  price: string | number | null | undefined,
+  asOfMs?: number | null,
+): boolean {
+  if (price === null || price === undefined || price === "") return false;
+  const n = typeof price === "number" ? price : Number(price);
+  if (!Number.isFinite(n) || n <= 0) return false;
+  if (asOfMs != null && asOfMs <= 0) return false;
+  return true;
+}
+
 export function fmtPrice(
   value: string | number | null | undefined,
   digits = 4,
@@ -34,6 +49,7 @@ export function fmtPrice(
   const n = typeof value === "number" ? value : Number(value);
   if (!Number.isFinite(n)) return String(value);
   // WHI-794: 0 is not a price (never-published Pyth / empty book).
+  // Matches acceptance "no 0.0000 as price anywhere on the page".
   if (n <= 0) return DASH;
   return n.toFixed(digits);
 }

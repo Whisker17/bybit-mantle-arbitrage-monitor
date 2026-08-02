@@ -676,9 +676,13 @@ class CollectorDaemon:
         )
         self.store.set_meta(META_PROBE_ERRORS, errors_to_meta_json(outcome.errors))
         self.store.set_meta(META_PROBE_MS, str(probe_ms))
-        self.store.set_meta(
-            META_UNPUBLISHED, unpublished_to_meta_json(outcome.unpublished_feeds)
-        )
+        # Do not blank unpublished advisory on Hermes-latest transport failure
+        # (same "outage ≠ all clear" rule as WHI-787 mismatches).
+        if outcome.hermes_latest_ok:
+            self.store.set_meta(
+                META_UNPUBLISHED,
+                unpublished_to_meta_json(outcome.unpublished_feeds),
+            )
 
     async def _underlying_loop(self) -> None:
         """Poll Pyth Hermes (+ optional Yahoo) into underlying_prices (WHI-778)."""
@@ -762,6 +766,8 @@ class CollectorDaemon:
                                         error=str(exc)[:400],
                                     )
                                 ],
+                                # Outer failure: do not blank unpublished meta.
+                                hermes_latest_ok=False,
                             ),
                             probe_ms=now,
                         )

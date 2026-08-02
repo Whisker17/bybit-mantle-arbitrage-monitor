@@ -56,7 +56,15 @@ def main(argv: list[str] | None = None) -> int:
             print(json.dumps({"kind": "error", **e.to_dict()}), file=sys.stderr)
         if not cfg.uncovered_tickers():
             print("# no uncovered tickers in config", file=sys.stderr)
-        if outcome.mismatches or outcome.unpublished_feeds:
+        # Exit 1 only for actionable hits: uncovered reverse mismatch, or
+        # unpublished feed without Yahoo gap-fill. Known unpublished pins that
+        # already have yahoo_symbol stay advisory (exit 0).
+        need_yahoo = [
+            u
+            for u in outcome.unpublished_feeds
+            if not (cfg.tickers.get(u.ticker) and cfg.tickers[u.ticker].yahoo_symbol)
+        ]
+        if outcome.mismatches or need_yahoo:
             return 1
         if outcome.inconclusive:
             return 2
