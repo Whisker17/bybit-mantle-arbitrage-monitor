@@ -85,6 +85,12 @@ placeholders. Agents must not assume a module exists until its issue lands. -->
   - **Not landed yet:** MM label productization (WHI-768 — RFQ maker /
     Transfer collector fields + attribution flags). Do not assume those
     labels exist in the live panel until that issue lands.
+  - **M7-1 inventory (WHI-770) landed:** `docs/references/m7-bstocks-inventory.md`
+    + draft `config/binance_pancake_pairs.yaml` — top-10 Binance ⇄ Pancake V3
+    bStocks (on-chain-verified pools), BEP-677 `uiMultiplier` pricing (multiply
+    Binance mid for raw compare; ≠ Bybit divide), AMM-only Terminal (no RFQ),
+    US VPS geo: `api.binance.com` 451 / use `data-api.binance.vision` +
+    `data-stream.binance.vision`. Schema load deferred to M7-2.
 
 ## Build, test, run
 
