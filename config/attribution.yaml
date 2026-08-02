@@ -53,3 +53,42 @@ bybit_correlation:
   lookback_ms: 5000
   # Ignore Bybit moves smaller than this (bps of prior mid).
   min_move_bps: 1.0
+
+# --- market_maker (WHI-768; research defaults from mm-attribution-analysis.md) ---
+# Priority vs other address labels:
+#   market_maker → arb_bot → rebalancer → price_keeper → retail → unknown
+# (orthogonal is_rebalancer flag is also stored on address_labels when
+# cex_touch_transfers fire alongside another primary label).
+market_maker:
+  min_rfq_maker_fills: 2
+  min_pairs: 2
+  min_amm_trades: 10
+  min_direction_share: 0.25
+  max_median_notional_usd: 500
+  min_mean_reversion: 0.55
+
+# --- rebalancer (CEX-touch inventory moves) ---
+rebalancer:
+  min_cex_touch_transfers: 3
+  min_transfer_notional_native: 1
+  # Seed CEX-like high-degree deposit/hot wallets from WHI-767 clustering.
+  # Replace / extend after Mantlescan verification; config wins at load time.
+  cex_wallets:
+    - "0xd14b0dcd319551ae4d7b12787c00ee1c1f9e1d2e"
+    - "0x1a43997eb0513300ef9bb7111a836870598a427f"
+    - "0x9941b4c49e967c974d441be437929055879e247c"
+    - "0x588846213a30fd36244e0ae0ebb2374516da836c"
+    - "0xd8169f099ce16c87a99d2a8494023574b5eea9c5"
+    - "0xfd8b2cd9ad70a25f6741ac8948069000d42edf1a"
+    - "0x0d4dc3b8becc98782309e443a6da4b9455b5ca48"
+    - "0xc868d0ea71243f1580f934cdc59620603bf9f1f1"
+    - "0x35263632aa76b909b1ce57bd6291b80c565f79b3"
+    - "0x4a67e97e770de93952b8596f04c13ada0ab9a69c"
+
+# Manual address → label overrides (config wins over auto on refresh).
+# Example:
+# address_overrides:
+#   - address: "0xabc..."
+#     label: market_maker
+#     note: "desk confirmed"
+address_overrides: []

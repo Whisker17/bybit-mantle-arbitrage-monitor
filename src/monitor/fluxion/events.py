@@ -9,13 +9,15 @@ from typing import Any
 from eth_abi import decode as abi_decode  # type: ignore[attr-defined]
 
 from monitor.fluxion.abi import (
+    NATIVE_DECIMALS_DEFAULT,
     TOPIC0_ORDER_FILLED,
+    TOPIC0_TRANSFER,
     TOPIC0_V3_SWAP,
     TOPIC0_V3_SWAP_PCS,
     USDC_DECIMALS,
 )
 from monitor.fluxion.pools import PoolMeta
-from monitor.quotes import FluxionRfqFillTick, FluxionSwapTick
+from monitor.quotes import Erc20TransferTick, FluxionRfqFillTick, FluxionSwapTick
 
 
 def _topic_addr(topic: str) -> str:
@@ -197,3 +199,44 @@ def decode_lop_fill_log(
 def swap_log_filter_topics() -> list[list[str]]:
     """topic0 OR filter for eth_getLogs (both UniV3 and PCS-style Swap)."""
     return [[TOPIC0_V3_SWAP, TOPIC0_V3_SWAP_PCS]]
+
+
+def decode_erc20_transfer_log(
+    log: Mapping[str, Any],
+    *,
+    pair_id: str,
+    token: str,
+    block_ts: int,
+    recv_ts_ms: int,
+    decimals: int = NATIVE_DECIMALS_DEFAULT,
+    gap: bool = False,
+) -> Erc20TransferTick | None:
+    """Decode a standard ERC-20 Transfer for a known xStock native token."""
+    if _topic0(log) != TOPIC0_TRANSFER.lower():
+        return None
+    topics = log.get("topics") or []
+    if len(topics) < 3:
+        return None
+    frm = _topic_addr(str(topics[1]))
+    to = _topic_addr(str(topics[2]))
+    data_hex = str(log.get("data") or "0x")
+    try:
+        raw = bytes.fromhex(data_hex[2:] if data_hex.startswith("0x") else data_hex)
+        amount_raw = int.from_bytes(raw[-32:], "big") if len(raw) >= 32 else 0
+    except ValueError:
+        return None
+    amount = Decimal(amount_raw) / Decimal(10**decimals)
+    return Erc20TransferTick(
+        pair_id=pair_id,
+        token=token.lower(),
+        block_number=_hex_int(log, "blockNumber"),
+        block_ts=block_ts,
+        recv_ts_ms=recv_ts_ms,
+        tx_hash=str(log.get("transactionHash") or "").lower(),
+        log_index=_hex_int(log, "logIndex"),
+        frm=frm,
+        to_addr=to,
+        amount=amount,
+        amount_raw=amount_raw,
+        gap=gap,
+    )

@@ -82,6 +82,8 @@ retention:
   fluxion_rfq_quotes_ms: 259200000  # 3 days
   fluxion_swaps_ms: null            # permanent — M4 attribution feedstock
   fluxion_rfq_fills_ms: null        # permanent — M4 attribution feedstock
+  erc20_transfers_ms: null          # permanent — WHI-768 inventory Transfer stream
+  rebalance_events_ms: null         # permanent — WHI-768 CEX-touch rebalance events
   collector_gaps_ms: 2592000000     # 30 days
   delete_batch_size: 5000
   # After DELETE, free pages for reuse; pages=0 skips. Full VACUUM is opt-in.

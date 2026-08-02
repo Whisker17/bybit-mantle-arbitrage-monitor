@@ -16,7 +16,16 @@ from monitor.metrics.session import SessionKind
 
 
 class BehaviorLabel(StrEnum):
+    """Address / taker behavior labels.
+
+    AMM-taker path (``assign_behavior_label``) still uses arb_bot → price_keeper
+    → retail → unknown. Full address path (WHI-768 ``assign_address_label``)
+    inserts ``market_maker`` first and ``rebalancer`` after ``arb_bot``.
+    """
+
+    MARKET_MAKER = "market_maker"
     ARB_BOT = "arb_bot"
+    REBALANCER = "rebalancer"
     PRICE_KEEPER = "price_keeper"
     RETAIL = "retail"
     UNKNOWN = "unknown"

@@ -42,7 +42,8 @@ class AmmTradeEvent:
 class RfqFillEvent:
     """One RFQ / LOP settlement (mechanism=RFQ).
 
-    ``pair_id`` is optional until fill enrichment lands (DEFERRED_ISSUES).
+    WHI-768 enriches ``pair_id`` / maker / taker / direction from receipt
+    Transfer graphs. Unenriched fills still count in global mechanism share.
     ``session`` should be stamped by the producer from fill timestamp so
     session-scoped mechanism share stays coherent with AMM.
     """
@@ -54,6 +55,11 @@ class RfqFillEvent:
     pair_id: str | None = None
     order_hash: str | None = None
     session: SessionKind | None = None
+    maker: str | None = None
+    taker: str | None = None
+    direction: str | None = None
+    usdc_amount: Decimal | None = None
+    stock_amount: Decimal | None = None
 
 
 def swap_notional_usd(swap: FluxionSwapTick, *, quote_is_token0: bool) -> Decimal:
@@ -117,12 +123,24 @@ def rfq_fill_from_tick(
     ts_ms: int | None = None,
     session: SessionKind | None = None,
 ) -> RfqFillEvent:
+    resolved_pair = pair_id if pair_id is not None else tick.pair_id
+    usdc: Decimal | None = None
+    if tick.usdc_amount is not None:
+        usdc = Decimal(tick.usdc_amount)
+    stock: Decimal | None = None
+    if tick.stock_amount is not None:
+        stock = Decimal(tick.stock_amount)
     return RfqFillEvent(
         ts_ms=ts_ms if ts_ms is not None else tick.recv_ts_ms,
         block_number=tick.block_number,
         tx_hash=tick.tx_hash,
         log_index=tick.log_index,
-        pair_id=pair_id,
+        pair_id=resolved_pair,
         order_hash=tick.order_hash,
         session=session,
+        maker=None if tick.maker is None else tick.maker.lower(),
+        taker=None if tick.taker is None else tick.taker.lower(),
+        direction=tick.direction,
+        usdc_amount=usdc,
+        stock_amount=stock,
     )

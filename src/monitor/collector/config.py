@@ -179,6 +179,9 @@ class RetentionConfig(BaseModel):
     fluxion_rfq_quotes_ms: int | None = Field(default=259_200_000, ge=1)  # 3d
     fluxion_swaps_ms: int | None = Field(default=None, ge=1)
     fluxion_rfq_fills_ms: int | None = Field(default=None, ge=1)
+    # WHI-768 permanent inventory Transfer stream + rebalance events.
+    erc20_transfers_ms: int | None = Field(default=None, ge=1)
+    rebalance_events_ms: int | None = Field(default=None, ge=1)
     collector_gaps_ms: int | None = Field(default=2_592_000_000, ge=1)  # 30d
     delete_batch_size: int = Field(default=5000, ge=1, le=100_000)
     incremental_vacuum_pages: int = Field(default=1000, ge=0)

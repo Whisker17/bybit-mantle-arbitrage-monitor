@@ -82,6 +82,66 @@ class BybitCorrelationConfig(BaseModel):
         return value
 
 
+class MarketMakerConfig(BaseModel):
+    """WHI-768 productized MM gates (from mm-attribution-analysis.md)."""
+
+    model_config = ConfigDict(extra="forbid", frozen=True)
+
+    min_rfq_maker_fills: int = Field(default=2, ge=1)
+    min_pairs: int = Field(default=2, ge=1)
+    min_amm_trades: int = Field(default=10, ge=1)
+    min_direction_share: float = Field(default=0.25, ge=0.0, le=0.5)
+    max_median_notional_usd: Decimal = Field(default=Decimal("500"), gt=0)
+    min_mean_reversion: float = Field(default=0.55, ge=0.0, le=1.0)
+
+    @field_validator("max_median_notional_usd", mode="before")
+    @classmethod
+    def _to_decimal(cls, value: object) -> object:
+        if isinstance(value, (int, float, str)):
+            return Decimal(str(value))
+        return value
+
+
+class RebalancerConfig(BaseModel):
+    model_config = ConfigDict(extra="forbid", frozen=True)
+
+    min_cex_touch_transfers: int = Field(default=3, ge=1)
+    min_transfer_notional_native: Decimal = Field(default=Decimal("1"), ge=0)
+    # Seed / allowlist of hypothesized CEX deposit / hot wallets (lowercased at load).
+    cex_wallets: list[str] = Field(default_factory=list)
+
+    @field_validator("min_transfer_notional_native", mode="before")
+    @classmethod
+    def _to_decimal(cls, value: object) -> object:
+        if isinstance(value, (int, float, str)):
+            return Decimal(str(value))
+        return value
+
+    @field_validator("cex_wallets", mode="before")
+    @classmethod
+    def _lower_wallets(cls, value: object) -> object:
+        if isinstance(value, list):
+            return [str(v).lower() for v in value]
+        return value
+
+
+class AddressOverride(BaseModel):
+    """Manual address → label override (config wins over auto)."""
+
+    model_config = ConfigDict(extra="forbid", frozen=True)
+
+    address: str
+    label: str
+    note: str = ""
+
+    @field_validator("address", mode="before")
+    @classmethod
+    def _lower_addr(cls, value: object) -> object:
+        if isinstance(value, str):
+            return value.lower()
+        return value
+
+
 class AttributionConfig(BaseModel):
     model_config = ConfigDict(extra="forbid", frozen=True)
 
@@ -93,6 +153,10 @@ class AttributionConfig(BaseModel):
     retail: RetailConfig
     activity: ActivityConfig
     bybit_correlation: BybitCorrelationConfig
+    # WHI-768 — optional for back-compat with partial test fixtures.
+    market_maker: MarketMakerConfig = Field(default_factory=MarketMakerConfig)
+    rebalancer: RebalancerConfig = Field(default_factory=RebalancerConfig)
+    address_overrides: list[AddressOverride] = Field(default_factory=list)
 
 
 def default_attribution_path() -> Path:

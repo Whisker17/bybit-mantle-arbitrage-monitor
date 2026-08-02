@@ -29,6 +29,7 @@ from monitor.quotes import (
     BybitDepthTick,
     BybitTradeTick,
     CollectorGap,
+    Erc20TransferTick,
     FluxionPoolStateTick,
     FluxionRfqFillTick,
     FluxionSwapTick,
@@ -37,6 +38,11 @@ from monitor.quotes import (
 from monitor.storage import SqliteStore
 from monitor.symbols import load_pairs_config
 from monitor.symbols.models import PairsConfig
+from monitor.symbols.token_map import (
+    inventory_token_to_pair,
+    native_token_decimals,
+    native_token_to_pair,
+)
 
 logger = logging.getLogger(__name__)
 
@@ -222,6 +228,9 @@ class CollectorDaemon:
         def on_fills(ticks: list[FluxionRfqFillTick]) -> None:
             self.store.insert_rfq_fills(ticks)
 
+        def on_transfers(ticks: list[Erc20TransferTick]) -> None:
+            self.store.insert_erc20_transfers(ticks)
+
         def on_gap(gap: CollectorGap) -> None:
             self.store.insert_gap(gap)
             logger.warning("chain gap: %s", gap.detail)
@@ -254,9 +263,15 @@ class CollectorDaemon:
             max_block_gap=self.cfg.mantle.max_block_gap,
             max_catchup_blocks=self.cfg.mantle.max_catchup_blocks,
             fetch_swap_receipts=self.cfg.mantle.fetch_swap_receipts,
+            token_to_pair=inventory_token_to_pair(self.pairs),
+            usdc=self.pairs.contracts.usdc,
+            transfer_tokens=native_token_to_pair(self.pairs),
+            transfer_decimals=native_token_decimals(self.pairs),
+            enrich_rfq_fills=True,
             on_pool_state=on_state,
             on_swaps=on_swaps,
             on_rfq_fills=on_fills,
+            on_transfers=on_transfers,
             on_gap=on_gap,
             on_block_done=on_block_done,
         )

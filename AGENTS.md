@@ -81,10 +81,15 @@ placeholders. Agents must not assume a module exists until its issue lands. -->
     draft `market_maker` / `rebalancer` rules — note
     `docs/references/mm-attribution-analysis.md`, pure helpers
     `monitor.attribution.mm_draft`, CLI
-    `scripts/mm_attribution_analysis.py`. Productization is WHI-768.
-  - **Not landed yet:** MM label productization (WHI-768 — RFQ maker /
-    Transfer collector fields + attribution flags). Do not assume those
-    labels exist in the live panel until that issue lands.
+    `scripts/mm_attribution_analysis.py`.
+  - **MM productization (WHI-768) landed:** RFQ fill receipt enrichment
+    (maker/taker/pair/amounts) + native xStock `erc20_transfers` stream;
+    `address_labels` + `rebalance_events` tables; full-address labels
+    `market_maker` / `rebalancer` via `monitor.attribution.address_labels`
+    + config thresholds / `cex_wallets` / manual overrides; CLIs
+    `python -m monitor.collector.backfill_rfq` and
+    `python -m monitor.attribution.refresh`. Schema v4. UI surface for
+    labels is WHI-769 (not this issue).
 
 ## Build, test, run
 
@@ -114,6 +119,9 @@ uv run python -m monitor.metrics --fluxion-mid 99.5 --json
 # MM attribution research backfill (WHI-767); needs Mantle RPC + network:
 #   uv run python scripts/mm_attribution_analysis.py --days 30
 #   uv run python scripts/mm_attribution_analysis.py --skip-fetch
+# WHI-768: enrich historical RFQ fills + refresh address labels from journal:
+#   uv run python -m monitor.collector.backfill_rfq
+#   uv run python -m monitor.attribution.refresh
 # Web static export (build on laptop/CI — never on the 1GB VPS):
 #   cd web && npm ci && npm run build   # → web/out
 # Web pure-helper unit tests (format/sort):
