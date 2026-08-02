@@ -94,10 +94,17 @@ export function MarketOverview({ marketId }: Props) {
    * expand before first pairs poll still stamps `?all=1`.
    */
   const sortReady = useRef(false);
+  /**
+   * When URL hydration schedules setState, the URL-write effect in the same
+   * commit still sees the previous render's sortKey. Skip one write so we do
+   * not flash `?sort=net_edge` over a shared `?sort=tvl_usd`.
+   */
+  const skipUrlWriteOnce = useRef(false);
 
   // Mount + market switch: re-read share URL; otherwise wait for API default.
   useEffect(() => {
     sortReady.current = false;
+    skipUrlWriteOnce.current = false;
     setOverview(null);
     setHealth(null);
     setPairsErr(null);
@@ -114,6 +121,7 @@ export function MarketOverview({ marketId }: Props) {
     });
     if (hasSortKey) {
       sortReady.current = true;
+      skipUrlWriteOnce.current = true;
     }
   }, [marketId]);
 
@@ -123,6 +131,10 @@ export function MarketOverview({ marketId }: Props) {
   useEffect(() => {
     if (typeof window === "undefined") return;
     if (!sortReady.current) return;
+    if (skipUrlWriteOnce.current) {
+      skipUrlWriteOnce.current = false;
+      return;
+    }
     const next = buildOverviewSearch({ sortKey, sortDesc, showAll });
     const url = `${window.location.pathname}${next}`;
     if (url !== `${window.location.pathname}${window.location.search}`) {
@@ -251,10 +263,7 @@ export function MarketOverview({ marketId }: Props) {
   );
 
   const emptyMessage = useMemo(() => {
-    if (topView.totalCount === 0) {
-      return "No pairs match the current filter.";
-    }
-    if (topView.rows.length === 0 && topView.presentCount === 0) {
+    if (topView.presentCount === 0 && topView.totalCount > 0) {
       const label = sortKeyLabel(sortKey);
       return `No pairs with ${label} data yet — n/a rows trail. Expand to see all ${topView.totalCount}.`;
     }
