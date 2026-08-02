@@ -90,6 +90,26 @@ def test_aggregate_truncated_with_zero_swaps_uses_collector_start() -> None:
     assert win.window_start_ms == 9_000
 
 
+def test_not_truncated_when_first_start_is_old() -> None:
+    """After restart, write-once first-start keeps full 24h label."""
+    metrics = load_metrics_config()
+    now = 200_000_000
+    since = now - 86_400_000  # 24h window
+    first_start = since - 86_400_000  # started two days ago
+    swaps = [_swap(recv_ts_ms=since + 1_000, amount0="10", log_index=0)]
+    win = aggregate_dex_volume(
+        swaps,
+        quote_is_token0=True,
+        since_ms=since,
+        now_ms=now,
+        metrics=metrics,
+        collector_started_ms=first_start,
+        earliest_recv_ts_ms=first_start + 1,
+    )
+    assert win.truncated is False
+    assert win.window_start_ms == since
+
+
 def test_aggregate_not_truncated_when_full_window() -> None:
     metrics = load_metrics_config()
     swaps = [_swap(recv_ts_ms=5_000, amount0="10", log_index=0)]

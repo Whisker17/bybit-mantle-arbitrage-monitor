@@ -560,7 +560,7 @@ def _row_to_bybit_book(row: sqlite3.Row) -> BybitBookTick:
 def _row_to_bybit_trade(row: sqlite3.Row) -> BybitTradeTick:
     side = str(row["side"])
     if side not in ("Buy", "Sell"):
-        side = "Buy"
+        raise ValueError(f"invalid bybit_trades.side={side!r}")
     return BybitTradeTick(
         pair_id=str(row["pair_id"]),
         symbol=str(row["symbol"]),
@@ -579,7 +579,7 @@ def _row_to_bybit_trade(row: sqlite3.Row) -> BybitTradeTick:
 def _row_to_cex_volume(row: sqlite3.Row) -> CexVolumeTick:
     src = str(row["source"])
     if src not in ("bybit", "binance"):
-        src = "bybit"
+        raise ValueError(f"invalid cex_volume_24h.source={src!r}")
     count_raw = row["trade_count_24h"]
     return CexVolumeTick(
         pair_id=str(row["pair_id"]),

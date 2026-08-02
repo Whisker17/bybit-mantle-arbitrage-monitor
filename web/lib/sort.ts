@@ -83,8 +83,6 @@ export const SORT_KEYS: { key: SortKey; label: string }[] = [
   { key: "cex_volume_24h", label: "CEX Vol" },
   { key: "dex_volume_24h", label: "DEX Vol" },
   { key: "volume_ratio", label: "CEX/DEX" },
-  { key: "volume_24h", label: "Vol 24h" },
-  { key: "trades_24h", label: "Trades" },
   { key: "bybit_mid", label: "Bybit mid" },
   { key: "pair_id", label: "Pair" },
 ];

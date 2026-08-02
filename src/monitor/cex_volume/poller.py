@@ -12,7 +12,6 @@ from urllib.parse import urljoin
 import httpx
 
 from monitor.cex_volume.parse import (
-    CexVolumeParseError,
     parse_binance_ticker_24hr,
     parse_bybit_tickers,
 )
@@ -139,5 +138,4 @@ class CexVolumePoller:
         return ticks
 
 
-# Re-export for tests that construct parse errors via poller imports.
-__all__ = ["CexVolumePoller", "CexVolumeParseError"]
+__all__ = ["CexVolumePoller"]

@@ -108,6 +108,20 @@ class CollectorDaemon:
     def request_stop(self) -> None:
         self._stop.set()
 
+    def _stamp_collector_meta(self) -> None:
+        """Wall-clock start + write-once first-ever start (WHI-777 truncation).
+
+        ``collector_started_ms`` is this process (rewritten every boot).
+        ``collector_first_started_ms`` is permanent so volume windows still
+        look like a full 24h after a routine restart when swaps are retained.
+        """
+        ts = now_ms()
+        self.store.set_meta("collector_started_ms", str(ts))
+        self.store.set_meta("market_id", self.market_id)
+        self.store.set_meta("rpc_url_kind", rpc_url_kind(self.rpc_url))
+        if self.store.get_meta("collector_first_started_ms") is None:
+            self.store.set_meta("collector_first_started_ms", str(ts))
+
     async def run(self) -> None:
         if self.cfg.is_binance_pancake:
             await self._run_binance_pancake()
@@ -157,9 +171,7 @@ class CollectorDaemon:
         vol_task = self._maybe_cex_volume_task(pair_id_by_symbol)
         if vol_task is not None:
             tasks.append(vol_task)
-        self.store.set_meta("collector_started_ms", str(now_ms()))
-        self.store.set_meta("market_id", self.market_id)
-        self.store.set_meta("rpc_url_kind", rpc_url_kind(self.rpc_url))
+        self._stamp_collector_meta()
         logger.info(
             "collector started market=%s pairs=%d amm_pools=%d sqlite=%s rpc_kind=%s "
             "retention=%s bybit_book=%s depth=%s cex_volume=%s",
@@ -225,9 +237,7 @@ class CollectorDaemon:
         vol_task = self._maybe_cex_volume_task(pair_id_by_symbol)
         if vol_task is not None:
             tasks.append(vol_task)
-        self.store.set_meta("collector_started_ms", str(now_ms()))
-        self.store.set_meta("market_id", self.market_id)
-        self.store.set_meta("rpc_url_kind", rpc_url_kind(self.rpc_url))
+        self._stamp_collector_meta()
         logger.info(
             "collector started market=%s pairs=%d amm_pools=%d sqlite=%s rpc_kind=%s "
             "retention=%s binance_ws=%s depth=%s pool_stride=%d cex_volume=%s",

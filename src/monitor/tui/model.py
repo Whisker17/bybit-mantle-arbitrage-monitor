@@ -38,7 +38,7 @@ class PairOverviewRow:
     net_edge_venue: VenueKind | None
     net_edge_direction: Direction | None
     reference_size_usd: Decimal
-    volume_24h: Decimal  # legacy TUI cell: CEX REST when present else journal CEX
+    volume_24h: Decimal  # legacy TUI cell: CEX journal notional (price_dm × size)
     trades_24h: int  # legacy: CEX journal prints + DEX swaps
     stale: bool = False  # True when no Bybit book yet
     # WHI-777: CEX REST vs DEX swap 24h (API / Web primary surface).

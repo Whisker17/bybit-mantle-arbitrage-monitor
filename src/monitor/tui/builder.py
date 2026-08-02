@@ -173,7 +173,10 @@ def _volume_compare_for_pair(
     cex = reader.latest_cex_volume(pair.id)
     swaps = reader.swaps_since(pair.id, since_ms=since_ms)
     earliest = reader.earliest_swap_recv_ts_ms(pair.id)
-    started_raw = reader.get_meta("collector_started_ms")
+    # Prefer write-once first start so restarts don't fake-truncate retained swaps.
+    started_raw = reader.get_meta("collector_first_started_ms") or reader.get_meta(
+        "collector_started_ms"
+    )
     collector_started: int | None = None
     if started_raw is not None:
         try:

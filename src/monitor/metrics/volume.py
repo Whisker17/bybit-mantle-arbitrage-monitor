@@ -16,9 +16,11 @@ from monitor.metrics.session import SessionKind, session_kind
 from monitor.quotes import BybitTradeTick, CexVolumeTick, FluxionSwapTick
 
 
-def _swap_quote_notional(swap: FluxionSwapTick, *, quote_is_token0: bool) -> Decimal:
-    """Absolute quote-leg notional (USDC/USDT human units). Kept local so M3
-    does not import M4 attribution (DESIGN §4.2 layering).
+def swap_notional_usd(swap: FluxionSwapTick, *, quote_is_token0: bool) -> Decimal:
+    """Absolute quote-leg notional (USDC/USDT human units).
+
+    Lives in metrics (M3) so attribution can import it without an upward
+    dependency (DESIGN §4.2).
     """
     leg = swap.amount_token0 if quote_is_token0 else swap.amount_token1
     return abs(leg)
@@ -79,11 +81,9 @@ class VolumeCompare:
     volume_ratio: Decimal | None  # cex / dex when both > 0 and cex known
 
 
-def volume_ratio(
-    cex: Decimal | None, dex: Decimal, *, min_dex: Decimal = Decimal("0")
-) -> Decimal | None:
+def volume_ratio(cex: Decimal | None, dex: Decimal) -> Decimal | None:
     """CEX/DEX notional ratio. None when CEX missing or DEX not positive."""
-    if cex is None or dex <= min_dex:
+    if cex is None or dex <= 0:
         return None
     return cex / dex
 
@@ -133,7 +133,7 @@ def aggregate_dex_volume(
             continue
         if s.direction not in ("buy_native", "sell_native"):
             continue
-        notional = _swap_quote_notional(s, quote_is_token0=quote_is_token0)
+        notional = swap_notional_usd(s, quote_is_token0=quote_is_token0)
         total += notional
         count += 1
         try:
@@ -257,6 +257,9 @@ def build_volume_compare(
             now_ms=now_ms,
             metrics=metrics,
         )
+    # Bybit tickers omit trade count; surface journal prints as secondary.
+    if cex_n is None and journal is not None:
+        cex_n = journal.trade_count
 
     return VolumeCompare(
         cex_volume_24h=cex_vol,
