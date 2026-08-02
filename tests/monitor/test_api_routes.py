@@ -495,3 +495,12 @@ cors_origins: []
         # Unscoped legacy path same contract.
         r2 = client.get("/api/pairs")
         assert r2.status_code == 503
+
+
+def test_binance_pair_detail_503_when_not_builder_ready(client: TestClient) -> None:
+    """binance-pancake has no PairsConfig builders yet → 503 on detail routes."""
+    r = client.get("/api/binance-pancake/pairs/TSLAB")
+    assert r.status_code == 503
+    assert "wired" in r.json()["detail"].lower() or "accumulat" in r.json()["detail"].lower()
+    t = client.get("/api/binance-pancake/pairs/TSLAB/trades")
+    assert t.status_code == 503

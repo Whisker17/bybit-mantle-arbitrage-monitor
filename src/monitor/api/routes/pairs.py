@@ -30,7 +30,7 @@ from monitor.metrics.pnl_snapshot import (
 from monitor.quotes import now_ms
 from monitor.storage import JournalReader
 from monitor.storage.reader import AddressLabelRow
-from monitor.symbols.models import Pair
+from monitor.symbols.models import Pair, PairsConfig
 from monitor.symbols.token_map import quote_is_token0_by_pair
 from monitor.tui.builder import build_overview, build_pair_detail
 from monitor.tui.model import PairDetailModel
@@ -50,8 +50,10 @@ def _require_reader(runtime: MarketRuntime) -> JournalReader:
     return reader
 
 
-def _require_pairs(runtime: MarketRuntime) -> None:
-    if runtime.pairs is None:
+def _require_pairs(runtime: MarketRuntime) -> PairsConfig:
+    """Return PairsConfig or 503 when inventory is not builder-ready."""
+    pairs = runtime.pairs
+    if pairs is None:
         raise HTTPException(
             status_code=503,
             detail=(
@@ -59,13 +61,13 @@ def _require_pairs(runtime: MarketRuntime) -> None:
                 f"pair builders ({_ACCUMULATING_MSG})"
             ),
         )
+    return pairs
 
 
 def _pair_or_404(runtime: MarketRuntime, pair_id: str) -> Pair:
-    _require_pairs(runtime)
-    assert runtime.pairs is not None
+    pairs = _require_pairs(runtime)
     try:
-        return runtime.pairs.pair_by_id(pair_id)
+        return pairs.pair_by_id(pair_id)
     except KeyError as exc:
         raise HTTPException(status_code=404, detail=f"unknown pair_id: {pair_id}") from exc
 
@@ -80,10 +82,10 @@ def _market_fields(runtime: MarketRuntime) -> dict[str, Any]:
 
 
 def _empty_overview(state: AppState, runtime: MarketRuntime, *, error: str) -> dict[str, Any]:
-    """Explicit accumulating / missing-journal overview (no dashed placeholder)."""
+    """Explicit accumulating overview (no dashed placeholder)."""
     from datetime import UTC, datetime
 
-    from monitor.metrics.session import session_kind
+    from monitor.metrics.session import SessionKind, session_kind
 
     ts = now_ms()
     try:
@@ -91,14 +93,16 @@ def _empty_overview(state: AppState, runtime: MarketRuntime, *, error: str) -> d
             datetime.fromtimestamp(ts / 1000, tz=UTC),
             config=runtime.metrics,
         ).value
-    except Exception:
-        sess = "closed"
+    except ValueError:
+        # Holiday table year not covered yet — treat as closed, not "unknown crash".
+        sess = SessionKind.CLOSED.value
+    tui = runtime.tui
     return {
         "generated_ts_ms": ts,
         "session_now": sess,
-        "sort_key": state.tui.default_sort,
-        "sort_desc": state.tui.default_sort_desc,
-        "reference_size_usd": format(state.tui.reference_size_usd, "f"),
+        "sort_key": tui.default_sort,
+        "sort_desc": tui.default_sort_desc,
+        "reference_size_usd": format(tui.reference_size_usd, "f"),
         "rows": [],
         "db_path": str(runtime.db_path),
         "error": error,
@@ -160,8 +164,8 @@ def _inventory_events(
         hit = cache.get()
         if hit is not None:
             return hit
-    assert runtime.pairs is not None
-    q0 = quote_is_token0_by_pair(runtime.pairs)
+    pairs = _require_pairs(runtime)
+    q0 = quote_is_token0_by_pair(pairs)
     events = inventory_events_from_ticks(
         swaps=reader.recent_swaps(),
         rfq_fills=reader.recent_rfq_fills(),
@@ -197,8 +201,9 @@ def _detail_model(
     state: AppState, runtime: MarketRuntime, pair_id: str
 ) -> tuple[PairDetailModel, PnlPairSnapshot]:
     """Build detail + PnL under the process lock (shared by detail + trades)."""
-    reader = _require_reader(runtime)
+    # Pairs check first so accumulating markets report "not wired" not "no journal".
     pair = _pair_or_404(runtime, pair_id)
+    reader = _require_reader(runtime)
     with runtime.lock:
         model = build_pair_detail(
             pair=pair,
@@ -277,8 +282,8 @@ def _list_pairs_body(state: AppState, runtime: MarketRuntime) -> dict[str, Any]:
 def _get_pair_body(
     state: AppState, runtime: MarketRuntime, pair_id: str
 ) -> dict[str, Any]:
-    reader = _require_reader(runtime)
     model, pnl = _detail_model(state, runtime, pair_id)
+    reader = _require_reader(runtime)
     body = to_json_dict(model)
     body["pnl_v2"] = pnl.to_dict()
     body.update(_market_fields(runtime))
@@ -322,8 +327,8 @@ def _get_pair_body(
 def _get_pair_mm_body(
     state: AppState, runtime: MarketRuntime, pair_id: str
 ) -> dict[str, Any]:
-    reader = _require_reader(runtime)
     _pair_or_404(runtime, pair_id)
+    reader = _require_reader(runtime)
     with runtime.lock:
         labels = reader.address_labels()
         inv = _inventory_events(runtime, reader)

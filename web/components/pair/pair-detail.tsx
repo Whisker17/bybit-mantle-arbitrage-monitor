@@ -73,8 +73,9 @@ export function PairDetail({ marketId, pairId }: Props) {
       // Keep last good snapshot so panels do not flash empty on a blip.
       const msg = e instanceof Error ? e.message : String(e);
       setErr(msg);
-      // Do not treat 503 as accumulating — that label is reserved for
-      // markets that cannot produce overview rows yet (binance until M7-4).
+      // If health already said this market is accumulating (no builders),
+      // prefer the empty-state panel over a red error box on direct pair URLs.
+      // Builder-ready markets with a missing journal stay an error (503).
     }
   }, [marketId, pairId]);
 
@@ -116,6 +117,22 @@ export function PairDetail({ marketId, pairId }: Props) {
   }, [refresh, pollMs]);
 
   if (accumulating && !data) {
+    return (
+      <EmptyPanel
+        variant="solid"
+        message={marketAccumulatingMessage(displayName)}
+        className="py-10"
+      />
+    );
+  }
+
+  // Direct deep-link to a pair on an accumulating market: detail 503s with
+  // "not yet wired" — prefer the same empty state as overview (not a red box).
+  if (
+    !data &&
+    err &&
+    /not yet wired|accumulat/i.test(err)
+  ) {
     return (
       <EmptyPanel
         variant="solid"
