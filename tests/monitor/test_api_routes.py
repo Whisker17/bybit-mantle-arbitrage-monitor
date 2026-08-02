@@ -264,3 +264,108 @@ def test_openapi_available(client: TestClient) -> None:
     assert "/api/pairs" in paths
     assert "/api/pairs/{pair_id}" in paths
     assert "/api/pairs/{pair_id}/trades" in paths
+    assert "/api/pairs/{pair_id}/mm" in paths
+
+
+def test_pairs_overview_mm_active_unknown_without_labels(client: TestClient) -> None:
+    r = client.get("/api/pairs")
+    assert r.status_code == 200
+    aapl = next(row for row in r.json()["rows"] if row["pair_id"] == "AAPLx")
+    assert aapl["mm_active"] == "unknown"
+
+
+def test_pair_detail_address_panel_and_mm_endpoint(
+    tmp_path: Path, monkeypatch: pytest.MonkeyPatch
+) -> None:
+    """Seed MM label + RFQ fill → address_panel + /mm inventory series."""
+    db = tmp_path / "mm.db"
+    _seed_store(db, with_depth=False)
+    store = SqliteStore(db)
+    ts = now_ms()
+    maker = "0x" + "aa" * 20
+    store.upsert_address_label(
+        address=maker,
+        label="market_maker",
+        evidence_summary="n_rfq_maker>=2",
+        first_seen_ms=ts - 60_000,
+        last_seen_ms=ts,
+        source="auto",
+        is_rebalancer=False,
+        n_rfq_maker=3,
+        n_amm=0,
+        cex_touch_transfers=0,
+        updated_at_ms=ts,
+    )
+    from monitor.quotes import FluxionRfqFillTick
+
+    store.insert_rfq_fills(
+        [
+            FluxionRfqFillTick(
+                block_number=12345,
+                block_ts=ts // 1000,
+                recv_ts_ms=ts,
+                tx_hash="0x" + "ab" * 32,
+                log_index=0,
+                order_hash="0x" + "cd" * 32,
+                remaining_making_amount=0,
+                pair_id="AAPLx",
+                maker=maker,
+                taker="0x" + "bb" * 20,
+                direction="sell_native",
+                making_token="0x" + "11" * 20,
+                taking_token=USDC,
+                making_amount="1.5",
+                taking_amount="150",
+                usdc_amount="150",
+                stock_amount="1.5",
+                enriched=True,
+            )
+        ]
+    )
+    store.insert_rebalance_events(
+        [
+            (
+                maker,
+                "0x" + "cc" * 20,
+                "AAPLx",
+                "0x" + "11" * 20,
+                "2.0",
+                "deposit_to_cex",
+                12346,
+                ts // 1000,
+                ts,
+                "0x" + "ee" * 32,
+                1,
+            )
+        ]
+    )
+    store.close()
+
+    with _make_client(db, tmp_path, monkeypatch) as client:
+        detail = client.get("/api/pairs/AAPLx")
+        assert detail.status_code == 200
+        body = detail.json()
+        assert "address_panel" in body
+        assert isinstance(body["address_panel"], list)
+        # Overview mm_active should be active (MM fill within 24h).
+        assert body["overview"]["mm_active"] == "active"
+
+        overview = client.get("/api/pairs")
+        aapl = next(
+            row for row in overview.json()["rows"] if row["pair_id"] == "AAPLx"
+        )
+        assert aapl["mm_active"] == "active"
+
+        mm = client.get("/api/pairs/AAPLx/mm")
+        assert mm.status_code == 200
+        payload = mm.json()
+        assert payload["pair_id"] == "AAPLx"
+        assert payload["status"] == "ok"
+        assert len(payload["addresses"]) >= 1
+        addr = payload["addresses"][0]
+        assert addr["address"] == maker.lower()
+        assert addr["label"] == "market_maker"
+        assert len(addr["series"]) >= 1
+        assert len(payload["rebalance_events"]) >= 1
+        assert payload["rebalance_events"][0]["direction"] == "deposit_to_cex"
+        assert payload["rebalance_events"][0]["tx_hash"].startswith("0x")

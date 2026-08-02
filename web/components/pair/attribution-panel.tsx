@@ -1,30 +1,51 @@
 "use client";
 
 import { EmptyPanel } from "@/components/ui/empty-panel";
+import { Badge } from "@/components/ui/badge";
 import {
   fmtLabel,
   fmtNotional,
   fmtPct,
+  fmtTsMs,
   shortAddr,
 } from "@/lib/format";
-import type { PairAttribution, PairDetailResponse } from "@/lib/types";
+import type {
+  AddressPanelRow,
+  PairAttribution,
+  PairDetailResponse,
+} from "@/lib/types";
 
 type Props = {
   attribution: PairAttribution | null;
+  addressPanel?: AddressPanelRow[] | null;
   detail: Pick<
     PairDetailResponse,
     "arb_bot_trade_share" | "price_keeper_trade_share" | "rfq_mechanism_share"
   >;
 };
 
-export function AttributionPanel({ attribution, detail }: Props) {
-  if (attribution == null) {
+function labelVariant(
+  label: string,
+): "mm" | "warning" | "muted" | "default" | "positive" {
+  if (label === "market_maker") return "mm";
+  if (label === "arb_bot") return "warning";
+  if (label === "price_keeper") return "positive";
+  if (label === "rebalancer") return "warning";
+  return "muted";
+}
+
+export function AttributionPanel({
+  attribution,
+  addressPanel,
+  detail,
+}: Props) {
+  if (attribution == null && (!addressPanel || addressPanel.length === 0)) {
     return (
       <EmptyPanel message="No attribution yet — no AMM trades scored in the detail window." />
     );
   }
 
-  const m = attribution.mechanism;
+  const m = attribution?.mechanism ?? { amm_trades: 0, rfq_trades: 0 };
   // Pair-scoped RFQ fills are often 0 until enrichment (DEFERRED); avoid a
   // false "0% RFQ" ring — surface n/a when rfq_trades == 0. Do not invent a
   // share from counts when the API left rfq_mechanism_share null.
@@ -33,45 +54,62 @@ export function AttributionPanel({ attribution, detail }: Props) {
       ? "n/a (fills unscoped)"
       : fmtPct(detail.rfq_mechanism_share);
 
-  // Server already truncates via config/attribution.yaml top_takers_n.
-  const top = attribution.top_takers;
+  // Prefer extended address_panel (WHI-769); fall back to top_takers.
+  const rows: AddressPanelRow[] =
+    addressPanel && addressPanel.length > 0
+      ? addressPanel
+      : (attribution?.top_takers ?? []).map((t) => ({
+          address: t.features.address,
+          label: t.label,
+          evidence_summary: null,
+          is_rebalancer: false,
+          n_trades: t.features.n_trades,
+          notional_usd: t.features.notional_usd,
+          convergence_ratio: t.features.convergence_ratio,
+          last_active_ms: null,
+          source: null,
+          n_rfq_maker: 0,
+          n_amm: t.features.n_trades,
+        }));
 
   return (
     <div className="space-y-3">
-      <div className="grid gap-3 sm:grid-cols-[140px_1fr]">
-        <MechanismDonut
-          amm={m.amm_trades}
-          rfq={m.rfq_trades}
-          rfqShareLabel={rfqShareTxt}
-        />
-        <div className="space-y-1 text-xs">
-          <p>
-            <span className="text-muted-foreground">mechanism:</span> AMM=
-            {m.amm_trades} RFQ={m.rfq_trades} rfq_share={rfqShareTxt}
-          </p>
-          <p>
-            <span className="text-muted-foreground">convergence:</span>{" "}
-            {fmtPct(attribution.convergence_share)} (scored=
-            {attribution.n_convergence_scored})
-          </p>
-          <p>
-            <span className="text-muted-foreground">arb_bot:</span>{" "}
-            {fmtPct(detail.arb_bot_trade_share)}{" "}
-            <span className="text-muted-foreground">price_keeper:</span>{" "}
-            {fmtPct(detail.price_keeper_trade_share)}
-          </p>
+      {attribution != null && (
+        <div className="grid gap-3 sm:grid-cols-[140px_1fr]">
+          <MechanismDonut
+            amm={m.amm_trades}
+            rfq={m.rfq_trades}
+            rfqShareLabel={rfqShareTxt}
+          />
+          <div className="space-y-1 text-xs">
+            <p>
+              <span className="text-muted-foreground">mechanism:</span> AMM=
+              {m.amm_trades} RFQ={m.rfq_trades} rfq_share={rfqShareTxt}
+            </p>
+            <p>
+              <span className="text-muted-foreground">convergence:</span>{" "}
+              {fmtPct(attribution.convergence_share)} (scored=
+              {attribution.n_convergence_scored})
+            </p>
+            <p>
+              <span className="text-muted-foreground">arb_bot:</span>{" "}
+              {fmtPct(detail.arb_bot_trade_share)}{" "}
+              <span className="text-muted-foreground">price_keeper:</span>{" "}
+              {fmtPct(detail.price_keeper_trade_share)}
+            </p>
+          </div>
         </div>
-      </div>
+      )}
 
       <div>
         <h3 className="mb-1.5 text-[10px] font-medium uppercase tracking-wide text-muted-foreground">
-          Top takers
+          Top addresses
         </h3>
-        {top.length === 0 ? (
-          <EmptyPanel message="No labeled takers in window." />
+        {rows.length === 0 ? (
+          <EmptyPanel message="No labeled addresses in window." />
         ) : (
           <div className="overflow-x-auto rounded-md border border-border">
-            <table className="w-full min-w-[520px] border-collapse text-xs">
+            <table className="w-full min-w-[640px] border-collapse text-xs">
               <thead>
                 <tr className="border-b border-border bg-muted/40 text-muted-foreground">
                   <th className="px-2 py-1.5 text-left text-[10px] font-medium uppercase">
@@ -90,43 +128,71 @@ export function AttributionPanel({ attribution, detail }: Props) {
                     Conv
                   </th>
                   <th className="px-2 py-1.5 text-left text-[10px] font-medium uppercase">
-                    Type
+                    Last
                   </th>
                 </tr>
               </thead>
               <tbody>
-                {top.map((t) => {
-                  const f = t.features;
-                  const kind =
-                    f.is_contract === true
-                      ? "C"
-                      : f.is_contract === false
-                        ? "E"
-                        : "?";
+                {rows.map((r) => {
+                  const highlight = r.label === "market_maker";
                   return (
                     <tr
-                      key={f.address}
-                      className="border-b border-border/60 hover:bg-muted/30"
+                      key={r.address}
+                      className={
+                        highlight
+                          ? "border-b border-border/60 bg-sky-500/5 hover:bg-sky-500/10"
+                          : "border-b border-border/60 hover:bg-muted/30"
+                      }
                     >
                       <td
                         className="px-2 py-1 font-mono text-[11px]"
-                        title={f.address}
+                        title={r.address}
                       >
-                        {shortAddr(f.address)}
+                        {shortAddr(r.address)}
                       </td>
-                      <td className="px-2 py-1 text-[11px]">
-                        {fmtLabel(t.label)}
+                      <td className="px-2 py-1">
+                        <span className="inline-flex flex-wrap items-center gap-1">
+                          <Badge
+                            variant={labelVariant(r.label)}
+                            className="normal-case"
+                            title={
+                              r.evidence_summary
+                                ? r.evidence_summary
+                                : fmtLabel(r.label)
+                            }
+                          >
+                            {fmtLabel(r.label)}
+                          </Badge>
+                          {r.is_rebalancer && (
+                            <Badge
+                              variant="warning"
+                              className="normal-case"
+                              title="CEX-touch rebalancer flag (orthogonal)"
+                            >
+                              reb
+                            </Badge>
+                          )}
+                        </span>
                       </td>
                       <td className="px-2 py-1 text-right tabular-nums">
-                        {f.n_trades}
+                        {r.n_trades}
                       </td>
                       <td className="px-2 py-1 text-right tabular-nums">
-                        {fmtNotional(f.notional_usd)}
+                        {fmtNotional(r.notional_usd)}
                       </td>
                       <td className="px-2 py-1 text-right tabular-nums">
-                        {fmtPct(f.convergence_ratio)}
+                        {fmtPct(r.convergence_ratio)}
                       </td>
-                      <td className="px-2 py-1 text-muted-foreground">{kind}</td>
+                      <td
+                        className="px-2 py-1 text-muted-foreground tabular-nums"
+                        title={
+                          r.last_active_ms != null
+                            ? new Date(r.last_active_ms).toISOString()
+                            : undefined
+                        }
+                      >
+                        {fmtTsMs(r.last_active_ms)}
+                      </td>
                     </tr>
                   );
                 })}
