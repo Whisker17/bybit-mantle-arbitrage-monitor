@@ -46,7 +46,10 @@ def test_optional_table_accessors_refresh_after_late_create(tmp_path: Path) -> N
     with SqliteStore(db) as store:
         assert store.get_meta("schema_version") == str(SCHEMA_VERSION)
 
-    # Simulate a pre-v7 (or partially migrated) journal: optional tables gone.
+    # Simulate "table absent" at API start (the production failure mode). We
+    # DROP while leaving schema_version at current SCHEMA_VERSION — this is not
+    # a version-gated pre-v7 migration, but SqliteStore re-runs unconditional
+    # CREATE IF NOT EXISTS, so late recreate still matches the real collector path.
     conn = sqlite3.connect(db)
     try:
         for name in _OPTIONAL_TABLES:

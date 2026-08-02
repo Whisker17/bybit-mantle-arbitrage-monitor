@@ -585,7 +585,8 @@ def test_api_tvl_appears_after_late_table_create(
     )
     store.close()
 
-    # Pre-v7 journals: optional TVL table missing when API starts.
+    # Table-absent at API start (not a version-gated pre-v7 migration — see
+    # test_optional_table_accessors_refresh_after_late_create for the note).
     for db_path in (bybit_db, pancake_db):
         conn = sqlite3.connect(db_path)
         try:
