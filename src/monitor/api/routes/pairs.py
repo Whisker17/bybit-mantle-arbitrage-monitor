@@ -11,10 +11,13 @@ from monitor.api.state import AppState, app_state_from_request
 from monitor.attribution.address_labels import inventory_events_from_ticks
 from monitor.attribution.mm_draft import InventoryEvent
 from monitor.attribution.mm_panel import (
+    MM_LABEL,
+    MmActiveStatus,
     build_address_panel_rows,
     build_mm_pair_snapshot,
     labels_by_address,
     mm_active_status,
+    pair_active_addresses,
 )
 from monitor.metrics.pnl_snapshot import (
     PnlOptimalSummary,
@@ -24,6 +27,7 @@ from monitor.metrics.pnl_snapshot import (
 )
 from monitor.quotes import now_ms
 from monitor.storage import JournalReader
+from monitor.storage.reader import AddressLabelRow
 from monitor.symbols.models import Pair
 from monitor.symbols.token_map import quote_is_token0_by_pair
 from monitor.tui.builder import build_overview, build_pair_detail
@@ -89,12 +93,50 @@ def _inventory_events(
     state: AppState, reader: JournalReader
 ) -> list[InventoryEvent]:
     """Ledger events for MM activity / inventory curves (caller holds lock)."""
+    cache = state.inventory_cache
+    if cache is not None:
+        hit = cache.get()
+        if hit is not None:
+            return hit
     q0 = quote_is_token0_by_pair(state.pairs)
-    return inventory_events_from_ticks(
+    events = inventory_events_from_ticks(
         swaps=reader.recent_swaps(),
         rfq_fills=reader.recent_rfq_fills(),
         transfers=reader.recent_erc20_transfers(),
         quote_is_token0_by_pair=q0,
+    )
+    if cache is not None:
+        cache.put(events)
+    return events
+
+
+def _mm_active_for(
+    state: AppState,
+    reader: JournalReader,
+    *,
+    pair_id: str,
+    label_count: int | None = None,
+    mm_labels: list[AddressLabelRow] | None = None,
+    inv_events: list[InventoryEvent] | None = None,
+    now: int | None = None,
+) -> MmActiveStatus:
+    """Shared overview badge path for list + detail (caller holds lock)."""
+    n = reader.address_label_count() if label_count is None else label_count
+    labels = (
+        mm_labels
+        if mm_labels is not None
+        else (reader.address_labels(label=MM_LABEL) if n > 0 else [])
+    )
+    events = inv_events
+    if events is None:
+        events = _inventory_events(state, reader) if n > 0 and labels else []
+    return mm_active_status(
+        label_count=n,
+        mm_labels=labels,
+        inventory_events=events,
+        pair_id=pair_id,
+        now_ms=now if now is not None else now_ms(),
+        window_ms=state.api.mm_active_window_ms,
     )
 
 
@@ -130,8 +172,9 @@ def list_pairs(request: Request) -> dict[str, Any]:
         )
         body = to_json_dict(model)
         label_count = reader.address_label_count()
-        all_labels = reader.address_labels() if label_count > 0 else []
-        mm_labels = [r for r in all_labels if r.label == "market_maker"]
+        mm_labels = (
+            reader.address_labels(label=MM_LABEL) if label_count > 0 else []
+        )
         inv_events = (
             _inventory_events(state, reader)
             if label_count > 0 and mm_labels
@@ -144,7 +187,6 @@ def list_pairs(request: Request) -> dict[str, Any]:
             try:
                 pair = state.pairs.pair_by_id(pair_id)
             except KeyError:
-                # Builder rows should always be configured pairs; never 404 the list.
                 enriched = dict(row)
                 enriched["pnl_v2"] = PnlOptimalSummary(
                     status="no_pool", has_depth=False
@@ -155,12 +197,14 @@ def list_pairs(request: Request) -> dict[str, Any]:
             snap = _pnl_snapshot_for_pair(state, pair=pair, reader=reader)
             enriched = dict(row)
             enriched["pnl_v2"] = overview_pnl_summary(snap).to_dict()
-            enriched["mm_active"] = mm_active_status(
+            enriched["mm_active"] = _mm_active_for(
+                state,
+                reader,
+                pair_id=pair_id,
                 label_count=label_count,
                 mm_labels=mm_labels,
-                inventory_events=inv_events,
-                pair_id=pair_id,
-                now_ms=ts,
+                inv_events=inv_events,
+                now=ts,
             )
             rows_out.append(enriched)
         body["rows"] = rows_out
@@ -175,38 +219,38 @@ def get_pair(pair_id: str, request: Request) -> dict[str, Any]:
     model, pnl = _detail_model(state, pair_id)
     body = to_json_dict(model)
     body["pnl_v2"] = pnl.to_dict()
-    # Keep overview row in sync with the same snapshot (summary view).
-    if "overview" in body and isinstance(body["overview"], dict):
-        body["overview"] = dict(body["overview"])
-        body["overview"]["pnl_v2"] = overview_pnl_summary(pnl).to_dict()
-        with state.lock:
-            label_count = reader.address_label_count()
-            mm_labels = (
-                reader.address_labels(label="market_maker")
-                if label_count > 0
-                else []
-            )
-            inv = (
-                _inventory_events(state, reader)
-                if label_count > 0 and mm_labels
-                else []
-            )
-            body["overview"]["mm_active"] = mm_active_status(
+
+    with state.lock:
+        label_count = reader.address_label_count()
+        all_labels = reader.address_labels() if label_count > 0 else []
+        mm_labels = [r for r in all_labels if r.label == MM_LABEL]
+        inv = (
+            _inventory_events(state, reader)
+            if label_count > 0 and mm_labels
+            else []
+        )
+        if "overview" in body and isinstance(body["overview"], dict):
+            body["overview"] = dict(body["overview"])
+            body["overview"]["pnl_v2"] = overview_pnl_summary(pnl).to_dict()
+            body["overview"]["mm_active"] = _mm_active_for(
+                state,
+                reader,
+                pair_id=pair_id,
                 label_count=label_count,
                 mm_labels=mm_labels,
-                inventory_events=inv,
-                pair_id=pair_id,
-                now_ms=now_ms(),
+                inv_events=inv,
             )
-
-    # Extended top-address list (labels + evidence) for the attribution panel.
-    with state.lock:
-        labels = labels_by_address(reader.address_labels())
-        top_n = state.attribution.top_takers_n
+        labels = labels_by_address(all_labels)
+        active = pair_active_addresses(inv, pair_id) if inv else set()
+        # Also mark addresses that appear as AMM top takers so they stay in panel.
+        if model.attribution is not None:
+            for t in model.attribution.top_takers:
+                active.add(t.address.lower())
         panel_rows = build_address_panel_rows(
             attribution=model.attribution,
             labels=labels,
-            top_n=top_n,
+            top_n=state.attribution.top_takers_n,
+            pair_active=active if label_count > 0 else None,
         )
     body["address_panel"] = [r.to_dict() for r in panel_rows]
     return body
@@ -221,23 +265,17 @@ def get_pair_mm(pair_id: str, request: Request) -> dict[str, Any]:
     with state.lock:
         labels = reader.address_labels()
         inv = _inventory_events(state, reader)
-        reb = reader.rebalance_events(pair_id=pair_id, limit=200)
-        # Also include rebalances for MM addresses that may be tagged other pairs.
-        mm_addrs = [r.address for r in labels if r.label == "market_maker"]
-        for addr in mm_addrs:
-            extra = reader.rebalance_events(address=addr, limit=50)
-            seen = {(e.tx_hash, e.log_index, e.address) for e in reb}
-            for e in extra:
-                key = (e.tx_hash, e.log_index, e.address)
-                if key not in seen:
-                    reb.append(e)
-                    seen.add(key)
+        reb = reader.rebalance_events(
+            pair_id=pair_id, limit=state.api.mm_rebalance_limit
+        )
         snap = build_mm_pair_snapshot(
             pair_id=pair_id,
             labels=labels,
             inventory_events=inv,
             rebalance_events=reb,
             generated_ts_ms=now_ms(),
+            max_series_points=state.api.mm_series_max_points,
+            max_rebalance=state.api.mm_rebalance_limit,
         )
         return snap.to_dict()
 

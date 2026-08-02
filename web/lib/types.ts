@@ -246,6 +246,7 @@ export type AddressPanelRow = {
   source: string | null;
   n_rfq_maker: number;
   n_amm: number;
+  is_contract?: boolean | null;
 };
 
 export type InventoryPoint = {

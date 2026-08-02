@@ -84,6 +84,7 @@ from monitor.attribution.mechanism import (
     mechanism_for_swap,
 )
 from monitor.attribution.mm_panel import (
+    MM_LABEL,
     AddressPanelRow,
     InventoryPoint,
     MmActiveStatus,
@@ -95,6 +96,7 @@ from monitor.attribution.mm_panel import (
     build_mm_pair_snapshot,
     labels_by_address,
     mm_active_status,
+    pair_active_addresses,
 )
 from monitor.attribution.snapshot import AttributionSnapshot, build_attribution_snapshot
 
@@ -112,6 +114,7 @@ __all__ = [
     "BehaviorLabel",
     "InventoryPoint",
     "Mechanism",
+    "MM_LABEL",
     "MechanismShare",
     "MmActiveStatus",
     "MmAddressSeries",
@@ -152,6 +155,7 @@ __all__ = [
     "mechanism_of_trade",
     "mechanism_share",
     "mm_active_status",
+    "pair_active_addresses",
     "persist_address_labels",
     "persist_rebalance_events",
     "probe_roles",

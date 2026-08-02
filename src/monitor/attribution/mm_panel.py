@@ -6,7 +6,7 @@ rows. Callers load ticks from ``JournalReader`` / pair attribution.
 
 from __future__ import annotations
 
-from collections.abc import Mapping, Sequence
+from collections.abc import Mapping, Sequence, Set
 from dataclasses import dataclass
 from decimal import Decimal
 from typing import Any, Literal
@@ -15,6 +15,7 @@ from monitor.attribution.aggregate import PairAttribution
 from monitor.attribution.labels import BehaviorLabel, TakerProfile
 from monitor.attribution.mm_draft import (
     InventoryEvent,
+    LedgerKind,
     build_position_series,
 )
 from monitor.storage.reader import AddressLabelRow, RebalanceEventRow
@@ -25,8 +26,11 @@ MmActiveStatus = Literal["active", "inactive", "unknown"]
 # Detail /mm empty-state machine (issue: 数据积累中 / 无候选 / ok).
 MmDataStatus = Literal["ok", "accumulating", "no_candidates"]
 
-_MM_LABEL = BehaviorLabel.MARKET_MAKER.value
-_DEFAULT_ACTIVE_WINDOW_MS = 24 * 60 * 60 * 1000
+MM_LABEL = BehaviorLabel.MARKET_MAKER.value
+
+# Trade-side ledger kinds only — pure ERC-20 transfers do not count as
+# "成交/报价活动" for the overview badge (spec WHI-769).
+_TRADE_KINDS = frozenset({LedgerKind.AMM_SWAP, LedgerKind.RFQ_FILL})
 
 
 @dataclass(frozen=True, slots=True)
@@ -44,6 +48,7 @@ class AddressPanelRow:
     source: str | None  # auto | manual | None (live AMM-only, not yet persisted)
     n_rfq_maker: int
     n_amm: int
+    is_contract: bool | None = None
 
     def to_dict(self) -> dict[str, Any]:
         return {
@@ -58,6 +63,7 @@ class AddressPanelRow:
             "source": self.source,
             "n_rfq_maker": self.n_rfq_maker,
             "n_amm": self.n_amm,
+            "is_contract": self.is_contract,
         }
 
 
@@ -155,19 +161,37 @@ def labels_by_address(
     return {r.address.lower(): r for r in rows}
 
 
+def pair_active_addresses(
+    inventory_events: Sequence[InventoryEvent],
+    pair_id: str,
+    *,
+    trade_only: bool = False,
+) -> set[str]:
+    """Addresses with ledger activity on ``pair_id``."""
+    out: set[str] = set()
+    for e in inventory_events:
+        if e.pair_id != pair_id:
+            continue
+        if trade_only and e.kind not in _TRADE_KINDS:
+            continue
+        out.add(e.address.lower())
+    return out
+
+
 def build_address_panel_rows(
     *,
     attribution: PairAttribution | None,
     labels: Mapping[str, AddressLabelRow],
     top_n: int = 10,
+    pair_active: Set[str] | None = None,
 ) -> list[AddressPanelRow]:
     """Merge live top takers with persisted full-address labels (MM path).
 
-    Priority for ranking: market_maker first, then trade-count (existing
-    top_takers order), then label-only MM addresses that never hit the AMM
-    taker path (RFQ makers).
+    Ranking: market_maker first, then trade-count. RFQ-only MMs are injected
+    only when they have ledger activity on this pair (``pair_active``).
     """
     by_addr: dict[str, AddressPanelRow] = {}
+    active = {a.lower() for a in pair_active} if pair_active is not None else None
 
     takers: Sequence[TakerProfile] = ()
     if attribution is not None:
@@ -205,13 +229,16 @@ def build_address_panel_rows(
             source=source,
             n_rfq_maker=n_rfq,
             n_amm=n_amm,
+            is_contract=f.is_contract,
         )
 
-    # Inject label-only market makers not present as AMM top takers (RFQ makers).
+    # Inject pair-active market makers missing from AMM top takers (RFQ makers).
     for addr, stored in labels.items():
-        if stored.label != _MM_LABEL:
+        if stored.label != MM_LABEL:
             continue
         if addr in by_addr:
+            continue
+        if active is not None and addr not in active:
             continue
         by_addr[addr] = AddressPanelRow(
             address=addr,
@@ -225,13 +252,13 @@ def build_address_panel_rows(
             source=stored.source,
             n_rfq_maker=stored.n_rfq_maker,
             n_amm=stored.n_amm,
+            is_contract=None,
         )
 
     rows = list(by_addr.values())
 
     def _sort_key(r: AddressPanelRow) -> tuple[int, int, str]:
-        # market_maker first, then by n_trades desc, then address.
-        mm_rank = 0 if r.label == _MM_LABEL else 1
+        mm_rank = 0 if r.label == MM_LABEL else 1
         return (mm_rank, -r.n_trades, r.address)
 
     rows.sort(key=_sort_key)
@@ -245,32 +272,47 @@ def mm_active_status(
     inventory_events: Sequence[InventoryEvent],
     pair_id: str,
     now_ms: int,
-    window_ms: int = _DEFAULT_ACTIVE_WINDOW_MS,
+    window_ms: int,
 ) -> MmActiveStatus:
     """Overview three-state MM badge for one pair.
 
     - ``unknown``: no address_labels rows (refresh never ran / empty journal)
-    - ``active``: a market_maker address has inventory events on this pair
-      inside the lookback window
-    - ``inactive``: labels exist but no recent MM activity on this pair
+    - ``active``: a market_maker address has AMM/RFQ activity on this pair
+      inside the lookback window (transfers alone do not count)
+    - ``inactive``: labels exist but no recent MM trade activity on this pair
     """
     if label_count <= 0:
         return "unknown"
-    mm_addrs = {r.address.lower() for r in mm_labels if r.label == _MM_LABEL}
+    mm_addrs = {r.address.lower() for r in mm_labels if r.label == MM_LABEL}
     if not mm_addrs:
-        # Labels refreshed but no MM candidates globally.
         return "inactive"
     cutoff = now_ms - window_ms
     for e in inventory_events:
         if e.pair_id != pair_id:
             continue
+        if e.kind not in _TRADE_KINDS:
+            continue
         if e.address.lower() not in mm_addrs:
             continue
         if e.ts_ms >= cutoff:
             return "active"
-    # Also treat recent last_seen on an MM that traded this pair historically
-    # via pair_id on stored features is unavailable — fall back to inactive.
     return "inactive"
+
+
+def _pair_rebalances(
+    rebalance_events: Sequence[RebalanceEventRow],
+    pair_id: str,
+    *,
+    limit: int,
+) -> list[RebalanceTimelineItem]:
+    out: list[RebalanceTimelineItem] = []
+    for e in rebalance_events:
+        if e.pair_id != pair_id:
+            continue
+        out.append(_reb_item(e))
+        if len(out) >= limit:
+            break
+    return out
 
 
 def build_mm_pair_snapshot(
@@ -284,56 +326,29 @@ def build_mm_pair_snapshot(
     max_rebalance: int = 100,
 ) -> MmPairSnapshot:
     """Inventory curves for MM addresses + rebalance timeline for one pair."""
+    reb = _pair_rebalances(rebalance_events, pair_id, limit=max_rebalance)
+
     if not labels:
         return MmPairSnapshot(
             pair_id=pair_id,
             status="accumulating",
             generated_ts_ms=generated_ts_ms,
             addresses=[],
-            rebalance_events=[],
+            rebalance_events=reb,
         )
 
-    mm_rows = [r for r in labels if r.label == _MM_LABEL]
-    # Prefer MMs that have inventory on this pair; still surface global MMs
-    # with empty series so the UI can show the label + empty chart message.
+    mm_rows = [r for r in labels if r.label == MM_LABEL]
     pair_events = [e for e in inventory_events if e.pair_id == pair_id]
     addrs_with_events = {e.address.lower() for e in pair_events}
-    mm_for_pair = [
-        r
-        for r in mm_rows
-        if r.address in addrs_with_events
-        or r.n_amm > 0
-        or r.n_rfq_maker > 0
-    ]
-    # If no MM labels at all → no candidates; if MM labels but none touch
-    # this pair's events → still no_candidates for the pair panel.
-    if not mm_rows:
-        return MmPairSnapshot(
-            pair_id=pair_id,
-            status="no_candidates",
-            generated_ts_ms=generated_ts_ms,
-            addresses=[],
-            rebalance_events=[
-                _reb_item(e)
-                for e in rebalance_events
-                if e.pair_id == pair_id
-            ][:max_rebalance],
-        )
+    chart_rows = [r for r in mm_rows if r.address in addrs_with_events]
 
-    # Restrict chart addresses to those with pair activity when available.
-    chart_rows = [r for r in mm_for_pair if r.address in addrs_with_events]
-    if not chart_rows:
-        # Global MMs exist but none have inventory on this pair.
+    if not mm_rows or not chart_rows:
         return MmPairSnapshot(
             pair_id=pair_id,
             status="no_candidates",
             generated_ts_ms=generated_ts_ms,
             addresses=[],
-            rebalance_events=[
-                _reb_item(e)
-                for e in rebalance_events
-                if e.pair_id == pair_id
-            ][:max_rebalance],
+            rebalance_events=reb,
         )
 
     series_out: list[MmAddressSeries] = []
@@ -342,17 +357,19 @@ def build_mm_pair_snapshot(
             pair_events, address=row.address, pair_id=pair_id
         )
         points: list[InventoryPoint] = []
-        # Keep last N points for chart density.
         start = max(0, len(pos.events) - max_series_points)
         for ev, inv in zip(
             pos.events[start:], pos.inventory[start:], strict=True
         ):
+            kind = (
+                ev.kind.value if isinstance(ev.kind, LedgerKind) else str(ev.kind)
+            )
             points.append(
                 InventoryPoint(
                     ts_ms=ev.ts_ms,
                     inventory=inv,
                     tx_hash=ev.tx_hash,
-                    kind=str(ev.kind.value if hasattr(ev.kind, "value") else ev.kind),
+                    kind=kind,
                     delta_native=ev.delta_native,
                 )
             )
@@ -366,13 +383,6 @@ def build_mm_pair_snapshot(
                 series=points,
             )
         )
-
-    reb = [
-        _reb_item(e)
-        for e in rebalance_events
-        if e.pair_id == pair_id
-        or e.address.lower() in {r.address for r in chart_rows}
-    ][:max_rebalance]
 
     return MmPairSnapshot(
         pair_id=pair_id,

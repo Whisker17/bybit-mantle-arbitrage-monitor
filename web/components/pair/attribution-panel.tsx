@@ -70,6 +70,7 @@ export function AttributionPanel({
           source: null,
           n_rfq_maker: 0,
           n_amm: t.features.n_trades,
+          is_contract: t.features.is_contract,
         }));
 
   return (
@@ -130,11 +131,20 @@ export function AttributionPanel({
                   <th className="px-2 py-1.5 text-left text-[10px] font-medium uppercase">
                     Last
                   </th>
+                  <th className="px-2 py-1.5 text-left text-[10px] font-medium uppercase">
+                    Type
+                  </th>
                 </tr>
               </thead>
               <tbody>
                 {rows.map((r) => {
                   const highlight = r.label === "market_maker";
+                  const kind =
+                    r.is_contract === true
+                      ? "C"
+                      : r.is_contract === false
+                        ? "E"
+                        : "?";
                   return (
                     <tr
                       key={r.address}
@@ -193,6 +203,7 @@ export function AttributionPanel({
                       >
                         {fmtTsMs(r.last_active_ms)}
                       </td>
+                      <td className="px-2 py-1 text-muted-foreground">{kind}</td>
                     </tr>
                   );
                 })}

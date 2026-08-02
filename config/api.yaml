@@ -30,6 +30,14 @@ poll_interval_s: 2.0
 # 0 = recompute every request (tests).
 pnl_cache_ttl_s: 2.5
 
+# MM panel (WHI-769): overview badge lookback + inventory series / rebalance caps.
+# Inventory ledger events are TTL-cached (same idea as pnl_cache) so /api/pairs
+# + detail + /mm do not each re-scan 50k+ journal rows under the process lock.
+mm_active_window_ms: 86400000   # 24h
+mm_series_max_points: 500
+mm_rebalance_limit: 100
+mm_inventory_cache_ttl_s: 2.5   # 0 = rebuild every request
+
 # CORS origins for local static-export dogfood. Production nginx serves UI +
 # /api same-origin, so empty list is correct on the VPS.
 # Example local: ["http://127.0.0.1:3000", "http://localhost:3000"]

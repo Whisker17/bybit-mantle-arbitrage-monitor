@@ -18,10 +18,12 @@ import {
   fmtTsMs,
   shortAddr,
 } from "@/lib/format";
-import { prepareInventorySeries } from "@/lib/inventory-chart";
+import {
+  alignInventorySeries,
+  prepareInventorySeries,
+} from "@/lib/inventory-chart";
 import { mmEmptyMessage } from "@/lib/mm";
 import type { MmPairResponse } from "@/lib/types";
-import { cn } from "@/lib/cn";
 
 const COLORS = [
   "hsl(199 80% 55%)",
@@ -73,9 +75,9 @@ export function MmPanel({ pairId, pollMs }: Props) {
     );
   }
 
-  if (data.status !== "ok") {
-    return <EmptyPanel message={mmEmptyMessage(data.status)} />;
-  }
+  // Always surface rebalance txs when present (even on no_candidates /
+  // accumulating) so explorer links stay verifiable.
+  const showEmpty = data.status !== "ok" && data.addresses.length === 0;
 
   return (
     <div className="space-y-4">
@@ -84,7 +86,11 @@ export function MmPanel({ pairId, pollMs }: Props) {
           Refresh failed — showing last snapshot. {err}
         </p>
       )}
-      <InventoryChart addresses={data.addresses} />
+      {showEmpty ? (
+        <EmptyPanel message={mmEmptyMessage(data.status)} />
+      ) : (
+        <InventoryChart addresses={data.addresses} />
+      )}
       <RebalanceTimeline events={data.rebalance_events} />
     </div>
   );
@@ -113,17 +119,8 @@ function InventoryChart({
       return;
     }
 
-    // Align all series onto a shared time axis (union of timestamps).
-    const allTs = new Set<number>();
-    for (const s of series) {
-      for (const x of s.xs) allTs.add(x);
-    }
-    const xs = Array.from(allTs).sort((a, b) => a - b);
-    const data: uPlot.AlignedData = [xs];
-    for (const s of series) {
-      const map = new Map(s.xs.map((x, i) => [x, s.ys[i]]));
-      data.push(xs.map((t) => map.get(t) ?? null));
-    }
+    const aligned = alignInventorySeries(series);
+    const data: uPlot.AlignedData = [aligned.xs, ...aligned.columns];
 
     const el = hostRef.current;
     const width = Math.max(el.clientWidth || 640, 320);
@@ -293,9 +290,7 @@ function RebalanceTimeline({
                           href={url}
                           target="_blank"
                           rel="noreferrer"
-                          className={cn(
-                            "text-sky-300 hover:underline underline-offset-2",
-                          )}
+                          className="text-sky-300 hover:underline underline-offset-2"
                           onClick={(ev) => ev.stopPropagation()}
                         >
                           {shortAddr(e.tx_hash)}

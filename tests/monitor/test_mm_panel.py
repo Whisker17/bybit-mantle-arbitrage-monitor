@@ -123,9 +123,11 @@ def test_address_panel_merges_label_evidence_and_ranks_mm_first() -> None:
 def test_address_panel_injects_rfq_only_mm() -> None:
     mm = _addr(9)
     labels = labels_by_address([_label(mm, n_rfq=4, n_amm=0)])
-    # No AMM takers at all — MM still surfaces from labels.
+    # No AMM takers — MM surfaces only when marked active on this pair.
     attr = _attr([])
-    rows = build_address_panel_rows(attribution=attr, labels=labels, top_n=5)
+    rows = build_address_panel_rows(
+        attribution=attr, labels=labels, top_n=5, pair_active={mm}
+    )
     assert len(rows) == 1
     assert rows[0].address == mm
     assert rows[0].n_rfq_maker == 4
@@ -134,6 +136,7 @@ def test_address_panel_injects_rfq_only_mm() -> None:
 def test_mm_active_three_states() -> None:
     mm = _addr(1)
     now = 1_700_100_000_000
+    window = 24 * 60 * 60 * 1000
     labels = [_label(mm, last_seen_ms=now)]
     events = [
         InventoryEvent(
@@ -153,6 +156,7 @@ def test_mm_active_three_states() -> None:
             inventory_events=[],
             pair_id="SPCXx",
             now_ms=now,
+            window_ms=window,
         )
         == "unknown"
     )
@@ -163,6 +167,7 @@ def test_mm_active_three_states() -> None:
             inventory_events=events,
             pair_id="SPCXx",
             now_ms=now,
+            window_ms=window,
         )
         == "active"
     )
@@ -173,6 +178,7 @@ def test_mm_active_three_states() -> None:
             inventory_events=events,
             pair_id="AAPLx",
             now_ms=now,
+            window_ms=window,
         )
         == "inactive"
     )
@@ -194,9 +200,55 @@ def test_mm_active_three_states() -> None:
             inventory_events=old,
             pair_id="SPCXx",
             now_ms=now,
+            window_ms=window,
         )
         == "inactive"
     )
+    # Pure transfers do not flip the badge (spec: 成交/报价).
+    xfer_only = [
+        InventoryEvent(
+            ts_ms=now - 1_000,
+            pair_id="SPCXx",
+            address=mm,
+            delta_native=Decimal("5"),
+            kind=LedgerKind.ERC20_TRANSFER,
+            tx_hash="0x" + "ee" * 32,
+        )
+    ]
+    assert (
+        mm_active_status(
+            label_count=5,
+            mm_labels=labels,
+            inventory_events=xfer_only,
+            pair_id="SPCXx",
+            now_ms=now,
+            window_ms=window,
+        )
+        == "inactive"
+    )
+
+
+def test_address_panel_does_not_inject_foreign_pair_mm() -> None:
+    mm = _addr(9)
+    arb = _addr(2)
+    labels = labels_by_address([_label(mm, n_rfq=4, n_amm=0)])
+    attr = _attr([_taker(arb, label=BehaviorLabel.ARB_BOT, n_trades=20)])
+    # pair_active excludes the global MM → only the pair's taker remains.
+    rows = build_address_panel_rows(
+        attribution=attr,
+        labels=labels,
+        top_n=5,
+        pair_active={arb},
+    )
+    assert [r.address for r in rows] == [arb]
+    # When MM is active on the pair, it is injected.
+    rows2 = build_address_panel_rows(
+        attribution=attr,
+        labels=labels,
+        top_n=5,
+        pair_active={arb, mm},
+    )
+    assert rows2[0].address == mm
 
 
 def test_mm_pair_snapshot_accumulating_and_ok() -> None:

@@ -121,6 +121,10 @@ collector_stale_ms: 30000
 recent_gap_window_ms: 300000
 poll_interval_s: 2.0
 pnl_cache_ttl_s: 0
+mm_active_window_ms: 86400000
+mm_series_max_points: 500
+mm_rebalance_limit: 100
+mm_inventory_cache_ttl_s: 0
 cors_origins: []
 """,
         encoding="utf-8",
