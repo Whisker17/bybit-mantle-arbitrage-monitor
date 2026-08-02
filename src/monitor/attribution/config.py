@@ -166,6 +166,10 @@ class AttributionConfig(BaseModel):
     version: int = Field(ge=1)
     top_takers_n: int = Field(ge=1)
     rpc_probe_batch_size: int = Field(ge=1, le=200)
+    # Mechanism layer: when False (e.g. Pancake AMM-only), RFQ fills are
+    # ignored and mechanism share collapses to 100% AMM. Market assembly
+    # overrides this from ``dex.has_rfq`` (WHI-773) — not a market-id branch.
+    has_rfq: bool = True
     arb_bot: ArbBotConfig
     price_keeper: PriceKeeperConfig
     retail: RetailConfig

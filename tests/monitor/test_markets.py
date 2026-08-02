@@ -162,6 +162,18 @@ def test_apply_market_costs_overrides_metrics() -> None:
     assert merged.pnl_v2.buckets_usd == base.pnl_v2.buckets_usd
 
 
+def test_apply_market_attribution_has_rfq_switch() -> None:
+    from monitor.attribution import load_attribution_config
+    from monitor.markets import apply_market_attribution
+
+    base = load_attribution_config()
+    assert base.has_rfq is True
+    no_rfq = apply_market_attribution(base, has_rfq=False)
+    assert no_rfq.has_rfq is False
+    # Thresholds unchanged (retune via attribution_path, not market id).
+    assert no_rfq.arb_bot.min_scored_trades == base.arb_bot.min_scored_trades
+
+
 def test_load_market_context_bybit_fluxion() -> None:
     ctx = load_market_context("bybit-fluxion")
     assert ctx.market_id == "bybit-fluxion"

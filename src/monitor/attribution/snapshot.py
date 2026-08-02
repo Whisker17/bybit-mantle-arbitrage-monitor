@@ -69,7 +69,10 @@ def build_attribution_snapshot(
         )
 
     amm_scoped = filter_amm_session(amm_trades, session)
-    rfq_scoped = filter_rfq_session(rfq_fills, session)
+    # config.has_rfq (from market dex.has_rfq) degenerates RFQ mechanism layer.
+    rfq_scoped = (
+        filter_rfq_session(rfq_fills, session) if config.has_rfq else []
+    )
     global_m = build_global_mechanism_share(amm_scoped, rfq_scoped)
     start, end = window_bounds_ms(amm_scoped, rfq_scoped)
     return AttributionSnapshot(

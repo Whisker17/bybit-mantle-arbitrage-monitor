@@ -6,6 +6,11 @@
 
 version: 1
 
+# Mechanism layer: RFQ fills contribute to RFQ/AMM mix when true.
+# Market assembly overrides from dex.has_rfq (bybit-fluxion=true,
+# binance-pancake=false) so AMM-only markets do not hard-code market id.
+has_rfq: true
+
 # How many top AMM takers (by trade count) to surface for M5 detail pages.
 top_takers_n: 10
 

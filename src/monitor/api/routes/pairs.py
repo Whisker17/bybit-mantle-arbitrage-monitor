@@ -73,7 +73,7 @@ def _pnl_snapshot_for_pair(
     rfq_buy, rfq_sell = reader.latest_rfq_sides(pair.id)
     amm = amm_pool_from_tick(pair, amm_tick) if amm_tick is not None else None
     snap = build_pnl_pair_snapshot(
-        pair=pair,
+        pair_id=pair.id,
         bybit=bybit,
         amm=amm,
         amm_tick=amm_tick,
@@ -81,6 +81,8 @@ def _pnl_snapshot_for_pair(
         depth=depth,
         rfq_buy=rfq_buy,
         rfq_sell=rfq_sell,
+        native_decimals=pair.fluxion.native_decimals,
+        rfq_enabled=True,
         now_ms=now_ms(),
         stale_ms=state.api.collector_stale_ms,
     )

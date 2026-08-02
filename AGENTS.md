@@ -114,7 +114,11 @@ placeholders. Agents must not assume a module exists until its issue lands. -->
     `data/monitor-binance-pancake.db` reuses existing table names (ADR-0001).
     Config `markets.binance-pancake` in `collector.yaml`; optional
     `BSC_RPC_URL`. Run: `python -m monitor.collector --market binance-pancake`.
-    Web multi-market bar is M7-5; metrics/attribution for this market is M7-4.
+  - **M7-4 metrics/attribution (WHI-773) landed:** same M3/M4/PnL v2 algorithms
+    for `binance-pancake` — costs via `apply_market_costs`, mechanism RFQ off
+    via `apply_market_attribution(has_rfq=dex.has_rfq)`, pool geometry with
+    BSC USDT 18d, CLI `python -m monitor.metrics --market binance-pancake`.
+    DESIGN §2.7. Web multi-market bar is M7-5.
 
 ## Build, test, run
 
@@ -140,9 +144,10 @@ uv run python -m monitor.collector.latency_probe --duration-s 600
 # Phase-2 read-only Web API (WHI-757); needs collector journal:
 uv run python -m monitor.api --market bybit-fluxion
 # Optional: uv run python -m monitor.api --host 127.0.0.1 --port 8000
-# PnL v2 cash-flow engine demo (WHI-756); pure synthetic mids, no journal:
+# PnL v2 cash-flow engine demo (WHI-756 / WHI-773); pure synthetic mids, no journal:
 uv run python -m monitor.metrics
 uv run python -m monitor.metrics --fluxion-mid 99.5 --json
+uv run python -m monitor.metrics --market binance-pancake --pair-id TSLAB --amm-mid 99.5 --json
 # MM attribution research backfill (WHI-767); needs Mantle RPC + network:
 #   uv run python scripts/mm_attribution_analysis.py --days 30
 #   uv run python scripts/mm_attribution_analysis.py --skip-fetch

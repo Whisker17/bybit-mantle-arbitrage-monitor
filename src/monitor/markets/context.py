@@ -29,6 +29,7 @@ from monitor.symbols.models import PairsConfig
 # Re-export for tests that import apply_market_costs from monitor.markets
 __all__ = [
     "MarketContext",
+    "apply_market_attribution",
     "apply_market_costs",
     "load_market_context",
     "resolve_market_sqlite",
@@ -84,6 +85,21 @@ def apply_market_costs(metrics: MetricsConfig, costs: MarketCosts) -> MetricsCon
             "usdt_usdc_basis_bps": costs.quote_basis_bps,
         }
     )
+
+
+def apply_market_attribution(
+    attribution: AttributionConfig,
+    *,
+    has_rfq: bool,
+) -> AttributionConfig:
+    """Return a copy of attribution with mechanism RFQ flag from the market.
+
+    Pure: no I/O. ``dex.has_rfq`` is the config switch (WHI-773) so Pancake
+    degenerates to all-AMM without ``if market_id == ...`` branches in label
+    code. Behavior-layer thresholds stay in attribution.yaml (pass a
+    market-specific ``attribution_path`` to retune per market).
+    """
+    return attribution.model_copy(update={"has_rfq": has_rfq})
 
 
 def resolve_market_sqlite(
@@ -197,7 +213,10 @@ def load_market_context(
 
     base_metrics = load_metrics_config(metrics_path)
     metrics = apply_market_costs(base_metrics, mf.costs)
-    attribution = load_attribution_config(attribution_path)
+    base_attribution = load_attribution_config(attribution_path)
+    attribution = apply_market_attribution(
+        base_attribution, has_rfq=mf.dex.has_rfq
+    )
 
     collector: CollectorConfig | None = None
     configured_db: Path
