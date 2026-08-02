@@ -1119,3 +1119,179 @@ def test_unpublished_tickers_have_yahoo_symbol() -> None:
         t = cfg.tickers[name]
         assert t.uncovered is False, name
         assert t.yahoo_symbol, f"{name} needs yahoo_symbol for gap-fill"
+
+
+def test_detect_unpublished_sets_gap_filled_when_yahoo_configured() -> None:
+    from monitor.underlying.coverage_probe import detect_unpublished_pyth_feeds
+
+    cfg = load_underlying_config()
+    soxl_id = cfg.tickers["SOXL"].feed_id
+    assert soxl_id is not None
+    assert cfg.tickers["SOXL"].yahoo_symbol
+    body = {
+        "parsed": [
+            {
+                "id": soxl_id,
+                "price": {"price": "0", "conf": "0", "expo": -5, "publish_time": 0},
+            }
+        ]
+    }
+    found = detect_unpublished_pyth_feeds(body, cfg=cfg, tickers={"SOXL"})
+    assert len(found) == 1
+    assert found[0].gap_filled is True
+    assert "Yahoo gap-fill" in found[0].detail
+
+
+def test_poller_skips_hermes_miss_gap_fill_on_transport_failure() -> None:
+    """Hermes raise must not fan out Yahoo for every yahoo_symbol pin."""
+    from monitor.underlying.config import UnderlyingConfig
+    from monitor.underlying.poller import UnderlyingPoller
+
+    base = load_underlying_config()
+    soxl_id = base.tickers["SOXL"].feed_id
+    assert soxl_id is not None
+    raw = base.model_dump()
+    raw["tickers"] = {
+        "SOXL": {
+            "currency": "USD",
+            "feed_id": soxl_id,
+            "yahoo_symbol": "SOXL",
+            "prefer_yahoo": False,
+        },
+        "SPCX": {
+            "currency": "USD",
+            "feed_id": None,
+            "yahoo_symbol": "SPCX",
+            "prefer_yahoo": True,
+        },
+    }
+    cfg = UnderlyingConfig.model_validate(raw)
+    yahoo_calls: list[str] = []
+
+    class FailHermes:
+        def fetch_latest(self, feed_ids: list[str], *, chunk_size: int = 20):  # noqa: ANN001
+            raise TimeoutError("hermes down")
+
+        def close(self) -> None:
+            return None
+
+    class TrackYahoo:
+        def fetch_chart(self, symbol: str) -> dict[str, object]:
+            yahoo_calls.append(symbol)
+            as_of_s = int(_ms(2026, 7, 31, 16, 0) / 1000)
+            return {
+                "chart": {
+                    "result": [
+                        {
+                            "meta": {
+                                "regularMarketPrice": 100.0,
+                                "regularMarketTime": as_of_s,
+                                "currency": "USD",
+                                "marketState": "CLOSED",
+                            }
+                        }
+                    ]
+                }
+            }
+
+        def close(self) -> None:
+            return None
+
+    poller = UnderlyingPoller(
+        cfg,
+        tickers=["SOXL", "SPCX"],
+        hermes=FailHermes(),  # type: ignore[arg-type]
+        yahoo=TrackYahoo(),  # type: ignore[arg-type]
+    )
+    try:
+        ticks = poller.poll_once(now_ms_value=_ms(2026, 8, 2, 12, 0))
+    finally:
+        poller.close()
+    # prefer_yahoo still runs; Hermes-miss gap-fill for SOXL does not.
+    assert yahoo_calls == ["SPCX"]
+    assert [t.ticker for t in ticks] == ["SPCX"]
+
+
+def test_stamp_unpublished_meta_skips_on_hermes_latest_failure(tmp_path: Path) -> None:
+    """WHI-794: Hermes transport error must not blank prior unpublished meta."""
+    from monitor.collector.config import load_collector_config
+    from monitor.collector.daemon import CollectorDaemon
+    from monitor.symbols import load_pairs_config
+    from monitor.underlying.coverage_probe import (
+        META_UNPUBLISHED,
+        ProbeError,
+        ProbeOutcome,
+        UnpublishedFeed,
+        unpublished_from_meta_json,
+        unpublished_to_meta_json,
+    )
+
+    store = SqliteStore(tmp_path / "stamp.db")
+    prior = [
+        UnpublishedFeed(
+            ticker="SOXL",
+            feed_id="abc",
+            publish_time=0,
+            price="0",
+            detail="prior",
+            gap_filled=True,
+        )
+    ]
+    store.set_meta(META_UNPUBLISHED, unpublished_to_meta_json(prior))
+    daemon = CollectorDaemon(
+        load_pairs_config(),
+        load_collector_config(market_id="bybit-fluxion"),
+        store,
+        market_id="bybit-fluxion",
+    )
+    daemon._stamp_uncovered_probe(
+        ProbeOutcome(
+            mismatches=[],
+            errors=[ProbeError(ticker="*", source="pyth_hermes_latest", error="timeout")],
+            unpublished_feeds=[],
+            hermes_latest_ok=False,
+        ),
+        probe_ms=1_700_000_000_000,
+    )
+    kept = unpublished_from_meta_json(store.get_meta(META_UNPUBLISHED))
+    assert len(kept) == 1
+    assert kept[0]["ticker"] == "SOXL"
+    store.close()
+
+
+def test_probe_cli_exit_zero_when_unpublished_already_gap_filled(
+    monkeypatch: pytest.MonkeyPatch,
+) -> None:
+    """CLI exit 0 when unpublished pins already have yahoo_symbol (soft-ack)."""
+    from monitor.underlying import __main__ as umain
+    from monitor.underlying.coverage_probe import (
+        ProbeOutcome,
+        UnpublishedFeed,
+    )
+
+    class FakeProbe:
+        def __init__(self, cfg) -> None:  # noqa: ANN001
+            self.cfg = cfg
+
+        def probe_once(self) -> ProbeOutcome:
+            return ProbeOutcome(
+                mismatches=[],
+                errors=[],
+                unpublished_feeds=[
+                    UnpublishedFeed(
+                        ticker="SOXL",
+                        feed_id="5300",
+                        publish_time=0,
+                        price="0",
+                        detail="gap fill ok",
+                        gap_filled=True,
+                    )
+                ],
+                hermes_latest_ok=True,
+            )
+
+        def close(self) -> None:
+            return None
+
+    monkeypatch.setattr(umain, "UncoveredCoverageProbe", FakeProbe)
+    assert umain.main(["--probe-uncovered"]) == 0

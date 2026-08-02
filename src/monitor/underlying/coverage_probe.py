@@ -105,6 +105,8 @@ class UnpublishedFeed:
     publish_time: int
     price: str
     detail: str
+    # True when yahoo_symbol is already configured (soft-ack; CLI exit 0).
+    gap_filled: bool = False
 
     def to_dict(self) -> dict[str, Any]:
         return {
@@ -113,6 +115,7 @@ class UnpublishedFeed:
             "publish_time": self.publish_time,
             "price": self.price,
             "detail": self.detail,
+            "gap_filled": self.gap_filled,
         }
 
     @classmethod
@@ -133,6 +136,7 @@ class UnpublishedFeed:
             publish_time=publish_time,
             price=str(raw.get("price") if raw.get("price") is not None else "0"),
             detail=str(raw.get("detail") or ""),
+            gap_filled=bool(raw.get("gap_filled", False)),
         )
 
 
@@ -293,11 +297,13 @@ def detect_unpublished_pyth_feeds(
             continue
         seen.add(ticker)
         tcfg = cfg.tickers.get(ticker)
-        if tcfg is not None and tcfg.yahoo_symbol:
+        yahoo_sym = tcfg.yahoo_symbol if tcfg is not None else None
+        gap_filled = bool(yahoo_sym)
+        if gap_filled:
             detail = (
                 f"Hermes feed {q.feed_id[:12]}… still never published "
                 f"(price={q.price} publish_time={q.publish_time}); "
-                f"Yahoo gap-fill via {tcfg.yahoo_symbol} is configured"
+                f"Yahoo gap-fill via {yahoo_sym} is configured"
             )
         else:
             detail = (
@@ -313,6 +319,7 @@ def detect_unpublished_pyth_feeds(
                 publish_time=q.publish_time,
                 price=str(q.price),
                 detail=detail,
+                gap_filled=gap_filled,
             )
         )
     found.sort(key=lambda r: r.ticker)
@@ -418,8 +425,7 @@ class UncoveredCoverageProbe:
                 body = self._hermes.fetch_latest(feed_ids)
                 unpublished = detect_unpublished_pyth_feeds(body, cfg=self.cfg)
                 for row in unpublished:
-                    tcfg = self.cfg.tickers.get(row.ticker)
-                    if tcfg is not None and tcfg.yahoo_symbol:
+                    if row.gap_filled:
                         # Gap-fill already wired — keep advisory soft (debug).
                         logger.debug(
                             "pyth feed never published (yahoo gap-fill ok) "
@@ -449,5 +455,5 @@ class UncoveredCoverageProbe:
             mismatches=found,
             errors=errors,
             unpublished_feeds=unpublished,
-            hermes_latest_ok=hermes_latest_ok if feed_ids else True,
+            hermes_latest_ok=hermes_latest_ok,
         )

@@ -238,14 +238,21 @@ Bug class: Hermes **registers** an equity feed id but **never publishes**
 
 1. **Parse reject** — `hermes_quote_is_valid` requires `publish_time > 0` and
    `price > 0`. Invalid rows are dropped (no tick, no `prices_by_feed` entry).
-2. **Yahoo gap-fill** — poller: after Hermes, any covered ticker still missing
-   a tick with `yahoo_symbol` set is filled from Yahoo (same path as
-   `prefer_yahoo` names). `prefer_yahoo` still always uses Yahoo.
+2. **Yahoo gap-fill** — when `yahoo_fallback: true` (compliance-strict deploys
+   may set false → those tickers stay empty), the poller fills any covered
+   ticker still missing a Hermes tick **if** `yahoo_symbol` is set, after a
+   successful Hermes batch. `prefer_yahoo` always uses Yahoo. A Hermes
+   **transport** failure does **not** fan out Yahoo for every gap-fill pin
+   (only `prefer_yahoo` runs then) so open-session polls stay bounded.
 3. **UI / premium** — `price <= 0` or `as_of_ms <= 0` → empty / n/a; no
    `0.0000` as a price; vs Und does not compute.
-4. **Reverse guardrail** — same probe interval fetches Hermes `latest` for all
-   pinned feed ids; never-published → WARN + meta `underlying_unpublished_feeds`
-   + health `unpublished_pyth_feeds`.
+4. **Reverse guardrail** — same probe interval (`uncovered_probe_interval_s`,
+   default 3600s) always batches Hermes `latest` for all pinned feed ids even
+   when the uncovered list is empty (one multi-id request, chunked).
+   Never-published → meta `underlying_unpublished_feeds` + health
+   `unpublished_pyth_feeds`. WARN only when `yahoo_symbol` is missing;
+   soft-ack (debug log / health advisory / CLI exit 0) when gap-fill is already
+   configured.
 
 ### Hermes publish_time audit (probe 2026-08-03, US closed)
 

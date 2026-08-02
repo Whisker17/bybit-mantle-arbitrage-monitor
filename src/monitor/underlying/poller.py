@@ -85,6 +85,7 @@ class UnderlyingPoller:
         prices_by_feed: dict[str, Decimal] = {}
 
         feed_ids = self.cfg.pyth_feed_ids(want, include_fx=self.cfg.needs_fx(want))
+        hermes_transport_ok = True
 
         if feed_ids:
             try:
@@ -103,6 +104,7 @@ class UnderlyingPoller:
                 logger.warning("hermes poll failed: %s", exc)
                 self._gap = True
                 use_gap = True
+                hermes_transport_ok = False
 
         usd_krw = self._fx_usd_krw(prices_by_feed)
         got = {t.ticker for t in ticks}
@@ -116,10 +118,15 @@ class UnderlyingPoller:
                 continue
             if not tcfg.yahoo_symbol:
                 continue
-            # prefer_yahoo: always Yahoo. Otherwise: Hermes miss → gap-fill
-            # (covers registered-but-never-published feeds, WHI-794).
-            if not tcfg.prefer_yahoo and name in got:
-                continue
+            # prefer_yahoo: always Yahoo.
+            # Otherwise: Hermes miss → gap-fill for never-published feeds (WHI-794).
+            # Do NOT fan out Yahoo for every yahoo_symbol on a Hermes transport
+            # failure (would N× chart requests per poll); only prefer_yahoo then.
+            if not tcfg.prefer_yahoo:
+                if not hermes_transport_ok:
+                    continue
+                if name in got:
+                    continue
             try:
                 chart = self._yahoo.fetch_chart(tcfg.yahoo_symbol)
                 tick = parse_yahoo_chart(
