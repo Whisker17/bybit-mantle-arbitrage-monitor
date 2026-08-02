@@ -9,6 +9,7 @@ import { cn } from "@/lib/cn";
 import {
   bpsTone,
   fmtDirection,
+  fmtDirectionTitle,
   fmtNotional,
   fmtPrice,
   fmtSession,
@@ -17,7 +18,10 @@ import {
   fmtUtcHm,
   fmtVolumeRatio,
   priceTypeBadgeVariant,
+  resolveVenues,
   usdTone,
+  venueLabel,
+  type DirectionVenues,
 } from "@/lib/format";
 import { marketPairPath } from "@/lib/markets";
 import { mmActiveLabel, mmActiveTitle } from "@/lib/mm";
@@ -44,93 +48,218 @@ type Props = {
   marketId: string;
   /** Hide RFQ columns entirely when the market has no RFQ (binance-pancake). */
   hasRfq?: boolean;
+  /** Venue ids for group labels + Dir codes (WHI-780). */
+  venues?: DirectionVenues | null;
   /** Empty-table message (filter miss vs market accumulating). */
   emptyMessage?: string;
 };
 
+/** Column groups for the two-row thead (WHI-780). */
+type ColGroup =
+  | "identity"
+  | "cex"
+  | "dex"
+  | "edge"
+  | "vol_gap"
+  | "result"
+  | "reference";
+
 type Col = {
   key: SortKey | null;
   label: string;
+  group: ColGroup;
   align?: "left" | "right";
   title?: string;
   /** Column is RFQ-only; omitted when hasRfq is false. */
   rfq?: boolean;
+  /** Stable id for React keys (labels can repeat across markets). */
+  id: string;
 };
 
+/**
+ * Leaf column order (WHI-780): CEX Vol sits with CEX L1; DEX Vol with DEX quotes.
+ * WHI-779 Underlying/Premium live in the Reference group after Result.
+ * To add a group later: append a ColGroup + COLS entries; group row is derived.
+ */
 const COLS: Col[] = [
-  { key: "pair_id", label: "Pair" },
-  { key: null, label: "Sess", title: "NYSE session at last quote" },
-  { key: null, label: "Bid", align: "right" },
-  { key: null, label: "Ask", align: "right" },
-  { key: "bybit_mid", label: "Mid", align: "right" },
-  { key: null, label: "AMM", align: "right", title: "Fluxion AMM mid" },
+  { id: "pair", key: "pair_id", label: "Pair", group: "identity" },
   {
+    id: "sess",
     key: null,
-    label: "RFQb",
-    align: "right",
-    title: "RFQ buy (taker buys base)",
-    rfq: true,
+    label: "Sess",
+    group: "identity",
+    title: "NYSE session at last quote",
   },
-  { key: null, label: "RFQs", align: "right", title: "RFQ sell", rfq: true },
-  { key: "amm_spread", label: "AMM bps", align: "right" },
+  { id: "bid", key: null, label: "Bid", group: "cex", align: "right" },
+  { id: "ask", key: null, label: "Ask", group: "cex", align: "right" },
   {
-    key: "rfq_spread",
-    label: "RFQ bps",
+    id: "mid",
+    key: "bybit_mid",
+    label: "Mid",
+    group: "cex",
     align: "right",
-    rfq: true,
   },
   {
-    key: "net_edge",
-    label: "Net",
-    align: "right",
-    title: "Net edge at ref size (AMM)",
-  },
-  { key: null, label: "Dir", title: "Arb direction" },
-  { key: null, label: "Ven" },
-  {
+    id: "cex_vol",
     key: "cex_volume_24h",
     label: "CEX Vol",
+    group: "cex",
     align: "right",
     title: "CEX rolling 24h quote volume (exchange REST)",
   },
   {
+    id: "amm",
+    key: null,
+    label: "AMM",
+    group: "dex",
+    align: "right",
+    title: "DEX AMM mid",
+  },
+  {
+    id: "rfqb",
+    key: null,
+    label: "RFQb",
+    group: "dex",
+    align: "right",
+    title: "RFQ buy (taker buys base)",
+    rfq: true,
+  },
+  {
+    id: "rfqs",
+    key: null,
+    label: "RFQs",
+    group: "dex",
+    align: "right",
+    title: "RFQ sell",
+    rfq: true,
+  },
+  {
+    id: "amm_bps",
+    key: "amm_spread",
+    label: "AMM bps",
+    group: "dex",
+    align: "right",
+  },
+  {
+    id: "rfq_bps",
+    key: "rfq_spread",
+    label: "RFQ bps",
+    group: "dex",
+    align: "right",
+    rfq: true,
+  },
+  {
+    id: "dex_vol",
     key: "dex_volume_24h",
     label: "DEX Vol",
+    group: "dex",
     align: "right",
     title: "DEX AMM swap notional in window (truncated if collector < 24h)",
   },
   {
+    id: "net",
+    key: "net_edge",
+    label: "Net",
+    group: "edge",
+    align: "right",
+    title: "Net edge at ref size (AMM)",
+  },
+  {
+    id: "dir",
+    key: null,
+    label: "Dir",
+    group: "edge",
+    title: "Arb direction (market-aware short codes)",
+  },
+  { id: "ven", key: null, label: "Ven", group: "edge" },
+  {
+    id: "vol_ratio",
     key: "volume_ratio",
     label: "CEX/DEX",
+    group: "vol_gap",
     align: "right",
     title: "CEX ÷ DEX 24h notional ratio (core volume gap metric)",
   },
   {
-    key: "underlying_price",
-    label: "Underlying",
-    align: "right",
-    title: "Underlying equity reference (Pyth/Yahoo) + price_type badge",
-  },
-  {
-    key: "premium_bps",
-    label: "Premium",
-    align: "right",
-    title:
-      "CEX de-multiplied mid vs underlying (bps). Hover for AMM/RFQ premiums",
-  },
-  {
+    id: "bucket_pnl",
     key: null,
     label: "Bucket PnL",
+    group: "result",
     align: "right",
     title: "Optimal size net PnL (PnL v2) — hover for direction & notional",
   },
   {
+    id: "mm",
     key: null,
     label: "MM",
+    group: "result",
     title:
       "Market-maker trade activity in lookback window: active / inactive / unknown",
   },
+  {
+    id: "underlying",
+    key: "underlying_price",
+    label: "Underlying",
+    group: "reference",
+    align: "right",
+    title: "Underlying equity reference (Pyth/Yahoo) + price_type badge",
+  },
+  {
+    id: "premium",
+    key: "premium_bps",
+    label: "Premium",
+    group: "reference",
+    align: "right",
+    title:
+      "CEX de-multiplied mid vs underlying (bps). Hover for AMM/RFQ premiums",
+  },
 ];
+
+type GroupStrip = {
+  group: ColGroup;
+  label: string;
+  colSpan: number;
+};
+
+function groupDisplayLabel(
+  group: ColGroup,
+  venues: DirectionVenues,
+): string {
+  switch (group) {
+    case "identity":
+      return "";
+    case "cex":
+      return venueLabel(venues.cex);
+    case "dex":
+      return venueLabel(venues.dex);
+    case "edge":
+      return "Edge";
+    case "vol_gap":
+      return "CEX÷DEX";
+    case "result":
+      // Spec group name is Result (Bucket PnL + MM); "PnL" alone mislabels MM.
+      return "Result";
+    case "reference":
+      return "Underlying";
+  }
+}
+
+function buildGroupStrip(cols: Col[], venues: DirectionVenues): GroupStrip[] {
+  const out: GroupStrip[] = [];
+  for (const col of cols) {
+    const last = out[out.length - 1];
+    if (last && last.group === col.group) {
+      last.colSpan += 1;
+      continue;
+    }
+    out.push({
+      group: col.group,
+      label: groupDisplayLabel(col.group, venues),
+      colSpan: 1,
+    });
+  }
+  return out;
+}
 
 function BpsCell({ value }: { value: string | null }) {
   const tone = bpsTone(value);
@@ -148,8 +277,16 @@ function BpsCell({ value }: { value: string | null }) {
   );
 }
 
-function BucketPnlCell({ row }: { row: PairOverviewRow }) {
-  const cell = overviewPnlCell(row.pnl_v2);
+function BucketPnlCell({
+  row,
+  venues,
+  marketId,
+}: {
+  row: PairOverviewRow;
+  venues: DirectionVenues;
+  marketId: string;
+}) {
+  const cell = overviewPnlCell(row.pnl_v2, venues, marketId);
   if (cell.kind === "ok") {
     const tone = usdTone(cell.pnlUsd);
     return (
@@ -284,6 +421,11 @@ function PremiumCell({ row }: { row: PairOverviewRow }) {
   );
 }
 
+/** Light left rule between groups (first leaf of each non-identity group). */
+function groupSep(group: ColGroup): string {
+  return group !== "identity" ? "border-l border-border/70" : "";
+}
+
 export function PairsTable({
   rows,
   sortKey,
@@ -291,13 +433,27 @@ export function PairsTable({
   onSort,
   marketId,
   hasRfq = true,
+  venues: venuesProp,
   emptyMessage = "No pairs match the current filter.",
 }: Props) {
   const router = useRouter();
+  const venues = useMemo(
+    () => resolveVenues(venuesProp, marketId),
+    [venuesProp, marketId],
+  );
   const cols = useMemo(
     () => COLS.filter((c) => hasRfq || !c.rfq),
     [hasRfq],
   );
+  const groups = useMemo(() => buildGroupStrip(cols, venues), [cols, venues]);
+  // First leaf id per group — for separator styling on body cells.
+  const groupFirstId = useMemo(() => {
+    const map = new Map<ColGroup, string>();
+    for (const c of cols) {
+      if (!map.has(c.group)) map.set(c.group, c.id);
+    }
+    return map;
+  }, [cols]);
 
   return (
     <div className="overflow-x-auto rounded-md border border-border">
@@ -308,14 +464,32 @@ export function PairsTable({
         )}
       >
         <thead>
+          {/* Group strip — venue-named CEX/DEX bars (WHI-780). */}
+          <tr className="border-b border-border/80 bg-muted/50 text-[10px] uppercase tracking-wide text-muted-foreground">
+            {groups.map((g) => (
+              <th
+                key={g.group}
+                colSpan={g.colSpan}
+                className={cn(
+                  "whitespace-nowrap px-2 py-1 font-semibold text-center",
+                  groupSep(g.group),
+                  g.label ? "text-foreground/80" : "text-transparent",
+                )}
+              >
+                {g.label || "\u00a0"}
+              </th>
+            ))}
+          </tr>
+          {/* Leaf labels. */}
           <tr className="border-b border-border bg-muted/40 text-muted-foreground">
             {cols.map((col) => {
               const sortable = col.key != null;
               const active = col.key === sortKey;
               const arrow = active ? (sortDesc ? " ↓" : " ↑") : "";
+              const isGroupStart = groupFirstId.get(col.group) === col.id;
               return (
                 <th
-                  key={col.label}
+                  key={col.id}
                   title={col.title}
                   className={cn(
                     "whitespace-nowrap px-2 py-2 font-medium",
@@ -323,6 +497,7 @@ export function PairsTable({
                     sortable &&
                       "cursor-pointer select-none hover:text-foreground",
                     active && "text-foreground",
+                    isGroupStart && groupSep(col.group),
                   )}
                   onClick={() => {
                     if (col.key) onSort(col.key);
@@ -352,6 +527,11 @@ export function PairsTable({
             rows.map((row) => {
               const dim = row.low_liquidity || row.stale;
               const href = marketPairPath(marketId, row.pair_id);
+              const dirTitle = fmtDirectionTitle(
+                row.net_edge_direction,
+                venues,
+                marketId,
+              );
               return (
                 <tr
                   key={row.pair_id}
@@ -375,6 +555,7 @@ export function PairsTable({
                   }}
                   tabIndex={0}
                 >
+                  {/* Identity */}
                   <td className="px-2 py-1.5 font-medium text-foreground">
                     <span className="inline-flex items-center gap-1.5">
                       <Link
@@ -412,7 +593,13 @@ export function PairsTable({
                       {fmtSession(row.session)}
                     </Badge>
                   </td>
-                  <td className="px-2 py-1.5 text-right tabular-nums">
+                  {/* CEX: Bid Ask Mid CEX Vol */}
+                  <td
+                    className={cn(
+                      "px-2 py-1.5 text-right tabular-nums",
+                      groupSep("cex"),
+                    )}
+                  >
                     {fmtPrice(row.bybit_bid)}
                   </td>
                   <td className="px-2 py-1.5 text-right tabular-nums">
@@ -421,7 +608,23 @@ export function PairsTable({
                   <td className="px-2 py-1.5 text-right tabular-nums">
                     {fmtPrice(row.bybit_mid)}
                   </td>
-                  <td className="px-2 py-1.5 text-right tabular-nums">
+                  <td
+                    className="px-2 py-1.5 text-right tabular-nums"
+                    title={
+                      row.cex_volume_24h != null
+                        ? `CEX 24h ${row.cex_volume_24h}`
+                        : "Waiting for CEX volume poll"
+                    }
+                  >
+                    {fmtNotional(row.cex_volume_24h)}
+                  </td>
+                  {/* DEX: AMM RFQ* bps DEX Vol */}
+                  <td
+                    className={cn(
+                      "px-2 py-1.5 text-right tabular-nums",
+                      groupSep("dex"),
+                    )}
+                  >
                     {fmtPrice(row.amm_mid)}
                   </td>
                   {hasRfq && (
@@ -442,25 +645,6 @@ export function PairsTable({
                       <BpsCell value={row.rfq_spread_bps} />
                     </td>
                   )}
-                  <td className="px-2 py-1.5 text-right font-medium">
-                    <BpsCell value={row.net_edge_bps} />
-                  </td>
-                  <td className="px-2 py-1.5 text-muted-foreground">
-                    {fmtDirection(row.net_edge_direction)}
-                  </td>
-                  <td className="px-2 py-1.5 uppercase text-muted-foreground">
-                    {row.net_edge_venue ?? "—"}
-                  </td>
-                  <td
-                    className="px-2 py-1.5 text-right tabular-nums"
-                    title={
-                      row.cex_volume_24h != null
-                        ? `CEX 24h ${row.cex_volume_24h}`
-                        : "Waiting for CEX volume poll"
-                    }
-                  >
-                    {fmtNotional(row.cex_volume_24h)}
-                  </td>
                   <td
                     className="px-2 py-1.5 text-right tabular-nums"
                     title={dexVolumeTitle(row)}
@@ -472,8 +656,30 @@ export function PairsTable({
                       </span>
                     ) : null}
                   </td>
+                  {/* Edge */}
                   <td
-                    className="px-2 py-1.5 text-right tabular-nums text-muted-foreground"
+                    className={cn(
+                      "px-2 py-1.5 text-right font-medium",
+                      groupSep("edge"),
+                    )}
+                  >
+                    <BpsCell value={row.net_edge_bps} />
+                  </td>
+                  <td
+                    className="px-2 py-1.5 text-muted-foreground"
+                    title={dirTitle}
+                  >
+                    {fmtDirection(row.net_edge_direction, venues, marketId)}
+                  </td>
+                  <td className="px-2 py-1.5 uppercase text-muted-foreground">
+                    {row.net_edge_venue ?? "—"}
+                  </td>
+                  {/* Vol gap */}
+                  <td
+                    className={cn(
+                      "px-2 py-1.5 text-right tabular-nums text-muted-foreground",
+                      groupSep("vol_gap"),
+                    )}
                     title={
                       row.volume_ratio != null
                         ? row.dex_volume_truncated
@@ -489,17 +695,30 @@ export function PairsTable({
                       </span>
                     ) : null}
                   </td>
-                  <td className="px-2 py-1.5 text-right">
+                  {/* Result: Bucket PnL, MM */}
+                  <td
+                    className={cn("px-2 py-1.5 text-right", groupSep("result"))}
+                  >
+                    <BucketPnlCell
+                      row={row}
+                      venues={venues}
+                      marketId={marketId}
+                    />
+                  </td>
+                  <td className="px-2 py-1.5">
+                    <MmActiveCell status={row.mm_active} />
+                  </td>
+                  {/* Reference: Underlying, Premium (WHI-779) */}
+                  <td
+                    className={cn(
+                      "px-2 py-1.5 text-right",
+                      groupSep("reference"),
+                    )}
+                  >
                     <UnderlyingCell row={row} />
                   </td>
                   <td className="px-2 py-1.5 text-right">
                     <PremiumCell row={row} />
-                  </td>
-                  <td className="px-2 py-1.5 text-right">
-                    <BucketPnlCell row={row} />
-                  </td>
-                  <td className="px-2 py-1.5">
-                    <MmActiveCell status={row.mm_active} />
                   </td>
                 </tr>
               );

@@ -22,9 +22,30 @@ def test_fmt_signed_bps() -> None:
 
 
 def test_fmt_direction() -> None:
+    # Default Bybit ⇄ Fluxion (backward compatible).
     assert fmt_direction("buy_fluxion_sell_bybit") == "F→B"
     assert fmt_direction("buy_bybit_sell_fluxion") == "B→F"
     assert fmt_direction(None) == "—"
+    # Explicit bybit-fluxion venues.
+    assert (
+        fmt_direction(
+            "buy_fluxion_sell_bybit", cex_venue="bybit", dex_venue="fluxion"
+        )
+        == "F→B"
+    )
+    # binance-pancake: Pancake ↔ Binance (never F→B).
+    assert (
+        fmt_direction(
+            "buy_fluxion_sell_bybit", cex_venue="binance", dex_venue="pancake"
+        )
+        == "P→B"
+    )
+    assert (
+        fmt_direction(
+            "buy_bybit_sell_fluxion", cex_venue="binance", dex_venue="pancake"
+        )
+        == "B→P"
+    )
 
 
 def test_short_addr() -> None:

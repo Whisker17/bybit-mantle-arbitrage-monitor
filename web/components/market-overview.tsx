@@ -14,6 +14,7 @@ import { StaleBanner } from "@/components/stale-banner";
 import { StatusBar } from "@/components/status-bar";
 import { EmptyPanel } from "@/components/ui/empty-panel";
 import { fetchJson } from "@/lib/api";
+import { resolveVenues, type DirectionVenues } from "@/lib/format";
 import {
   marketAccumulatingMessage,
   marketApiHealthPath,
@@ -160,6 +161,15 @@ export function MarketOverview({ marketId }: Props) {
 
   const accumulating = dataStatus === "accumulating";
 
+  // Group headers + Dir labels use venue names from /api/markets (WHI-780).
+  const venues: DirectionVenues = useMemo(() => {
+    const m = markets?.markets.find((x) => x.id === marketId);
+    return resolveVenues(
+      m ? { cex: m.cex_venue, dex: m.dex_venue } : null,
+      marketId,
+    );
+  }, [markets, marketId]);
+
   const visibleRows = useMemo(() => {
     const base = overview?.rows ?? [];
     const filtered = filterRows(base, {
@@ -242,6 +252,7 @@ export function MarketOverview({ marketId }: Props) {
             onSort={handleSort}
             marketId={marketId}
             hasRfq={hasRfq}
+            venues={venues}
           />
         </>
       )}

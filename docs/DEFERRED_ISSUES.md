@@ -31,6 +31,13 @@ soon — anything touching key handling, RPC credentials defaults to at least Hi
 
 ## Open
 
+- **Overview table COLS header vs hand-written body `<td>` order dual-write** (Low, WHI-780 → when table grows).
+  `web/components/pairs-table.tsx` — thead derives groups/`colSpan` from the `COLS`
+  list, but body cells are still a manual `<td>` sequence. Adding/reordering a leaf
+  requires editing both without a compile-time link. Deferred: existing table style
+  pre-dates WHI-780; full data-driven body cells is a larger refactor than this
+  header/Dir issue. Fix: one column descriptor that renders both header and cell.
+
 - **WHI-778 VPS 30-minute underlying soak not run in this PR** (Medium, WHI-778 → ops).
   Local Hermes/Yahoo smoke covers all public tickers; VPS soak needs both
   collectors up ≥30m then

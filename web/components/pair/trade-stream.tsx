@@ -8,19 +8,34 @@ import { cn } from "@/lib/cn";
 import {
   explorerTxUrl,
   fmtDirection,
+  fmtDirectionTitle,
   fmtLabel,
   fmtNotional,
   fmtPrice,
   fmtTsMs,
   shortAddr,
+  type DirectionVenues,
 } from "@/lib/format";
-import type { TradeStreamRow } from "@/lib/types";
+import type { Direction, TradeStreamRow } from "@/lib/types";
 
 type Props = {
   trades: TradeStreamRow[];
+  /** Explicit venues preferred; marketId is fallback only (WHI-780). */
+  venues?: DirectionVenues | null;
+  marketId?: string;
 };
 
-export function TradeStream({ trades }: Props) {
+function asArbDirection(direction: string | null | undefined): Direction | null {
+  if (
+    direction === "buy_fluxion_sell_bybit" ||
+    direction === "buy_bybit_sell_fluxion"
+  ) {
+    return direction;
+  }
+  return null;
+}
+
+export function TradeStream({ trades, venues, marketId }: Props) {
   if (trades.length === 0) {
     return (
       <EmptyPanel message="No Fluxion fills in the detail window (or RFQ fills lack pair_id — see DEFERRED_ISSUES)." />
@@ -54,6 +69,7 @@ export function TradeStream({ trades }: Props) {
                   : t.converging
                     ? "yes"
                     : "no";
+              const arbDir = asArbDirection(t.direction);
               return (
                 <tr
                   key={`${t.tx_hash}-${t.ts_ms}-${i}`}
@@ -69,10 +85,16 @@ export function TradeStream({ trades }: Props) {
                       {t.mechanism}
                     </Badge>
                   </Td>
-                  <Td className="tabular-nums">
-                    {t.direction === "buy_fluxion_sell_bybit" ||
-                    t.direction === "buy_bybit_sell_fluxion"
-                      ? fmtDirection(t.direction)
+                  <Td
+                    className="tabular-nums"
+                    title={
+                      arbDir
+                        ? fmtDirectionTitle(arbDir, venues, marketId)
+                        : undefined
+                    }
+                  >
+                    {arbDir
+                      ? fmtDirection(arbDir, venues, marketId)
                       : t.direction || "—"}
                   </Td>
                   <Td align="right" className="tabular-nums">

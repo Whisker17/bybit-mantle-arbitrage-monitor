@@ -40,6 +40,7 @@ function cardFromSummary(m: MarketSummary): MarketCard {
           : m.id,
     has_rfq: m.has_rfq,
     cex_venue: m.cex_venue,
+    dex_venue: m.dex_venue,
   };
 }
 

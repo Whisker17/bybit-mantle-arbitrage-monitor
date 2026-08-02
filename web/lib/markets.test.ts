@@ -46,6 +46,10 @@ describe("markets helpers", () => {
     const bsc = cards.find((m) => m.id === "binance-pancake")!;
     assert.equal(bybit.has_rfq, true);
     assert.equal(bsc.has_rfq, false);
+    assert.equal(bybit.cex_venue, "bybit");
+    assert.equal(bybit.dex_venue, "fluxion");
+    assert.equal(bsc.cex_venue, "binance");
+    assert.equal(bsc.dex_venue, "pancake");
     assert.deepEqual(
       new Set(KNOWN_MARKET_IDS),
       new Set(cards.map((c) => c.id)),

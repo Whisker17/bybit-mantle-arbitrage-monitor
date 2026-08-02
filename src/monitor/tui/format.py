@@ -40,12 +40,39 @@ def fmt_notional(value: Decimal | None) -> str:
     return f"{v:.0f}"
 
 
-def fmt_direction(direction: Direction | None) -> str:
+_VENUE_CODE: dict[str, str] = {
+    "bybit": "B",
+    "binance": "B",
+    "fluxion": "F",
+    "pancake": "P",
+}
+
+
+def _venue_code(venue: str) -> str:
+    key = venue.strip().lower()
+    if key in _VENUE_CODE:
+        return _VENUE_CODE[key]
+    return key[:1].upper() if key else "?"
+
+
+def fmt_direction(
+    direction: Direction | None,
+    *,
+    cex_venue: str = "bybit",
+    dex_venue: str = "fluxion",
+) -> str:
+    """Short Dir label using market venues (WHI-780).
+
+    Wire enums stay historical: ``buy_fluxion_sell_bybit`` = buy DEX sell CEX.
+    Defaults preserve Bybit⇄Fluxion ``F→B`` / ``B→F``.
+    """
     if direction is None:
         return "—"
+    cex = _venue_code(cex_venue)
+    dex = _venue_code(dex_venue)
     if direction == "buy_fluxion_sell_bybit":
-        return "F→B"
-    return "B→F"
+        return f"{dex}→{cex}"
+    return f"{cex}→{dex}"
 
 
 def fmt_session(session: SessionKind | None) -> str:

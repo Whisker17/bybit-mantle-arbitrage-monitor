@@ -4,14 +4,18 @@ import { useEffect, useMemo, useState } from "react";
 
 import {
   bpsTone,
+  directionToggleLabel,
   fmtBps,
   fmtDirection,
+  fmtDirectionTitle,
   fmtNotional,
   fmtSignedBps,
   fmtUsd,
   parseNum,
+  resolveVenues,
   totalWearBps,
   usdTone,
+  type DirectionVenues,
 } from "@/lib/format";
 import {
   isOptimalBucket,
@@ -37,14 +41,29 @@ type Props = {
   pnl?: PnlPairSnapshot | null;
   /** Hide RFQ venue card when market has no RFQ (WHI-774). */
   hasRfq?: boolean;
+  /** Explicit venues preferred over marketId split (WHI-780). */
+  venues?: DirectionVenues | null;
+  marketId?: string;
 };
 
-const DIRECTIONS: Array<{ id: Direction; label: string }> = [
-  { id: "buy_fluxion_sell_bybit", label: "F→B (buy Fluxion)" },
-  { id: "buy_bybit_sell_fluxion", label: "B→F (buy Bybit)" },
+const DIRECTION_IDS: Direction[] = [
+  "buy_fluxion_sell_bybit",
+  "buy_bybit_sell_fluxion",
 ];
 
-export function EdgeStatsPanel({ amm, rfq, pnl, hasRfq = true }: Props) {
+export function EdgeStatsPanel({
+  amm,
+  rfq,
+  pnl,
+  hasRfq = true,
+  venues: venuesProp,
+  marketId,
+}: Props) {
+  const venues = resolveVenues(venuesProp, marketId);
+  const directions = DIRECTION_IDS.map((id) => ({
+    id,
+    label: directionToggleLabel(id, venues, marketId),
+  }));
   const [direction, setDirection] = useState<Direction>(
     "buy_fluxion_sell_bybit",
   );
@@ -74,12 +93,14 @@ export function EdgeStatsPanel({ amm, rfq, pnl, hasRfq = true }: Props) {
           hasRfq ? "lg:grid-cols-2" : "lg:grid-cols-1",
         )}
       >
-        <VenueEdgeCard title="AMM" panel={amm} />
+        <VenueEdgeCard title="AMM" panel={amm} venues={venues} marketId={marketId} />
         {hasRfq && (
           <VenueEdgeCard
             title="RFQ"
             panel={rfq}
             note="unslipped ladder (see DEFERRED)"
+            venues={venues}
+            marketId={marketId}
           />
         )}
       </div>
@@ -88,6 +109,9 @@ export function EdgeStatsPanel({ amm, rfq, pnl, hasRfq = true }: Props) {
         direction={direction}
         onDirection={setDirection}
         table={table}
+        directions={directions}
+        venues={venues}
+        marketId={marketId}
       />
     </div>
   );
@@ -97,10 +121,14 @@ function VenueEdgeCard({
   title,
   panel,
   note,
+  venues,
+  marketId,
 }: {
   title: string;
   panel: EdgePanel;
   note?: string;
+  venues?: DirectionVenues | null;
+  marketId?: string;
 }) {
   const cur = panel.current;
   const costs = cur?.costs ?? panel.costs;
@@ -120,8 +148,12 @@ function VenueEdgeCard({
         <div className="space-y-1 text-xs">
           <div className="flex flex-wrap items-baseline gap-x-3 gap-y-0.5">
             <Bps value={cur.net_edge_bps} className="text-sm font-semibold" />
-            <span className="text-muted-foreground">
-              {fmtDirection(cur.direction)} @ ${Number(cur.size_usd).toLocaleString()}
+            <span
+              className="text-muted-foreground"
+              title={fmtDirectionTitle(cur.direction, venues, marketId)}
+            >
+              {fmtDirection(cur.direction, venues, marketId)} @ $
+              {Number(cur.size_usd).toLocaleString()}
             </span>
             <span className="text-muted-foreground">
               gross {fmtSignedBps(cur.gross_spread_bps)}
@@ -247,11 +279,17 @@ function BucketPnlPanel({
   direction,
   onDirection,
   table,
+  directions,
+  venues,
+  marketId,
 }: {
   snap: PnlPairSnapshot | null | undefined;
   direction: Direction;
   onDirection: (d: Direction) => void;
   table: PnlBucketTable | null;
+  directions: Array<{ id: Direction; label: string }>;
+  venues?: DirectionVenues | null;
+  marketId?: string;
 }) {
   if (snap == null) {
     return (
@@ -279,7 +317,7 @@ function BucketPnlPanel({
           </p>
         </div>
         <div className="flex gap-1">
-          {DIRECTIONS.map((d) => (
+          {directions.map((d) => (
             <button
               key={d.id}
               type="button"
@@ -309,10 +347,13 @@ function BucketPnlPanel({
           >
             {fmtUsd(best.optimal_net_pnl_usd)}
           </span>
-          <span className="text-muted-foreground">
+          <span
+            className="text-muted-foreground"
+            title={fmtDirectionTitle(best.direction, venues, marketId)}
+          >
             {" "}
             @ ${fmtNotional(best.optimal_notional_usd)}{" "}
-            {fmtDirection(best.direction)}
+            {fmtDirection(best.direction, venues, marketId)}
           </span>
         </p>
       )}

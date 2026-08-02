@@ -25,16 +25,20 @@ export type MarketCard = {
   short_label: string;
   has_rfq: boolean;
   cex_venue: string;
+  /** DEX venue id from market yaml (fluxion / pancake) — WHI-780 Dir + groups. */
+  dex_venue: string;
 };
 
 /**
  * Minimal client fallback cards until /api/markets responds.
  * short_label/display_name are placeholders; API is the source of truth.
- * Capitalized CEX token is derived from the market id prefix only.
+ * Venue tokens are derived from the market id (`cex-dex`) until YAML/API loads.
  */
 export const KNOWN_MARKETS: readonly MarketCard[] = KNOWN_MARKET_IDS.map(
   (id) => {
-    const cex = id.split("-")[0] ?? id;
+    const parts = id.split("-");
+    const cex = parts[0] ?? id;
+    const dex = parts[1] ?? "";
     const short = cex.charAt(0).toUpperCase() + cex.slice(1);
     return {
       id,
@@ -43,6 +47,7 @@ export const KNOWN_MARKETS: readonly MarketCard[] = KNOWN_MARKET_IDS.map(
       // Safe default: hide RFQ until API confirms has_rfq (binance has none).
       has_rfq: id === "bybit-fluxion",
       cex_venue: cex,
+      dex_venue: dex,
     };
   },
 );

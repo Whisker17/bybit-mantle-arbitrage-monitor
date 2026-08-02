@@ -142,7 +142,11 @@ class OverviewScreen(Screen[None]):
                     fmt_signed_bps(row.amm_spread_bps),
                     fmt_signed_bps(row.rfq_spread_bps),
                     fmt_signed_bps(row.net_edge_bps),
-                    fmt_direction(row.net_edge_direction),
+                    fmt_direction(
+                        row.net_edge_direction,
+                        cex_venue=self._app_state.cex_venue,
+                        dex_venue=self._app_state.dex_venue,
+                    ),
                     row.net_edge_venue or "—",
                     fmt_notional(row.volume_24h),
                     str(row.trades_24h),
@@ -237,13 +241,18 @@ class DetailScreen(Screen[None]):
         hdr = self.query_one("#detail_header", Static)
         liq = " [dim](low liq)[/]" if model.low_liquidity else ""
         o = model.overview
+        dir_label = fmt_direction(
+            o.net_edge_direction,
+            cex_venue=self._app_state.cex_venue,
+            dex_venue=self._app_state.dex_venue,
+        )
         hdr.update(
             f"[bold]{model.pair_id}[/] {model.name}{liq}  "
             f"session={fmt_session(model.session_now)}  "
             f"mid={fmt_price(o.bybit_mid)}  "
             f"AMM={fmt_price(o.amm_mid)}  "
             f"net={fmt_signed_bps(o.net_edge_bps)} bps "
-            f"({fmt_direction(o.net_edge_direction)} {o.net_edge_venue or '—'})"
+            f"({dir_label} {o.net_edge_venue or '—'})"
         )
 
         spark_cells = sparkline(
@@ -264,7 +273,10 @@ class DetailScreen(Screen[None]):
 
         self.query_one("#edge_panel", Static).update(
             _format_edge_panels(
-                model, sample_cap=self._app_state.tui.edge_history_max_samples
+                model,
+                sample_cap=self._app_state.tui.edge_history_max_samples,
+                cex_venue=self._app_state.cex_venue,
+                dex_venue=self._app_state.dex_venue,
             )
         )
         self.query_one("#attr_panel", Static).update(_format_attr_panel(model))
@@ -318,7 +330,13 @@ def _dist_line(label: str, dist: Distribution) -> str:
     )
 
 
-def _format_edge_panels(model: PairDetailModel, *, sample_cap: int) -> str:
+def _format_edge_panels(
+    model: PairDetailModel,
+    *,
+    sample_cap: int,
+    cex_venue: str = "bybit",
+    dex_venue: str = "fluxion",
+) -> str:
     # Cumulative rows are over the last `sample_cap` journal book samples for
     # this pair, not the whole journal (tui.edge_history_max_samples).
     lines = [
@@ -332,7 +350,7 @@ def _format_edge_panels(model: PairDetailModel, *, sample_cap: int) -> str:
         else:
             lines.append(
                 f"{title}: {fmt_signed_bps(cur.net_edge_bps)} bps  "
-                f"{fmt_direction(cur.direction)}  "
+                f"{fmt_direction(cur.direction, cex_venue=cex_venue, dex_venue=dex_venue)}  "
                 f"@ ${cur.size_usd:g}  "
                 f"gross={fmt_signed_bps(cur.gross_spread_bps)}"
             )
@@ -450,6 +468,9 @@ class TuiApp(App[None]):
             attribution_path=attribution_path,
             load_collector=True,
         )
+        # Dir labels use market venues (WHI-780); defaults stay Bybit/Fluxion codes.
+        self.cex_venue = ctx.cex.venue
+        self.dex_venue = ctx.dex.venue
         if pairs_path is not None:
             self.pairs = load_pairs_config(pairs_path, market_id=mid)
         else:

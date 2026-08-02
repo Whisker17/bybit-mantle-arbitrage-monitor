@@ -143,6 +143,10 @@ placeholders. Agents must not assume a module exists until its issue lands. -->
     detail `volume_compare` panel (session open/closed split); API fields
     `cex_volume_24h` / `dex_volume_24h` / `volume_ratio` on pairs + detail.
     Module `monitor/cex_volume` + `monitor/metrics/volume.py`. Both markets.
+  - **Overview group headers + Dir labels (WHI-780) landed:** two-row
+    overview thead (venue-named CEX/DEX groups + Edge/Vol gap/PnL/Underlying);
+    column reorder so CEX Vol sits with CEX L1 and DEX Vol with DEX quotes;
+    market-aware Dir short codes (`F→B`/`B→F` vs `P→B`/`B→P`) on Web + TUI.
 
 ## Build, test, run
 
