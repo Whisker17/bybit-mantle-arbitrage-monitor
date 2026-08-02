@@ -431,7 +431,10 @@ def test_daemon_underlying_tickers_both_markets(tmp_path: Path) -> None:
 def test_stamp_underlying_poll_meta_even_when_empty(tmp_path: Path) -> None:
     """WHI-788: empty poll still writes last_poll_ms / last_n (ops observability)."""
     from monitor.collector.config import load_collector_config
-    from monitor.collector.daemon import CollectorDaemon
+    from monitor.collector.daemon import (
+        UNDERLYING_STATUS_RUNNING,
+        CollectorDaemon,
+    )
     from monitor.symbols import load_pairs_config
 
     store = SqliteStore(tmp_path / "meta.db")
@@ -442,10 +445,10 @@ def test_stamp_underlying_poll_meta_even_when_empty(tmp_path: Path) -> None:
         market_id="bybit-fluxion",
     )
     daemon._stamp_underlying_status(
-        "running", error="", tickers=["AAPL", "TSLA"]
+        UNDERLYING_STATUS_RUNNING, error="", tickers=["AAPL", "TSLA"]
     )
     daemon._stamp_underlying_poll(0, poll_ms=1_700_000_000_000)
-    assert store.get_meta("underlying_status") == "running"
+    assert store.get_meta("underlying_status") == UNDERLYING_STATUS_RUNNING
     assert store.get_meta("underlying_tickers") == "AAPL,TSLA"
     assert store.get_meta("underlying_last_poll_ms") == "1700000000000"
     assert store.get_meta("underlying_last_n") == "0"
