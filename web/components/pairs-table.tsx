@@ -7,6 +7,7 @@ import { useMemo } from "react";
 import { Badge } from "@/components/ui/badge";
 import { cn } from "@/lib/cn";
 import {
+  ammQuoteReasonLabel,
   bpsTone,
   cexPremiumBps,
   fmtDirection,
@@ -295,7 +296,26 @@ function buildGroupStrip(cols: Col[], venues: DirectionVenues): GroupStrip[] {
   return out;
 }
 
-function BpsCell({ value }: { value: string | null }) {
+function BpsCell({
+  value,
+  emptyLabel,
+  emptyTitle,
+}: {
+  value: string | null;
+  /** When value is null, show this instead of em-dash (e.g. empty pool). */
+  emptyLabel?: string | null;
+  emptyTitle?: string | null;
+}) {
+  if (value == null && emptyLabel) {
+    return (
+      <span
+        className="text-muted-foreground"
+        title={emptyTitle ?? emptyLabel}
+      >
+        {emptyLabel}
+      </span>
+    );
+  }
   const tone = bpsTone(value);
   return (
     <span
@@ -308,6 +328,24 @@ function BpsCell({ value }: { value: string | null }) {
     >
       {fmtSignedBps(value)}
     </span>
+  );
+}
+
+/** AMM mid / price cell with empty-pool reason (WHI-795). */
+function AmmMidCell({ row }: { row: PairOverviewRow }) {
+  const reason = ammQuoteReasonLabel(row.amm_quote_reason);
+  if (row.amm_mid == null && reason) {
+    return (
+      <span
+        className="text-muted-foreground"
+        title="Pool has zero in-range liquidity — residual slot0 mid suppressed"
+      >
+        {reason}
+      </span>
+    );
+  }
+  return (
+    <span className="tabular-nums">{fmtPrice(row.amm_mid)}</span>
   );
 }
 
@@ -485,6 +523,17 @@ function DexVsUndCell({
   hasRfq: boolean;
 }) {
   const amm = row.amm_premium_bps ?? null;
+  const emptyPool = ammQuoteReasonLabel(row.amm_quote_reason);
+  if (amm == null && emptyPool) {
+    return (
+      <span
+        className="text-muted-foreground"
+        title="Pool has zero in-range liquidity — residual mid suppressed"
+      >
+        {emptyPool}
+      </span>
+    );
+  }
   return (
     <VsUndCell
       row={row}
@@ -706,7 +755,7 @@ export function PairsTable({
                       groupSep("dex"),
                     )}
                   >
-                    {fmtPrice(row.amm_mid)}
+                    <AmmMidCell row={row} />
                   </td>
                   {hasRfq && (
                     <>
@@ -719,7 +768,11 @@ export function PairsTable({
                     </>
                   )}
                   <td className="px-2 py-1.5 text-right">
-                    <BpsCell value={row.amm_spread_bps} />
+                    <BpsCell
+                      value={row.amm_spread_bps}
+                      emptyLabel={ammQuoteReasonLabel(row.amm_quote_reason)}
+                      emptyTitle="Pool has zero in-range liquidity — residual mid suppressed"
+                    />
                   </td>
                   {hasRfq && (
                     <td className="px-2 py-1.5 text-right">
@@ -753,7 +806,11 @@ export function PairsTable({
                       groupSep("edge"),
                     )}
                   >
-                    <BpsCell value={row.net_edge_bps} />
+                    <BpsCell
+                      value={row.net_edge_bps}
+                      emptyLabel={ammQuoteReasonLabel(row.amm_quote_reason)}
+                      emptyTitle="Pool has zero in-range liquidity — no net edge"
+                    />
                   </td>
                   <td
                     className="px-2 py-1.5 text-muted-foreground"

@@ -18,6 +18,7 @@ from typing import Any, Literal
 
 from monitor.fluxion.abi import USDC_DECIMALS
 from monitor.metrics.amm_pool import AmmPoolState
+from monitor.metrics.amm_quote import is_pool_quotable
 from monitor.metrics.bybit_slip import BPS
 from monitor.metrics.config import MetricsConfig
 from monitor.metrics.edge import Direction
@@ -40,6 +41,7 @@ PnlStatus = Literal[
     "ok",
     "no_book",
     "no_pool",
+    "empty_pool",
     "no_depth",
     "no_fillable",
     "stale",
@@ -267,6 +269,14 @@ def build_pnl_pair_snapshot(
         empty = _empty_summary(status="no_pool", has_depth=False)
         return PnlPairSnapshot(
             status="no_pool", has_depth=False, best=empty, tables={}
+        )
+
+    # Align with spread/edge quotability (WHI-795): residual slot0 mid on an
+    # empty pool is not a fillable market — surface empty_pool, not no_fillable.
+    if not is_pool_quotable(amm_tick):
+        empty = _empty_summary(status="empty_pool", has_depth=False)
+        return PnlPairSnapshot(
+            status="empty_pool", has_depth=False, best=empty, tables={}
         )
 
     if _ticks_stale(bybit=bybit, amm=amm_tick, now_ms=now_ms, stale_ms=stale_ms):

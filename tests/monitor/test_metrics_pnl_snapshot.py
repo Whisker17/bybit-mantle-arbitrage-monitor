@@ -265,6 +265,42 @@ def test_snapshot_no_book() -> None:
     assert snap.tables == {}
 
 
+def test_snapshot_empty_pool_not_no_fillable() -> None:
+    """WHI-795: liquidity==0 residual mid → empty_pool (aligned with spreads)."""
+    pair = _load_aapl_pair()
+    pool_tick = _pool_tick(mid=Decimal("66.89"))
+    # Rebuild with zero liquidity (residual mid still set).
+    pool_tick = FluxionPoolStateTick(
+        pair_id=pool_tick.pair_id,
+        pool=pool_tick.pool,
+        block_number=pool_tick.block_number,
+        block_ts=pool_tick.block_ts,
+        recv_ts_ms=pool_tick.recv_ts_ms,
+        sqrt_price_x96=pool_tick.sqrt_price_x96,
+        tick=pool_tick.tick,
+        liquidity=0,
+        token0=pool_tick.token0,
+        token1=pool_tick.token1,
+        mid_usdc_per_wrapper=pool_tick.mid_usdc_per_wrapper,
+        mid_usdc_per_native=pool_tick.mid_usdc_per_native,
+        wrapper_assets_per_share=pool_tick.wrapper_assets_per_share,
+    )
+    amm = amm_pool_from_tick(pair, pool_tick)
+    assert amm is not None
+    snap = build_pnl_pair_snapshot(
+        pair_id=pair.id,
+        bybit=_book(),
+        amm=amm,
+        amm_tick=pool_tick,
+        config=_cfg(),
+        depth=_depth(),
+        native_decimals=pair.fluxion.native_decimals,
+    )
+    assert snap.status == "empty_pool"
+    assert snap.best.status == "empty_pool"
+    assert snap.tables == {}
+
+
 def test_snapshot_no_depth_hides_overview_optimal() -> None:
     """Overview must show no_depth; detail tables still compute on L1."""
     pair = _load_aapl_pair()

@@ -8,6 +8,7 @@ from monitor.metrics.session import SessionKind
 from monitor.tui.format import (
     downsample,
     fmt_direction,
+    fmt_price_or_reason,
     fmt_signed_bps,
     short_addr,
     sparkline,
@@ -19,6 +20,14 @@ def test_fmt_signed_bps() -> None:
     assert fmt_signed_bps(Decimal("12.3")) == "+12.3"
     assert fmt_signed_bps(Decimal("-1.5")) == "-1.5"
     assert fmt_signed_bps(None) == "—"
+    assert fmt_signed_bps(None, reason="empty_pool") == "empty pool"
+    assert fmt_signed_bps(None, reason="invalid_mid") == "invalid mid"
+
+
+def test_fmt_price_or_reason() -> None:
+    assert fmt_price_or_reason(Decimal("99.5"), None) == "99.5000"
+    assert fmt_price_or_reason(None, "empty_pool") == "empty pool"
+    assert fmt_price_or_reason(None, None) == "—"
 
 
 def test_fmt_direction() -> None:

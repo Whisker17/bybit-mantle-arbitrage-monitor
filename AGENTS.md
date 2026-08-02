@@ -175,6 +175,12 @@ placeholders. Agents must not assume a module exists until its issue lands. -->
     footer “Show all N / Collapse”; n/a sort values trail and never fill Top-N
     slots; shareable `?sort=&desc=&all=`; pair-id TVL/Vol badges +
     `web/lib/pair-badges.ts` removed.
+  - **Empty-pool AMM quote gate (WHI-795) landed:** residual V3 `slot0` mid
+    when `liquidity == 0` is no longer treated as a tradable AMM quote.
+    Single seam `monitor.metrics.amm_quote.quotable_amm_mid` suppresses mid /
+    vs CEX / vs Und / net edge with reason `empty_pool`; PnL v2 status
+    `empty_pool` (distinct from `no_pool` / `stale`); bps magnitude guardrail
+    `assert_sane_bps` (±5000) in tests.
 
   - **Underlying dual-market ops (WHI-788) landed:** bybit blank Underlying
     was a **stale collector process** (pre-778 binary; binance restarted later).

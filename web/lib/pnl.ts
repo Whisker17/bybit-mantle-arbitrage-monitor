@@ -35,6 +35,7 @@ const STATUS_LABEL: Record<PnlStatus, string> = {
   ok: "ok",
   no_book: "no book",
   no_pool: "no pool",
+  empty_pool: "empty pool",
   no_depth: "no depth",
   no_fillable: "unfillable",
   stale: "stale",

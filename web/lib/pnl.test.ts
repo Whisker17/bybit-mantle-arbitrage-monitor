@@ -91,7 +91,7 @@ describe("overviewPnlCell", () => {
   });
 
   it("does not collapse no_book/stale into no depth", () => {
-    for (const status of ["no_book", "no_pool", "stale"] as const) {
+    for (const status of ["no_book", "no_pool", "empty_pool", "stale"] as const) {
       const cell = overviewPnlCell({
         status,
         has_depth: false,
@@ -106,6 +106,33 @@ describe("overviewPnlCell", () => {
         assert.notEqual(cell.label, "no depth");
         assert.match(cell.label, /book|pool|stale/);
       }
+    }
+  });
+
+  it("labels empty_pool distinctly from no_pool", () => {
+    const empty = overviewPnlCell({
+      status: "empty_pool",
+      has_depth: false,
+      direction: null,
+      optimal_notional_usd: null,
+      optimal_net_pnl_usd: null,
+      optimal_net_pnl_bps: null,
+      bybit_depth_source: null,
+    });
+    const none = overviewPnlCell({
+      status: "no_pool",
+      has_depth: false,
+      direction: null,
+      optimal_notional_usd: null,
+      optimal_net_pnl_usd: null,
+      optimal_net_pnl_bps: null,
+      bybit_depth_source: null,
+    });
+    assert.equal(empty.kind, "status");
+    assert.equal(none.kind, "status");
+    if (empty.kind === "status" && none.kind === "status") {
+      assert.equal(empty.label, "empty pool");
+      assert.equal(none.label, "no pool");
     }
   });
 });

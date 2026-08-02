@@ -17,9 +17,13 @@ export type PnlStatus =
   | "ok"
   | "no_book"
   | "no_pool"
+  | "empty_pool"
   | "no_depth"
   | "no_fillable"
   | "stale";
+
+/** Why AMM mid is n/a when a pool tick existed (WHI-795). */
+export type AmmQuoteReason = "empty_pool" | "invalid_mid";
 
 export type PnlDepthSource = "l1" | "book";
 
@@ -110,6 +114,12 @@ export type PairOverviewRow = {
   volume_24h: string;
   trades_24h: number;
   stale: boolean;
+  /**
+   * WHI-795: why AMM mid / vs CEX / AMM vs Und are n/a when a pool tick
+   * existed (empty_pool residual slot0, invalid_mid). Null when mid is usable
+   * or there is no pool tick at all.
+   */
+  amm_quote_reason?: AmmQuoteReason | null;
   /** Present after WHI-766; older APIs may omit. */
   pnl_v2?: PnlOptimalSummary | null;
   /** Present after WHI-769; older APIs may omit. */

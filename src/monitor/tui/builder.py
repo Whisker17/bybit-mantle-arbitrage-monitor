@@ -41,6 +41,7 @@ from monitor.metrics import (
     build_spread_snapshot,
     session_kind,
 )
+from monitor.metrics.amm_quote import quotable_amm_mid
 from monitor.metrics.edge import Direction, EdgeResult, VenueKind, mid_from_bid_ask
 from monitor.metrics.premium import (
     PremiumSnapshot,
@@ -240,7 +241,8 @@ def _premium_for_pair(
     if bybit is not None and bybit.bid_de_multiplied > 0 and bybit.ask_de_multiplied > 0:
         cex_mid = mid_from_bid_ask(bybit.bid_de_multiplied, bybit.ask_de_multiplied)
     cex_eq = equity_equivalent_mid(cex_mid, ui_multiplier=ui_mult)
-    amm_raw = None if amm is None else amm.mid_usdc_per_native
+    # Empty-pool residual slot0 mid must not enter premium (WHI-795).
+    amm_raw, _amm_reason = quotable_amm_mid(amm)
     amm_eq = equity_equivalent_mid(amm_raw, ui_multiplier=ui_mult)
     # RFQ is Fluxion-only (no ui_multiplier path).
     rfq_mid = mean_mid(rfq_price(rfq_buy), rfq_price(rfq_sell))
@@ -454,6 +456,7 @@ def build_pair_overview_row(
     tvl_usd = None if tvl is None else tvl.tvl_usd
     tvl_as_of = None if tvl is None else tvl.recv_ts_ms
     if bybit is None:
+        stale_amm_mid, stale_amm_reason = quotable_amm_mid(amm)
         return PairOverviewRow(
             pair_id=pair.id,
             name=pair.name,
@@ -462,7 +465,7 @@ def build_pair_overview_row(
             bybit_bid=None,
             bybit_ask=None,
             bybit_mid=None,
-            amm_mid=None if amm is None else amm.mid_usdc_per_native,
+            amm_mid=stale_amm_mid,
             rfq_buy=None if rfq_buy is None or not rfq_buy.available else rfq_buy.price,
             rfq_sell=(
                 None if rfq_sell is None or not rfq_sell.available else rfq_sell.price
@@ -476,6 +479,7 @@ def build_pair_overview_row(
             volume_24h=volume_24h,
             trades_24h=trades_24h,
             stale=True,
+            amm_quote_reason=stale_amm_reason,
             est_liquidity_usd=liq,
             tvl_usd=tvl_usd,
             tvl_as_of_ms=tvl_as_of,
@@ -520,6 +524,7 @@ def build_pair_overview_row(
         volume_24h=volume_24h,
         trades_24h=trades_24h,
         stale=False,
+        amm_quote_reason=spreads.amm_quote_reason,
         est_liquidity_usd=liq,
         tvl_usd=tvl_usd,
         tvl_as_of_ms=tvl_as_of,
