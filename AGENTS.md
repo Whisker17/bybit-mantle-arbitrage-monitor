@@ -75,8 +75,14 @@ placeholders. Agents must not assume a module exists until its issue lands. -->
     attribution (top takers + mechanism donut). Bucket/optimal PnL placeholder
     until Web wires WHI-756. SpreadPoint gains rfq_spread_bps + bybit_mid for
     the chart.
+  - **MM attribution research (WHI-767) landed:** chain-backfill analysis +
+    draft `market_maker` / `rebalancer` rules — note
+    `docs/references/mm-attribution-analysis.md`, pure helpers
+    `monitor.attribution.mm_draft`, CLI
+    `scripts/mm_attribution_analysis.py`. Productization is WHI-768.
   - **Not landed yet:** Web/API consumption of PnL v2 bucket table + optimal
-    size. Do not assume those routes exist until a wiring issue lands.
+    size; MM label productization (WHI-768). Do not assume those routes/labels
+    exist until a wiring issue lands.
 ## Build, test, run
 
 ```bash
@@ -102,6 +108,9 @@ uv run python -m monitor.api
 # PnL v2 cash-flow engine demo (WHI-756); pure synthetic mids, no journal:
 uv run python -m monitor.metrics
 uv run python -m monitor.metrics --fluxion-mid 99.5 --json
+# MM attribution research backfill (WHI-767); needs Mantle RPC + network:
+#   uv run python scripts/mm_attribution_analysis.py --days 30
+#   uv run python scripts/mm_attribution_analysis.py --skip-fetch
 # Web static export (build on laptop/CI — never on the 1GB VPS):
 #   cd web && npm ci && npm run build   # → web/out
 # Web pure-helper unit tests (format/sort):
