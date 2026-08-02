@@ -25,6 +25,11 @@ import {
 } from "@/lib/format";
 import { marketPairPath } from "@/lib/markets";
 import { mmActiveLabel, mmActiveTitle } from "@/lib/mm";
+import {
+  BADGE_LABEL_TVL,
+  BADGE_LABEL_VOL,
+  pairBadgesForRows,
+} from "@/lib/pair-badges";
 import { overviewPnlCell } from "@/lib/pnl";
 import type { MmActiveStatus, PairOverviewRow, SortKey } from "@/lib/types";
 
@@ -455,6 +460,12 @@ export function PairsTable({
     return map;
   }, [cols]);
 
+  // WHI-781: TVL / Vol badges ranked in-market from row fields (no hardcoded ids).
+  const badgesByPair = useMemo(
+    () => pairBadgesForRows(rows, marketId),
+    [rows, marketId],
+  );
+
   return (
     <div className="overflow-x-auto rounded-md border border-border">
       <table
@@ -532,6 +543,7 @@ export function PairsTable({
                 venues,
                 marketId,
               );
+              const badges = badgesByPair.get(row.pair_id);
               return (
                 <tr
                   key={row.pair_id}
@@ -568,9 +580,22 @@ export function PairsTable({
                       >
                         {row.pair_id}
                       </Link>
-                      {row.low_liquidity && (
-                        <Badge variant="muted" className="normal-case">
-                          low-liq
+                      {badges?.hiTvl && (
+                        <Badge
+                          variant="positive"
+                          className="normal-case"
+                          title={badges.tvlTitle}
+                        >
+                          {BADGE_LABEL_TVL}
+                        </Badge>
+                      )}
+                      {badges?.hiVol && (
+                        <Badge
+                          variant="default"
+                          className="normal-case"
+                          title={badges.volTitle}
+                        >
+                          {BADGE_LABEL_VOL}
                         </Badge>
                       )}
                       {row.stale && (

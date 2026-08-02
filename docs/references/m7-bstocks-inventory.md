@@ -52,6 +52,23 @@ Snapshot date: **2026-08-02**.
 Ranked by DexScreener liquidity USD on the **on-chain-verified** best USDT pool.
 `low_liquidity` uses the same $50k gate as M1 `pairs.yaml` (inventory convention only).
 
+### Web overview badges (WHI-781) — not a volume top-10 inventory
+
+The Web overview can show compact **`TVL`** / **`Vol`** badges next to a pair id.
+These **label two independent ranking dimensions** on the *current fixed inventory*;
+they do **not** mean the monitor set was rebuilt to Binance CEX volume top-10.
+
+| Badge | Dimension | Default rule (binance-pancake) |
+|-------|-----------|--------------------------------|
+| `TVL` | DEX pool liquidity | Inventory `est_liquidity_usd` rank ≤ 5 among this market's overview rows |
+| `Vol` | CEX 24h quote volume | Live `cex_volume_24h` rank ≤ 5 among this market's overview rows |
+
+A pair may show **both** when it ranks high on both axes (set overlap with global
+CEX leaders is small — research day 2026-08-02 had only SPCXB / SKHYB / MUB in both
+universes). The `low-liq` badge was removed from the UI; the hide-low-liquidity
+filter still uses inventory `low_liquidity`. bybit-fluxion uses **Vol-only** (no
+PCS TVL story).
+
 | # | id | Binance | BEP-20 | PCS pool | fee | Est liq USD | uiMultiplier | mid cross-check |
 |---|-----|---------|--------|----------|-----|-------------|--------------|-----------------|
 | 1 | SPCXB | SPCXBUSDT | `0xbe9D…03E1` | `0x977D…5b4d` V3 | 2500 | ~3.17M | 1.0 | ~−1 bps |

@@ -147,6 +147,11 @@ placeholders. Agents must not assume a module exists until its issue lands. -->
     overview thead (venue-named CEX/DEX groups + Edge/Vol gap/PnL/Underlying);
     column reorder so CEX Vol sits with CEX L1 and DEX Vol with DEX quotes;
     market-aware Dir short codes (`F→B`/`B→F` vs `P→B`/`B→P`) on Web + TUI.
+  - **Pair badges TVL/Vol (WHI-781) landed:** overview pair-id badges for
+    high inventory DEX pool TVL and/or high in-market CEX 24h vol (top-5);
+    `low-liq` badge removed (filter kept); binance-pancake TVL+Vol,
+    bybit-fluxion Vol-only; `est_liquidity_usd` on overview rows;
+    pure helpers `web/lib/pair-badges.ts`.
 
 ## Build, test, run
 

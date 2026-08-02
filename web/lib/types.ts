@@ -139,6 +139,11 @@ export type PairOverviewRow = {
   amm_premium_bps?: string | null;
   rfq_premium_bps?: string | null;
   premium_type_label?: string | null;
+  /**
+   * WHI-781: inventory snapshot pool liquidity USD (est / DexScreener).
+   * Used client-side to rank the TVL badge; not live journal TVL.
+   */
+  est_liquidity_usd?: string | null;
 };
 
 /** Session bucket for volume compare (WHI-777). */
