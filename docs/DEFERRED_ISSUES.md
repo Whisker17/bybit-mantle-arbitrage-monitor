@@ -31,6 +31,29 @@ soon — anything touching key handling, RPC credentials defaults to at least Hi
 
 ## Open
 
+- **WHI-778 VPS 30-minute underlying soak not run in this PR** (Medium, WHI-778 → ops).
+  Local Hermes/Yahoo smoke covers all public tickers; VPS soak needs both
+  collectors up ≥30m then
+  `SELECT ticker, COUNT(*), MAX(as_of_ms) FROM underlying_prices GROUP BY ticker`.
+  SPCX remains uncovered (private). Checklist in
+  `docs/references/underlying-price-source.md`.
+
+- **WHI-778 session hours duplicated in underlying.yaml vs metrics.yaml** (Low, WHI-778).
+  `config/underlying.yaml` `session:` mirrors `metrics.yaml` with a comment
+  "must match". Code already types `SessionConfig` from metrics; config files
+  stay independent so underlying can load without metrics. Fix: load session
+  from metrics by default with optional override, or a single shared session
+  fragment.
+
+- **WHI-778 classify_price_type takes stale thresholds as loose params** (Low, WHI-778).
+  `session` + three `stale_after_*_ms` travel together at call sites. Pass
+  `UnderlyingConfig` (or a small `StalePolicy`) instead of four scalars.
+
+- **WHI-778 corporate-action jump→stale not detected on the collection side** (Medium, WHI-778 → WHI-779).
+  Spec asked for anomaly-day stale when multipliers / underlyings jump.
+  Collection only does age-based stale; premium alignment + jump detection
+  needs both legs and is deferred to the display issue (WHI-779).
+
 - **WHI-772 VPS 30-minute soak + co-resident memory not measured in this PR** (Medium, WHI-772 → M7-6 / WHI-775).
   Collector wiring lands with unit tests; acceptance “30 分钟实跑 / 0 结构性 gap /
   内存实测（与现采集器共存）” needs deploy host + keyed BSC RPC. Report totals to

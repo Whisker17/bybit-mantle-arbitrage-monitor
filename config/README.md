@@ -29,6 +29,7 @@ A **market** is `{ id, cex, dex, costs, inventory }` plus a dedicated SQLite jou
 | `attribution.yaml` | `monitor.attribution.load_attribution_config` | Taker-label thresholds (M4). |
 | `tui.yaml` | `monitor.tui.load_tui_config` | Panel refresh, default `market`, sqlite path, reference edge size (also used by API builders). |
 | `api.yaml` | `monitor.api.load_api_config` | FastAPI bind, default `market`, sqlite path, stale windows, PnL cache TTL, CORS. |
+| `underlying.yaml` | `monitor.underlying.load_underlying_config` | WHI-778 equity feed map (Pyth Hermes ids, Yahoo gap-fill, poll cadence, stale thresholds). Toggle via `collector.yaml` `underlying.enabled`. Session hours mirror `metrics.yaml` (must stay in sync). Validated in `docs/references/underlying-price-source.md`. |
 
 CLI entrypoints take `--market` (default `bybit-fluxion`). Journal migration from the
 pre-M7-2 single file:

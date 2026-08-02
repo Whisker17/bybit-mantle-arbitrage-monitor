@@ -283,6 +283,7 @@ Planned `src/monitor/` packages (land with their issues; empty package until the
 | `monitor/fluxion` | AMM state/quotes + RFQ feed; also BSC Pancake poll (parameterized) | M2 (landed WHI-731); M7-3 WHI-772 |
 | `monitor/storage` | SQLite journal for collector ticks + retention | M2 (landed WHI-731); retention WHI-751 |
 | `monitor/collector` | daemon orchestrating feeds → SQLite (+ retention loop); multi-market | M2 (landed WHI-731); M7-3 WHI-772 |
+| `monitor/underlying` | Pyth Hermes (+ optional Yahoo) equity reference → `underlying_prices` | WHI-778 (landed) |
 | `monitor/retention` | thin CLI over `storage.retention` (`python -m monitor.retention`) | WHI-751 |
 | `monitor/metrics` | edge, wear, session stats | M3 (landed WHI-732) |
 | `monitor/attribution` | mechanism + behavior labels (+ MM/rebalancer, WHI-768) | M4 (landed WHI-733); MM productization WHI-768 |
@@ -396,6 +397,7 @@ python -m monitor.retention --growth-only
 | `address_labels` | **permanent** | WHI-768 address → label + evidence (auto + manual override). |
 | `rebalance_events` | **permanent** | WHI-768 CEX-touch deposit/withdraw stream. |
 | `collector_gaps` | **30 days** | Ops history. |
+| `underlying_prices` | **7 days** | WHI-778 equity reference (Pyth Hermes / Yahoo gap-fill). Dedup on `(ticker, as_of_ms, source)`. |
 
 **M3 cumulative P50/P95/P99/max + breach stats** live in process memory
 (`EdgeStats` / `RunningEdgeState`), not in SQLite. TUI cold-start rebuilds from
@@ -434,8 +436,8 @@ deploy with `python -m monitor.retention --growth-only` (WHI-755 AC).
    (no destructive migration). v2 = `bybit_book_1m`; v3 = `bybit_depth`
    (WHI-755); v4 = RFQ fill enrichment columns + `erc20_transfers` +
    `address_labels` + `rebalance_events` (WHI-768; ALTER ADD COLUMN for
-   pre-v4 `fluxion_rfq_fills`). Meta key is updated for operators; readers
-   do not gate on the integer.
+   pre-v4 `fluxion_rfq_fills`); v5 = `underlying_prices` (WHI-778). Meta key
+   is updated for operators; readers do not gate on the integer.
 
 #### Disk waterline (`retention.disk`)
 

@@ -19,6 +19,7 @@ from monitor.quotes import (
     FluxionRfqFillTick,
     FluxionRfqQuoteTick,
     FluxionSwapTick,
+    UnderlyingPriceTick,
 )
 from monitor.storage.schema import DDL, RFQ_FILL_V4_COLUMNS, SCHEMA_VERSION
 
@@ -520,6 +521,33 @@ class SqliteStore:
             list(rows),
         )
 
+    def insert_underlying_prices(self, ticks: Iterable[UnderlyingPriceTick]) -> int:
+        """Append underlying equity reference prints (WHI-778)."""
+        rows = [
+            (
+                t.ticker,
+                str(t.price),
+                t.currency,
+                t.price_type,
+                t.as_of_ms,
+                t.recv_ts_ms,
+                t.source,
+                t.feed_id,
+                None if t.conf is None else str(t.conf),
+                1 if t.gap else 0,
+            )
+            for t in ticks
+        ]
+        return self._insert_many(
+            """
+            INSERT OR IGNORE INTO underlying_prices (
+                ticker, price, currency, price_type, as_of_ms, recv_ts_ms,
+                source, feed_id, conf, gap
+            ) VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?)
+            """,
+            rows,
+        )
+
     def insert_gap(self, gap: CollectorGap) -> None:
         with self._lock:
             with self._conn:
@@ -561,6 +589,7 @@ class SqliteStore:
             "address_labels",
             "rebalance_events",
             "collector_gaps",
+            "underlying_prices",
         }:
             raise ValueError(f"unknown table: {table}")
         with self._lock:

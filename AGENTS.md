@@ -125,6 +125,12 @@ placeholders. Agents must not assume a module exists until its issue lands. -->
     `/m/{market}/` and `/m/{market}/pair/{id}/` (root + legacy `/pair/{id}/`
     redirect to default market); RFQ columns hidden when `has_rfq` is false;
     explicit accumulating empty state when a market journal is not ready.
+  - **Underlying price source (WHI-778) landed:** research note
+    `docs/references/underlying-price-source.md` (Pyth Hermes primary +
+    Yahoo gap-fill for SKHY; SPCX uncovered/private); journal table
+    `underlying_prices` (schema v5); `monitor/underlying` poller wired into
+    both collectors; config `config/underlying.yaml` +
+    `collector.yaml` `underlying.enabled`. Display/premium column is WHI-779.
 
 ## Build, test, run
 
@@ -154,6 +160,9 @@ uv run python -m monitor.api --market bybit-fluxion
 uv run python -m monitor.metrics
 uv run python -m monitor.metrics --fluxion-mid 99.5 --json
 uv run python -m monitor.metrics --market binance-pancake --pair-id TSLAB --amm-mid 99.5 --json
+# Underlying equity smoke (WHI-778); Hermes public, no key:
+uv run python -m monitor.underlying
+uv run python -m monitor.underlying --tickers AAPL,TSLA,SKHY
 # MM attribution research backfill (WHI-767); needs Mantle RPC + network:
 #   uv run python scripts/mm_attribution_analysis.py --days 30
 #   uv run python scripts/mm_attribution_analysis.py --skip-fetch
@@ -189,6 +198,8 @@ Module layout is fixed by `docs/DESIGN.md` §4.2. Short mirror:
     **`monitor/collector`** (M2) — live feeds → per-market SQLite.
   - **`monitor/binance`** (M7-3) — Binance public combined streams for
     binance-pancake; journal rows reuse `bybit_*` table names.
+  - **`monitor/underlying`** (WHI-778) — Pyth Hermes (+ optional Yahoo)
+    equity reference → `underlying_prices` (shared by ticker).
   - **`monitor/metrics`** (M3 + WHI-756 + WHI-766) — edge/wear (M3 ladder),
     session stats, PnL v2 cash-flow engine (`pnl_v2.py`) + journal snapshot
     assembly (`pnl_snapshot.py`).

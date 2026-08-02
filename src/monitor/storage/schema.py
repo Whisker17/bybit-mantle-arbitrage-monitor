@@ -7,7 +7,7 @@ window so downstream metrics can exclude or weight them.
 
 from __future__ import annotations
 
-SCHEMA_VERSION = 4
+SCHEMA_VERSION = 5
 
 DDL: tuple[str, ...] = (
     """
@@ -310,6 +310,33 @@ DDL: tuple[str, ...] = (
     """
     CREATE INDEX IF NOT EXISTS idx_collector_gaps_start
         ON collector_gaps (gap_start_ms)
+    """,
+    # WHI-778: shared underlying equity reference (keyed by ticker, not pair_id).
+    # UNIQUE(ticker, as_of_ms, source) dedups frozen closes under closed-session
+    # poll cadence (same publish_time every 5 min).
+    """
+    CREATE TABLE IF NOT EXISTS underlying_prices (
+        id              INTEGER PRIMARY KEY AUTOINCREMENT,
+        ticker          TEXT    NOT NULL,
+        price           TEXT    NOT NULL,
+        currency        TEXT    NOT NULL,
+        price_type      TEXT    NOT NULL,
+        as_of_ms        INTEGER NOT NULL,
+        recv_ts_ms      INTEGER NOT NULL,
+        source          TEXT    NOT NULL,
+        feed_id         TEXT,
+        conf            TEXT,
+        gap             INTEGER NOT NULL DEFAULT 0,
+        UNIQUE (ticker, as_of_ms, source)
+    )
+    """,
+    """
+    CREATE INDEX IF NOT EXISTS idx_underlying_prices_ticker_asof
+        ON underlying_prices (ticker, as_of_ms)
+    """,
+    """
+    CREATE INDEX IF NOT EXISTS idx_underlying_prices_recv
+        ON underlying_prices (recv_ts_ms)
     """,
 )
 
