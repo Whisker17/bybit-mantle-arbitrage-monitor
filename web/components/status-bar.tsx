@@ -23,10 +23,13 @@ export function StatusBar({
 }: Props) {
   const alive = health?.collector_alive ?? false;
   const session = overview?.session_now ?? null;
+  // Prefer API display_name (human) over raw market id fallbacks.
+  const fromApi = overview?.display_name ?? health?.display_name;
   const title =
-    displayName ??
-    overview?.display_name ??
-    health?.display_name ??
+    fromApi ??
+    (displayName && displayName !== overview?.market_id && displayName.includes("⇄")
+      ? displayName
+      : null) ??
     "xStocks · Bybit ⇄ Fluxion";
 
   return (

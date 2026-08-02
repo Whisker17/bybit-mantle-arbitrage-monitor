@@ -1,7 +1,7 @@
 import Link from "next/link";
 import { notFound } from "next/navigation";
 
-import { MarketSwitcher } from "@/components/market-switcher";
+import { MarketSwitcherLive } from "@/components/market-switcher-live";
 import { PairDetail } from "@/components/pair/pair-detail";
 import { isKnownMarketId, marketOverviewPath } from "@/lib/markets";
 import { loadAllMarketPairParams } from "@/lib/pair-ids";
@@ -22,7 +22,7 @@ export default async function MarketPairPage({
 
   return (
     <main className="mx-auto max-w-[1100px] px-3 py-4 sm:px-4">
-      <MarketSwitcher marketId={market} />
+      <MarketSwitcherLive marketId={market} />
       <div className="mb-4 flex items-center gap-3 text-xs">
         <Link
           href={marketOverviewPath(market)}

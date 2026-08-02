@@ -459,3 +459,39 @@ def test_openapi_has_market_scoped_paths(client: TestClient) -> None:
     # Legacy paths remain.
     assert "/api/health" in paths
     assert "/api/pairs" in paths
+
+
+def test_builder_ready_market_missing_journal_returns_503(
+    tmp_path: Path, monkeypatch: pytest.MonkeyPatch
+) -> None:
+    """Builder-ready market with no DB keeps pre-WHI-774 503 (not accumulating)."""
+    monkeypatch.chdir(tmp_path)
+    api_yaml = tmp_path / "config" / "api.yaml"
+    api_yaml.parent.mkdir(parents=True, exist_ok=True)
+    missing = tmp_path / "data" / "no-such-journal.db"
+    api_yaml.write_text(
+        f"""version: 1
+host: 127.0.0.1
+port: 8000
+market: bybit-fluxion
+sqlite_path: {missing}
+collector_stale_ms: 30000
+recent_gap_window_ms: 300000
+poll_interval_s: 2.0
+pnl_cache_ttl_s: 0
+mm_active_window_ms: 86400000
+mm_series_max_points: 500
+mm_rebalance_limit: 100
+mm_inventory_cache_ttl_s: 0
+cors_origins: []
+""",
+        encoding="utf-8",
+    )
+    app = create_app(api_config_path=api_yaml)
+    with TestClient(app) as client:
+        r = client.get("/api/bybit-fluxion/pairs")
+        assert r.status_code == 503
+        assert "journal" in r.json()["detail"].lower()
+        # Unscoped legacy path same contract.
+        r2 = client.get("/api/pairs")
+        assert r2.status_code == 503

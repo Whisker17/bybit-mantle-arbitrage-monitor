@@ -1,7 +1,8 @@
 import fs from "node:fs";
 import path from "node:path";
 
-import { KNOWN_MARKETS } from "./markets";
+import { KNOWN_MARKET_IDS } from "./markets";
+import { assertKnownMarketIdsMatchDisk, loadKnownMarketsFromDisk } from "./markets-server";
 
 /**
  * Build-time pair id list from a market inventory YAML
@@ -54,8 +55,10 @@ export function loadPairIdsFromConfig(marketId = "bybit-fluxion"): string[] {
 
 /** All static params for /m/{market}/pair/{pairId}/. */
 export function loadAllMarketPairParams(): { market: string; pairId: string }[] {
+  // Fail build if client id list drifts from config/markets/*.yaml.
+  assertKnownMarketIdsMatchDisk();
   const out: { market: string; pairId: string }[] = [];
-  for (const m of KNOWN_MARKETS) {
+  for (const m of loadKnownMarketsFromDisk()) {
     for (const pairId of loadPairIdsFromConfig(m.id)) {
       out.push({ market: m.id, pairId });
     }
@@ -64,5 +67,9 @@ export function loadAllMarketPairParams(): { market: string; pairId: string }[] 
 }
 
 export function loadMarketIds(): string[] {
-  return KNOWN_MARKETS.map((m) => m.id);
+  assertKnownMarketIdsMatchDisk();
+  return loadKnownMarketsFromDisk().map((m) => m.id);
 }
+
+/** Re-export for callers that only need the static id list. */
+export { KNOWN_MARKET_IDS };

@@ -27,16 +27,24 @@ export type MarketCard = {
   cex_venue: string;
 };
 
-/** Minimal client fallback cards until /api/markets responds. */
+/**
+ * Minimal client fallback cards until /api/markets responds.
+ * short_label/display_name are placeholders; API is the source of truth.
+ * Capitalized CEX token is derived from the market id prefix only.
+ */
 export const KNOWN_MARKETS: readonly MarketCard[] = KNOWN_MARKET_IDS.map(
-  (id) => ({
-    id,
-    display_name: id,
-    short_label: id.split("-")[0] ?? id,
-    // Safe default: hide RFQ until API confirms has_rfq (binance has none).
-    has_rfq: id === "bybit-fluxion",
-    cex_venue: id.split("-")[0] ?? id,
-  }),
+  (id) => {
+    const cex = id.split("-")[0] ?? id;
+    const short = cex.charAt(0).toUpperCase() + cex.slice(1);
+    return {
+      id,
+      display_name: short, // upgraded to full "A ⇄ B" once /api/markets loads
+      short_label: short,
+      // Safe default: hide RFQ until API confirms has_rfq (binance has none).
+      has_rfq: id === "bybit-fluxion",
+      cex_venue: cex,
+    };
+  },
 );
 
 export function isKnownMarketId(id: string): boolean {

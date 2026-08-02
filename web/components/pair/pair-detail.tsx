@@ -66,14 +66,15 @@ export function PairDetail({ marketId, pairId }: Props) {
       setErr(null);
       if (d.has_rfq != null) setHasRfq(d.has_rfq);
       if (d.display_name) setDisplayName(d.display_name);
+      // Only markets without builders are "accumulating"; missing journals
+      // on builder-ready markets stay an error (HTTP 503 → err banner).
       setAccumulating(d.data_status === "accumulating");
     } catch (e) {
       // Keep last good snapshot so panels do not flash empty on a blip.
       const msg = e instanceof Error ? e.message : String(e);
       setErr(msg);
-      if (/503|accumulat/i.test(msg)) {
-        setAccumulating(true);
-      }
+      // Do not treat 503 as accumulating — that label is reserved for
+      // markets that cannot produce overview rows yet (binance until M7-4).
     }
   }, [marketId, pairId]);
 
