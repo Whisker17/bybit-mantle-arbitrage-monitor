@@ -69,13 +69,29 @@ Inventory underlyings (union of Bybit xStocks + Binance bStocks top sets):
 
 1. **`price_type`** ∈ `{live, pre, post, close, stale}`:
    - **live** — US RTH open *and* `as_of` within freshness window.
-   - **pre / post** — reserved if a source emits extended-hours prints (Yahoo can; main Pyth RTH feed usually does not).
-   - **close** — outside RTH (or holiday/weekend) with `as_of` on the last session; **must not** be treated as live premium without the label.
-   - **stale** — RTH open but `as_of` older than `stale_after_open_ms`, or absolute age > `stale_after_abs_ms` (catches dead KR feeds).
+   - **pre / post** — **only** when the source explicitly signals extended hours
+     (Yahoo `marketState`). Never invent pre/post from wall-clock alone: Pyth’s
+     RTH feed freezes `publish_time` at the last close, so weekday 16:00–20:00 ET
+     would otherwise stamp Friday’s close as `post`.
+   - **close** — outside RTH (or holiday/weekend) without a source pre/post hint;
+     **must not** be treated as live premium without the label.
+   - **stale** — RTH open but `as_of` older than `stale_after_open_ms`, or absolute
+     age > `stale_after_abs_ms` (catches dead KR feeds).
 2. **`as_of_ms`** = source publish/trade time (Pyth `publish_time`), never wall-clock alone.
-3. **Split days / multiplier jumps** — tokenized `xstockMultiplier` / `uiMultiplier` and underlying as-of must be compared at aligned times; if either side is stale, prefer “stale” over a silent premium spike (WHI-779).
-4. **Poll cadence** — open `open_poll_interval_s` (default 30s), closed `closed_poll_interval_s` (default 300s). Single batched Hermes request for all feed IDs.
-5. **Keys** — none required for Pyth. Optional future keys stay in `.env`; missing keys must not crash the collector (graceful empty column).
+3. **Split days / multiplier jumps** — tokenized `xstockMultiplier` / `uiMultiplier`
+   and underlying as-of must be compared at aligned times. Collection marks
+   **age-based stale** only; jump-vs-prior detection for corporate-action days is
+   deferred to WHI-779 (needs both legs). Prefer “stale” over a silent premium spike.
+4. **Poll cadence** — open `open_poll_interval_s` (default 30s), closed
+   `closed_poll_interval_s` (default 300s). Single batched Hermes request for all
+   feed IDs. Rows dedup on `(ticker, as_of_ms, source)` so frozen closes do not
+   flood the journal.
+5. **Keys** — none required for Pyth. Optional future keys stay in `.env`; missing
+   keys must not crash the collector (graceful empty column).
+6. **Dual-market write** — each collector process writes the underlyings its
+   inventory needs into **its** per-market SQLite (ADR-0001). Shared *source +
+   ticker map*, not a single shared DB; overlapping tickers may be polled twice
+   (Hermes free batch, acceptable).
 
 ## Schema
 
@@ -101,8 +117,10 @@ Pair → ticker stripping: `AAPLx`/`AAPLB` → `AAPL`, `MUB` → `MU`, `SKHYB` �
 
 - [x] Decision matrix + license in this note
 - [x] Collector writes `underlying_prices` for every **public** inventory ticker
-- [x] Closed session labels `close` (not live)
-- [ ] 30-minute live soak on VPS (ops) — local Hermes smoke covered by unit tests + optional CLI
+- [x] Closed session labels `close` (not live); pre/post only with source hint
+- [x] Local Hermes + Yahoo smoke: `uv run python -m monitor.underlying` (all covered tickers)
+- [ ] 30-minute live soak on VPS (ops) — run both collectors and confirm
+  `SELECT ticker, COUNT(*), MAX(as_of_ms) FROM underlying_prices GROUP BY ticker`
 
 ## Ops
 

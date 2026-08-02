@@ -106,6 +106,37 @@ def test_classify_close_on_weekend() -> None:
     )
 
 
+def test_classify_close_not_post_on_weekday_after_rth() -> None:
+    """Pyth freezes publish_time at RTH close — wall-clock post hours ≠ post print."""
+    # Friday 17:30 ET (after 16:00 close); as_of = 16:00 close.
+    now = _ms(2026, 7, 31, 17, 30)
+    as_of = _ms(2026, 7, 31, 16, 0)
+    assert (
+        classify_price_type(
+            as_of_ms=as_of,
+            now_ms=now,
+            session=_session(),
+            stale_after_open_ms=120_000,
+            stale_after_closed_ms=432_000_000,
+            stale_after_abs_ms=604_800_000,
+        )
+        == "close"
+    )
+    # Explicit source hint still allows post.
+    assert (
+        classify_price_type(
+            as_of_ms=as_of,
+            now_ms=now,
+            session=_session(),
+            stale_after_open_ms=120_000,
+            stale_after_closed_ms=432_000_000,
+            stale_after_abs_ms=604_800_000,
+            source_session_hint="post",
+        )
+        == "post"
+    )
+
+
 def test_classify_stale_dead_feed() -> None:
     now = _ms(2026, 8, 2, 12, 0)
     as_of = _ms(2025, 8, 29, 6, 30)  # ~1y old
@@ -233,6 +264,9 @@ def test_insert_underlying_prices(tmp_path: Path) -> None:
         gap=False,
     )
     assert store.insert_underlying_prices([tick]) == 1
+    assert store.count("underlying_prices") == 1
+    # Same (ticker, as_of, source) is ignored (closed-session re-poll).
+    assert store.insert_underlying_prices([tick]) == 1  # row attempted
     assert store.count("underlying_prices") == 1
     row = store._conn.execute(
         "SELECT ticker, price, price_type, source FROM underlying_prices"

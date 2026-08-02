@@ -312,6 +312,8 @@ DDL: tuple[str, ...] = (
         ON collector_gaps (gap_start_ms)
     """,
     # WHI-778: shared underlying equity reference (keyed by ticker, not pair_id).
+    # UNIQUE(ticker, as_of_ms, source) dedups frozen closes under closed-session
+    # poll cadence (same publish_time every 5 min).
     """
     CREATE TABLE IF NOT EXISTS underlying_prices (
         id              INTEGER PRIMARY KEY AUTOINCREMENT,
@@ -324,7 +326,8 @@ DDL: tuple[str, ...] = (
         source          TEXT    NOT NULL,
         feed_id         TEXT,
         conf            TEXT,
-        gap             INTEGER NOT NULL DEFAULT 0
+        gap             INTEGER NOT NULL DEFAULT 0,
+        UNIQUE (ticker, as_of_ms, source)
     )
     """,
     """

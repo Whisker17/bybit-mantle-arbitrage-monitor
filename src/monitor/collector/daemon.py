@@ -56,6 +56,7 @@ from monitor.symbols.token_map import (
     native_token_decimals,
     native_token_to_pair,
 )
+from monitor.underlying.tickers import underlying_tickers_for_pairs
 
 logger = logging.getLogger(__name__)
 
@@ -537,8 +538,6 @@ class CollectorDaemon:
 
     def _underlying_tickers_for_market(self) -> list[str]:
         """Canonical underlyings present in this market's inventory."""
-        from monitor.underlying.tickers import underlying_tickers_for_pairs
-
         if self.pairs is not None:
             return underlying_tickers_for_pairs([p.id for p in self.pairs.pairs])
         if self.bstocks is not None:
@@ -550,15 +549,12 @@ class CollectorDaemon:
         if not self.cfg.underlying_enabled:
             logger.info("underlying poller disabled (collector.yaml underlying.enabled)")
             return
-        try:
-            from monitor.underlying.config import (
-                UnderlyingConfigError,
-                load_underlying_config,
-            )
-            from monitor.underlying.poller import UnderlyingPoller
-        except ImportError as exc:
-            logger.error("underlying module unavailable: %s", exc)
-            return
+        from monitor.underlying.config import (
+            UnderlyingConfigError,
+            load_underlying_config,
+        )
+        from monitor.underlying.poller import UnderlyingPoller
+
         try:
             u_cfg = load_underlying_config()
         except UnderlyingConfigError as exc:

@@ -4,6 +4,7 @@ from __future__ import annotations
 
 import logging
 from collections.abc import Callable
+from datetime import UTC, datetime
 from decimal import Decimal
 
 from monitor.metrics.session import SessionKind, session_kind
@@ -58,8 +59,6 @@ class UnderlyingPoller:
 
     def poll_interval_s(self, *, now_ms_value: int | None = None) -> float:
         ts = now_ms_value if now_ms_value is not None else now_ms()
-        from datetime import UTC, datetime
-
         try:
             kind = session_kind(
                 datetime.fromtimestamp(ts / 1000, tz=UTC),

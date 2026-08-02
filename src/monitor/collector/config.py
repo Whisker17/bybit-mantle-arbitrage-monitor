@@ -494,14 +494,10 @@ def _merge_market_section(
     if "attribution_refresh_interval_s" in data:
         flat["attribution_refresh_interval_s"] = data["attribution_refresh_interval_s"]
     # WHI-778: enable/disable underlying poller (feed map lives in underlying.yaml).
-    if "underlying" in data and isinstance(data["underlying"], dict):
-        en = data["underlying"].get("enabled")
-        if en is not None:
-            flat["underlying_enabled"] = bool(en)
-    if "underlying" in section and isinstance(section["underlying"], dict):
-        en = section["underlying"].get("enabled")
-        if en is not None:
-            flat["underlying_enabled"] = bool(en)
+    # Per-market section overrides the shared root block when both set ``enabled``.
+    for block in (data.get("underlying"), section.get("underlying")):
+        if isinstance(block, dict) and "enabled" in block:
+            flat["underlying_enabled"] = bool(block["enabled"])
     for key in ("bybit", "mantle", "rfq", "binance", "bsc"):
         if key in section:
             flat[key] = section[key]

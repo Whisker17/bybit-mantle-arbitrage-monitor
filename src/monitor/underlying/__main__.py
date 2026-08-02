@@ -11,6 +11,7 @@ from __future__ import annotations
 import argparse
 import json
 import sys
+from pathlib import Path
 
 from monitor.underlying.config import load_underlying_config
 from monitor.underlying.poller import UnderlyingPoller
@@ -29,7 +30,6 @@ def main(argv: list[str] | None = None) -> int:
         help="Path to underlying.yaml (default: config/underlying.yaml)",
     )
     args = p.parse_args(argv)
-    from pathlib import Path
 
     cfg = load_underlying_config(None if args.config is None else Path(args.config))
     tickers = (

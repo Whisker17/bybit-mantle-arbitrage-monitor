@@ -540,7 +540,7 @@ class SqliteStore:
         ]
         return self._insert_many(
             """
-            INSERT INTO underlying_prices (
+            INSERT OR IGNORE INTO underlying_prices (
                 ticker, price, currency, price_type, as_of_ms, recv_ts_ms,
                 source, feed_id, conf, gap
             ) VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?)
