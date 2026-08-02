@@ -280,27 +280,30 @@ tickers:
     feed_id: null
     yahoo_symbol: "NOK"
     prefer_yahoo: true
+# Roundhill Daily DRAM / memory thematic ETF (public tape when listed)
   DRAM:
     currency: USD
     pyth_symbol: null
     feed_id: null
-    uncovered: true
-    uncovered_reason: "bStock thematic DRAM basket — no single public equity ticker"
+    yahoo_symbol: "DRAM"
+    prefer_yahoo: true
   CBRS:
     currency: USD
     pyth_symbol: null
     feed_id: null
     uncovered: true
     uncovered_reason: "bStock label without confirmed public equity/ETF tape"
+# GraniteShares 2x Long INTC Daily ETF
   INTW:
     currency: USD
     pyth_symbol: null
     feed_id: null
-    uncovered: true
-    uncovered_reason: "bStock label without confirmed public equity/ETF tape"
+    yahoo_symbol: "INTW"
+    prefer_yahoo: true
+# Tradr 2X Long SNDK Daily ETF
   SNXX:
     currency: USD
     pyth_symbol: null
     feed_id: null
-    uncovered: true
-    uncovered_reason: "bStock label without confirmed public equity/ETF tape"
+    yahoo_symbol: "SNXX"
+    prefer_yahoo: true

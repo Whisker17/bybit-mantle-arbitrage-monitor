@@ -161,20 +161,43 @@ class HermesClient:
         if self._owns_client:
             self._client.close()
 
-    def fetch_latest(self, feed_ids: list[str]) -> dict[str, Any]:
+    def fetch_latest(
+        self,
+        feed_ids: list[str],
+        *,
+        chunk_size: int = 20,
+    ) -> dict[str, Any]:
+        """Fetch latest prices for ``feed_ids``.
+
+        Chunks the request (WHI-790 widened the batch to ~40 RTH equities) and
+        sets ``ignore_invalid_price_ids`` so one bad pin cannot blank every
+        underlying on Hermes 4xx. Parsed updates from all chunks are merged.
+        """
         if not feed_ids:
             return {"parsed": []}
-        # Hermes accepts repeated ids[] query params.
-        params: list[tuple[str, str | int | float | bool | None]] = [
-            ("ids[]", fid) for fid in feed_ids
-        ]
+        if chunk_size < 1:
+            raise ValueError("chunk_size must be >= 1")
         url = f"{self.base_url}/v2/updates/price/latest"
-        resp = self._client.get(url, params=params)
-        resp.raise_for_status()
-        data = resp.json()
-        if not isinstance(data, dict):
-            raise ValueError(f"Hermes latest: expected object, got {type(data).__name__}")
-        return data
+        merged: list[Any] = []
+        for i in range(0, len(feed_ids), chunk_size):
+            chunk = feed_ids[i : i + chunk_size]
+            # Hermes accepts repeated ids[] query params.
+            params: list[tuple[str, str | int | float | bool | None]] = [
+                ("ids[]", fid) for fid in chunk
+            ]
+            # Drop unknown ids instead of failing the whole multi-market batch.
+            params.append(("ignore_invalid_price_ids", "true"))
+            resp = self._client.get(url, params=params)
+            resp.raise_for_status()
+            data = resp.json()
+            if not isinstance(data, dict):
+                raise ValueError(
+                    f"Hermes latest: expected object, got {type(data).__name__}"
+                )
+            parsed = data.get("parsed")
+            if isinstance(parsed, list):
+                merged.extend(parsed)
+        return {"parsed": merged}
 
     def search_price_feeds(self, query: str) -> list[Any]:
         """Hermes ``/v2/price_feeds?query=…`` — used by uncovered coverage probe."""

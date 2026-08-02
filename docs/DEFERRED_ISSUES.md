@@ -45,11 +45,17 @@ soon — anything touching key handling, RPC credentials defaults to at least Hi
   getPool equivalent and a listing appears.
 
 - **WHI-790: residual prefer_yahoo underlyings still serial** (Low, WHI-790).
-  After Hermes RTH pin for 30 liquid names, ~8 tickers remain Yahoo gap-fill
-  (SKHY, SPCX, FLNC, KORU, LITE, MUU, MVLL, NOK). `UnderlyingPoller` still
-  fetches them serially. Acceptable load now; if more Yahoo-only names land,
-  add concurrency/throttle or raise closed/open poll intervals for Yahoo-heavy
-  markets.
+  After Hermes RTH pin for 30 liquid names, ~11 tickers remain Yahoo gap-fill
+  (SKHY, SPCX, FLNC, KORU, LITE, MUU, MVLL, NOK, DRAM, INTW, SNXX).
+  `UnderlyingPoller` still fetches them serially. Acceptable load now; if more
+  Yahoo-only names land, add concurrency/throttle or raise poll intervals.
+
+- **WHI-790: dust AMM pools still surface as ranked rows by default** (Medium, WHI-790 → WHI-791).
+  Factory-verified V3 USDT pools include sub-$50 TVL names (KORUB/CRCLB/…);
+  they are `low_liquidity: true` but Web overview defaults
+  `hideLowLiquidity=false` + sort by net_edge, so zero-depth mids can top the
+  table until WHI-791 Top-N. Fix: market-aware default filter or min-TVL
+  for overview sort, not inventory amputation.
 
 - **Optional-table name literals + sqlite_master probes duplicated** (Low, WHI-789).
   `monitor/storage/reader.py::JournalReader._table_names` (six call-site string
