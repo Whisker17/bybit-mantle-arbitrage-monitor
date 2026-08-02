@@ -15,6 +15,7 @@ from monitor.metrics.config import MetricsConfig
 _REPO_ROOT = Path(__file__).resolve().parents[3]
 _DEFAULT_TUI_PATH = _REPO_ROOT / "config" / "tui.yaml"
 
+# Web/API may sort on cex/dex volume keys; TUI only renders legacy volume_24h.
 SortKey = Literal[
     "pair_id",
     "net_edge",

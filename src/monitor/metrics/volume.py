@@ -7,15 +7,21 @@
 
 from __future__ import annotations
 
-from collections.abc import Mapping
 from dataclasses import dataclass
 from datetime import UTC, datetime
 from decimal import Decimal
 
-from monitor.attribution.events import swap_notional_usd
 from monitor.metrics.config import MetricsConfig
 from monitor.metrics.session import SessionKind, session_kind
 from monitor.quotes import BybitTradeTick, CexVolumeTick, FluxionSwapTick
+
+
+def _swap_quote_notional(swap: FluxionSwapTick, *, quote_is_token0: bool) -> Decimal:
+    """Absolute quote-leg notional (USDC/USDT human units). Kept local so M3
+    does not import M4 attribution (DESIGN §4.2 layering).
+    """
+    leg = swap.amount_token0 if quote_is_token0 else swap.amount_token1
+    return abs(leg)
 
 
 @dataclass(frozen=True, slots=True)
@@ -90,21 +96,29 @@ def aggregate_dex_volume(
     now_ms: int,
     metrics: MetricsConfig,
     earliest_recv_ts_ms: int | None = None,
+    collector_started_ms: int | None = None,
 ) -> DexVolumeWindow:
     """Sum USDC-leg notional of swaps in ``[since_ms, now_ms]``.
 
-    When ``earliest_recv_ts_ms`` (or the min of provided swaps) is later than
-    ``since_ms``, the window is marked truncated — UI should show "since HH:MM"
-    rather than a full 24h label.
+    Truncation is keyed off **collector coverage** (``collector_started_ms``),
+    not the first swap on this pair — an illiquid pair with zero swaps on a
+    young collector must still show "since HH:MM" rather than a full 24h zero.
     """
+    # Coverage floor: when the process started (meta), else first observed swap.
+    coverage_start = collector_started_ms
+    if coverage_start is None:
+        coverage_start = earliest_recv_ts_ms
+    if coverage_start is None and swaps:
+        coverage_start = min(s.recv_ts_ms for s in swaps)
+
     earliest = earliest_recv_ts_ms
     if earliest is None and swaps:
         earliest = min(s.recv_ts_ms for s in swaps)
 
     effective_start = since_ms
     truncated = False
-    if earliest is not None and earliest > since_ms:
-        effective_start = earliest
+    if coverage_start is not None and coverage_start > since_ms:
+        effective_start = coverage_start
         truncated = True
 
     total = Decimal(0)
@@ -119,7 +133,7 @@ def aggregate_dex_volume(
             continue
         if s.direction not in ("buy_native", "sell_native"):
             continue
-        notional = swap_notional_usd(s, quote_is_token0=quote_is_token0)
+        notional = _swap_quote_notional(s, quote_is_token0=quote_is_token0)
         total += notional
         count += 1
         try:
@@ -172,7 +186,9 @@ def aggregate_cex_journal_volume(
     for t in trades:
         if t.exchange_ts_ms < since_ms or t.exchange_ts_ms > now_ms:
             continue
-        notional = t.price_de_multiplied * t.size
+        # Venue-listed price × size = quote notional (matches REST turnover).
+        # Do not use price_de_multiplied (comparable units only).
+        notional = t.price * t.size
         total += notional
         count += 1
         try:
@@ -210,6 +226,7 @@ def build_volume_compare(
     now_ms: int,
     metrics: MetricsConfig,
     earliest_swap_recv_ts_ms: int | None = None,
+    collector_started_ms: int | None = None,
     journal_trades: list[BybitTradeTick] | None = None,
 ) -> VolumeCompare:
     """Assemble overview/detail volume compare for one pair."""
@@ -220,6 +237,7 @@ def build_volume_compare(
         now_ms=now_ms,
         metrics=metrics,
         earliest_recv_ts_ms=earliest_swap_recv_ts_ms,
+        collector_started_ms=collector_started_ms,
     )
     cex_vol: Decimal | None = None
     cex_n: int | None = None
@@ -251,8 +269,3 @@ def build_volume_compare(
     )
 
 
-def quote_is_token0_for_pair(
-    pair_id: str, mapping: Mapping[str, bool], *, default: bool = True
-) -> bool:
-    """Resolve quote-is-token0; default True for USDC-sorted-first Fluxion pools."""
-    return mapping.get(pair_id, default)

@@ -169,6 +169,10 @@ DDL: tuple[str, ...] = (
         ON fluxion_swaps (pair_id, block_number)
     """,
     """
+    CREATE INDEX IF NOT EXISTS idx_fluxion_swaps_pair_recv
+        ON fluxion_swaps (pair_id, recv_ts_ms)
+    """,
+    """
     CREATE TABLE IF NOT EXISTS fluxion_rfq_quotes (
         id              INTEGER PRIMARY KEY AUTOINCREMENT,
         pair_id         TEXT    NOT NULL,

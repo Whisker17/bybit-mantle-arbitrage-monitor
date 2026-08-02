@@ -3,6 +3,7 @@
 from __future__ import annotations
 
 import asyncio
+import json
 import logging
 from collections.abc import Awaitable, Callable
 from typing import Literal
@@ -100,8 +101,6 @@ class CexVolumePoller:
                 resp = await client.get(url, params={"symbol": symbols[0]})
             elif len(symbols) <= 50:
                 # Binance accepts a JSON array of symbols.
-                import json
-
                 resp = await client.get(
                     url, params={"symbols": json.dumps(symbols, separators=(",", ":"))}
                 )

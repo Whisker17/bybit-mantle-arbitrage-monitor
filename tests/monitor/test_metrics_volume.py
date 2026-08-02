@@ -65,12 +65,29 @@ def test_aggregate_dex_volume_sums_quote_leg() -> None:
         since_ms=0,
         now_ms=10_000,
         metrics=metrics,
-        earliest_recv_ts_ms=1_000,
+        collector_started_ms=1_000,
     )
     assert win.volume_usd == Decimal("150")
     assert win.trade_count == 2
-    assert win.truncated is True  # earliest 1000 > since 0
+    assert win.truncated is True  # collector started after since
     assert win.window_start_ms == 1_000
+
+
+def test_aggregate_truncated_with_zero_swaps_uses_collector_start() -> None:
+    """Illiquid pair: no swaps still truncated when collector is young."""
+    metrics = load_metrics_config()
+    win = aggregate_dex_volume(
+        [],
+        quote_is_token0=True,
+        since_ms=0,
+        now_ms=10_000,
+        metrics=metrics,
+        collector_started_ms=9_000,
+    )
+    assert win.volume_usd == Decimal(0)
+    assert win.trade_count == 0
+    assert win.truncated is True
+    assert win.window_start_ms == 9_000
 
 
 def test_aggregate_not_truncated_when_full_window() -> None:
@@ -82,9 +99,10 @@ def test_aggregate_not_truncated_when_full_window() -> None:
         since_ms=5_000,
         now_ms=10_000,
         metrics=metrics,
+        collector_started_ms=1_000,
         earliest_recv_ts_ms=1_000,
     )
-    # earliest before since → full requested window available
+    # collector started before since → full requested window available
     assert win.truncated is False
     assert win.window_start_ms == 5_000
     assert win.volume_usd == Decimal("10")

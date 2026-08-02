@@ -361,7 +361,7 @@ class CollectorConfig(BaseModel):
     rfq: RfqCollectorConfig | None = None
     binance: BinanceCollectorConfig | None = None
     bsc: BscCollectorConfig | None = None
-    # WHI-777: optional (defaults enabled when rest_base_url can be inferred).
+    # WHI-777: optional; when set, REST poll is required (rest_base_url + venue).
     cex_volume: CexVolumeConfig | None = None
     logging: LoggingConfig
     retention: RetentionConfig = Field(default_factory=default_retention_config)

@@ -149,13 +149,12 @@ def _volume_fields(vol: VolumeCompare | None) -> dict[str, object]:
 
 
 def _inventory_quote_is_token0(pair: Pair | BStocksPair) -> bool:
-    """UniV3 token0 < token1 address order → whether quote is token0."""
+    """Fallback when no pool tick: UniV3 address order → quote is token0."""
     if isinstance(pair, BStocksPair):
         quote = pair.pancake.quote_token_address.lower()
         base = pair.pancake.native_token.lower()
     else:
         quote = pair.fluxion.quote_token_address.lower()
-        # Fluxion pools are quote vs wrapper share.
         base = pair.fluxion.wrapper_token.lower()
     return quote < base
 
@@ -168,22 +167,35 @@ def _volume_compare_for_pair(
     since_ms: int,
     now_ms: int,
     include_journal_cex: bool = False,
+    amm: FluxionPoolStateTick | None = None,
 ) -> VolumeCompare:
     """Load journal rows and assemble CEX REST vs DEX swap volume (WHI-777)."""
     cex = reader.latest_cex_volume(pair.id)
     swaps = reader.swaps_since(pair.id, since_ms=since_ms)
     earliest = reader.earliest_swap_recv_ts_ms(pair.id)
+    started_raw = reader.get_meta("collector_started_ms")
+    collector_started: int | None = None
+    if started_raw is not None:
+        try:
+            collector_started = int(started_raw)
+        except ValueError:
+            collector_started = None
     journal = (
         reader.trades_since(pair.id, since_ms=since_ms) if include_journal_cex else None
     )
+    pool_tick = amm if amm is not None else reader.latest_pool_state(pair.id)
+    q0 = quote_is_token0(pair, pool_tick) if pool_tick is not None else None
+    if q0 is None:
+        q0 = _inventory_quote_is_token0(pair)
     return build_volume_compare(
         cex_tick=cex,
         swaps=swaps,
-        quote_is_token0=_inventory_quote_is_token0(pair),
+        quote_is_token0=q0,
         since_ms=since_ms,
         now_ms=now_ms,
         metrics=metrics,
         earliest_swap_recv_ts_ms=earliest,
+        collector_started_ms=collector_started,
         journal_trades=journal,
     )
 
@@ -304,13 +316,12 @@ def build_overview(
         rfq_buy, rfq_sell = reader.latest_rfq_sides(pair.id)
         vol = reader.volume_stats(pair.id, since_ms=since)
         vcmp = _volume_compare_for_pair(
-            pair, reader=reader, metrics=metrics, since_ms=since, now_ms=ts
-        )
-        # Legacy TUI Vol cell: prefer authoritative CEX REST, else journal notional.
-        legacy_vol = (
-            vcmp.cex_volume_24h
-            if vcmp.cex_volume_24h is not None
-            else vol.bybit_notional
+            pair,
+            reader=reader,
+            metrics=metrics,
+            since_ms=since,
+            now_ms=ts,
+            amm=amm,
         )
         if edge_state is not None and bybit is not None:
             # Stamp with exchange time so a stalled collector does not inflate
@@ -342,7 +353,8 @@ def build_overview(
                 amm=amm,
                 rfq_buy=rfq_buy,
                 rfq_sell=rfq_sell,
-                volume_24h=legacy_vol,
+                # TUI frozen: keep journal CEX notional for legacy Vol cell.
+                volume_24h=vol.bybit_notional,
                 trades_24h=vol.bybit_trade_count + vol.fluxion_swap_count,
                 metrics=metrics,
                 tui=tui,
@@ -734,9 +746,7 @@ def build_pair_detail(
         since_ms=since_vol,
         now_ms=ts,
         include_journal_cex=True,
-    )
-    legacy_vol = (
-        vcmp.cex_volume_24h if vcmp.cex_volume_24h is not None else vol.bybit_notional
+        amm=amm,
     )
     overview = build_pair_overview_row(
         pair,
@@ -744,7 +754,7 @@ def build_pair_detail(
         amm=amm,
         rfq_buy=rfq_buy,
         rfq_sell=rfq_sell,
-        volume_24h=legacy_vol,
+        volume_24h=vol.bybit_notional,
         trades_24h=vol.bybit_trade_count + vol.fluxion_swap_count,
         metrics=metrics,
         tui=tui,

@@ -455,15 +455,18 @@ def test_binance_pancake_overview_with_journal(
 ) -> None:
     """Seeded L1 book for a bStocks pair surfaces on the scoped overview.
 
-    Collector sqlite paths resolve against the package repo root (not cwd), so
-    the seeded journal must land at ``<repo>/data/monitor-binance-pancake.db``.
+    Collector sqlite paths resolve against the package repo root, so the test
+    points ``_REPO_ROOT`` at ``tmp_path`` and places journals under
+    ``tmp_path/data/`` — never writes into the real worktree ``data/``.
     """
-    from monitor.markets.context import _REPO_ROOT
+    import monitor.markets.context as markets_context
     from monitor.symbols import load_bstocks_pairs_config
 
     bstocks = load_bstocks_pairs_config()
     pair = bstocks.pairs[0]
-    db = tmp_path / "monitor-binance-pancake.db"
+    data_dir = tmp_path / "data"
+    data_dir.mkdir()
+    db = data_dir / "monitor-binance-pancake.db"
     store = SqliteStore(db)
     ts = now_ms()
     store.set_meta("collector_started_ms", str(ts - 5_000))
@@ -485,18 +488,9 @@ def test_binance_pancake_overview_with_journal(
     )
     store.close()
 
-    # api.yaml market still bybit-fluxion (default); binance uses convention path.
-    bybit_db = tmp_path / "monitor-bybit.db"
+    bybit_db = data_dir / "monitor-bybit-fluxion.db"
     _seed_store(bybit_db, with_depth=False)
-
-    data_dir = _REPO_ROOT / "data"
-    data_dir.mkdir(parents=True, exist_ok=True)
-    target = data_dir / "monitor-binance-pancake.db"
-    bybit_target = data_dir / "monitor-bybit-fluxion.db"
-    prev_binance = target.read_bytes() if target.is_file() else None
-    prev_bybit = bybit_target.read_bytes() if bybit_target.is_file() else None
-    target.write_bytes(db.read_bytes())
-    bybit_target.write_bytes(bybit_db.read_bytes())
+    monkeypatch.setattr(markets_context, "_REPO_ROOT", tmp_path)
 
     api_yaml = tmp_path / "config" / "api.yaml"
     api_yaml.parent.mkdir(parents=True, exist_ok=True)
@@ -505,7 +499,7 @@ def test_binance_pancake_overview_with_journal(
 host: 127.0.0.1
 port: 8000
 market: bybit-fluxion
-sqlite_path: {bybit_target}
+sqlite_path: {bybit_db}
 collector_stale_ms: 30000
 recent_gap_window_ms: 300000
 poll_interval_s: 2.0
@@ -518,33 +512,23 @@ cors_origins: []
 """,
         encoding="utf-8",
     )
-    try:
-        app = create_app(api_config_path=api_yaml)
-        with TestClient(app) as c:
-            r = c.get("/api/binance-pancake/pairs")
-            assert r.status_code == 200, r.text
-            body = r.json()
-            assert body["market_id"] == "binance-pancake"
-            assert body["data_status"] == "ok"
-            assert body["has_rfq"] is False
-            ids = {row["pair_id"] for row in body["rows"]}
-            assert pair.id in ids
-            row = next(x for x in body["rows"] if x["pair_id"] == pair.id)
-            assert row["bybit_mid"] is not None
-            assert row["stale"] is False
-            # WHI-777 fields present (null CEX until poll; DEX zero without swaps).
-            assert "cex_volume_24h" in row
-            assert "dex_volume_24h" in row
-            assert "volume_ratio" in row
-    finally:
-        if prev_binance is None:
-            target.unlink(missing_ok=True)
-        else:
-            target.write_bytes(prev_binance)
-        if prev_bybit is None:
-            bybit_target.unlink(missing_ok=True)
-        else:
-            bybit_target.write_bytes(prev_bybit)
+    app = create_app(api_config_path=api_yaml)
+    with TestClient(app) as c:
+        r = c.get("/api/binance-pancake/pairs")
+        assert r.status_code == 200, r.text
+        body = r.json()
+        assert body["market_id"] == "binance-pancake"
+        assert body["data_status"] == "ok"
+        assert body["has_rfq"] is False
+        ids = {row["pair_id"] for row in body["rows"]}
+        assert pair.id in ids
+        row = next(x for x in body["rows"] if x["pair_id"] == pair.id)
+        assert row["bybit_mid"] is not None
+        assert row["stale"] is False
+        # WHI-777 fields present (null CEX until poll; DEX zero without swaps).
+        assert "cex_volume_24h" in row
+        assert "dex_volume_24h" in row
+        assert "volume_ratio" in row
 
 
 def test_unknown_market_404(client: TestClient) -> None:

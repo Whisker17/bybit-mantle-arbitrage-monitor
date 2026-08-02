@@ -3,7 +3,7 @@
 from __future__ import annotations
 
 from decimal import Decimal, InvalidOperation
-from typing import Any, Literal
+from typing import Any
 
 
 class CexVolumeParseError(ValueError):
@@ -106,5 +106,3 @@ def parse_binance_ticker_24hr(
     return out
 
 
-def venue_source(venue: Literal["bybit", "binance"]) -> Literal["bybit", "binance"]:
-    return venue
