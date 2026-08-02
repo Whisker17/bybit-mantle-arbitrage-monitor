@@ -212,7 +212,8 @@ class BinanceWsCollector:
 
     async def _ping_loop(self, ws: Any) -> None:
         # Probe half-open sockets: websockets.ping() returns an awaitable that
-        # resolves when the pong arrives; failure ends the session → reconnect+gap.
+        # resolves when the pong arrives. On failure, close the socket so
+        # ``async for`` ends and run() reconnects with a CollectorGap.
         while not self._stop.is_set():
             await asyncio.sleep(self.ping_interval_s)
             try:
@@ -223,6 +224,10 @@ class BinanceWsCollector:
                 if hasattr(waiter, "__await__"):
                     await waiter
             except Exception:  # noqa: BLE001
+                close = getattr(ws, "close", None)
+                if callable(close):
+                    with contextlib.suppress(Exception):
+                        await close()
                 return
 
     async def _handle_raw(self, raw: str | bytes) -> None:

@@ -64,6 +64,7 @@ class BinanceDepthTracker:
         self._buckets_usd: tuple[Decimal, ...] = tuple(raw)
         self._bids: dict[str, SideMap] = {}
         self._asks: dict[str, SideMap] = {}
+        # Last book used for depth_tick (always depth-derived L1 after first depth).
         self._last_book: dict[str, BybitBookTick] = {}
         self._last_update_id: dict[str, int] = {}
 
@@ -126,30 +127,19 @@ class BinanceDepthTracker:
         self._bids[symbol] = bid_map
         self._asks[symbol] = ask_map
         recv = recv_ts_ms if recv_ts_ms is not None else now_ms()
-        # Prefer bookTicker L1 prices when present; always refresh timestamps so
-        # depth_tick does not stamp VWAP with a stalled bookTicker. lastUpdateId
-        # is a sequence, not ms — never store it as exchange_ts_ms.
-        ticker = self._last_book.get(symbol)
-        if ticker is not None:
-            l1_bid, l1_ask = ticker.bid, ticker.ask
-            l1_bid_dm, l1_ask_dm = ticker.bid_de_multiplied, ticker.ask_de_multiplied
-            tick_gap = gap or ticker.gap
-        else:
-            l1_bid, l1_ask = bid, ask
-            l1_bid_dm = multiplied_price(bid, mult)
-            l1_ask_dm = multiplied_price(ask, mult)
-            tick_gap = gap
+        # Always use this snapshot's best bid/ask for depth_tick L1 — never freeze
+        # on a stalled bookTicker. lastUpdateId is a sequence, not ms.
         book = BybitBookTick(
             pair_id=pair_id,
             symbol=symbol,
             exchange_ts_ms=recv,
             recv_ts_ms=recv,
-            bid=l1_bid,
-            ask=l1_ask,
-            bid_de_multiplied=l1_bid_dm,
-            ask_de_multiplied=l1_ask_dm,
+            bid=bid,
+            ask=ask,
+            bid_de_multiplied=multiplied_price(bid, mult),
+            ask_de_multiplied=multiplied_price(ask, mult),
             multiplier=mult,
-            gap=tick_gap,
+            gap=gap,
         )
         self._last_book[symbol] = book
         return book

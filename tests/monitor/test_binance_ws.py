@@ -88,8 +88,9 @@ async def test_handle_raw_book_ticker_and_depth_and_trade() -> None:
 
 
 @pytest.mark.asyncio
-async def test_depth_seeds_l1_when_book_ticker_absent() -> None:
+async def test_depth_seeds_l1_once_and_depth_tick_tracks_fresh_mid() -> None:
     books: list[BybitBookTick] = []
+    depths: list[BybitDepthTick] = []
     coll = BinanceWsCollector(
         ws_base_url="wss://example",
         symbols=["TSLABUSDT"],
@@ -97,7 +98,11 @@ async def test_depth_seeds_l1_when_book_ticker_absent() -> None:
         ui_multiplier_by_symbol={"TSLABUSDT": Decimal("1")},
         on_book=books.append,
         on_trade=lambda _t: None,
-        depth_enabled=False,
+        on_depth=depths.append,
+        depth_enabled=True,
+        depth_buckets_usd=[Decimal("10")],
+        depth_emit_interval_ms=60_000,  # large; second row via mid-move gate
+        depth_mid_change_bps=Decimal("1"),
     )
     await coll._handle_raw(
         json.dumps(
@@ -111,7 +116,7 @@ async def test_depth_seeds_l1_when_book_ticker_absent() -> None:
             }
         )
     )
-    # Second depth should not re-seed L1.
+    # Second depth should not re-seed L1 journal, but depth VWAP must track new bid.
     await coll._handle_raw(
         json.dumps(
             {
@@ -126,3 +131,5 @@ async def test_depth_seeds_l1_when_book_ticker_absent() -> None:
     )
     assert len(books) == 1
     assert books[0].bid == Decimal("10")
+    assert len(depths) == 2
+    assert depths[-1].bid == Decimal("10.5")
