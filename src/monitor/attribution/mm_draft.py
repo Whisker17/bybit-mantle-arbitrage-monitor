@@ -131,7 +131,8 @@ class DraftThresholds:
     # default (30d sample had ≤2 fills/maker). Raise for production if needed.
     mm_min_rfq_maker_fills: int = 2
     mm_min_pairs: int = 2
-    mm_min_amm_both_dirs: int = 10
+    # Min AMM trades on the cross-pair bidirectional path (not a boolean).
+    mm_min_amm_trades: int = 10
     mm_min_direction_share: float = 0.25
     mm_max_median_notional_usd: Decimal = Decimal("500")
     mm_min_mean_reversion: float = 0.55
@@ -366,7 +367,7 @@ def assign_draft_label(
         )
     if (
         features.n_pairs >= th.mm_min_pairs
-        and features.n_amm >= th.mm_min_amm_both_dirs
+        and features.n_amm >= th.mm_min_amm_trades
         and features.both_directions
     ):
         buy_share = features.n_buy / features.n_amm if features.n_amm else 0.0
@@ -706,8 +707,8 @@ class CexCluster:
 def cluster_cex_candidates(
     transfers: Sequence[TransferEdge],
     *,
-    min_counterparties: int = 5,
-    min_transfers: int = 8,
+    min_counterparties: int = 4,
+    min_transfers: int = 6,
     exclude: Iterable[str] = (),
 ) -> list[CexCluster]:
     """Rank addresses that many EOAs send to / receive from (deposit-like).

@@ -36,6 +36,7 @@ from eth_utils import keccak  # type: ignore[attr-defined]
 _REPO = Path(__file__).resolve().parents[1]
 sys.path.insert(0, str(_REPO / "src"))
 
+from monitor.attribution.config import load_attribution_config  # noqa: E402
 from monitor.attribution.convergence import (  # noqa: E402
     bybit_move_aligned,
     is_converging,
@@ -475,6 +476,9 @@ def build_events(
     transfers: list[dict[str, Any]],
     bybit: dict[str, list[tuple[int, float]]],
     metrics_cfg: Any,
+    *,
+    bybit_lookback_ms: int = 5000,
+    bybit_min_move_bps: Decimal = Decimal("1"),
 ) -> tuple[list[InventoryEvent], list[TransferEdge]]:
     events: list[InventoryEvent] = []
     edges: list[TransferEdge] = []
@@ -499,7 +503,9 @@ def build_events(
         if series:
             # convert list of (ts, float) for resolve helper
             mids = [(int(ts), Decimal(str(m))) for ts, m in series]
-            prev = resolve_bybit_mid_prev(ts_ms, mids, lookback_ms=5000)
+            prev = resolve_bybit_mid_prev(
+                ts_ms, mids, lookback_ms=bybit_lookback_ms
+            )
         if (
             direction in ("buy_native", "sell_native")
             and bmid is not None
@@ -509,7 +515,7 @@ def build_events(
                 direction,
                 bybit_mid=bmid,
                 bybit_mid_prev=prev,
-                min_move_bps=Decimal("1"),
+                min_move_bps=bybit_min_move_bps,
             )
         # notional ≈ |wrapper_delta| * price
         try:
@@ -638,9 +644,11 @@ def build_events(
     return events, edges
 
 
-def classify_contracts(rpc: Rpc, addrs: list[str]) -> dict[str, bool]:
+def classify_contracts(
+    rpc: Rpc, addrs: list[str], *, batch_size: int = 50
+) -> dict[str, bool]:
     out: dict[str, bool] = {}
-    batch = 40
+    batch = max(1, batch_size)
     for i in range(0, len(addrs), batch):
         part = addrs[i : i + batch]
         calls = [("eth_getCode", [a, "latest"]) for a in part]
@@ -672,6 +680,8 @@ def run_analysis(
     )
     # Never treat infra as a CEX wallet even if it slipped through.
     cex_addrs = [c.address for c in cex[:20] if c.address not in infra]
+    # Do not let cluster hubs label themselves as rebalancer via self-degree.
+    cex_hub_set = set(cex_addrs)
 
     by_addr_n: dict[str, int] = defaultdict(int)
     for e in events:
@@ -691,6 +701,9 @@ def run_analysis(
             cex_addrs,
             min_amount=th.reb_min_transfer_notional_native,
         )
+        # Cluster hubs are CEX candidates themselves — not rebalancer users.
+        if addr in cex_hub_set:
+            touches = 0
         lab = assign_draft_label(feats, thresholds=th, cex_touch_transfers=touches)
         labeled.append(
             {
@@ -721,24 +734,8 @@ def run_analysis(
     for row in labeled:
         by_label[row["label"]].append(row)
 
-    th = DraftThresholds()
     th_dict = {
-        "mm_min_rfq_maker_fills": th.mm_min_rfq_maker_fills,
-        "mm_min_pairs": th.mm_min_pairs,
-        "mm_min_amm_both_dirs": th.mm_min_amm_both_dirs,
-        "mm_min_direction_share": th.mm_min_direction_share,
-        "mm_max_median_notional_usd": str(th.mm_max_median_notional_usd),
-        "mm_min_mean_reversion": th.mm_min_mean_reversion,
-        "reb_min_cex_touch_transfers": th.reb_min_cex_touch_transfers,
-        "reb_min_transfer_notional_native": str(th.reb_min_transfer_notional_native),
-        "arb_min_scored": th.arb_min_scored,
-        "arb_min_convergence": th.arb_min_convergence,
-        "arb_min_bybit_align_ratio": th.arb_min_bybit_align_ratio,
-        "pk_min_trades": th.pk_min_trades,
-        "pk_min_direction_share": th.pk_min_direction_share,
-        "pk_max_median_notional_usd": str(th.pk_max_median_notional_usd),
-        "pk_max_trade_notional_usd": str(th.pk_max_trade_notional_usd),
-        "retail_min_trades": th.retail_min_trades,
+        k: (str(v) if isinstance(v, Decimal) else v) for k, v in asdict(th).items()
     }
     cex_rows = []
     for c in cex[:15]:
@@ -825,8 +822,8 @@ def render_report(
     lines.append("|-------|----------:|")
     for lab in (
         "market_maker",
-        "rebalancer",
         "arb_bot",
+        "rebalancer",
         "price_keeper",
         "retail",
         "unknown",
@@ -1019,7 +1016,7 @@ def render_report(
     )
     lines.append(
         f"2. **Cross-pair inventory path:** `n_pairs ≥ {th['mm_min_pairs']}` AND "
-        f"`n_amm ≥ {th['mm_min_amm_both_dirs']}` AND both directions with share "
+        f"`n_amm ≥ {th['mm_min_amm_trades']}` AND both directions with share "
         f"≥ {th['mm_min_direction_share']} AND "
         f"`median_notional_usd ≤ {th['mm_max_median_notional_usd']}` AND "
         f"(`inv_mean_reversion` is null OR ≥ {th['mm_min_mean_reversion']})."
@@ -1138,7 +1135,12 @@ def render_report(
         "rows; no swap-based convergence."
     )
     lines.append(
-        "9. **Cross-pair MM inventory path** (bidirectional + mean-reversion "
+        "9. **RFQ-maker `market_maker` path** is fitted on a thin "
+        "sample (18 LOP fills / 30d). Threshold `mm_min_rfq_maker_fills=2` "
+        "is research-default; re-validate before productization."
+    )
+    lines.append(
+        "10. **Cross-pair MM inventory path** (bidirectional + mean-reversion "
         "across ≥2 pairs) is implemented but did **not** fire in the 30d "
         "sample — all five `market_maker` hits came from the RFQ-maker path. "
         "Thresholds for that branch are unfitted on live xStock flow."
@@ -1219,6 +1221,7 @@ def main() -> int:
     pairs_doc = _load_pairs(args.pairs)
     metas = _pool_metas(pairs_doc)
     metrics_cfg = load_metrics_config()
+    attr_cfg = load_attribution_config()
 
     rpc_url = resolve_mantle_rpc_url()
     print(f"rpc={rpc_url[:32]}… days={args.days}", flush=True)
@@ -1287,7 +1290,15 @@ def main() -> int:
         meta["n_transfers"] = len(transfers)
 
         print("build events", flush=True)
-        events, edges = build_events(swaps, rfq, transfers, bybit, metrics_cfg)
+        events, edges = build_events(
+            swaps,
+            rfq,
+            transfers,
+            bybit,
+            metrics_cfg,
+            bybit_lookback_ms=attr_cfg.bybit_correlation.lookback_ms,
+            bybit_min_move_bps=attr_cfg.bybit_correlation.min_move_bps,
+        )
 
         infra = {
             pairs_doc["contracts"]["usdc"].lower(),
@@ -1315,7 +1326,9 @@ def main() -> int:
             {e.address.lower() for e in events if e.address.lower() not in infra}
         )
         print(f"classify {min(len(addr_set), 200)} / {len(addr_set)} addresses", flush=True)
-        flags = classify_contracts(rpc, addr_set[:200])
+        flags = classify_contracts(
+            rpc, addr_set[:200], batch_size=attr_cfg.rpc_probe_batch_size
+        )
 
         print("score", flush=True)
         result = run_analysis(events, edges, rfq, flags, infra=infra)

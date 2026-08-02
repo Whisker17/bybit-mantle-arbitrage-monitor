@@ -2,14 +2,14 @@
 
 Research note: per-address inventory ledger + draft `market_maker` / `rebalancer` rules for Fluxion xStocks, with evidence from a full-history chain backfill (collector journal alone is too short / weekend-sparse).
 
-**Generated:** 2026-08-02 04:47 UTC
+**Generated:** 2026-08-02 04:55 UTC
 
 ## Method
 
 | Item | Value |
 |------|--------|
-| Window | 30 days ending block `98757762` |
-| From block | `97461762` |
+| Window | 30 days ending block `98757993` |
+| From block | `97461993` |
 | Pools (AMM) | 8 liquid inventory pairs |
 | AMM swaps decoded | 6441 |
 | LOP OrderFilled | 18 |
@@ -31,11 +31,11 @@ Research note: per-address inventory ledger + draft `market_maker` / `rebalancer
 | Label | Addresses |
 |-------|----------:|
 | `market_maker` | 5 |
-| `rebalancer` | 15 |
 | `arb_bot` | 3 |
+| `rebalancer` | 8 |
 | `price_keeper` | 0 |
 | `retail` | 3 |
-| `unknown` | 86 |
+| `unknown` | 93 |
 
 ## Candidate addresses (evidence)
 
@@ -96,14 +96,7 @@ Addresses are lowercased. Explore on [Mantlescan](https://mantlescan.xyz/address
 | Address | Contract? | Pairs | AMM | RFQ m/t | Conv | Mean-rev | CEX touches | Why |
 |---------|-----------|------:|----:|--------:|-----:|---------:|------------:|-----|
 | [`0x513ab093…`](https://mantlescan.xyz/address/0x513ab093c745d21357475aea9a80f6ca4974ce00) | no | 1 (SPCXx) | 0 | 0/0 | — | 0.49 | 213 | cex_touch_transfers=213 |
-| [`0xfd8b2cd9…`](https://mantlescan.xyz/address/0xfd8b2cd9ad70a25f6741ac8948069000d42edf1a) | no | 4 (CRCLx,GOOGLx,HOODx,TSLAx) | 0 | 0/0 | — | 0.67 | 82 | cex_touch_transfers=82 |
-| [`0x58884621…`](https://mantlescan.xyz/address/0x588846213a30fd36244e0ae0ebb2374516da836c) | no | 7 (AAPLx,COINx,CRCLx,GOOGLx) | 0 | 0/0 | — | 0.08 | 51 | cex_touch_transfers=51 |
-| [`0xd8169f09…`](https://mantlescan.xyz/address/0xd8169f099ce16c87a99d2a8494023574b5eea9c5) | no | 4 (CRCLx,HOODx,METAx,TSLAx) | 0 | 0/0 | — | 0.21 | 24 | cex_touch_transfers=24 |
-| [`0x35263632…`](https://mantlescan.xyz/address/0x35263632aa76b909b1ce57bd6291b80c565f79b3) | no | 6 (CRCLx,GOOGLx,HOODx,METAx) | 0 | 0/0 | — | 0.56 | 22 | cex_touch_transfers=22 |
-| [`0x4a67e97e…`](https://mantlescan.xyz/address/0x4a67e97e770de93952b8596f04c13ada0ab9a69c) | no | 5 (COINx,CRCLx,GOOGLx,HOODx) | 0 | 0/0 | — | 0.22 | 21 | cex_touch_transfers=21 |
-| [`0x0d4dc3b8…`](https://mantlescan.xyz/address/0x0d4dc3b8becc98782309e443a6da4b9455b5ca48) | no | 4 (CRCLx,HOODx,METAx,NVDAx) | 0 | 0/0 | — | 0.18 | 14 | cex_touch_transfers=14 |
 | [`0x75094d26…`](https://mantlescan.xyz/address/0x75094d260b86ab7ac5c926404f5fbad4c79df581) | no | 1 (SPCXx) | 0 | 0/0 | — | 0.49 | 14 | cex_touch_transfers=14 |
-| [`0xc868d0ea…`](https://mantlescan.xyz/address/0xc868d0ea71243f1580f934cdc59620603bf9f1f1) | no | 3 (CRCLx,GOOGLx,HOODx) | 0 | 0/0 | — | 0.22 | 13 | cex_touch_transfers=13 |
 | [`0xc9d16f4c…`](https://mantlescan.xyz/address/0xc9d16f4cd9edec605689127794a1091c4a6098ae) | no | 1 (SPCXx) | 0 | 0/0 | — | 0.43 | 11 | cex_touch_transfers=11 |
 | [`0x03972795…`](https://mantlescan.xyz/address/0x0397279515ba8a57a869daa97df4dd7562cbf648) | no | 1 (SPCXx) | 0 | 0/0 | — | 0.50 | 10 | cex_touch_transfers=10 |
 | [`0x5df5012c…`](https://mantlescan.xyz/address/0x5df5012c151a75ddd808cabee83de64b5c4afe63) | no | 1 (SPCXx) | 0 | 0/0 | — | 0.94 | 7 | cex_touch_transfers=7 |
@@ -119,45 +112,45 @@ Addresses are lowercased. Explore on [Mantlescan](https://mantlescan.xyz/address
 - Notional (sum USD proxy): 0 (median 0)
 - Explorer: https://mantlescan.xyz/address/0x513ab093c745d21357475aea9a80f6ca4974ce00
 
-#### `0xfd8b2cd9ad70a25f6741ac8948069000d42edf1a`
+#### `0x75094d260b86ab7ac5c926404f5fbad4c79df581`
 
 - Label: **rebalancer**
-- Reasons: cex_touch_transfers=82
-- Activity: AMM=0 buy=0 sell=0 RFQ maker=0 taker=0 transfers=82
+- Reasons: cex_touch_transfers=14
+- Activity: AMM=0 buy=0 sell=0 RFQ maker=0 taker=0 transfers=79
 - Notional (sum USD proxy): 0 (median 0)
-- Explorer: https://mantlescan.xyz/address/0xfd8b2cd9ad70a25f6741ac8948069000d42edf1a
+- Explorer: https://mantlescan.xyz/address/0x75094d260b86ab7ac5c926404f5fbad4c79df581
 
-#### `0x588846213a30fd36244e0ae0ebb2374516da836c`
+#### `0xc9d16f4cd9edec605689127794a1091c4a6098ae`
 
 - Label: **rebalancer**
-- Reasons: cex_touch_transfers=51
-- Activity: AMM=0 buy=0 sell=0 RFQ maker=0 taker=0 transfers=65
+- Reasons: cex_touch_transfers=11
+- Activity: AMM=0 buy=0 sell=0 RFQ maker=0 taker=0 transfers=22
 - Notional (sum USD proxy): 0 (median 0)
-- Explorer: https://mantlescan.xyz/address/0x588846213a30fd36244e0ae0ebb2374516da836c
+- Explorer: https://mantlescan.xyz/address/0xc9d16f4cd9edec605689127794a1091c4a6098ae
 
-#### `0xd8169f099ce16c87a99d2a8494023574b5eea9c5`
+#### `0x0397279515ba8a57a869daa97df4dd7562cbf648`
 
 - Label: **rebalancer**
-- Reasons: cex_touch_transfers=24
-- Activity: AMM=0 buy=0 sell=0 RFQ maker=0 taker=0 transfers=35
+- Reasons: cex_touch_transfers=10
+- Activity: AMM=0 buy=0 sell=0 RFQ maker=0 taker=0 transfers=21
 - Notional (sum USD proxy): 0 (median 0)
-- Explorer: https://mantlescan.xyz/address/0xd8169f099ce16c87a99d2a8494023574b5eea9c5
+- Explorer: https://mantlescan.xyz/address/0x0397279515ba8a57a869daa97df4dd7562cbf648
 
-#### `0x35263632aa76b909b1ce57bd6291b80c565f79b3`
+#### `0x5df5012c151a75ddd808cabee83de64b5c4afe63`
 
 - Label: **rebalancer**
-- Reasons: cex_touch_transfers=22
-- Activity: AMM=0 buy=0 sell=0 RFQ maker=0 taker=0 transfers=90
+- Reasons: cex_touch_transfers=7
+- Activity: AMM=0 buy=0 sell=0 RFQ maker=0 taker=0 transfers=18
 - Notional (sum USD proxy): 0 (median 0)
-- Explorer: https://mantlescan.xyz/address/0x35263632aa76b909b1ce57bd6291b80c565f79b3
+- Explorer: https://mantlescan.xyz/address/0x5df5012c151a75ddd808cabee83de64b5c4afe63
 
 ### Arb bots (high convergence) (`arb_bot`)
 
 | Address | Contract? | Pairs | AMM | RFQ m/t | Conv | Mean-rev | CEX touches | Why |
 |---------|-----------|------:|----:|--------:|-----:|---------:|------------:|-----|
 | [`0xcdddbcb6…`](https://mantlescan.xyz/address/0xcdddbcb65f01d7696ecca0e635f425ce4d429010) | no | 5 (AAPLx,GOOGLx,METAx,NVDAx) | 6216 | 0/0 | 0.97 (n=6215) | 0.45 | 0 | convergence=0.97 on 6215 scored; bybit_align=0.91 |
-| [`0xb15d7daa…`](https://mantlescan.xyz/address/0xb15d7daa4e21500102c7c57b21009cf3549ab890) | no | 6 (AAPLx,CRCLx,GOOGLx,HOODx) | 114 | 0/0 | 1.00 (n=114) | 0.47 | 108 | convergence=1.00 on 114 scored; bybit_align=0.58 |
-| [`0xed8f393d…`](https://mantlescan.xyz/address/0xed8f393d2582c9b2ef57559fa5c49f5e5b6d543a) | no | 6 (CRCLx,GOOGLx,HOODx,METAx) | 52 | 0/0 | 1.00 (n=52) | 0.45 | 15 | convergence=1.00 on 52 scored; bybit_align=0.50 |
+| [`0xb15d7daa…`](https://mantlescan.xyz/address/0xb15d7daa4e21500102c7c57b21009cf3549ab890) | no | 6 (AAPLx,CRCLx,GOOGLx,HOODx) | 114 | 0/0 | 1.00 (n=114) | 0.47 | 0 | convergence=1.00 on 114 scored; bybit_align=0.58 |
+| [`0xed8f393d…`](https://mantlescan.xyz/address/0xed8f393d2582c9b2ef57559fa5c49f5e5b6d543a) | no | 6 (CRCLx,GOOGLx,HOODx,METAx) | 52 | 0/0 | 1.00 (n=52) | 0.45 | 0 | convergence=1.00 on 52 scored; bybit_align=0.50 |
 
 #### `0xcdddbcb65f01d7696ecca0e635f425ce4d429010`
 
@@ -290,7 +283,8 @@ Orthogonal to MM: the same desk may be both; product may emit `market_maker+reba
 6. **CEX wallets are clustered, not labeled.** Manual Mantlescan / Bybit deposit address verification still required before shipping `rebalancer` as a product label.
 7. **LP Mint/Burn not pulled.** MM LP behavior is out of scope for this pass; only swap/fill/transfer inventory.
 8. **Pools without AMM** (AMZNx/COINx/MCDx) contribute Transfer-only rows; no swap-based convergence.
-9. **Cross-pair MM inventory path** (bidirectional + mean-reversion across ≥2 pairs) is implemented but did **not** fire in the 30d sample — all five `market_maker` hits came from the RFQ-maker path. Thresholds for that branch are unfitted on live xStock flow.
+9. **RFQ-maker `market_maker` path** is fitted on a thin sample (18 LOP fills / 30d). Threshold `mm_min_rfq_maker_fills=2` is research-default; re-validate before productization.
+10. **Cross-pair MM inventory path** (bidirectional + mean-reversion across ≥2 pairs) is implemented but did **not** fire in the 30d sample — all five `market_maker` hits came from the RFQ-maker path. Thresholds for that branch are unfitted on live xStock flow.
 
 ## Relationship to M4
 
