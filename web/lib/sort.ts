@@ -112,3 +112,143 @@ export function isSortKey(value: string): value is SortKey {
 export function defaultSortDesc(key: SortKey): boolean {
   return key !== "pair_id";
 }
+
+// ---------------------------------------------------------------------------
+// Top-N overview view (WHI-791)
+// ---------------------------------------------------------------------------
+
+/** Default collapsed row budget for the overview table. */
+export const TOP_N_DEFAULT = 10;
+
+/** True when the row has a non-null value for the active sort key. */
+export function hasSortValue(row: PairOverviewRow, key: SortKey): boolean {
+  return rawValue(row, key) !== null;
+}
+
+export type TopNView = {
+  rows: PairOverviewRow[];
+  /** Rows with a non-null sort value (after filter + sort). */
+  presentCount: number;
+  /** Full filtered list length (including n/a for the sort key). */
+  totalCount: number;
+  /** How many rows are currently rendered. */
+  shownCount: number;
+  /** Cap used when collapsed. */
+  topN: number;
+  showAll: boolean;
+  /**
+   * True when the collapsed view omits rows (present > N and/or trailing n/a
+   * exist). Drives the "Show all" footer affordance.
+   */
+  isTruncated: boolean;
+};
+
+/**
+ * Apply the Top-N window to an already-sorted row list.
+ *
+ * Contract (WHI-791):
+ * - Collapsed: only rows with a present sort value, first `n` of them.
+ *   Null / n/a rows sort last (via {@link sortRows}) and **never** fill Top-N
+ *   slots (e.g. dex:none pairs with no TVL do not appear in "Top 10 by TVL").
+ * - Expanded (`showAll`): full sorted list, trailing n/a included.
+ */
+export function applyTopN(
+  sortedRows: ReadonlyArray<PairOverviewRow>,
+  key: SortKey,
+  opts: { n?: number; showAll: boolean },
+): TopNView {
+  const n = opts.n ?? TOP_N_DEFAULT;
+  const totalCount = sortedRows.length;
+  const present = sortedRows.filter((r) => hasSortValue(r, key));
+  const presentCount = present.length;
+
+  if (opts.showAll) {
+    return {
+      rows: [...sortedRows],
+      presentCount,
+      totalCount,
+      shownCount: totalCount,
+      topN: n,
+      showAll: true,
+      isTruncated: false,
+    };
+  }
+
+  const rows = present.slice(0, n);
+  return {
+    rows,
+    presentCount,
+    totalCount,
+    shownCount: rows.length,
+    topN: n,
+    showAll: false,
+    isTruncated: presentCount > n || totalCount > rows.length,
+  };
+}
+
+/** Human label for a sort key (footer / controls). */
+export function sortKeyLabel(key: SortKey): string {
+  return SORT_KEYS.find((s) => s.key === key)?.label ?? key;
+}
+
+/**
+ * Footer count copy — must reflect the full filtered universe so a Top-10
+ * window is never mistaken for a 10-pair inventory.
+ */
+export function topNSummary(view: TopNView, key: SortKey): string {
+  const label = sortKeyLabel(key);
+  if (view.showAll) {
+    return `Showing all ${view.totalCount} pairs · sorted by ${label}`;
+  }
+  return `Top ${view.shownCount} of ${view.totalCount} by ${label}`;
+}
+
+// ---------------------------------------------------------------------------
+// Shareable overview URL state (WHI-791)
+// ---------------------------------------------------------------------------
+
+export type OverviewUrlState = {
+  sortKey?: SortKey;
+  sortDesc?: boolean;
+  showAll?: boolean;
+};
+
+/**
+ * Parse `?sort=&desc=&all=` from a location search string.
+ * Unknown sort keys are ignored (caller keeps server/default).
+ */
+export function parseOverviewSearch(search: string): OverviewUrlState {
+  const raw = search.startsWith("?") ? search.slice(1) : search;
+  if (!raw) return {};
+  const p = new URLSearchParams(raw);
+  const out: OverviewUrlState = {};
+  const sort = p.get("sort");
+  if (sort && isSortKey(sort)) {
+    out.sortKey = sort;
+  }
+  if (p.has("desc")) {
+    const d = p.get("desc");
+    out.sortDesc = d !== "0" && d !== "false";
+  }
+  if (p.get("all") === "1" || p.get("all") === "true") {
+    out.showAll = true;
+  } else if (p.has("all")) {
+    out.showAll = false;
+  }
+  return out;
+}
+
+/** Build `?sort=…&desc=…[&all=1]` for replaceState / share links. */
+export function buildOverviewSearch(state: {
+  sortKey: SortKey;
+  sortDesc: boolean;
+  showAll: boolean;
+}): string {
+  const p = new URLSearchParams();
+  p.set("sort", state.sortKey);
+  p.set("desc", state.sortDesc ? "1" : "0");
+  if (state.showAll) {
+    p.set("all", "1");
+  }
+  return `?${p.toString()}`;
+}

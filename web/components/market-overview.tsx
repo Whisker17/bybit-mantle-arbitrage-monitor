@@ -1,8 +1,9 @@
 "use client";
 
 /**
- * Market-scoped overview table (WHI-758 / WHI-766 / WHI-774).
+ * Market-scoped overview table (WHI-758 / WHI-766 / WHI-774 / WHI-791).
  * Polls /api/{market}/pairs + health; RFQ columns hidden when has_rfq is false.
+ * Default view is Top-N by the active sort key; expand to the full list.
  */
 
 import { useCallback, useEffect, useMemo, useRef, useState } from "react";
@@ -12,6 +13,7 @@ import { OverviewControls } from "@/components/overview-controls";
 import { PairsTable } from "@/components/pairs-table";
 import { StaleBanner } from "@/components/stale-banner";
 import { StatusBar } from "@/components/status-bar";
+import { Button } from "@/components/ui/button";
 import { EmptyPanel } from "@/components/ui/empty-panel";
 import { fetchJson } from "@/lib/api";
 import { resolveVenues, type DirectionVenues } from "@/lib/format";
@@ -22,10 +24,15 @@ import {
   marketCard,
 } from "@/lib/markets";
 import {
+  applyTopN,
+  buildOverviewSearch,
   defaultSortDesc,
   filterRows,
   isSortKey,
+  parseOverviewSearch,
   sortRows,
+  topNSummary,
+  TOP_N_DEFAULT,
 } from "@/lib/sort";
 import type {
   HealthResponse,
@@ -51,14 +58,38 @@ export function MarketOverview({ marketId }: Props) {
 
   const [sortKey, setSortKey] = useState<SortKey>("net_edge");
   const [sortDesc, setSortDesc] = useState(true);
+  const [showAll, setShowAll] = useState(false);
   const [query, setQuery] = useState("");
   const [hideLowLiquidity, setHideLowLiquidity] = useState(false);
   const [hideStale, setHideStale] = useState(false);
-  /** Once the operator touches sort, stop adopting server defaults. */
+  /** Once the operator touches sort / expand, stop adopting server defaults. */
   const sortTouched = useRef(false);
   const sortHydrated = useRef(false);
+  /** URL search applied once on mount (shareable sort/top-N state). */
+  const urlHydrated = useRef(false);
 
-  // Reset sort hydration when switching markets so each market can apply its default.
+  // Hydrate sort / top-N from the share URL before the first server default lands.
+  useEffect(() => {
+    if (urlHydrated.current) return;
+    urlHydrated.current = true;
+    if (typeof window === "undefined") return;
+    const fromUrl = parseOverviewSearch(window.location.search);
+    if (fromUrl.sortKey) {
+      setSortKey(fromUrl.sortKey);
+      sortTouched.current = true;
+      sortHydrated.current = true;
+    }
+    if (fromUrl.sortDesc !== undefined) {
+      setSortDesc(fromUrl.sortDesc);
+      sortTouched.current = true;
+      sortHydrated.current = true;
+    }
+    if (fromUrl.showAll !== undefined) {
+      setShowAll(fromUrl.showAll);
+    }
+  }, []);
+
+  // Reset view when switching markets so each market can apply its default.
   useEffect(() => {
     sortHydrated.current = false;
     sortTouched.current = false;
@@ -67,7 +98,37 @@ export function MarketOverview({ marketId }: Props) {
     setPairsErr(null);
     setErr(null);
     setQuery("");
+    setShowAll(false);
+    // Re-read URL after market path change (path changes, query may persist).
+    if (typeof window !== "undefined") {
+      const fromUrl = parseOverviewSearch(window.location.search);
+      if (fromUrl.sortKey) {
+        setSortKey(fromUrl.sortKey);
+        sortTouched.current = true;
+        sortHydrated.current = true;
+      }
+      if (fromUrl.sortDesc !== undefined) {
+        setSortDesc(fromUrl.sortDesc);
+        sortTouched.current = true;
+        sortHydrated.current = true;
+      }
+      if (fromUrl.showAll !== undefined) {
+        setShowAll(fromUrl.showAll);
+      }
+    }
   }, [marketId]);
+
+  // Keep shareable query params in sync (replaceState — no history spam).
+  useEffect(() => {
+    if (typeof window === "undefined") return;
+    // Wait until URL hydration has run so we do not clobber ?sort= on first paint.
+    if (!urlHydrated.current && !sortTouched.current) return;
+    const next = buildOverviewSearch({ sortKey, sortDesc, showAll });
+    const url = `${window.location.pathname}${next}`;
+    if (url !== `${window.location.pathname}${window.location.search}`) {
+      window.history.replaceState(null, "", url);
+    }
+  }, [sortKey, sortDesc, showAll, marketId]);
 
   const refresh = useCallback(async () => {
     // Independent fetches so a 503 on pairs does not discard a successful health.
@@ -170,7 +231,7 @@ export function MarketOverview({ marketId }: Props) {
     );
   }, [markets, marketId]);
 
-  const visibleRows = useMemo(() => {
+  const sortedRows = useMemo(() => {
     const base = overview?.rows ?? [];
     const filtered = filterRows(base, {
       query,
@@ -179,6 +240,15 @@ export function MarketOverview({ marketId }: Props) {
     });
     return sortRows(filtered, sortKey, sortDesc);
   }, [overview, query, hideLowLiquidity, hideStale, sortKey, sortDesc]);
+
+  const topView = useMemo(
+    () =>
+      applyTopN(sortedRows, sortKey, {
+        n: TOP_N_DEFAULT,
+        showAll,
+      }),
+    [sortedRows, sortKey, showAll],
+  );
 
   const handleSort = useCallback(
     (key: SortKey) => {
@@ -189,6 +259,9 @@ export function MarketOverview({ marketId }: Props) {
         setSortKey(key);
         setSortDesc(defaultSortDesc(key));
       }
+      // Changing the sort key rebuilds the Top-N set; stay collapsed so
+      // "click CEX Vol → Top 10 by CEX Vol" is the default path.
+      setShowAll(false);
     },
     [sortKey],
   );
@@ -197,11 +270,16 @@ export function MarketOverview({ marketId }: Props) {
     sortTouched.current = true;
     setSortKey(k);
     setSortDesc(defaultSortDesc(k));
+    setShowAll(false);
   }, []);
 
   const toggleSortDir = useCallback(() => {
     sortTouched.current = true;
     setSortDesc((d) => !d);
+  }, []);
+
+  const toggleShowAll = useCallback(() => {
+    setShowAll((v) => !v);
   }, []);
 
   return (
@@ -213,7 +291,8 @@ export function MarketOverview({ marketId }: Props) {
         overview={overview}
         pollMs={pollMs}
         rowCount={overview?.rows.length ?? 0}
-        filteredCount={visibleRows.length}
+        // Filtered universe (not Top-N window) — footer owns the Top-N count.
+        filteredCount={topView.totalCount}
         displayName={displayName}
       />
 
@@ -246,8 +325,7 @@ export function MarketOverview({ marketId }: Props) {
           />
 
           <PairsTable
-            rows={visibleRows}
-            badgeSourceRows={overview?.rows ?? []}
+            rows={topView.rows}
             sortKey={sortKey}
             sortDesc={sortDesc}
             onSort={handleSort}
@@ -255,6 +333,28 @@ export function MarketOverview({ marketId }: Props) {
             hasRfq={hasRfq}
             venues={venues}
           />
+
+          {(topView.isTruncated || topView.showAll) &&
+            topView.totalCount > 0 && (
+              <div className="mt-2 flex flex-wrap items-center justify-between gap-2 rounded-md border border-border bg-card px-3 py-2 text-[11px] text-muted-foreground">
+                <span className="tabular-nums text-foreground/90">
+                  {topNSummary(topView, sortKey)}
+                  {!topView.showAll && topView.presentCount < topView.totalCount
+                    ? ` · ${topView.presentCount} with data`
+                    : ""}
+                </span>
+                <Button
+                  type="button"
+                  variant="outline"
+                  className="h-7 text-[11px]"
+                  onClick={toggleShowAll}
+                >
+                  {topView.showAll
+                    ? `Collapse to Top ${TOP_N_DEFAULT}`
+                    : `Show all ${topView.totalCount} pairs`}
+                </Button>
+              </div>
+            )}
         </>
       )}
 
@@ -262,10 +362,13 @@ export function MarketOverview({ marketId }: Props) {
         {hasRfq
           ? "Prices are de-multiplied CEX L1 vs DEX AMM/RFQ. Net edge is AMM-only at the reference notional (see status bar). "
           : "Prices are CEX L1 vs AMM (this market has no RFQ). Net edge is AMM-only at the reference notional. "}
+        Overview defaults to Top {TOP_N_DEFAULT} by the active sort column
+        (header click cycles sort; n/a values sort last and never fill Top-N).
         Bucket PnL is PnL v2 optimal cash-flow (hover for direction &amp; size;
         &quot;no depth&quot; when the journal has no depth curve). Row opens pair
         detail. Market selection is the URL path{" "}
-        <code className="text-foreground">/m/{"{market}"}/</code>.
+        <code className="text-foreground">/m/{"{market}"}/</code>; sort state is
+        in the query string for sharing.
       </p>
     </main>
   );

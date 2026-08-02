@@ -62,22 +62,16 @@ Snapshot date: **2026-08-02** (factory enum re-run same day for WHI-790).
 Ranked by DexScreener liquidity USD on the **on-chain-verified** best USDT pool.
 `low_liquidity` uses the same $50k gate as M1 `pairs.yaml` (inventory convention only).
 
-### Web overview badges (WHI-781) — not a volume top-10 inventory
+### Web overview Top-N (WHI-791) — not a volume top-10 inventory
 
-The Web overview can show compact **`TVL`** / **`Vol`** badges next to a pair id.
-These **label two independent ranking dimensions** on the *current fixed inventory*;
-they do **not** mean the monitor set was rebuilt to Binance CEX volume top-10.
+The Web overview **defaults to Top 10 by the active sort column** (click
+**CEX Vol** / **DEX Vol** / **TVL** headers; footer expands to the full
+filtered list). This is a **view** over the full inventory — it does **not**
+mean the collector set was rebuilt to Binance CEX volume top-10.
 
-| Badge | Dimension | Default rule (binance-pancake) |
-|-------|-----------|--------------------------------|
-| `TVL` | DEX pool liquidity | Inventory `est_liquidity_usd` rank ≤ 5 among **all** market overview rows (not UI-filtered) |
-| `Vol` | CEX 24h quote volume | Live `cex_volume_24h` rank ≤ 5 among **all** market overview rows (not UI-filtered) |
-
-A pair may show **both** when it ranks high on both axes (set overlap with global
-CEX leaders is small — research day 2026-08-02 had only SPCXB / SKHYB / MUB in both
-universes). The `low-liq` badge was removed from the UI; the hide-low-liquidity
-filter still uses inventory `low_liquidity`. bybit-fluxion uses **Vol-only** (no
-PCS TVL story).
+WHI-781 pair-id `TVL` / `Vol` badges were removed in WHI-791 (redundant once
+Volume/TVL are first-class sortable columns with a Top-N window). The
+hide-low-liquidity filter still uses inventory `low_liquidity`.
 
 | # | id | Binance | BEP-20 | PCS pool | fee | Est liq USD | uiMultiplier | mid cross-check |
 |---|-----|---------|--------|----------|-----|-------------|--------------|-----------------|

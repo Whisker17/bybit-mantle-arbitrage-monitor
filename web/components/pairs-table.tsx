@@ -26,12 +26,6 @@ import {
 } from "@/lib/format";
 import { marketPairPath } from "@/lib/markets";
 import { mmActiveLabel, mmActiveTitle } from "@/lib/mm";
-import {
-  BADGE_LABEL_TVL,
-  BADGE_LABEL_VOL,
-  badgePolicyForMarket,
-  pairBadgesForRows,
-} from "@/lib/pair-badges";
 import { overviewPnlCell } from "@/lib/pnl";
 import type { MmActiveStatus, PairOverviewRow, SortKey } from "@/lib/types";
 
@@ -70,11 +64,6 @@ type Props = {
   venues?: DirectionVenues | null;
   /** Empty-table message (filter miss vs market accumulating). */
   emptyMessage?: string;
-  /**
-   * Full market overview rows used for TVL/Vol badge ranking (WHI-781).
-   * Required unfiltered set so hide-low-liq / search does not change ranks.
-   */
-  badgeSourceRows: PairOverviewRow[];
 };
 
 /** Column groups for the two-row thead (WHI-780). */
@@ -528,7 +517,6 @@ export function PairsTable({
   hasRfq = true,
   venues: venuesProp,
   emptyMessage = "No pairs match the current filter.",
-  badgeSourceRows,
 }: Props) {
   const router = useRouter();
   const venues = useMemo(
@@ -548,16 +536,6 @@ export function PairsTable({
     }
     return map;
   }, [cols]);
-
-  // WHI-781: rank on full market set; tooltips from the same policy object.
-  const badgePolicy = useMemo(
-    () => badgePolicyForMarket(marketId),
-    [marketId],
-  );
-  const badgesByPair = useMemo(
-    () => pairBadgesForRows(badgeSourceRows, badgePolicy),
-    [badgeSourceRows, badgePolicy],
-  );
 
   return (
     <div className="overflow-x-auto rounded-md border border-border">
@@ -637,7 +615,6 @@ export function PairsTable({
                 venues,
                 marketId,
               );
-              const badges = badgesByPair.get(row.pair_id);
               return (
                 <tr
                   key={row.pair_id}
@@ -674,24 +651,6 @@ export function PairsTable({
                       >
                         {row.pair_id}
                       </Link>
-                      {badges?.hiTvl && (
-                        <Badge
-                          variant="positive"
-                          className="normal-case"
-                          title={badgePolicy.tvlTitle}
-                        >
-                          {BADGE_LABEL_TVL}
-                        </Badge>
-                      )}
-                      {badges?.hiVol && (
-                        <Badge
-                          variant="default"
-                          className="normal-case"
-                          title={badgePolicy.volTitle}
-                        >
-                          {BADGE_LABEL_VOL}
-                        </Badge>
-                      )}
                       {row.stale && (
                         <Badge variant="warning" className="normal-case">
                           stale

@@ -149,11 +149,9 @@ placeholders. Agents must not assume a module exists until its issue lands. -->
     overview thead (venue-named CEX/DEX groups + Edge/Vol gap/PnL/Underlying);
     column reorder so CEX Vol sits with CEX L1 and DEX Vol with DEX quotes;
     market-aware Dir short codes (`F→B`/`B→F` vs `P→B`/`B→P`) on Web + TUI.
-  - **Pair badges TVL/Vol (WHI-781) landed:** overview pair-id badges for
-    high inventory DEX pool TVL and/or high in-market CEX 24h vol (top-5);
-    `low-liq` badge removed (filter kept); binance-pancake TVL+Vol,
-    bybit-fluxion Vol-only; `est_liquidity_usd` on overview rows;
-    pure helpers `web/lib/pair-badges.ts`.
+  - **Pair badges TVL/Vol (WHI-781) landed (superseded by WHI-791):** had
+    overview pair-id badges for hi-TVL / hi-Vol; removed once Volume/TVL
+    became first-class Top-N sort columns.
   - **Premium column split (WHI-783) landed:** overview moves vs-underlying
     into CEX/DEX groups (`vs Und`); renames AMM/RFQ bps → `vs CEX` /
     `RFQ vs CEX`; Underlying group is reference price only; detail chart
@@ -172,7 +170,11 @@ placeholders. Agents must not assume a module exists until its issue lands. -->
     **21** collector-scope V3 USDT AMM pools (`pancake.amm`) and **34** dex:none
     (CEX-only; chain via `pairs_with_amm()`). QQQB restored as real high-TVL pool.
     Underlying Yahoo/uncovered map covers new tickers (`config/underlying.yaml`).
-    Dynamic Top-N UI is WHI-791.
+  - **Overview Top-N sort (WHI-791) landed:** Web overview defaults to Top 10
+    by the active sort key (CEX Vol / DEX Vol / TVL / … are header-sortable);
+    footer “Show all N / Collapse”; n/a sort values trail and never fill Top-N
+    slots; shareable `?sort=&desc=&all=`; pair-id TVL/Vol badges +
+    `web/lib/pair-badges.ts` removed.
 
   - **Underlying dual-market ops (WHI-788) landed:** bybit blank Underlying
     was a **stale collector process** (pre-778 binary; binance restarted later).

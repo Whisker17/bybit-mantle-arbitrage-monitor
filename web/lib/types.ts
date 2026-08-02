@@ -143,8 +143,9 @@ export type PairOverviewRow = {
   rfq_premium_bps?: string | null;
   premium_type_label?: string | null;
   /**
-   * WHI-781: inventory snapshot pool liquidity USD (est / DexScreener).
-   * Badge ranking falls back here when live TVL is absent.
+   * Inventory snapshot pool liquidity USD (est / DexScreener). API still
+   * emits this for cold-start / TUI; Web overview ranks on live `tvl_usd`
+   * via Top-N sort (WHI-791), not this field.
    */
   est_liquidity_usd?: string | null;
   /**
