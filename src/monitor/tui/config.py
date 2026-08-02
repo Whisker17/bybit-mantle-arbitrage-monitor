@@ -23,6 +23,9 @@ SortKey = Literal[
     "bybit_mid",
     "volume_24h",
     "trades_24h",
+    "cex_volume_24h",
+    "dex_volume_24h",
+    "volume_ratio",
 ]
 
 

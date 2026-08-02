@@ -14,12 +14,25 @@ import {
   fmtSession,
   fmtSignedBps,
   fmtUsd,
+  fmtUtcHm,
+  fmtVolumeRatio,
   usdTone,
 } from "@/lib/format";
 import { marketPairPath } from "@/lib/markets";
 import { mmActiveLabel, mmActiveTitle } from "@/lib/mm";
 import { overviewPnlCell } from "@/lib/pnl";
 import type { MmActiveStatus, PairOverviewRow, SortKey } from "@/lib/types";
+
+function dexVolumeTitle(row: PairOverviewRow): string {
+  const base =
+    row.dex_volume_24h != null
+      ? `DEX window notional ${row.dex_volume_24h}`
+      : "No DEX swaps in window";
+  if (row.dex_volume_truncated && row.dex_volume_window_start_ms != null) {
+    return `${base} · truncated since ${fmtUtcHm(row.dex_volume_window_start_ms)} UTC (collector < 24h)`;
+  }
+  return base;
+}
 
 type Props = {
   rows: PairOverviewRow[];
@@ -73,8 +86,24 @@ const COLS: Col[] = [
   },
   { key: null, label: "Dir", title: "Arb direction" },
   { key: null, label: "Ven" },
-  { key: "volume_24h", label: "Vol24h", align: "right" },
-  { key: "trades_24h", label: "N24h", align: "right" },
+  {
+    key: "cex_volume_24h",
+    label: "CEX Vol",
+    align: "right",
+    title: "CEX rolling 24h quote volume (exchange REST)",
+  },
+  {
+    key: "dex_volume_24h",
+    label: "DEX Vol",
+    align: "right",
+    title: "DEX AMM swap notional in window (truncated if collector < 24h)",
+  },
+  {
+    key: "volume_ratio",
+    label: "CEX/DEX",
+    align: "right",
+    title: "CEX ÷ DEX 24h notional ratio (core volume gap metric)",
+  },
   {
     key: null,
     label: "Bucket PnL",
@@ -313,11 +342,36 @@ export function PairsTable({
                   <td className="px-2 py-1.5 uppercase text-muted-foreground">
                     {row.net_edge_venue ?? "—"}
                   </td>
-                  <td className="px-2 py-1.5 text-right tabular-nums">
-                    {fmtNotional(row.volume_24h)}
+                  <td
+                    className="px-2 py-1.5 text-right tabular-nums"
+                    title={
+                      row.cex_volume_24h != null
+                        ? `CEX 24h ${row.cex_volume_24h}`
+                        : "Waiting for CEX volume poll"
+                    }
+                  >
+                    {fmtNotional(row.cex_volume_24h)}
                   </td>
-                  <td className="px-2 py-1.5 text-right tabular-nums">
-                    {row.trades_24h}
+                  <td
+                    className="px-2 py-1.5 text-right tabular-nums"
+                    title={dexVolumeTitle(row)}
+                  >
+                    {fmtNotional(row.dex_volume_24h)}
+                    {row.dex_volume_truncated ? (
+                      <span className="ml-0.5 text-[10px] text-amber-400/90">
+                        *
+                      </span>
+                    ) : null}
+                  </td>
+                  <td
+                    className="px-2 py-1.5 text-right tabular-nums text-muted-foreground"
+                    title={
+                      row.volume_ratio != null
+                        ? `CEX/DEX = ${row.volume_ratio}`
+                        : "Ratio needs positive DEX volume and a CEX poll"
+                    }
+                  >
+                    {fmtVolumeRatio(row.volume_ratio)}
                   </td>
                   <td className="px-2 py-1.5 text-right">
                     <BucketPnlCell row={row} />

@@ -33,6 +33,7 @@ retention:
   fluxion_rfq_fills_ms: null        # permanent — M4 attribution feedstock
   erc20_transfers_ms: null          # permanent — WHI-768 inventory Transfer stream
   rebalance_events_ms: null         # permanent — WHI-768 CEX-touch rebalance events
+  cex_volume_24h_ms: 604800000      # 7 days REST snapshots (WHI-777; UI uses latest)
   collector_gaps_ms: 2592000000     # 30 days
   delete_batch_size: 5000
   # After DELETE, free pages for reuse; pages=0 skips. Full VACUUM is opt-in.
@@ -101,6 +102,14 @@ markets:
       # Equal-weight samples for meta block_ingest_latency_{p50,p95,p99}_ms.
       latency_window_blocks: 256
 
+    # WHI-777: authoritative Bybit rolling 24h quote turnover (REST poll).
+    cex_volume:
+      enabled: true
+      venue: bybit
+      rest_base_url: "https://api.bybit.com"
+      poll_interval_s: 60
+      http_timeout_s: 15
+
     rfq:
       # Notional for EXACT_INPUT quote polls (USDC has 6 decimals). 100 USDC.
       amount_usdc_raw: "100000000"
@@ -157,3 +166,10 @@ markets:
       pool_state_every_n_blocks: 8
       quote_decimals: 18
       latency_window_blocks: 256
+    # WHI-777: Binance 24h quoteVolume via vision REST (same geo host as stream).
+    cex_volume:
+      enabled: true
+      venue: binance
+      rest_base_url: "https://data-api.binance.vision"
+      poll_interval_s: 60
+      http_timeout_s: 15

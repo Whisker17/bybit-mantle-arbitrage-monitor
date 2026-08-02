@@ -21,6 +21,8 @@ from monitor.quotes import (
     RFQ_SELL_SIDES,
     BybitBookTick,
     BybitDepthTick,
+    BybitTradeTick,
+    CexVolumeTick,
     CollectorGap,
     Erc20TransferTick,
     FluxionPoolStateTick,
@@ -89,6 +91,8 @@ class JournalReader:
         uri = self.path.resolve().as_uri() + "?mode=ro"
         self._conn = sqlite3.connect(uri, uri=True, check_same_thread=False)
         self._conn.row_factory = sqlite3.Row
+        # Cached for optional tables (schema v5+); pre-v5 journals degrade cleanly.
+        self._tables: frozenset[str] | None = None
 
     def close(self) -> None:
         self._conn.close()
@@ -279,6 +283,9 @@ class JournalReader:
         Bybit notional = Σ(price_de_multiplied × size). Fluxion is a count only:
         sizing the USDC leg needs the pool's token order, which lives in M5's
         ``swap_notional_usd`` path — SQL must not invent a pseudo-USD notional.
+
+        Prefer ``latest_cex_volume`` + ``aggregate_dex_volume`` (WHI-777) for
+        the panel's CEX/DEX columns; this method remains for TUI legacy cells.
         """
         bt = self._conn.execute(
             """
@@ -302,6 +309,70 @@ class JournalReader:
             bybit_notional=Decimal(str(bt["notional"])),
             fluxion_swap_count=int(sw["n"]),
         )
+
+    def _table_names(self) -> frozenset[str]:
+        if self._tables is None:
+            rows = self._conn.execute(
+                "SELECT name FROM sqlite_master WHERE type='table'"
+            ).fetchall()
+            self._tables = frozenset(str(r[0]) for r in rows)
+        return self._tables
+
+    def latest_cex_volume(self, pair_id: str) -> CexVolumeTick | None:
+        """Most recent REST-polled CEX 24h volume for a pair (WHI-777).
+
+        Returns None when the journal predates schema v5 (table absent) so the
+        API can keep serving until the collector restarts and migrates.
+        """
+        if "cex_volume_24h" not in self._table_names():
+            return None
+        row = self._conn.execute(
+            """
+            SELECT * FROM cex_volume_24h
+            WHERE pair_id = ?
+            ORDER BY poll_ts_ms DESC, id DESC
+            LIMIT 1
+            """,
+            (pair_id,),
+        ).fetchone()
+        return None if row is None else _row_to_cex_volume(row)
+
+    def earliest_swap_recv_ts_ms(self, pair_id: str) -> int | None:
+        """Oldest swap wall-clock for truncation labels (WHI-777)."""
+        row = self._conn.execute(
+            """
+            SELECT MIN(recv_ts_ms) AS ts FROM fluxion_swaps
+            WHERE pair_id = ?
+            """,
+            (pair_id,),
+        ).fetchone()
+        if row is None or row["ts"] is None:
+            return None
+        return int(row["ts"])
+
+    def swaps_since(self, pair_id: str, *, since_ms: int) -> list[FluxionSwapTick]:
+        """All swaps for a pair with ``recv_ts_ms >= since_ms`` (ascending)."""
+        rows = self._conn.execute(
+            """
+            SELECT * FROM fluxion_swaps
+            WHERE pair_id = ? AND recv_ts_ms >= ?
+            ORDER BY block_number ASC, log_index ASC, id ASC
+            """,
+            (pair_id, since_ms),
+        ).fetchall()
+        return [_row_to_swap(r) for r in rows]
+
+    def trades_since(self, pair_id: str, *, since_ms: int) -> list[BybitTradeTick]:
+        """CEX journal trades for session-split secondary volume (WHI-777)."""
+        rows = self._conn.execute(
+            """
+            SELECT * FROM bybit_trades
+            WHERE pair_id = ? AND exchange_ts_ms >= ?
+            ORDER BY exchange_ts_ms ASC, id ASC
+            """,
+            (pair_id, since_ms),
+        ).fetchall()
+        return [_row_to_bybit_trade(r) for r in rows]
 
     # --- health / meta (WHI-757 web API) ------------------------------------
 
@@ -482,6 +553,42 @@ def _row_to_bybit_book(row: sqlite3.Row) -> BybitBookTick:
         bid_de_multiplied=_d(row["bid_de_multiplied"]),
         ask_de_multiplied=_d(row["ask_de_multiplied"]),
         multiplier=_d(row["multiplier"]),
+        gap=bool(row["gap"]),
+    )
+
+
+def _row_to_bybit_trade(row: sqlite3.Row) -> BybitTradeTick:
+    side = str(row["side"])
+    if side not in ("Buy", "Sell"):
+        side = "Buy"
+    return BybitTradeTick(
+        pair_id=str(row["pair_id"]),
+        symbol=str(row["symbol"]),
+        exchange_ts_ms=int(row["exchange_ts_ms"]),
+        recv_ts_ms=int(row["recv_ts_ms"]),
+        trade_id=str(row["trade_id"]),
+        price=_d(row["price"]),
+        price_de_multiplied=_d(row["price_de_multiplied"]),
+        size=_d(row["size"]),
+        side=side,  # type: ignore[arg-type]
+        multiplier=_d(row["multiplier"]),
+        gap=bool(row["gap"]),
+    )
+
+
+def _row_to_cex_volume(row: sqlite3.Row) -> CexVolumeTick:
+    src = str(row["source"])
+    if src not in ("bybit", "binance"):
+        src = "bybit"
+    count_raw = row["trade_count_24h"]
+    return CexVolumeTick(
+        pair_id=str(row["pair_id"]),
+        symbol=str(row["symbol"]),
+        poll_ts_ms=int(row["poll_ts_ms"]),
+        recv_ts_ms=int(row["recv_ts_ms"]),
+        volume_quote_24h=_d(row["volume_quote_24h"]),
+        trade_count_24h=None if count_raw is None else int(count_raw),
+        source=src,  # type: ignore[arg-type]
         gap=bool(row["gap"]),
     )
 

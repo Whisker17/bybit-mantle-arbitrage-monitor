@@ -114,6 +114,54 @@ export type PairOverviewRow = {
   pnl_v2?: PnlOptimalSummary | null;
   /** Present after WHI-769; older APIs may omit. */
   mm_active?: MmActiveStatus | null;
+  /** WHI-777: CEX REST 24h quote volume (null until first poll). */
+  cex_volume_24h?: string | null;
+  /** WHI-777: DEX AMM swap notional in window. */
+  dex_volume_24h?: string | null;
+  /** WHI-777: cex / dex when both positive. */
+  volume_ratio?: string | null;
+  dex_trade_count_24h?: number | null;
+  cex_trade_count_24h?: number | null;
+  dex_volume_truncated?: boolean;
+  dex_volume_window_start_ms?: number | null;
+};
+
+/** Session bucket for volume compare (WHI-777). */
+export type SessionVolumeSlice = {
+  volume_usd: string;
+  trade_count: number;
+};
+
+export type DexVolumeWindow = {
+  volume_usd: string;
+  trade_count: number;
+  open: SessionVolumeSlice;
+  closed: SessionVolumeSlice;
+  window_start_ms: number;
+  requested_since_ms: number;
+  now_ms: number;
+  truncated: boolean;
+  earliest_recv_ts_ms: number | null;
+};
+
+export type CexJournalVolumeWindow = {
+  volume_usd: string;
+  trade_count: number;
+  open: SessionVolumeSlice;
+  closed: SessionVolumeSlice;
+  window_start_ms: number;
+  truncated: boolean;
+};
+
+/** Detail mini-panel payload (PairDetailModel.volume_compare). */
+export type VolumeCompare = {
+  cex_volume_24h: string | null;
+  cex_trade_count_24h: number | null;
+  cex_source: string | null;
+  cex_poll_ts_ms: number | null;
+  dex: DexVolumeWindow;
+  cex_journal: CexJournalVolumeWindow | null;
+  volume_ratio: string | null;
 };
 
 /** Market journal readiness for overview / markets list (WHI-774). */
@@ -155,6 +203,8 @@ export type PairDetailResponse = {
   pnl_v2?: PnlPairSnapshot | null;
   /** Extended address table (labels + evidence) — WHI-769. */
   address_panel?: AddressPanelRow[] | null;
+  /** WHI-777: CEX vs DEX 24h volume compare with session splits. */
+  volume_compare?: VolumeCompare | null;
   error?: string | null;
   /** Present after WHI-774 multi-market routes. */
   market_id?: string;
@@ -405,4 +455,7 @@ export type SortKey =
   | "rfq_spread"
   | "bybit_mid"
   | "volume_24h"
-  | "trades_24h";
+  | "trades_24h"
+  | "cex_volume_24h"
+  | "dex_volume_24h"
+  | "volume_ratio";

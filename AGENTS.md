@@ -125,6 +125,13 @@ placeholders. Agents must not assume a module exists until its issue lands. -->
     `/m/{market}/` and `/m/{market}/pair/{id}/` (root + legacy `/pair/{id}/`
     redirect to default market); RFQ columns hidden when `has_rfq` is false;
     explicit accumulating empty state when a market journal is not ready.
+  - **CEX/DEX 24h volume (WHI-777) landed:** CEX REST poll (Bybit
+    `turnover24h` / Binance `quoteVolume`, 60s) → journal `cex_volume_24h`
+    (schema v5); DEX volume from collected swaps with truncation label when
+    window &lt; 24h; overview columns CEX Vol / DEX Vol / CEX÷DEX ratio;
+    detail `volume_compare` panel (session open/closed split); API fields
+    `cex_volume_24h` / `dex_volume_24h` / `volume_ratio` on pairs + detail.
+    Module `monitor/cex_volume` + `monitor/metrics/volume.py`. Both markets.
 
 ## Build, test, run
 

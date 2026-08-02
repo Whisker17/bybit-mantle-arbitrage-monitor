@@ -14,6 +14,7 @@ from monitor.attribution.aggregate import PairAttribution
 from monitor.metrics.edge import CostBreakdown, Direction, EdgeResult, VenueKind
 from monitor.metrics.session import SessionKind
 from monitor.metrics.stats import BreachStats, Distribution, EdgeStats
+from monitor.metrics.volume import VolumeCompare
 from monitor.tui.config import SortKey
 
 
@@ -37,9 +38,17 @@ class PairOverviewRow:
     net_edge_venue: VenueKind | None
     net_edge_direction: Direction | None
     reference_size_usd: Decimal
-    volume_24h: Decimal  # Bybit notional proxy
-    trades_24h: int  # Bybit prints + Fluxion swaps
+    volume_24h: Decimal  # legacy TUI cell: CEX REST when present else journal CEX
+    trades_24h: int  # legacy: CEX journal prints + DEX swaps
     stale: bool = False  # True when no Bybit book yet
+    # WHI-777: CEX REST vs DEX swap 24h (API / Web primary surface).
+    cex_volume_24h: Decimal | None = None
+    dex_volume_24h: Decimal | None = None
+    volume_ratio: Decimal | None = None
+    dex_trade_count_24h: int | None = None
+    cex_trade_count_24h: int | None = None
+    dex_volume_truncated: bool = False
+    dex_volume_window_start_ms: int | None = None
 
 
 @dataclass(frozen=True, slots=True)
@@ -118,6 +127,8 @@ class PairDetailModel:
     arb_bot_trade_share: float | None
     price_keeper_trade_share: float | None
     rfq_mechanism_share: float | None
+    # WHI-777: CEX vs DEX volume compare (detail mini-panel).
+    volume_compare: VolumeCompare | None = None
     error: str | None = None
 
 

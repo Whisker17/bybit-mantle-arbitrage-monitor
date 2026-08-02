@@ -13,6 +13,7 @@ from monitor.quotes import (
     BybitBookTick,
     BybitDepthTick,
     BybitTradeTick,
+    CexVolumeTick,
     CollectorGap,
     Erc20TransferTick,
     FluxionPoolStateTick,
@@ -520,6 +521,31 @@ class SqliteStore:
             list(rows),
         )
 
+    def insert_cex_volume(self, ticks: Iterable[CexVolumeTick]) -> int:
+        """Append CEX REST 24h volume snapshots (WHI-777)."""
+        rows = [
+            (
+                t.pair_id,
+                t.symbol,
+                t.poll_ts_ms,
+                t.recv_ts_ms,
+                str(t.volume_quote_24h),
+                t.trade_count_24h,
+                t.source,
+                1 if t.gap else 0,
+            )
+            for t in ticks
+        ]
+        return self._insert_many(
+            """
+            INSERT INTO cex_volume_24h (
+                pair_id, symbol, poll_ts_ms, recv_ts_ms,
+                volume_quote_24h, trade_count_24h, source, gap
+            ) VALUES (?, ?, ?, ?, ?, ?, ?, ?)
+            """,
+            rows,
+        )
+
     def insert_gap(self, gap: CollectorGap) -> None:
         with self._lock:
             with self._conn:
@@ -561,6 +587,7 @@ class SqliteStore:
             "address_labels",
             "rebalance_events",
             "collector_gaps",
+            "cex_volume_24h",
         }:
             raise ValueError(f"unknown table: {table}")
         with self._lock:

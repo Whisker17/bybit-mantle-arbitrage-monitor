@@ -236,6 +236,23 @@ class BscCollectorConfig(BaseModel):
         return self
 
 
+class CexVolumeConfig(BaseModel):
+    """REST poll for venue 24h quote volume (WHI-777).
+
+    Authoritative rolling window from the exchange; journal trade streams only
+    cover collector uptime and are not the primary source.
+    """
+
+    model_config = ConfigDict(extra="forbid", frozen=True)
+
+    enabled: bool = True
+    poll_interval_s: float = Field(default=60.0, gt=0)
+    rest_base_url: str = Field(min_length=1)
+    http_timeout_s: float = Field(default=15.0, gt=0)
+    # Venue parser: bybit (turnover24h) or binance (quoteVolume).
+    venue: Literal["bybit", "binance"]
+
+
 class LoggingConfig(BaseModel):
     model_config = ConfigDict(extra="forbid", frozen=True)
 
@@ -288,6 +305,8 @@ class RetentionConfig(BaseModel):
     # WHI-768 permanent inventory Transfer stream + rebalance events.
     erc20_transfers_ms: int | None = Field(default=None, ge=1)
     rebalance_events_ms: int | None = Field(default=None, ge=1)
+    # WHI-777 CEX REST volume snapshots (only latest needed for UI; keep a week).
+    cex_volume_24h_ms: int | None = Field(default=604_800_000, ge=1)  # 7d
     collector_gaps_ms: int | None = Field(default=2_592_000_000, ge=1)  # 30d
     delete_batch_size: int = Field(default=5000, ge=1, le=100_000)
     incremental_vacuum_pages: int = Field(default=1000, ge=0)
@@ -342,6 +361,8 @@ class CollectorConfig(BaseModel):
     rfq: RfqCollectorConfig | None = None
     binance: BinanceCollectorConfig | None = None
     bsc: BscCollectorConfig | None = None
+    # WHI-777: optional (defaults enabled when rest_base_url can be inferred).
+    cex_volume: CexVolumeConfig | None = None
     logging: LoggingConfig
     retention: RetentionConfig = Field(default_factory=default_retention_config)
     # WHI-768: in-collector address_labels refresh interval (0 = CLI-only).
@@ -489,7 +510,7 @@ def _merge_market_section(
     # Shared process-level knobs (not venue-specific).
     if "attribution_refresh_interval_s" in data:
         flat["attribution_refresh_interval_s"] = data["attribution_refresh_interval_s"]
-    for key in ("bybit", "mantle", "rfq", "binance", "bsc"):
+    for key in ("bybit", "mantle", "rfq", "binance", "bsc", "cex_volume"):
         if key in section:
             flat[key] = section[key]
         elif key in data:

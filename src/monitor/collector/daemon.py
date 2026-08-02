@@ -20,6 +20,7 @@ from pathlib import Path
 
 from monitor.binance.ws import BinanceWsCollector
 from monitor.bybit.ws import BybitWsCollector
+from monitor.cex_volume.poller import CexVolumePoller
 from monitor.collector.config import (
     CollectorConfig,
     load_collector_config,
@@ -38,6 +39,7 @@ from monitor.quotes import (
     BybitBookTick,
     BybitDepthTick,
     BybitTradeTick,
+    CexVolumeTick,
     CollectorGap,
     Erc20TransferTick,
     FluxionPoolStateTick,
@@ -101,6 +103,7 @@ class CollectorDaemon:
         self._book_gap_until_ms: int = 0
         # Last written L1 row fingerprint — skip duplicate rows under hot books.
         self._last_book_l1: dict[str, tuple[Decimal, Decimal, bool]] = {}
+        self._cex_volume_poller: CexVolumePoller | None = None
 
     def request_stop(self) -> None:
         self._stop.set()
@@ -151,12 +154,15 @@ class CollectorDaemon:
                 self._attribution_refresh_loop(), name="attribution_refresh"
             ),
         ]
+        vol_task = self._maybe_cex_volume_task(pair_id_by_symbol)
+        if vol_task is not None:
+            tasks.append(vol_task)
         self.store.set_meta("collector_started_ms", str(now_ms()))
         self.store.set_meta("market_id", self.market_id)
         self.store.set_meta("rpc_url_kind", rpc_url_kind(self.rpc_url))
         logger.info(
             "collector started market=%s pairs=%d amm_pools=%d sqlite=%s rpc_kind=%s "
-            "retention=%s bybit_book=%s depth=%s",
+            "retention=%s bybit_book=%s depth=%s cex_volume=%s",
             self.market_id,
             len(self.pairs.pairs),
             len(self.pairs.pairs_with_amm()),
@@ -165,6 +171,7 @@ class CollectorDaemon:
             self.cfg.retention.enabled,
             self.cfg.bybit.book_topic_prefix,
             depth_cfg.enabled,
+            self.cfg.cex_volume is not None and self.cfg.cex_volume.enabled,
         )
         try:
             await self._stop.wait()
@@ -215,12 +222,15 @@ class CollectorDaemon:
             asyncio.create_task(self._retention_loop(), name="retention"),
             # No RFQ / MM attribution refresh for AMM-only pancake market.
         ]
+        vol_task = self._maybe_cex_volume_task(pair_id_by_symbol)
+        if vol_task is not None:
+            tasks.append(vol_task)
         self.store.set_meta("collector_started_ms", str(now_ms()))
         self.store.set_meta("market_id", self.market_id)
         self.store.set_meta("rpc_url_kind", rpc_url_kind(self.rpc_url))
         logger.info(
             "collector started market=%s pairs=%d amm_pools=%d sqlite=%s rpc_kind=%s "
-            "retention=%s binance_ws=%s depth=%s pool_stride=%d",
+            "retention=%s binance_ws=%s depth=%s pool_stride=%d cex_volume=%s",
             self.market_id,
             len(self.bstocks.pairs),
             len(self.bstocks.pairs_with_amm()),
@@ -230,6 +240,7 @@ class CollectorDaemon:
             self.cfg.binance.ws_base_url,
             depth_cfg.enabled,
             self.cfg.bsc.pool_state_every_n_blocks,
+            self.cfg.cex_volume is not None and self.cfg.cex_volume.enabled,
         )
         try:
             await self._stop.wait()
@@ -284,6 +295,27 @@ class CollectorDaemon:
 
     async def _on_trade(self, tick: BybitTradeTick) -> None:
         await asyncio.to_thread(self.store.insert_bybit_trades, [tick])
+
+    def _maybe_cex_volume_task(
+        self, pair_id_by_symbol: dict[str, str]
+    ) -> asyncio.Task[None] | None:
+        """Start REST 24h volume poll when configured and enabled (WHI-777)."""
+        cfg = self.cfg.cex_volume
+        if cfg is None or not cfg.enabled:
+            return None
+        poller = CexVolumePoller(
+            venue=cfg.venue,
+            rest_base_url=cfg.rest_base_url,
+            pair_id_by_symbol=pair_id_by_symbol,
+            on_volume=self._on_cex_volume,
+            poll_interval_s=cfg.poll_interval_s,
+            http_timeout_s=cfg.http_timeout_s,
+        )
+        self._cex_volume_poller = poller
+        return asyncio.create_task(poller.run(), name="cex_volume")
+
+    async def _on_cex_volume(self, ticks: list[CexVolumeTick]) -> None:
+        await asyncio.to_thread(self.store.insert_cex_volume, ticks)
 
     async def _on_gap(self, gap: CollectorGap) -> None:
         await asyncio.to_thread(self.store.insert_gap, gap)

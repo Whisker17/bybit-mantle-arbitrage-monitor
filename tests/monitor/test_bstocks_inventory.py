@@ -36,7 +36,8 @@ def test_collector_config_binance_pancake_shape() -> None:
     assert cfg.binance.trade_stream == "aggTrade"
     assert cfg.binance.depth.enabled is True
     assert cfg.binance.depth.stream == "depth20@100ms"
-    assert cfg.bsc.pool_state_every_n_blocks == 2
+    # Free-RPC default in collector.yaml (keyed RPC can lower this ops-side).
+    assert cfg.bsc.pool_state_every_n_blocks == 8
     assert cfg.bsc.quote_decimals == 18
     assert cfg.resolved_sqlite_path().name == "monitor-binance-pancake.db"
     assert "binance.vision" in cfg.binance.ws_base_url
