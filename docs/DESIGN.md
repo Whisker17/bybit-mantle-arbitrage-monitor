@@ -225,7 +225,7 @@ algorithms under `monitor.metrics` / `monitor.attribution` stay market-agnostic.
 | Gas per AMM swap | market `costs.gas_usd_per_swap` | Mantle ~$0.01; BSC inventory default $0.05 (non-zero constant). |
 | Quote basis wear | market `costs.quote_basis_bps` → `usdt_usdc_basis_bps` | 0 when CEX and DEX share the same quote (Binance USDT ⇄ Pancake USDT). |
 | Pool fee | inventory per-pool `amm.fee` (UniV3 units) | Injected into `AmmPoolState.pool_fee` at tick lift — not a global YAML. |
-| Quote token decimals | market `dex.quote_decimals` | Mantle USDC=6; BSC USDT=18. Threaded into `amm_pool_from_tick` (never hardcode in metrics). |
+| Quote token decimals | market `dex.quote_decimals` | Mantle USDC=6; BSC USDT=18. API/CLI pass this into `amm_pool_from_pair_tick`. Pure `amm_pool_from_tick` always requires explicit decimals. Pair-wrapper defaults (6/18) remain only for frozen TUI call sites that omit the arg (Bybit-only until M7-5). |
 | CEX depth VWAP | journal `bybit_depth` (table name reused per ADR-0001) | M7-3 Binance depth20 precomputes the same bucket curve shape. |
 | Multiplier / comparable mids | collector writes `*_de_multiplied` | **divide** (Bybit xstock) vs **multiply** (BEP-677 uiMultiplier). Metrics always consume comparable columns; do not re-apply the formula. Historical series keep the mult stamped on each tick (no retroactive rebase of the journal). |
 | Session open/closed | shared NYSE calendar (`metrics.session`) | Same for both markets (US equity underlyings). |

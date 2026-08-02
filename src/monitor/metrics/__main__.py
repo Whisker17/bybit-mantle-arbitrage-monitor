@@ -19,6 +19,7 @@ import sys
 from decimal import Decimal
 from typing import TYPE_CHECKING
 
+from monitor.fluxion.abi import WRAPPER_DECIMALS_DEFAULT
 from monitor.metrics.amm_pool import AmmPoolState
 from monitor.metrics.edge import Direction
 from monitor.metrics.pnl_v2 import pnl_bucket_table
@@ -72,8 +73,8 @@ def _inventory_pool_fee_and_base_decimals(
             return None
         if fpair.fluxion.amm is None:
             return None
-        # Wrapper pool uses 18d base side (same as monitor.fluxion.pools).
-        return fpair.fluxion.amm.fee, 18
+        # Wrapper pool uses default base decimals (same as monitor.fluxion.pools).
+        return fpair.fluxion.amm.fee, WRAPPER_DECIMALS_DEFAULT
     return None
 
 
@@ -126,7 +127,7 @@ def main(argv: list[str] | None = None) -> int:
 
     # Quote decimals always from market file (config-injected).
     quote_dec = ctx.dex.quote_decimals
-    base_dec = 18
+    base_dec = WRAPPER_DECIMALS_DEFAULT
     pool_fee = 0 if args.pool_fee is None else args.pool_fee
     pair_id = args.pair_id or "DEMO"
 

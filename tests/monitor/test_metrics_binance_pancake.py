@@ -73,6 +73,32 @@ def test_binance_pancake_costs_injected_into_metrics() -> None:
     assert ctx.metrics.pnl_v2.buckets_usd[-1] == Decimal(10000)
 
 
+def test_binance_pancake_m3_edge_uses_market_gas_and_fee() -> None:
+    """M3 compute_edge path also sees injected venue costs (not only PnL v2)."""
+    from monitor.metrics import compute_edge
+
+    ctx = load_market_context("binance-pancake", load_collector=False)
+    cfg = ctx.metrics
+    mid = Decimal(100)
+    amm = _deep_pool_at_mid(mid, pool_fee=2500)
+    r = compute_edge(
+        pair_id="TSLAB",
+        bybit_bid=mid,
+        bybit_ask=mid,
+        fluxion_mid=mid,
+        size_usd=Decimal(1000),
+        direction="buy_fluxion_sell_bybit",
+        venue="amm",
+        config=cfg,
+        amm=amm,
+    )
+    assert r.fillable
+    assert r.costs.bybit_taker_bps == Decimal(10)
+    assert r.costs.gas_bps == Decimal("0.05") / Decimal(1000) * Decimal(10_000)
+    # Pool fee 2500 UniV3 units → 25 bps wear line.
+    assert r.costs.fluxion_fee_bps == Decimal(25)
+
+
 def test_attribution_has_rfq_false_from_market_not_id_branch() -> None:
     ctx = load_market_context("binance-pancake", load_collector=False)
     assert ctx.dex.has_rfq is False
