@@ -14,14 +14,16 @@ from __future__ import annotations
 import argparse
 import logging
 import sys
-from dataclasses import replace
 from pathlib import Path
 
-from monitor.attribution.mm_draft import decode_rfq_fill_from_receipt
 from monitor.collector.config import (
     load_collector_config,
     load_dotenv,
     resolve_mantle_rpc_url,
+)
+from monitor.fluxion.rfq_decode import (
+    apply_decoded_rfq_enrichment,
+    decode_rfq_fill_from_receipt,
 )
 from monitor.fluxion.rpc import Rpc
 from monitor.quotes import FluxionRfqFillTick
@@ -59,48 +61,7 @@ def enrich_fill_from_receipt(
         settlement_router=None,
         token_to_pair=token_to_pair,
     )
-    making_amt = (
-        str(decoded.stock_amount)
-        if decoded.maker_side == "sell_native" and decoded.stock_amount is not None
-        else (
-            str(decoded.usdc_amount)
-            if decoded.maker_side == "buy_native" and decoded.usdc_amount is not None
-            else None
-        )
-    )
-    taking_amt = (
-        str(decoded.usdc_amount)
-        if decoded.maker_side == "sell_native" and decoded.usdc_amount is not None
-        else (
-            str(decoded.stock_amount)
-            if decoded.maker_side == "buy_native" and decoded.stock_amount is not None
-            else None
-        )
-    )
-    making_token = (
-        decoded.token if decoded.maker_side == "sell_native" else usdc.lower()
-    )
-    taking_token = (
-        usdc.lower() if decoded.maker_side == "sell_native" else decoded.token
-    )
-    return replace(
-        base,
-        pair_id=decoded.pair_id,
-        maker=decoded.maker,
-        taker=decoded.taker,
-        direction=decoded.maker_side,
-        making_token=making_token,
-        taking_token=taking_token,
-        making_amount=making_amt,
-        taking_amount=taking_amt,
-        usdc_amount=(
-            None if decoded.usdc_amount is None else str(decoded.usdc_amount)
-        ),
-        stock_amount=(
-            None if decoded.stock_amount is None else str(decoded.stock_amount)
-        ),
-        enriched=bool(decoded.maker is not None or decoded.pair_id is not None),
-    )
+    return apply_decoded_rfq_enrichment(base, decoded, usdc=usdc)
 
 
 def run_backfill(

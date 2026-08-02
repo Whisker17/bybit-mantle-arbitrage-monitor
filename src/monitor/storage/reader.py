@@ -22,7 +22,9 @@ from monitor.quotes import (
     BybitBookTick,
     BybitDepthTick,
     CollectorGap,
+    Erc20TransferTick,
     FluxionPoolStateTick,
+    FluxionRfqFillTick,
     FluxionRfqQuoteTick,
     FluxionSwapTick,
     RfqSideLeg,
@@ -324,6 +326,52 @@ class JournalReader:
             for r in rows
         ]
 
+    def recent_swaps(self, *, limit: int = 50_000) -> list[FluxionSwapTick]:
+        """Newest-first swaps for attribution refresh (WHI-768)."""
+        rows = self._conn.execute(
+            """
+            SELECT pair_id, pool, block_number, block_ts, recv_ts_ms, tx_hash, log_index,
+                   sender, recipient, amount0, amount1, sqrt_price_x96, liquidity, tick,
+                   amount_token0, amount_token1, direction, price_usdc_per_wrapper,
+                   gas_used, effective_gas_price, gap
+            FROM fluxion_swaps
+            ORDER BY block_number DESC, log_index DESC
+            LIMIT ?
+            """,
+            (limit,),
+        ).fetchall()
+        return [_row_to_swap(r) for r in rows]
+
+    def recent_rfq_fills(self, *, limit: int = 50_000) -> list[FluxionRfqFillTick]:
+        """Newest-first RFQ fills (enriched when WHI-768 columns present)."""
+        rows = self._conn.execute(
+            """
+            SELECT block_number, block_ts, recv_ts_ms, tx_hash, log_index, order_hash,
+                   remaining_making_amount, pair_id, maker, taker, direction,
+                   making_token, taking_token, making_amount, taking_amount,
+                   usdc_amount, stock_amount, enriched, gap
+            FROM fluxion_rfq_fills
+            ORDER BY block_number DESC, log_index DESC
+            LIMIT ?
+            """,
+            (limit,),
+        ).fetchall()
+        return [_row_to_rfq_fill(r) for r in rows]
+
+    def recent_erc20_transfers(self, *, limit: int = 100_000) -> list[Erc20TransferTick]:
+        """Newest-first native xStock transfers (WHI-768)."""
+        rows = self._conn.execute(
+            """
+            SELECT pair_id, token, block_number, block_ts, recv_ts_ms, tx_hash, log_index,
+                   frm, to_addr, amount, amount_raw, gap
+            FROM erc20_transfers
+            ORDER BY block_number DESC, log_index DESC
+            LIMIT ?
+            """,
+            (limit,),
+        ).fetchall()
+        return [_row_to_transfer(r) for r in rows]
+
 
 # --- row mappers ----------------------------------------------------------
 
@@ -452,4 +500,56 @@ def _row_to_swap(row: sqlite3.Row) -> FluxionSwapTick:
             else int(row["effective_gas_price"])
         ),
         gap=bool(row["gap"]),
+    )
+
+
+def _row_to_rfq_fill(row: sqlite3.Row) -> FluxionRfqFillTick:
+    keys = set(row.keys())
+
+    def _opt(name: str) -> str | None:
+        if name not in keys:
+            return None
+        val = row[name]
+        return None if val is None else str(val)
+
+    enriched = 0
+    if "enriched" in keys and row["enriched"] is not None:
+        enriched = int(row["enriched"])
+    return FluxionRfqFillTick(
+        block_number=int(row["block_number"]),
+        block_ts=int(row["block_ts"]),
+        recv_ts_ms=int(row["recv_ts_ms"]),
+        tx_hash=str(row["tx_hash"]),
+        log_index=int(row["log_index"]),
+        order_hash=str(row["order_hash"]),
+        remaining_making_amount=int(str(row["remaining_making_amount"])),
+        gap=bool(int(row["gap"] or 0)),
+        pair_id=_opt("pair_id"),
+        maker=_opt("maker"),
+        taker=_opt("taker"),
+        direction=_opt("direction"),
+        making_token=_opt("making_token"),
+        taking_token=_opt("taking_token"),
+        making_amount=_opt("making_amount"),
+        taking_amount=_opt("taking_amount"),
+        usdc_amount=_opt("usdc_amount"),
+        stock_amount=_opt("stock_amount"),
+        enriched=bool(enriched),
+    )
+
+
+def _row_to_transfer(row: sqlite3.Row) -> Erc20TransferTick:
+    return Erc20TransferTick(
+        pair_id=str(row["pair_id"]),
+        token=str(row["token"]),
+        block_number=int(row["block_number"]),
+        block_ts=int(row["block_ts"]),
+        recv_ts_ms=int(row["recv_ts_ms"]),
+        tx_hash=str(row["tx_hash"]),
+        log_index=int(row["log_index"]),
+        frm=str(row["frm"]),
+        to_addr=str(row["to_addr"]),
+        amount=_d(row["amount"]),
+        amount_raw=int(str(row["amount_raw"])),
+        gap=bool(int(row["gap"] or 0)),
     )

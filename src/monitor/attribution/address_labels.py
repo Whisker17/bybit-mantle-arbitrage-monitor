@@ -8,8 +8,10 @@ from __future__ import annotations
 from collections.abc import Iterable, Mapping, Sequence
 from dataclasses import dataclass
 from decimal import Decimal
+from typing import TYPE_CHECKING
 
 from monitor.attribution.config import AttributionConfig
+from monitor.attribution.events import swap_notional_usd
 from monitor.attribution.labels import BehaviorLabel
 from monitor.attribution.mm_draft import (
     DraftAddressFeatures,
@@ -23,6 +25,9 @@ from monitor.attribution.mm_draft import (
     count_cex_touches,
 )
 from monitor.quotes import Erc20TransferTick, FluxionRfqFillTick, FluxionSwapTick
+
+if TYPE_CHECKING:
+    from monitor.storage.store import SqliteStore
 
 
 def draft_thresholds_from_config(config: AttributionConfig) -> DraftThresholds:
@@ -91,27 +96,30 @@ def inventory_events_from_ticks(
     swaps: Sequence[FluxionSwapTick] = (),
     rfq_fills: Sequence[FluxionRfqFillTick] = (),
     transfers: Sequence[Erc20TransferTick] = (),
+    quote_is_token0_by_pair: Mapping[str, bool] | None = None,
 ) -> list[InventoryEvent]:
     """Lift collector ticks into signed inventory events for feature aggregation.
 
     Inventory convention (mm-attribution-analysis.md):
-    - AMM: recipient buys native when direction=buy_native → +delta
+    - AMM: recipient buys native when direction=buy_native → +delta (stock units)
     - RFQ: maker sell_native → maker −stock; maker buy_native → maker +stock
     - Transfer: to +amount, from −amount (native only stream preferred)
+
+    ``quote_is_token0_by_pair`` (UniV3 address order) is required for correct
+    USDC notional and stock delta; when missing, the swap is skipped rather than
+    inventing a pseudo-USD notional (see JournalReader / swap_notional_usd).
     """
+    q0 = quote_is_token0_by_pair or {}
     out: list[InventoryEvent] = []
     for s in swaps:
         if s.direction not in ("buy_native", "sell_native"):
             continue
-        # Approx native delta from wrapper amount legs is imperfect; use notional
-        # size of 1 unit proxy when only direction is known. Prefer amount of the
-        # non-quote leg when available — use abs(amount_token*) when 18-dec side.
-        delta = Decimal(1) if s.direction == "buy_native" else Decimal(-1)
-        # Prefer larger abs token amount as size proxy (wrapper/native 18-dec).
-        size = max(abs(s.amount_token0), abs(s.amount_token1))
-        if size > 0:
-            delta = size if s.direction == "buy_native" else -size
-        notional = abs(s.amount_token0)  # often USDC leg when token0 is quote
+        if s.pair_id not in q0:
+            continue
+        quote0 = q0[s.pair_id]
+        notional = swap_notional_usd(s, quote_is_token0=quote0)
+        stock = abs(s.amount_token1 if quote0 else s.amount_token0)
+        delta = stock if s.direction == "buy_native" else -stock
         out.append(
             InventoryEvent(
                 ts_ms=s.block_ts * 1000,
@@ -335,10 +343,14 @@ def label_addresses_from_journal(
     transfers: Sequence[Erc20TransferTick] = (),
     config: AttributionConfig,
     contract_flags: Mapping[str, bool] | None = None,
+    quote_is_token0_by_pair: Mapping[str, bool] | None = None,
 ) -> list[AddressLabelResult]:
     """End-to-end label pass over collector ticks (pure; no I/O)."""
     events = inventory_events_from_ticks(
-        swaps=swaps, rfq_fills=rfq_fills, transfers=transfers
+        swaps=swaps,
+        rfq_fills=rfq_fills,
+        transfers=transfers,
+        quote_is_token0_by_pair=quote_is_token0_by_pair,
     )
     edges = transfer_edges_from_ticks(transfers)
     addresses = sorted({e.address.lower() for e in events})
@@ -368,29 +380,24 @@ def label_addresses_from_journal(
 
 
 def persist_address_labels(
-    store: object,
+    store: SqliteStore,
     results: Sequence[AddressLabelResult],
     *,
     updated_at_ms: int,
 ) -> int:
     """Write auto labels into SqliteStore (skips sticky manual rows)."""
     n = 0
-    upsert = getattr(store, "upsert_address_label", None)
-    if upsert is None:
-        raise TypeError("store must provide upsert_address_label")
     for r in results:
         if r.source == "manual":
-            manual = getattr(store, "upsert_manual_address_label", None)
-            if manual is not None:
-                manual(
-                    address=r.address,
-                    label=r.label.value,
-                    evidence_summary="; ".join(r.reasons),
-                    updated_at_ms=updated_at_ms,
-                )
-                n += 1
+            store.upsert_manual_address_label(
+                address=r.address,
+                label=r.label.value,
+                evidence_summary="; ".join(r.reasons),
+                updated_at_ms=updated_at_ms,
+            )
+            n += 1
             continue
-        upsert(
+        store.upsert_address_label(
             address=r.address,
             label=r.label.value,
             evidence_summary="; ".join(r.reasons),
@@ -407,10 +414,9 @@ def persist_address_labels(
     return n
 
 
-def persist_rebalance_events(store: object, events: Sequence[RebalanceEvent]) -> int:
-    insert = getattr(store, "insert_rebalance_events", None)
-    if insert is None:
-        raise TypeError("store must provide insert_rebalance_events")
+def persist_rebalance_events(
+    store: SqliteStore, events: Sequence[RebalanceEvent]
+) -> int:
     rows = [
         (
             e.address,
@@ -427,4 +433,4 @@ def persist_rebalance_events(store: object, events: Sequence[RebalanceEvent]) ->
         )
         for e in events
     ]
-    return int(insert(rows))
+    return store.insert_rebalance_events(rows)

@@ -23,3 +23,13 @@ def native_token_decimals(pairs: PairsConfig) -> dict[str, int]:
     return {
         p.fluxion.native_token.lower(): p.fluxion.native_decimals for p in pairs.pairs
     }
+
+
+def quote_is_token0_by_pair(pairs: PairsConfig) -> dict[str, bool]:
+    """UniV3 token0 < token1 address order → whether quote (USDC) is token0."""
+    out: dict[str, bool] = {}
+    for p in pairs.pairs:
+        q = p.fluxion.quote_token_address.lower()
+        w = p.fluxion.wrapper_token.lower()
+        out[p.id] = q < w
+    return out

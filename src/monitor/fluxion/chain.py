@@ -7,8 +7,8 @@ from collections.abc import Callable, Mapping
 from dataclasses import replace
 from typing import Any
 
-from monitor.attribution.mm_draft import decode_rfq_fill_from_receipt
 from monitor.fluxion.abi import (
+    NATIVE_DECIMALS_DEFAULT,
     SEL_TOKEN0,
     SEL_TOKEN1,
     TOPIC0_ORDER_FILLED,
@@ -20,6 +20,10 @@ from monitor.fluxion.events import (
     decode_v3_swap_log,
 )
 from monitor.fluxion.pools import PoolMeta, fetch_pool_states
+from monitor.fluxion.rfq_decode import (
+    apply_decoded_rfq_enrichment,
+    decode_rfq_fill_from_receipt,
+)
 from monitor.fluxion.rpc import Rpc, encode_call
 from monitor.quotes import (
     CollectorGap,
@@ -274,7 +278,7 @@ class ChainPoller:
                 pair_id = self.transfer_tokens.get(token)
                 if pair_id is None:
                     continue
-                dec = self.transfer_decimals.get(token, 18)
+                dec = self.transfer_decimals.get(token, NATIVE_DECIMALS_DEFAULT)
                 tick = decode_erc20_transfer_log(
                     lg,
                     pair_id=pair_id,
@@ -305,7 +309,7 @@ class ChainPoller:
     def _enrich_rfq_fill(self, fill: FluxionRfqFillTick) -> FluxionRfqFillTick:
         """Best-effort maker/taker/pair enrichment from the fill receipt."""
         txh = fill.tx_hash.lower()
-        if not txh:
+        if not txh or not self.usdc:
             return fill
         try:
             rcpt = self.rpc.get_transaction_receipt(txh)
@@ -320,52 +324,12 @@ class ChainPoller:
         decoded = decode_rfq_fill_from_receipt(
             tx_hash=txh,
             logs=logs,  # type: ignore[arg-type]
-            usdc=self.usdc or "",
+            usdc=self.usdc,
             lop=self.lop_address,
             settlement_router=None,
             token_to_pair=self.token_to_pair,
         )
-        # Direction is maker_side from decode; making/taking amounts as strings.
-        making_amt = (
-            str(decoded.stock_amount)
-            if decoded.maker_side == "sell_native" and decoded.stock_amount is not None
-            else (
-                str(decoded.usdc_amount)
-                if decoded.maker_side == "buy_native"
-                and decoded.usdc_amount is not None
-                else None
-            )
-        )
-        taking_amt = (
-            str(decoded.usdc_amount)
-            if decoded.maker_side == "sell_native" and decoded.usdc_amount is not None
-            else (
-                str(decoded.stock_amount)
-                if decoded.maker_side == "buy_native"
-                and decoded.stock_amount is not None
-                else None
-            )
-        )
-        making_token = decoded.token if decoded.maker_side == "sell_native" else self.usdc
-        taking_token = self.usdc if decoded.maker_side == "sell_native" else decoded.token
-        return replace(
-            fill,
-            pair_id=decoded.pair_id,
-            maker=decoded.maker,
-            taker=decoded.taker,
-            direction=decoded.maker_side,
-            making_token=making_token,
-            taking_token=taking_token,
-            making_amount=making_amt,
-            taking_amount=taking_amt,
-            usdc_amount=(
-                None if decoded.usdc_amount is None else str(decoded.usdc_amount)
-            ),
-            stock_amount=(
-                None if decoded.stock_amount is None else str(decoded.stock_amount)
-            ),
-            enriched=bool(decoded.maker is not None or decoded.pair_id is not None),
-        )
+        return apply_decoded_rfq_enrichment(fill, decoded, usdc=self.usdc)
 
     def _resolve_tokens(self, meta: PoolMeta, block: int) -> tuple[str, str]:
         try:

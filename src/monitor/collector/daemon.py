@@ -115,6 +115,9 @@ class CollectorDaemon:
             asyncio.create_task(self._chain_loop(), name="mantle_chain"),
             asyncio.create_task(self._rfq_loop(), name="rfq_poll"),
             asyncio.create_task(self._retention_loop(), name="retention"),
+            asyncio.create_task(
+                self._attribution_refresh_loop(), name="attribution_refresh"
+            ),
         ]
         self.store.set_meta("collector_started_ms", str(now_ms()))
         self.store.set_meta("rpc_url_kind", rpc_url_kind(self.rpc_url))
@@ -255,6 +258,11 @@ class CollectorDaemon:
             )
             self.store.set_meta("block_ingest_latency_n", str(report.count))
 
+        transfer_map = (
+            native_token_to_pair(self.pairs)
+            if self.cfg.mantle.collect_erc20_transfers
+            else {}
+        )
         poller = ChainPoller(
             rpc,
             pools=pools,
@@ -265,13 +273,13 @@ class CollectorDaemon:
             fetch_swap_receipts=self.cfg.mantle.fetch_swap_receipts,
             token_to_pair=inventory_token_to_pair(self.pairs),
             usdc=self.pairs.contracts.usdc,
-            transfer_tokens=native_token_to_pair(self.pairs),
+            transfer_tokens=transfer_map,
             transfer_decimals=native_token_decimals(self.pairs),
-            enrich_rfq_fills=True,
+            enrich_rfq_fills=self.cfg.mantle.enrich_rfq_fills,
             on_pool_state=on_state,
             on_swaps=on_swaps,
             on_rfq_fills=on_fills,
-            on_transfers=on_transfers,
+            on_transfers=on_transfers if transfer_map else None,
             on_gap=on_gap,
             on_block_done=on_block_done,
         )
@@ -336,6 +344,32 @@ class CollectorDaemon:
                     pass
         finally:
             poller.close()
+
+    async def _attribution_refresh_loop(self) -> None:
+        """Periodic address_labels + rebalance_events refresh (WHI-768)."""
+        interval = self.cfg.attribution_refresh_interval_s
+        if interval <= 0:
+            logger.info("attribution refresh disabled (interval_s=0)")
+            return
+        # Defer first pass so chain/RFQ have a sample window after boot.
+        first = True
+        while not self._stop.is_set():
+            delay = 30.0 if first else interval
+            first = False
+            try:
+                await asyncio.wait_for(self._stop.wait(), timeout=delay)
+                break
+            except TimeoutError:
+                pass
+            if self._stop.is_set():
+                break
+            try:
+                from monitor.attribution.refresh import run_refresh
+
+                stats = await asyncio.to_thread(run_refresh, self.store)
+                logger.info("attribution refresh: %s", stats)
+            except Exception as exc:  # noqa: BLE001
+                logger.exception("attribution refresh error: %s", exc)
 
     async def _retention_loop(self) -> None:
         """Periodic prune under the store lock (WHI-751)."""

@@ -199,6 +199,97 @@ def test_assign_market_maker_from_config_thresholds() -> None:
     assert result.source == "auto"
 
 
+def test_assign_address_label_priority_mm_before_arb_before_reb() -> None:
+    """Full-path priority: market_maker → arb_bot → rebalancer (spec merge)."""
+    cfg = load_attribution_config()
+    # Arb-bot-like features without RFQ maker.
+    arb_feats = DraftAddressFeatures(
+        address=_addr(2),
+        n_pairs=1,
+        n_amm=50,
+        n_rfq_maker=0,
+        n_rfq_taker=0,
+        n_transfer=0,
+        n_buy=25,
+        n_sell=25,
+        notional_usd=Decimal(5000),
+        median_notional_usd=Decimal(100),
+        max_notional_usd=Decimal(200),
+        open_share=0.5,
+        closed_share=0.5,
+        convergence_ratio=0.95,
+        n_convergence_scored=50,
+        bybit_align_ratio=0.9,
+        n_bybit_align_scored=50,
+        both_directions=True,
+        pairs=("AAPLx",),
+        inv_mean_reversion=0.4,
+    )
+    # High CEX touches alone → rebalancer when not MM/arb.
+    thin = DraftAddressFeatures(
+        address=_addr(3),
+        n_pairs=1,
+        n_amm=0,
+        n_rfq_maker=0,
+        n_rfq_taker=0,
+        n_transfer=10,
+        n_buy=0,
+        n_sell=0,
+        notional_usd=Decimal(0),
+        median_notional_usd=Decimal(0),
+        max_notional_usd=Decimal(0),
+        open_share=None,
+        closed_share=None,
+        convergence_ratio=None,
+        n_convergence_scored=0,
+        bybit_align_ratio=None,
+        n_bybit_align_scored=0,
+        both_directions=False,
+        pairs=("SPCXx",),
+        inv_mean_reversion=None,
+    )
+    assert (
+        assign_address_label(arb_feats, cfg, cex_touch_transfers=0).label
+        is BehaviorLabel.ARB_BOT
+    )
+    # Arb wins over rebalancer even with high CEX touches.
+    assert (
+        assign_address_label(arb_feats, cfg, cex_touch_transfers=99).label
+        is BehaviorLabel.ARB_BOT
+    )
+    assert (
+        assign_address_label(thin, cfg, cex_touch_transfers=5).label
+        is BehaviorLabel.REBALANCER
+    )
+    # MM wins over arb when RFQ maker gate hits.
+    mm = DraftAddressFeatures(
+        address=_addr(4),
+        n_pairs=1,
+        n_amm=50,
+        n_rfq_maker=3,
+        n_rfq_taker=0,
+        n_transfer=0,
+        n_buy=25,
+        n_sell=25,
+        notional_usd=Decimal(5000),
+        median_notional_usd=Decimal(100),
+        max_notional_usd=Decimal(200),
+        open_share=0.5,
+        closed_share=0.5,
+        convergence_ratio=0.95,
+        n_convergence_scored=50,
+        bybit_align_ratio=0.9,
+        n_bybit_align_scored=50,
+        both_directions=True,
+        pairs=("AAPLx",),
+        inv_mean_reversion=0.4,
+    )
+    assert (
+        assign_address_label(mm, cfg, cex_touch_transfers=0).label
+        is BehaviorLabel.MARKET_MAKER
+    )
+
+
 def test_manual_override_wins() -> None:
     cfg = load_attribution_config()
     feats = DraftAddressFeatures(
