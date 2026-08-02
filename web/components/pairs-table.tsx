@@ -219,8 +219,6 @@ type GroupStrip = {
   group: ColGroup;
   label: string;
   colSpan: number;
-  /** First leaf in this group — draw a light left rule (except identity). */
-  separator: boolean;
 };
 
 function groupDisplayLabel(
@@ -239,7 +237,8 @@ function groupDisplayLabel(
     case "vol_gap":
       return "CEX÷DEX";
     case "result":
-      return "PnL";
+      // Spec group name is Result (Bucket PnL + MM); "PnL" alone mislabels MM.
+      return "Result";
     case "reference":
       return "Underlying";
   }
@@ -257,7 +256,6 @@ function buildGroupStrip(cols: Col[], venues: DirectionVenues): GroupStrip[] {
       group: col.group,
       label: groupDisplayLabel(col.group, venues),
       colSpan: 1,
-      separator: col.group !== "identity",
     });
   }
   return out;
@@ -474,7 +472,7 @@ export function PairsTable({
                 colSpan={g.colSpan}
                 className={cn(
                   "whitespace-nowrap px-2 py-1 font-semibold text-center",
-                  g.separator && "border-l border-border/70",
+                  groupSep(g.group),
                   g.label ? "text-foreground/80" : "text-transparent",
                 )}
               >

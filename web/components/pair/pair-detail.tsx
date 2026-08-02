@@ -52,10 +52,10 @@ type Props = {
 
 function venuesFromCard(marketId: string): DirectionVenues {
   const card = marketCard(marketId);
-  if (card?.cex_venue && card?.dex_venue) {
-    return resolveVenues({ cex: card.cex_venue, dex: card.dex_venue }, marketId);
-  }
-  return resolveVenues(null, marketId);
+  return resolveVenues(
+    card ? { cex: card.cex_venue, dex: card.dex_venue } : null,
+    marketId,
+  );
 }
 
 export function PairDetail({ marketId, pairId }: Props) {

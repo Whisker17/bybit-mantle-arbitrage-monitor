@@ -164,10 +164,10 @@ export function MarketOverview({ marketId }: Props) {
   // Group headers + Dir labels use venue names from /api/markets (WHI-780).
   const venues: DirectionVenues = useMemo(() => {
     const m = markets?.markets.find((x) => x.id === marketId);
-    if (m?.cex_venue && m?.dex_venue) {
-      return resolveVenues({ cex: m.cex_venue, dex: m.dex_venue }, marketId);
-    }
-    return resolveVenues(null, marketId);
+    return resolveVenues(
+      m ? { cex: m.cex_venue, dex: m.dex_venue } : null,
+      marketId,
+    );
   }, [markets, marketId]);
 
   const visibleRows = useMemo(() => {

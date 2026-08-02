@@ -16,7 +16,7 @@ import {
   shortAddr,
   type DirectionVenues,
 } from "@/lib/format";
-import type { TradeStreamRow } from "@/lib/types";
+import type { Direction, TradeStreamRow } from "@/lib/types";
 
 type Props = {
   trades: TradeStreamRow[];
@@ -24,6 +24,16 @@ type Props = {
   venues?: DirectionVenues | null;
   marketId?: string;
 };
+
+function asArbDirection(direction: string | null | undefined): Direction | null {
+  if (
+    direction === "buy_fluxion_sell_bybit" ||
+    direction === "buy_bybit_sell_fluxion"
+  ) {
+    return direction;
+  }
+  return null;
+}
 
 export function TradeStream({ trades, venues, marketId }: Props) {
   if (trades.length === 0) {
@@ -59,6 +69,7 @@ export function TradeStream({ trades, venues, marketId }: Props) {
                   : t.converging
                     ? "yes"
                     : "no";
+              const arbDir = asArbDirection(t.direction);
               return (
                 <tr
                   key={`${t.tx_hash}-${t.ts_ms}-${i}`}
@@ -77,15 +88,13 @@ export function TradeStream({ trades, venues, marketId }: Props) {
                   <Td
                     className="tabular-nums"
                     title={
-                      t.direction === "buy_fluxion_sell_bybit" ||
-                      t.direction === "buy_bybit_sell_fluxion"
-                        ? fmtDirectionTitle(t.direction, venues, marketId)
+                      arbDir
+                        ? fmtDirectionTitle(arbDir, venues, marketId)
                         : undefined
                     }
                   >
-                    {t.direction === "buy_fluxion_sell_bybit" ||
-                    t.direction === "buy_bybit_sell_fluxion"
-                      ? fmtDirection(t.direction, venues, marketId)
+                    {arbDir
+                      ? fmtDirection(arbDir, venues, marketId)
                       : t.direction || "—"}
                   </Td>
                   <Td align="right" className="tabular-nums">
