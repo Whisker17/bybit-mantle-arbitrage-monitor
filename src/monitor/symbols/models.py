@@ -1,4 +1,8 @@
-"""Typed models for the fixed xStock pair inventory (config/pairs.yaml)."""
+"""Typed models for the Bybit ⇄ Fluxion xStock inventory.
+
+Source of truth: ``config/markets/bybit-fluxion.yaml`` ``inventory:`` block
+(M1 body; path moved in M7-2 / WHI-771).
+"""
 
 from __future__ import annotations
 

@@ -15,18 +15,27 @@ loaded into a typed, validated model at startup.
 - Per-deployment overrides use an untracked `<name>.local.yaml` copy (gitignored), so
   checking out a release tag never conflicts with live settings.
 
-## Files
+## Multi-market layout (M7-2 / WHI-771)
 
-| File | Loader | Purpose |
+A **market** is `{ id, cex, dex, costs, inventory }` plus a dedicated SQLite journal
+(`data/monitor-{market}.db` — see `docs/adr/0001-per-market-sqlite.md`).
+
+| Path | Loader | Purpose |
 |------|--------|---------|
-| `pairs.yaml` | `monitor.symbols.load_pairs_config` | Fixed Bybit ⇄ Fluxion xStock inventory + RFQ mode (M1 / WHI-730). Cross-validates `low_liquidity` vs threshold/AMM and `quote_token_address` vs `contracts`. |
-| `collector.yaml` | `monitor.collector.load_collector_config` | Live collector tunables (Bybit WS **orderbook.50** + `bybit.depth` VWAP throttle/buckets — WHI-755, Mantle poll / `head_lag_blocks` / **latency_window_blocks** — WHI-749, RFQ notional, SQLite path, **retention** incl. `bybit_depth_ms` / disk waterline — WHI-751) — M2 / WHI-731. |
-| `metrics.yaml` | `monitor.metrics.load_metrics_config` | Paper-edge size ladder, Bybit taker / gas / USDT–USDC basis, session hours, breach size — M3 / WHI-732; **`pnl_v2:`** cash-flow buckets + optimal-size search — WHI-756. |
-| `attribution.yaml` | `monitor.attribution.load_attribution_config` | Taker-label thresholds (arb-bot convergence, price-keeper size, activity regime, Bybit lead-lag) — M4 / WHI-733. Rules: `docs/references/m4-attribution-labels.md`. |
-| `tui.yaml` | `monitor.tui.load_tui_config` | Panel refresh interval, SQLite path, reference edge size, sort defaults, history windows — M5 / WHI-734. Also consumed by `monitor.api` for builder windows / reference size (single source of truth). |
-| `api.yaml` | `monitor.api.load_api_config` | Read-only FastAPI bind host/port, SQLite path, collector-stale / gap windows, poll interval hint, CORS — WHI-757; **`pnl_cache_ttl_s`** process-local PnL v2 snapshot TTL (default 2.5s, slightly above poll) — WHI-766. |
-| `binance_pancake_pairs.yaml` | *(none yet — M7-2)* | **Draft** Binance ⇄ PancakeSwap bStocks top-10 inventory (WHI-770 / M7-1). Isomorphic to `pairs.yaml`; not loaded until multi-market schema lands. Notes: `docs/references/m7-bstocks-inventory.md`. |
+| `markets/bybit-fluxion.yaml` | `monitor.markets.load_market_file` / `monitor.symbols.load_pairs_config` | Default market: Bybit ⇄ Fluxion xStocks inventory + RFQ mode + costs (M1 body under `inventory:`). |
+| `markets/binance-pancake.yaml` | `monitor.markets.load_market_file` | Binance ⇄ Pancake bStocks top-10 (M7-1). Multiplier semantics **multiply**. Collector runtime: M7-3. |
+| `collector.yaml` | `monitor.collector.load_collector_config(..., market_id=)` | **v2** shared `logging` / `retention` + `markets.{id}` venue blocks (RPC, poll, sqlite_path). |
+| `metrics.yaml` | `monitor.metrics.load_metrics_config` | Size ladder, session hours, PnL v2 search knobs. Venue fee/gas **overridden** at assembly from the market file `costs:`. |
+| `attribution.yaml` | `monitor.attribution.load_attribution_config` | Taker-label thresholds (M4). |
+| `tui.yaml` | `monitor.tui.load_tui_config` | Panel refresh, default `market`, sqlite path, reference edge size (also used by API builders). |
+| `api.yaml` | `monitor.api.load_api_config` | FastAPI bind, default `market`, sqlite path, stale windows, PnL cache TTL, CORS. |
 
-Optional per-deployment override: untracked `pairs.local.yaml` / `collector.local.yaml`
-/ `metrics.local.yaml` / `attribution.local.yaml` / `tui.local.yaml` / `api.local.yaml`
-are reserved for later if needed; v1 loads the checked-in YAML only.
+CLI entrypoints take `--market` (default `bybit-fluxion`). Journal migration from the
+pre-M7-2 single file:
+
+```bash
+mv data/monitor.db data/monitor-bybit-fluxion.db
+```
+
+Optional per-deployment override: untracked `*.local.yaml` copies are reserved for later
+if needed; v1 loads the checked-in YAML only.

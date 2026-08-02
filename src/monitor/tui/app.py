@@ -12,8 +12,6 @@ from textual.containers import Horizontal, VerticalScroll
 from textual.screen import Screen
 from textual.widgets import DataTable, Footer, Header, Static
 
-from monitor.attribution.config import load_attribution_config
-from monitor.metrics.config import load_metrics_config
 from monitor.metrics.session import SessionKind
 from monitor.metrics.stats import Distribution
 from monitor.storage import JournalReader
@@ -428,17 +426,41 @@ class TuiApp(App[None]):
         self,
         *,
         tui: TuiConfig,
+        market_id: str | None = None,
         pairs_path: Path | None = None,
         metrics_path: Path | None = None,
         attribution_path: Path | None = None,
         db_path: Path | None = None,
     ) -> None:
+        from monitor.markets import DEFAULT_MARKET_ID, load_market_context, normalize_market_id
+
         super().__init__()
         self.tui = tui
-        self.pairs = load_pairs_config(pairs_path)
-        self.metrics = load_metrics_config(metrics_path)
-        self.attribution = load_attribution_config(attribution_path)
-        self.db_path = db_path if db_path is not None else tui.resolved_sqlite_path()
+        mid = normalize_market_id(market_id or tui.market or DEFAULT_MARKET_ID)
+        self.market_id = mid
+        # Honour tui.sqlite_path only when the selected market matches tui.market
+        # (ops override). Explicit --db always wins. Otherwise use market context.
+        sqlite_override = db_path
+        if sqlite_override is None and mid == normalize_market_id(tui.market):
+            sqlite_override = tui.resolved_sqlite_path()
+        ctx = load_market_context(
+            mid,
+            sqlite_path=sqlite_override,
+            metrics_path=metrics_path,
+            attribution_path=attribution_path,
+            load_collector=True,
+        )
+        if pairs_path is not None:
+            self.pairs = load_pairs_config(pairs_path, market_id=mid)
+        else:
+            if ctx.pairs is None:
+                raise RuntimeError(
+                    f"market {mid!r} has no pairs inventory for the TUI"
+                )
+            self.pairs = ctx.pairs
+        self.metrics = ctx.metrics
+        self.attribution = ctx.attribution
+        self.db_path = ctx.sqlite_path
         validate_tui_against_metrics(self.tui, self.metrics)
         self.sort_key: SortKey = tui.default_sort
         self.sort_desc: bool = tui.default_sort_desc
@@ -516,9 +538,16 @@ class TuiApp(App[None]):
 
 
 def build_arg_parser() -> argparse.ArgumentParser:
+    from monitor.markets import DEFAULT_MARKET_ID
+
     p = argparse.ArgumentParser(
         prog="python -m monitor.tui",
         description="Bybit ⇄ Fluxion xStocks live TUI panel (M5 / WHI-734).",
+    )
+    p.add_argument(
+        "--market",
+        default=None,
+        help=f"Market id (default: tui.yaml market or {DEFAULT_MARKET_ID})",
     )
     p.add_argument(
         "--config",
@@ -536,7 +565,7 @@ def build_arg_parser() -> argparse.ArgumentParser:
         "--pairs",
         type=Path,
         default=None,
-        help="Override config/pairs.yaml",
+        help="Override market inventory path (default: config/markets/{market}.yaml)",
     )
     p.add_argument(
         "--metrics",
@@ -558,6 +587,7 @@ def main(argv: list[str] | None = None) -> None:
     tui = load_tui_config(args.config)
     app = TuiApp(
         tui=tui,
+        market_id=args.market,
         pairs_path=args.pairs,
         metrics_path=args.metrics,
         attribution_path=args.attribution,

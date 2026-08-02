@@ -17,7 +17,6 @@ import sys
 from decimal import Decimal
 
 from monitor.metrics.amm_pool import AmmPoolState
-from monitor.metrics.config import load_metrics_config
 from monitor.metrics.edge import Direction
 from monitor.metrics.pnl_v2 import pnl_bucket_table
 
@@ -36,7 +35,14 @@ def _pool(mid: Decimal, pool_fee: int) -> AmmPoolState:
 
 
 def main(argv: list[str] | None = None) -> int:
+    from monitor.markets import DEFAULT_MARKET_ID, load_market_context
+
     p = argparse.ArgumentParser(description="PnL v2 bucket table + optimal size")
+    p.add_argument(
+        "--market",
+        default=DEFAULT_MARKET_ID,
+        help=f"Market id for fee/gas costs (default: {DEFAULT_MARKET_ID})",
+    )
     p.add_argument("--pair-id", default="DEMO")
     p.add_argument("--mid", type=Decimal, default=Decimal(100), help="Bybit L1 mid")
     p.add_argument(
@@ -54,7 +60,8 @@ def main(argv: list[str] | None = None) -> int:
     p.add_argument("--json", action="store_true", help="Emit JSON")
     args = p.parse_args(argv)
 
-    cfg = load_metrics_config()
+    # Venue costs come from the market file; algorithm knobs from metrics.yaml.
+    cfg = load_market_context(args.market, load_collector=False).metrics
     bybit_mid = args.mid
     flux_mid = args.fluxion_mid if args.fluxion_mid is not None else bybit_mid
     amm = _pool(flux_mid, args.pool_fee)

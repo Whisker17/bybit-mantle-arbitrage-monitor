@@ -3,13 +3,13 @@
 # read-only API + Web panel.
 #
 # Starts:
-#   - monitor.collector            (Bybit WS + Mantle RPC → data/monitor.db)
-#   - monitor.api  on http://127.0.0.1:8000  (uv run, optional --reload)
+#   - monitor.collector --market $DEV_MARKET  (default bybit-fluxion)
+#   - monitor.api --market $DEV_MARKET on http://127.0.0.1:8000
 #   - Next.js dev  on http://localhost:3000  (NEXT_PUBLIC_API_BASE → API)
 #
 # The collector makes the panel *live*: it creates/updates the journal at
-# data/monitor.db. Skip it with --no-collector to browse a static snapshot
-# instead (then `pull` one from the VPS first).
+# data/monitor-{market}.db. Skip it with --no-collector to browse a static
+# snapshot instead (then `pull` one from the VPS first).
 #
 # Usage:
 #   ./scripts/dev-web.sh start                 # collector + API + Web (live)
@@ -19,7 +19,7 @@
 #   ./scripts/dev-web.sh stop
 #   ./scripts/dev-web.sh restart [flags as start]
 #   ./scripts/dev-web.sh status
-#   ./scripts/dev-web.sh pull                  # only refresh data/monitor.db
+#   ./scripts/dev-web.sh pull                  # only refresh the market journal
 #                                              # (refuses while collector runs)
 #   ./scripts/dev-web.sh logs [collector|api|web]  # tail (default: all)
 #   ./scripts/dev-web.sh clean                 # truncate .dev/*.log in place
@@ -27,6 +27,7 @@
 #                                              # whenever `status` warns)
 #
 # Env (optional):
+#   DEV_MARKET=bybit-fluxion      # market id (M7-2); drives --market + journal path
 #   DEV_API_HOST=127.0.0.1
 #   DEV_API_PORT=8000
 #   DEV_WEB_PORT=3000
@@ -34,7 +35,8 @@
 #   DEV_COLLECTOR=1               # set 0 for a permanent --no-collector
 #   DEV_LOG_WARN_MB=200           # `status` warns above this per-log size
 #   DEV_VPS_HOST=whi715-vps       # ssh Host for pull
-#   DEV_REMOTE_DB=/root/dev/bybit-mantle-arbitrage-monitor/data/monitor.db
+#   DEV_REMOTE_DB=.../data/monitor-bybit-fluxion.db   # (legacy monitor.db ok)
+#   DEV_SQLITE_PATH=data/monitor-bybit-fluxion.db     # override local journal
 #   DEV_DIR=.dev                  # pid/log dir under repo root
 #
 # Prerequisites:
@@ -62,6 +64,7 @@ LOG_API="$DEV_DIR_ABS/api.log"
 LOG_WEB="$DEV_DIR_ABS/web.log"
 LOG_COL="$DEV_DIR_ABS/collector.log"
 
+MARKET="${DEV_MARKET:-bybit-fluxion}"
 API_HOST="${DEV_API_HOST:-127.0.0.1}"
 API_PORT="${DEV_API_PORT:-8000}"
 WEB_PORT="${DEV_WEB_PORT:-3000}"
@@ -69,8 +72,8 @@ API_RELOAD="${DEV_API_RELOAD:-1}"
 COLLECTOR="${DEV_COLLECTOR:-1}"
 LOG_WARN_MB="${DEV_LOG_WARN_MB:-200}"
 VPS_HOST="${DEV_VPS_HOST:-whi715-vps}"
-REMOTE_DB="${DEV_REMOTE_DB:-/root/dev/bybit-mantle-arbitrage-monitor/data/monitor.db}"
-SQLITE_PATH="${DEV_SQLITE_PATH:-data/monitor.db}"
+REMOTE_DB="${DEV_REMOTE_DB:-/root/dev/bybit-mantle-arbitrage-monitor/data/monitor-${MARKET}.db}"
+SQLITE_PATH="${DEV_SQLITE_PATH:-data/monitor-${MARKET}.db}"
 
 API_BASE="http://${API_HOST}:${API_PORT}"
 WEB_URL="http://localhost:${WEB_PORT}"
@@ -330,11 +333,11 @@ cmd_start() {
   fi
 
   if [[ "$collector" -eq 1 ]]; then
-    info "starting collector (journal ${SQLITE_PATH})"
+    info "starting collector market=${MARKET} (journal ${SQLITE_PATH})"
     : >"$LOG_COL"
     (
       cd "$ROOT"
-      exec uv run python -u -m monitor.collector
+      exec uv run python -u -m monitor.collector --market "$MARKET" --sqlite "$SQLITE_PATH"
     ) >>"$LOG_COL" 2>&1 &
     echo $! >"$PID_COL"
     wait_journal
@@ -346,12 +349,12 @@ cmd_start() {
     info "collector disabled (--no-collector); panel reads a static journal"
   fi
 
-  info "starting API on ${API_BASE}"
+  info "starting API on ${API_BASE} (market=${MARKET})"
   : >"$LOG_API"
   (
     cd "$ROOT"
     # shellcheck disable=SC2086
-    exec uv run python -m monitor.api --host "$API_HOST" --port "$API_PORT" "${reload_flag[@]}"
+    exec uv run python -m monitor.api --market "$MARKET" --host "$API_HOST" --port "$API_PORT" "${reload_flag[@]}"
   ) >>"$LOG_API" 2>&1 &
   echo $! >"$PID_API"
 

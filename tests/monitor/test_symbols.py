@@ -46,7 +46,8 @@ EXPECTED_LIQUID_AMM_IDS = {
 
 def test_default_pairs_path_points_at_repo_config() -> None:
     path = default_pairs_path()
-    assert path.name == "pairs.yaml"
+    assert path.name == "bybit-fluxion.yaml"
+    assert path.parent.name == "markets"
     assert path.is_file()
 
 
