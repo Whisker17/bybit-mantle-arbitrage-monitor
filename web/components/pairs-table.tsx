@@ -28,6 +28,7 @@ import { mmActiveLabel, mmActiveTitle } from "@/lib/mm";
 import {
   BADGE_LABEL_TVL,
   BADGE_LABEL_VOL,
+  badgePolicyForMarket,
   pairBadgesForRows,
 } from "@/lib/pair-badges";
 import { overviewPnlCell } from "@/lib/pnl";
@@ -57,6 +58,12 @@ type Props = {
   venues?: DirectionVenues | null;
   /** Empty-table message (filter miss vs market accumulating). */
   emptyMessage?: string;
+  /**
+   * Full market overview rows used for TVL/Vol badge ranking (WHI-781).
+   * Must be the unfiltered set so hide-low-liq / search does not change ranks.
+   * Defaults to `rows` only when the parent already passes the full set.
+   */
+  badgeSourceRows?: PairOverviewRow[];
 };
 
 /** Column groups for the two-row thead (WHI-780). */
@@ -440,6 +447,7 @@ export function PairsTable({
   hasRfq = true,
   venues: venuesProp,
   emptyMessage = "No pairs match the current filter.",
+  badgeSourceRows,
 }: Props) {
   const router = useRouter();
   const venues = useMemo(
@@ -460,10 +468,14 @@ export function PairsTable({
     return map;
   }, [cols]);
 
-  // WHI-781: TVL / Vol badges ranked in-market from row fields (no hardcoded ids).
+  // WHI-781: rank on full market set; tooltips from market policy.
+  const badgePolicy = useMemo(
+    () => badgePolicyForMarket(marketId),
+    [marketId],
+  );
   const badgesByPair = useMemo(
-    () => pairBadgesForRows(rows, marketId),
-    [rows, marketId],
+    () => pairBadgesForRows(badgeSourceRows ?? rows, marketId, badgePolicy),
+    [badgeSourceRows, rows, marketId, badgePolicy],
   );
 
   return (
@@ -584,7 +596,7 @@ export function PairsTable({
                         <Badge
                           variant="positive"
                           className="normal-case"
-                          title={badges.tvlTitle}
+                          title={badgePolicy.tvlTitle}
                         >
                           {BADGE_LABEL_TVL}
                         </Badge>
@@ -593,7 +605,7 @@ export function PairsTable({
                         <Badge
                           variant="default"
                           className="normal-case"
-                          title={badges.volTitle}
+                          title={badgePolicy.volTitle}
                         >
                           {BADGE_LABEL_VOL}
                         </Badge>

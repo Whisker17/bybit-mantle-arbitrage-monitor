@@ -144,6 +144,24 @@ describe("pairBadgesForRows", () => {
     assert.equal(badges.get("TSLAx")?.hiVol, true);
   });
 
+  it("ranks on the provided full set (caller must pass unfiltered rows)", () => {
+    // Simulates market top-5 TVL: only A is top when ranking the full set.
+    const full = [
+      row({ pair_id: "A", est_liquidity_usd: "1000", cex_volume_24h: "1" }),
+      row({ pair_id: "B", est_liquidity_usd: "100", cex_volume_24h: "2" }),
+      row({ pair_id: "C", est_liquidity_usd: "50", cex_volume_24h: "3" }),
+      row({ pair_id: "D", est_liquidity_usd: "40", cex_volume_24h: "4" }),
+      row({ pair_id: "E", est_liquidity_usd: "30", cex_volume_24h: "5" }),
+      row({ pair_id: "F", est_liquidity_usd: "20", cex_volume_24h: "6" }),
+    ];
+    const onFull = pairBadgesForRows(full, "binance-pancake");
+    assert.equal(onFull.get("A")?.hiTvl, true);
+    assert.equal(onFull.get("F")?.hiTvl, false);
+    // If a caller wrongly ranks only the filtered subset, F becomes top-1.
+    const filteredOnly = pairBadgesForRows([full[5]!], "binance-pancake");
+    assert.equal(filteredOnly.get("F")?.hiTvl, true);
+  });
+
   it("exports short English labels", () => {
     assert.equal(BADGE_LABEL_TVL, "TVL");
     assert.equal(BADGE_LABEL_VOL, "Vol");

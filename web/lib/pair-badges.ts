@@ -5,11 +5,14 @@
  * interesting* along two independent dimensions; they do **not** mean the
  * inventory was rebuilt to CEX volume top-10 (see m7-bstocks-inventory.md).
  *
- * Defaults (resolve in PR if product adjusts):
+ * Defaults (product choice for this issue):
  * - binance-pancake: TVL + Vol, top-5 in-market each
  * - bybit-fluxion: Vol only (no PCS TVL inventory story), top-5
+ *
+ * Rank on the **full market overview set**, not a UI-filtered subset.
  */
 
+import { parseNum } from "./format";
 import type { PairOverviewRow } from "./types";
 
 /** Short labels next to pair id (same density as `stale` / `mm`). */
@@ -21,8 +24,6 @@ export type PairBadgeFlags = {
   hiTvl: boolean;
   /** High in-market CEX 24h quote volume rank. */
   hiVol: boolean;
-  tvlTitle: string;
-  volTitle: string;
 };
 
 export type BadgePolicy = {
@@ -32,15 +33,18 @@ export type BadgePolicy = {
   enableVol: boolean;
   /** Inclusive rank threshold (1..topN get the badge). */
   topN: number;
+  /** Tooltip when TVL badge is shown. */
   tvlTitle: string;
+  /** Tooltip when Vol badge is shown. */
   volTitle: string;
 };
 
 const DEFAULT_TOP_N = 5;
 
 /**
- * Per-market badge policy. Market-id branching is intentional; pair *lists*
- * are never hardcoded — ranks come from overview row fields.
+ * Per-market badge policy. Market-id branching is intentional (same pattern as
+ * `KNOWN_MARKETS` has_rfq fallback); pair *lists* are never hardcoded — ranks
+ * come from overview row fields (`est_liquidity_usd`, `cex_volume_24h`).
  */
 export function badgePolicyForMarket(marketId: string): BadgePolicy {
   if (marketId === "binance-pancake") {
@@ -49,9 +53,9 @@ export function badgePolicyForMarket(marketId: string): BadgePolicy {
       enableVol: true,
       topN: DEFAULT_TOP_N,
       tvlTitle:
-        "PCS USDT pool liquidity rank (inventory snapshot) — top half of this market",
+        "PCS USDT pool liquidity rank (inventory snapshot) — top 5 in this market",
       volTitle:
-        "CEX 24h quote volume rank among this market's pairs (live journal/API)",
+        "CEX 24h quote volume rank among this market's pairs (live journal/API) — top 5",
     };
   }
   // bybit-fluxion (default): no Fluxion TVL ranking story for the badge.
@@ -59,9 +63,9 @@ export function badgePolicyForMarket(marketId: string): BadgePolicy {
     enableTvl: false,
     enableVol: true,
     topN: DEFAULT_TOP_N,
-    tvlTitle: "DEX pool liquidity rank (not used on this market)",
+    tvlTitle: "",
     volTitle:
-      "CEX 24h quote volume rank among this market's pairs (live journal/API)",
+      "CEX 24h quote volume rank among this market's pairs (live journal/API) — top 5",
   };
 }
 
@@ -89,14 +93,10 @@ export function topRankedIds(
   return new Set(scored.slice(0, topN).map((s) => s.id));
 }
 
-function parseUsd(raw: string | null | undefined): number | null {
-  if (raw == null || raw === "") return null;
-  const n = Number(raw);
-  return Number.isFinite(n) ? n : null;
-}
-
 /**
  * Compute TVL/Vol badge flags for every overview row under a market policy.
+ *
+ * @param rows Full market overview rows (not a UI-filtered subset).
  */
 export function pairBadgesForRows(
   rows: ReadonlyArray<PairOverviewRow>,
@@ -107,7 +107,7 @@ export function pairBadgesForRows(
     ? topRankedIds(
         rows.map((r) => ({
           id: r.pair_id,
-          value: parseUsd(r.est_liquidity_usd),
+          value: parseNum(r.est_liquidity_usd),
         })),
         policy.topN,
       )
@@ -116,7 +116,7 @@ export function pairBadgesForRows(
     ? topRankedIds(
         rows.map((r) => ({
           id: r.pair_id,
-          value: parseUsd(r.cex_volume_24h),
+          value: parseNum(r.cex_volume_24h),
         })),
         policy.topN,
       )
@@ -127,8 +127,6 @@ export function pairBadgesForRows(
     out.set(row.pair_id, {
       hiTvl: tvlIds.has(row.pair_id),
       hiVol: volIds.has(row.pair_id),
-      tvlTitle: policy.tvlTitle,
-      volTitle: policy.volTitle,
     });
   }
   return out;

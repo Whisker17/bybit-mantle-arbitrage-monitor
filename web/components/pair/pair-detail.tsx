@@ -189,7 +189,6 @@ export function PairDetail({ marketId, pairId }: Props) {
           <Badge variant={session === "open" ? "open" : "closed"}>
             {fmtSession(session)}
           </Badge>
-          {/* WHI-781: low-liq badge removed; ranking badges live on overview. */}
           {o.stale && <Badge variant="warning">stale</Badge>}
           {o.mm_active === "active" && (
             <Badge variant="mm" title={mmActiveTitle(o.mm_active)}>

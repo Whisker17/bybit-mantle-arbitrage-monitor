@@ -247,6 +247,7 @@ export function MarketOverview({ marketId }: Props) {
 
           <PairsTable
             rows={visibleRows}
+            badgeSourceRows={overview?.rows ?? []}
             sortKey={sortKey}
             sortDesc={sortDesc}
             onSort={handleSort}

@@ -60,8 +60,8 @@ they do **not** mean the monitor set was rebuilt to Binance CEX volume top-10.
 
 | Badge | Dimension | Default rule (binance-pancake) |
 |-------|-----------|--------------------------------|
-| `TVL` | DEX pool liquidity | Inventory `est_liquidity_usd` rank ≤ 5 among this market's overview rows |
-| `Vol` | CEX 24h quote volume | Live `cex_volume_24h` rank ≤ 5 among this market's overview rows |
+| `TVL` | DEX pool liquidity | Inventory `est_liquidity_usd` rank ≤ 5 among **all** market overview rows (not UI-filtered) |
+| `Vol` | CEX 24h quote volume | Live `cex_volume_24h` rank ≤ 5 among **all** market overview rows (not UI-filtered) |
 
 A pair may show **both** when it ranks high on both axes (set overlap with global
 CEX leaders is small — research day 2026-08-02 had only SPCXB / SKHYB / MUB in both
