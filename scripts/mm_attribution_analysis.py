@@ -888,7 +888,9 @@ def render_report(
             why = "; ".join(r["reasons"])[:80]
             lines.append(
                 f"| [`{r['address'][:10]}…`]({MANTLESCAN_ADDR}{r['address']}) "
-                f"| {cc_s} | {r['n_pairs']} ({','.join(r['pairs'][:4])}) "
+                f"| {cc_s} | {r['n_pairs']} "
+                f"({','.join(r['pairs'][:4])}"
+                f"{'…' if len(r['pairs']) > 4 else ''}) "
                 f"| {r['n_amm']} | {r['n_rfq_maker']}/{r['n_rfq_taker']} "
                 f"| {conv} | {mr} | {r['cex_touches']} | {why} |"
             )

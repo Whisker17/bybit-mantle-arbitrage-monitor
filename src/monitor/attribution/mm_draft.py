@@ -296,8 +296,18 @@ def aggregate_address_features(
         1 for e in rows if e.kind is LedgerKind.RFQ_FILL and e.role == "taker"
     )
     n_xfer = sum(1 for e in rows if e.kind is LedgerKind.ERC20_TRANSFER)
-    n_buy = sum(1 for e in rows if e.direction == "buy_native")
-    n_sell = sum(1 for e in rows if e.direction == "sell_native")
+    # Direction counts are AMM-only so buy/sell shares used by MM/price_keeper
+    # gates are not inflated by RFQ maker/taker directions.
+    n_buy = sum(
+        1
+        for e in rows
+        if e.kind is LedgerKind.AMM_SWAP and e.direction == "buy_native"
+    )
+    n_sell = sum(
+        1
+        for e in rows
+        if e.kind is LedgerKind.AMM_SWAP and e.direction == "sell_native"
+    )
     notionals = [e.notional_usd for e in rows if e.notional_usd is not None]
     notional = sum(notionals, start=Decimal(0))
     trade_ev = [
