@@ -1,7 +1,8 @@
 # Underlying equity price source (WHI-778)
 
 Companion to `config/underlying.yaml` and `monitor/underlying/`.
-Research + decision date: **2026-08-02**.
+Research + decision date: **2026-08-02**. SKHY product semantics corrected
+**2026-08-02 (WHI-785)** — US ADR, not KRX.
 
 ## Goal
 
@@ -16,15 +17,21 @@ Inventory underlyings (union of Bybit xStocks + Binance bStocks top sets):
 | AAPL, GOOGL, NVDA, TSLA | both | liquid US names |
 | CRCL, HOOD, META, AMZN, COIN, MCD | bybit-fluxion | US equities |
 | SPY, MSFT, INTC, MU | binance-pancake | US / ETF |
-| SKHY (KRX 000660) | binance-pancake | KR equity, KRW listing |
+| SKHY (Nasdaq ADR) | binance-pancake | SK hynix **US ADR** (`SKHY`); USD tape for bStock premium |
 | SPCX | both | **private** SpaceX — no public equity print |
+
+**WHI-785 correction:** WHI-778 originally mapped SKHY → KRX `000660` / Yahoo
+`000660.KS` + KRW→USD FX. That was wrong for bStock product semantics: Binance
+`SKHYB` is priced against the **US ADR**, not the Korean common. Premium columns
+are meaningless across venue/currency/session mismatch. Authoritative reference
+is Nasdaq `SKHY` (permanent ticker as of 2026-07-13; prior SKHYV / OTC HXSCL).
 
 ## Decision matrix
 
 | Dimension | Pyth Hermes HTTP | Chainlink / RedStone (on-chain) | Polygon.io | Finnhub | Alpha Vantage | Yahoo chart (unofficial) |
 |-----------|------------------|----------------------------------|------------|---------|---------------|--------------------------|
-| **US coverage (our 14 names)** | **All 14** `Equity.US.{T}/USD` | Equity feeds sparse; **none** confirmed on Mantle/BSC for our set without paid nets | Broad US | Broad US | Broad US | Broad US + KR |
-| **SKHY (000660.KS)** | Feed exists (`Equity.KR.000660/KRW`) but **publish_time stale** (~year lag on probe) | Unlikely free on our chains | Paid | Free tier | Free tier | Live KRW quote works |
+| **US coverage (our 14 liquid names)** | **All 14** `Equity.US.{T}/USD` | Equity feeds sparse; **none** confirmed on Mantle/BSC for our set without paid nets | Broad US | Broad US | Broad US | Broad US |
+| **SKHY (Nasdaq ADR)** | **No** `Equity.US.SKHY/USD` on Hermes (probe 2026-08-02). Stale KR feed `Equity.KR.000660/KRW` is **not** the product underlying | Unlikely free on our chains | Paid | Free tier | Free tier | Live **USD** ADR quote (`SKHY`) |
 | **SPCX (SpaceX)** | None | None | None | None | None | None (not public) |
 | **Update cadence** | ~5s publish interval on RTH schedule | On-chain heartbeat (varies) | Realtime on paid | Free ~60/min | Free very tight | ~1m bars / last trade |
 | **Closed-session semantics** | RTH feed freezes `publish_time` at last close — usable as **close** | Last on-chain update | Explicit session fields | `t` timestamp | Daily bars | `marketState` + last trade |
@@ -37,8 +44,9 @@ Inventory underlyings (union of Bybit xStocks + Binance bStocks top sets):
 
 - Hermes `latest` for AAPL/TSLA/… returned `publish_time` ≈ **2026-07-31 20:00 UTC** (prior Friday RTH close) — correct **close** freeze, not a fake Saturday live print.
 - Price scale: `price * 10^expo` (e.g. AAPL ≈ 309.85 USD).
-- SKHY Pyth KRW feed returned **2025-08-29** publish_time → treat as **unusable** without a fallback.
-- Yahoo `000660.KS` returned ~1.72M KRW with recent `regularMarketTime`.
+- Hermes has **no** `Equity.US.SKHY/USD` (or SKHY/Hynix query hit) as of 2026-08-02 → Yahoo ADR path required until Pyth lists it.
+- Yahoo `SKHY` (NMS, EQUITY) ≈ **143.73 USD** (probe 2026-08-02) — correct ADR level for premium vs bStock USD.
+- *(Historical WHI-778 mistake)* Yahoo `000660.KS` ~1.72M KRW + Pyth KR feed stale publish_time — do **not** use for SKHYB premium.
 
 ## Decision
 
@@ -48,7 +56,7 @@ Inventory underlyings (union of Bybit xStocks + Binance bStocks top sets):
 |--------|-----|
 | Hermes over on-chain Pyth/Chainlink | Same oracle-grade numbers, **web2 latency and $0 RPC**; no Mantle/BSC feed deployment dependency |
 | Hermes over paid web2 | Covers every liquid US name in inventory **without keys**; free tier rate limits never gate a 15–60s poll of ~14 IDs |
-| Hybrid allowed | **Yahoo chart fallback** only for tickers Pyth cannot serve (SKHY today); optional — disable via config |
+| Hybrid allowed | **Yahoo chart fallback** only for tickers Pyth cannot serve (**SKHY US ADR** today); optional — disable via config |
 | SPCX | **No public underlying.** Collector skips; journal has no rows; UI (WHI-779) must show “n/a / private” |
 
 **Rejected as primary:**
@@ -62,7 +70,7 @@ Inventory underlyings (union of Bybit xStocks + Binance bStocks top sets):
 | Source | Use here |
 |--------|----------|
 | **Pyth Hermes** | Allowed for private monitoring and panel display. No API key. Pin feed IDs in config; do not scrape arbitrary Hermes endpoints beyond price reads. |
-| **Yahoo chart API** | Unofficial, no redistributable commercial license assumed. Used **only** as optional SKHY (and similar) gap-fill inside this private monitor. If compliance tightens, set `yahoo_fallback: false` and leave SKHY empty. |
+| **Yahoo chart API** | Unofficial, no redistributable commercial license assumed. Used **only** as optional SKHY ADR (and similar) gap-fill inside this private monitor. If compliance tightens, set `yahoo_fallback: false` and leave SKHY empty. |
 | **SPCX** | No licensed public tape exists; do not synthesize prices. |
 
 ## Session / corporate-action semantics (implementation contract)
@@ -101,11 +109,11 @@ Table `underlying_prices` (schema v5), dual-market shared **by ticker** (not `pa
 |--------|---------|
 | `ticker` | Canonical underlying id (`AAPL`, `MU`, `SKHY`, …) |
 | `price` | Decimal string |
-| `currency` | `USD` (SKHY fallback may be converted to USD via Pyth `FX.USD/KRW`) |
+| `currency` | `USD` (SKHY ADR is native USD via Yahoo; optional KRW→USD via Pyth `FX.USD/KRW` only if a future Yahoo KR listing is configured) |
 | `price_type` | `live` / `pre` / `post` / `close` / `stale` |
 | `as_of_ms` | Source time |
 | `recv_ts_ms` | Collector receive time |
-| `source` | `pyth_hermes` / `yahoo` / `yahoo+pyth_fx` |
+| `source` | `pyth_hermes` / `yahoo` / `yahoo+pyth_fx` (SKHY ADR → `yahoo`) |
 | `feed_id` | Pyth price feed id when applicable |
 | `gap` | Post-error flag |
 

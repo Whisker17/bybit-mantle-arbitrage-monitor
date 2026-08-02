@@ -55,7 +55,13 @@ def test_load_checked_in_underlying_config() -> None:
     assert "AAPL" in cfg.tickers
     assert cfg.tickers["AAPL"].feed_id is not None
     assert cfg.tickers["SPCX"].uncovered is True
-    assert cfg.tickers["SKHY"].prefer_yahoo is True
+    # WHI-785: SKHY is Nasdaq ADR (USD Yahoo), not KRX 000660.KS.
+    skhy = cfg.tickers["SKHY"]
+    assert skhy.prefer_yahoo is True
+    assert skhy.yahoo_symbol == "SKHY"
+    assert skhy.feed_id is None
+    assert skhy.pyth_symbol is None
+    assert cfg.needs_fx({"SKHY"}) is False
     assert "AAPL" in cfg.covered_tickers()
     assert "SPCX" in cfg.uncovered_tickers()
 
@@ -225,7 +231,45 @@ def test_parse_hermes_latest_maps_feed() -> None:
     assert aapl_id.lower().removeprefix("0x") in by_feed
 
 
+def test_parse_yahoo_chart_usd_no_fx() -> None:
+    """WHI-785: Nasdaq ADR (SKHY) is already USD — no KRW FX conversion."""
+    cfg = load_underlying_config()
+    as_of_s = int(_ms(2026, 8, 1, 16, 0) / 1000)  # US session close
+    body = {
+        "chart": {
+            "result": [
+                {
+                    "meta": {
+                        "regularMarketPrice": 143.73,
+                        "regularMarketTime": as_of_s,
+                        "currency": "USD",
+                        "marketState": "CLOSED",
+                        "exchangeName": "NMS",
+                    }
+                }
+            ]
+        }
+    }
+    now = _ms(2026, 8, 2, 12, 0)
+    tick = parse_yahoo_chart(
+        body,
+        ticker="SKHY",
+        currency="USD",
+        cfg=cfg,
+        recv_ts_ms=now,
+        now_ms_value=now,
+        usd_krw=None,
+    )
+    assert tick is not None
+    assert tick.ticker == "SKHY"
+    assert tick.currency == "USD"
+    assert tick.source == "yahoo"
+    assert tick.price == Decimal("143.73")
+    assert tick.price_type in {"close", "stale", "post", "pre"}
+
+
 def test_parse_yahoo_chart_krw_to_usd() -> None:
+    """KRW Yahoo path still converts when FX is supplied (infrastructure)."""
     cfg = load_underlying_config()
     as_of_s = int(_ms(2026, 8, 1, 2, 0) / 1000)  # KRX session-ish
     body = {
@@ -245,7 +289,7 @@ def test_parse_yahoo_chart_krw_to_usd() -> None:
     now = _ms(2026, 8, 2, 12, 0)
     tick = parse_yahoo_chart(
         body,
-        ticker="SKHY",
+        ticker="KRTEST",
         currency="USD",
         cfg=cfg,
         recv_ts_ms=now,
@@ -253,11 +297,52 @@ def test_parse_yahoo_chart_krw_to_usd() -> None:
         usd_krw=Decimal("1442.96057"),
     )
     assert tick is not None
-    assert tick.ticker == "SKHY"
+    assert tick.ticker == "KRTEST"
     assert tick.currency == "USD"
     assert tick.source == "yahoo+pyth_fx"
     assert tick.price == Decimal("1000")
     assert tick.price_type in {"close", "stale", "post", "pre"}
+
+
+def test_needs_fx_only_for_korean_yahoo_symbols(tmp_path: Path) -> None:
+    """FX.USD/KRW is only batched when a prefer_yahoo symbol is a KR listing."""
+    p = tmp_path / "fx.yaml"
+    p.write_text(
+        dedent(
+            """
+            version: 1
+            hermes_base_url: https://example
+            open_poll_interval_s: 30
+            closed_poll_interval_s: 300
+            http_timeout_s: 20
+            stale_after_open_ms: 1
+            stale_after_abs_ms: 1
+            stale_after_closed_ms: 1
+            yahoo_fallback: true
+            yahoo_chart_base_url: https://example
+            fx_usd_krw_feed_id: "abc123"
+            session:
+              timezone: America/New_York
+              open: "09:30"
+              close: "16:00"
+              early_close: "13:00"
+            tickers:
+              ADR:
+                currency: USD
+                yahoo_symbol: "SKHY"
+                prefer_yahoo: true
+              KR:
+                currency: USD
+                yahoo_symbol: "000660.KS"
+                prefer_yahoo: true
+            """
+        ),
+        encoding="utf-8",
+    )
+    cfg = load_underlying_config(p)
+    assert cfg.needs_fx({"ADR"}) is False
+    assert cfg.needs_fx({"KR"}) is True
+    assert cfg.needs_fx({"ADR", "KR"}) is True
 
 
 def test_market_state_hint() -> None:

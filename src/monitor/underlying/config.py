@@ -87,12 +87,22 @@ class UnderlyingConfig(BaseModel):
         return ids
 
     def needs_fx(self, want: set[str] | None = None) -> bool:
+        """True when a wanted Yahoo ticker may quote KRW and need FX.USD/KRW.
+
+        Korean Yahoo symbols (``*.KS`` / ``*.KQ``) need conversion. USD ADRs
+        and plain Nasdaq symbols (e.g. ``SKHY``) skip the FX feed.
+        """
+        if not self.fx_usd_krw_feed_id:
+            return False
         names = self.tickers.keys() if want is None else want
-        return any(
-            self.tickers[t].prefer_yahoo
-            for t in names
-            if t in self.tickers and not self.tickers[t].uncovered
-        )
+        for t in names:
+            cfg = self.tickers.get(t)
+            if cfg is None or cfg.uncovered or not cfg.prefer_yahoo:
+                continue
+            sym = (cfg.yahoo_symbol or "").upper()
+            if sym.endswith(".KS") or sym.endswith(".KQ"):
+                return True
+        return False
 
     def feed_id_to_ticker(self) -> dict[str, str]:
         out: dict[str, str] = {}

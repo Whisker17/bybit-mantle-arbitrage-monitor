@@ -20,11 +20,12 @@ stale_after_abs_ms: 604800000  # 7d
 # When classifying close vs stale outside RTH: last close older than this → stale.
 stale_after_closed_ms: 432000000  # 5d (covers long weekends + one holiday)
 
-# Yahoo chart API fallback for tickers Pyth cannot serve (SKHY today).
+# Yahoo chart API fallback for tickers Pyth cannot serve (SKHY ADR today).
 # Unofficial; disable for compliance-strict deploys.
 yahoo_fallback: true
 yahoo_chart_base_url: "https://query1.finance.yahoo.com"
-# Convert Yahoo KRW → USD using Pyth FX.USD/KRW when set.
+# Optional: convert Yahoo KRW → USD using Pyth FX.USD/KRW when a prefer_yahoo
+# ticker quotes KRW (Korean listings). Not used for USD ADRs (SKHY).
 fx_usd_krw_feed_id: "e539120487c29b4defdf9a53d337316ea022a2688978a468f9efd847201be7e3"
 
 # NYSE RTH hours — keep in sync with config/metrics.yaml session (file-level
@@ -94,12 +95,14 @@ tickers:
     currency: USD
     pyth_symbol: Equity.US.MU/USD
     feed_id: "152244dc24665ca7dd3f257b8f442dc449b6346f48235b7b229268cb770dda2d"
-  # Pyth KR feed exists but is stale; yahoo_symbol drives the live path.
+  # SK hynix US ADR (Nasdaq: SKHY) — not KRX 000660. No Equity.US.SKHY/USD on
+  # Hermes yet (probe 2026-08-02); Yahoo USD chart until Pyth lists the ADR.
+  # WHI-778 originally mapped KR by mistake for bStock premium semantics (WHI-785).
   SKHY:
     currency: USD
-    pyth_symbol: Equity.KR.000660/KRW
-    feed_id: "189f0b6276a37a09fa9d4305525d074d753b30d83f1d748ae12330b9c86622c2"
-    yahoo_symbol: "000660.KS"
+    pyth_symbol: null
+    feed_id: null
+    yahoo_symbol: "SKHY"
     prefer_yahoo: true
   # Private company — no public tape.
   SPCX:
