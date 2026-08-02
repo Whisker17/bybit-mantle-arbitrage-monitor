@@ -742,7 +742,9 @@ class CollectorDaemon:
                             detail=f"poll error: {exc}",
                         ),
                     )
-                # Uncovered coverage re-check (no network when uncovered list empty).
+                # Coverage re-check (WHI-787 uncovered reverse + WHI-794
+                # unpublished Hermes pins). Always batches Hermes latest for
+                # pinned feed ids even when uncovered list is empty.
                 # Always advance the wall-clock throttle when due — including on
                 # outer failure — so a broken probe cannot hot-loop every poll.
                 now = now_ms()

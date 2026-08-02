@@ -56,6 +56,8 @@ def main(argv: list[str] | None = None) -> int:
             print(json.dumps({"kind": "error", **e.to_dict()}), file=sys.stderr)
         if not cfg.uncovered_tickers():
             print("# no uncovered tickers in config", file=sys.stderr)
+        if not outcome.unpublished_feeds:
+            print("# no unpublished Hermes feeds detected", file=sys.stderr)
         # Exit 1 only for actionable hits: uncovered reverse mismatch, or
         # unpublished feed without Yahoo gap-fill (gap_filled=False).
         need_yahoo = [u for u in outcome.unpublished_feeds if not u.gap_filled]
