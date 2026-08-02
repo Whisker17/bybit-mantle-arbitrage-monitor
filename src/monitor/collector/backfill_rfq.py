@@ -61,6 +61,8 @@ def enrich_fill_from_receipt(
         lop=lop,
         settlement_router=None,
         token_to_pair=token_to_pair,
+        # Inventory natives/wrappers are not economic makers.
+        known_infra=list(token_to_pair.keys()),
     )
     return apply_decoded_rfq_enrichment(base, decoded, usdc=usdc)
 

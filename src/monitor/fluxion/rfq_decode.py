@@ -13,14 +13,18 @@ from decimal import Decimal
 
 from eth_utils import keccak  # type: ignore[attr-defined]
 
+from monitor.fluxion.abi import (
+    NATIVE_DECIMALS_DEFAULT,
+    TOPIC0_TRANSFER,
+    USDC_DECIMALS,
+)
 from monitor.quotes import FluxionRfqFillTick
 
 # ---------------------------------------------------------------------------
 # RFQ receipt decode (pure over already-fetched logs)
 # ---------------------------------------------------------------------------
 
-
-TOPIC_TRANSFER = "0x" + keccak(text="Transfer(address,address,uint256)").hex()
+TOPIC_TRANSFER = TOPIC0_TRANSFER
 TOPIC_APPROVAL = "0x" + keccak(text="Approval(address,address,uint256)").hex()
 
 
@@ -123,12 +127,15 @@ def decode_rfq_fill_from_receipt(
         except ValueError:
             amt = Decimal(0)
         if addr == usdc_l:
-            # USDC 6 decimals
-            usdc_transfers.append((frm, to, amt / Decimal(1_000_000)))
+            usdc_transfers.append(
+                (frm, to, amt / Decimal(10**USDC_DECIMALS))
+            )
         else:
-            # Inventory xStock OR any non-USDC ERC-20 on the path (18-dec assumption
+            # Inventory xStock OR any non-USDC ERC-20 on the path (18-dec default
             # for Backed xStocks / wrappers; unmapped tokens still yield maker/taker).
-            stock_transfers.append((addr, frm, to, amt / Decimal(10**18)))
+            stock_transfers.append(
+                (addr, frm, to, amt / Decimal(10**NATIVE_DECIMALS_DEFAULT))
+            )
 
     pair_id: str | None = None
     token: str | None = None

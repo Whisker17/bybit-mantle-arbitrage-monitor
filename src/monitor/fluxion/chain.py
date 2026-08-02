@@ -306,6 +306,20 @@ class ChainPoller:
             self.on_block_done(block, block_ts, miss_ts, recv)
         return True
 
+    def _rfq_known_infra(self) -> list[str]:
+        """Pools + inventory tokens excluded from RFQ maker/taker external set."""
+        infra: list[str] = []
+        for p in self.pools:
+            infra.append(p.pool.lower())
+            infra.append(p.wrapper_token.lower())
+            infra.append(p.native_token.lower())
+            infra.append(p.quote_token.lower())
+        for token in self.transfer_tokens:
+            infra.append(token.lower())
+        for token in self.token_to_pair:
+            infra.append(token.lower())
+        return infra
+
     def _enrich_rfq_fill(self, fill: FluxionRfqFillTick) -> FluxionRfqFillTick:
         """Best-effort maker/taker/pair enrichment from the fill receipt."""
         txh = fill.tx_hash.lower()
@@ -328,6 +342,7 @@ class ChainPoller:
             lop=self.lop_address,
             settlement_router=None,
             token_to_pair=self.token_to_pair,
+            known_infra=self._rfq_known_infra(),
         )
         return apply_decoded_rfq_enrichment(fill, decoded, usdc=self.usdc)
 
