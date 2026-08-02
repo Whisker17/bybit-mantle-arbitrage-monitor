@@ -1,36 +1,20 @@
-import Link from "next/link";
+import { redirect } from "next/navigation";
 
-import { PairDetail } from "@/components/pair/pair-detail";
+import { DEFAULT_MARKET_ID, marketPairPath } from "@/lib/markets";
 import { loadPairIdsFromConfig } from "@/lib/pair-ids";
 
 /**
- * Static-export requires every dynamic path at build time.
- * Ids come from config/pairs.yaml via loadPairIdsFromConfig (not a hand list).
+ * Legacy /pair/{id}/ → default market pair detail (WHI-774 bookmark compat).
  */
 export function generateStaticParams() {
   return loadPairIdsFromConfig().map((pairId) => ({ pairId }));
 }
 
-export default async function PairPage({
+export default async function LegacyPairPage({
   params,
 }: {
   params: Promise<{ pairId: string }>;
 }) {
   const { pairId } = await params;
-
-  return (
-    <main className="mx-auto max-w-[1100px] px-3 py-4 sm:px-4">
-      <div className="mb-4 flex items-center gap-3 text-xs">
-        <Link
-          href="/"
-          className="text-muted-foreground hover:text-foreground underline-offset-2 hover:underline"
-        >
-          ← Overview
-        </Link>
-        <span className="text-border">|</span>
-        <h1 className="text-sm font-semibold text-foreground">{pairId}</h1>
-      </div>
-      <PairDetail pairId={pairId} />
-    </main>
-  );
+  redirect(marketPairPath(DEFAULT_MARKET_ID, pairId));
 }

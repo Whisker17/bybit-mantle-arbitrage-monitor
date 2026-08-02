@@ -16,7 +16,11 @@ def main(argv: list[str] | None = None) -> None:
     parser.add_argument(
         "--market",
         default=None,
-        help=f"Market id (default: config/api.yaml market or {DEFAULT_MARKET_ID})",
+        help=(
+            f"Default market for legacy unscoped routes (default: "
+            f"config/api.yaml market or {DEFAULT_MARKET_ID}). "
+            "All config/markets/* journals are still opened (WHI-774)."
+        ),
     )
     parser.add_argument(
         "--host",

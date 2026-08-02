@@ -502,7 +502,7 @@ Probe: `python -m monitor.collector.latency_probe`.
 | **Web skeleton** | WHI-757 | FastAPI read-only API + Next.js static export + nginx/systemd deploy on VPS |
 | **Web overview** | WHI-758 | Full overview table (TUI-parity columns, status/stale banner, sort/filter) |
 | **Web pair detail** | WHI-759 | Pair detail: spread chart, trade stream, edge stats, attribution |
-| **M7 multi-market (Binance ⇄ Pancake bStocks)** | WHI-770… | Second market beside Bybit⇄Fluxion. **M7-1…M7-3** landed (inventory, domain, collectors). **M7-4 (WHI-773) landed:** same M3/M4/PnL v2 code path for `binance-pancake` — market cost injection, BEP-677 comparable mids, `has_rfq` mechanism degeneration, CLI `--market`, DESIGN §2.7. Web multi-market bar **M7-5**. |
+| **M7 multi-market (Binance ⇄ Pancake bStocks)** | WHI-770… | Second market beside Bybit⇄Fluxion. **M7-1…M7-4** landed (inventory, domain, collectors, metrics/attribution — DESIGN §2.7). **M7-5 Web/API bar** (WHI-774) landed: `/api/markets` + `/api/{market}/…`, Web `/m/{market}/` switcher, RFQ hide + accumulating empty state. |
 
 Dependency chain: M0 → M1 → M2 → (M3 ∥ M4) → M5 → Web (WHI-757 → 758…).
 M7 is parallel product expansion after Web PnL v2; does not block Web polish.

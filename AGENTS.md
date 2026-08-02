@@ -118,7 +118,13 @@ placeholders. Agents must not assume a module exists until its issue lands. -->
     for `binance-pancake` — costs via `apply_market_costs`, mechanism RFQ off
     via `apply_market_attribution(has_rfq=dex.has_rfq)`, pool geometry with
     BSC USDT 18d, CLI `python -m monitor.metrics --market binance-pancake`.
-    DESIGN §2.7. Web multi-market bar is M7-5.
+    DESIGN §2.7.
+  - **M7-5 Web/API multi-market (WHI-774) landed:** `GET /api/markets` +
+    market-scoped `/api/{market}/pairs|health|…` (legacy unscoped routes map
+    to default `bybit-fluxion`); Web `MarketSwitcher` + routes
+    `/m/{market}/` and `/m/{market}/pair/{id}/` (root + legacy `/pair/{id}/`
+    redirect to default market); RFQ columns hidden when `has_rfq` is false;
+    explicit accumulating empty state when a market journal is not ready.
 
 ## Build, test, run
 

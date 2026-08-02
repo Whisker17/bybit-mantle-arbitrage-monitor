@@ -8,11 +8,13 @@ version: 1
 host: 127.0.0.1
 port: 8000
 
-# Default market journal (M7-2 / WHI-771). Per-market path:
-# data/monitor-{market}.db — override with --market / --sqlite.
+# Default market for *legacy unscoped* routes (/api/pairs, /api/health) and
+# the sqlite_path override below (M7-2 / WHI-771 / WHI-774). The API opens
+# *all* config/markets/* journals; --market only selects this default.
+# Per-market path convention: data/monitor-{market}.db.
 # Relative paths resolve against the process cwd (repo root / deploy root).
-# CLI default market is bybit-fluxion; legacy data/monitor.db still falls back
-# if the configured file is missing (see resolve_market_sqlite).
+# Legacy data/monitor.db still falls back for bybit-fluxion when the
+# configured file is missing (see resolve_market_sqlite).
 market: bybit-fluxion
 sqlite_path: data/monitor-bybit-fluxion.db
 

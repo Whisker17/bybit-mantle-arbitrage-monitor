@@ -373,3 +373,134 @@ def test_pair_detail_address_panel_and_mm_endpoint(
         assert len(payload["rebalance_events"]) >= 1
         assert payload["rebalance_events"][0]["direction"] == "deposit_to_cex"
         assert payload["rebalance_events"][0]["tx_hash"].startswith("0x")
+
+
+# --- Multi-market (WHI-774) --------------------------------------------------
+
+
+def test_list_markets_includes_both(client: TestClient) -> None:
+    r = client.get("/api/markets")
+    assert r.status_code == 200
+    body = r.json()
+    assert body["default_market_id"] == "bybit-fluxion"
+    assert body["poll_interval_s"] == 2.0
+    ids = {m["id"] for m in body["markets"]}
+    assert "bybit-fluxion" in ids
+    assert "binance-pancake" in ids
+    bybit = next(m for m in body["markets"] if m["id"] == "bybit-fluxion")
+    assert bybit["has_rfq"] is True
+    assert bybit["data_status"] == "ok"
+    assert bybit["pair_count"] >= 1
+    assert "health" in bybit
+    assert bybit["health"]["collector_alive"] is True
+    bsc = next(m for m in body["markets"] if m["id"] == "binance-pancake")
+    assert bsc["has_rfq"] is False
+    assert bsc["data_status"] == "accumulating"
+    assert bsc["pair_count"] >= 1
+    assert bsc["health"]["ok"] is False
+
+
+def test_market_scoped_pairs_matches_legacy(client: TestClient) -> None:
+    legacy = client.get("/api/pairs")
+    scoped = client.get("/api/bybit-fluxion/pairs")
+    assert legacy.status_code == 200
+    assert scoped.status_code == 200
+    assert scoped.json()["market_id"] == "bybit-fluxion"
+    assert scoped.json()["has_rfq"] is True
+    assert scoped.json()["data_status"] == "ok"
+    # Same pair set as unscoped default-market route.
+    assert {r["pair_id"] for r in legacy.json()["rows"]} == {
+        r["pair_id"] for r in scoped.json()["rows"]
+    }
+
+
+def test_market_scoped_health_and_detail(client: TestClient) -> None:
+    h = client.get("/api/bybit-fluxion/health")
+    assert h.status_code == 200
+    assert h.json()["market_id"] == "bybit-fluxion"
+    assert h.json()["collector_alive"] is True
+
+    d = client.get("/api/bybit-fluxion/pairs/AAPLx")
+    assert d.status_code == 200
+    assert d.json()["pair_id"] == "AAPLx"
+    assert d.json()["market_id"] == "bybit-fluxion"
+
+    t = client.get("/api/bybit-fluxion/pairs/AAPLx/trades")
+    assert t.status_code == 200
+    assert t.json()["pair_id"] == "AAPLx"
+
+
+def test_binance_pancake_accumulating_empty_overview(client: TestClient) -> None:
+    r = client.get("/api/binance-pancake/pairs")
+    assert r.status_code == 200
+    body = r.json()
+    assert body["market_id"] == "binance-pancake"
+    assert body["has_rfq"] is False
+    assert body["data_status"] == "accumulating"
+    assert body["rows"] == []
+    assert body["error"]
+    assert "accumulat" in body["error"].lower()
+
+
+def test_unknown_market_404(client: TestClient) -> None:
+    r = client.get("/api/not-a-market/pairs")
+    assert r.status_code == 404
+    assert "unknown market" in r.json()["detail"]
+
+
+def test_openapi_has_market_scoped_paths(client: TestClient) -> None:
+    paths = client.get("/openapi.json").json()["paths"]
+    assert "/api/markets" in paths
+    assert "/api/{market}/health" in paths
+    assert "/api/{market}/pairs" in paths
+    assert "/api/{market}/pairs/{pair_id}" in paths
+    assert "/api/{market}/pairs/{pair_id}/mm" in paths
+    assert "/api/{market}/pairs/{pair_id}/trades" in paths
+    # Legacy paths remain.
+    assert "/api/health" in paths
+    assert "/api/pairs" in paths
+
+
+def test_builder_ready_market_missing_journal_returns_503(
+    tmp_path: Path, monkeypatch: pytest.MonkeyPatch
+) -> None:
+    """Builder-ready market with no DB keeps pre-WHI-774 503 (not accumulating)."""
+    monkeypatch.chdir(tmp_path)
+    api_yaml = tmp_path / "config" / "api.yaml"
+    api_yaml.parent.mkdir(parents=True, exist_ok=True)
+    missing = tmp_path / "data" / "no-such-journal.db"
+    api_yaml.write_text(
+        f"""version: 1
+host: 127.0.0.1
+port: 8000
+market: bybit-fluxion
+sqlite_path: {missing}
+collector_stale_ms: 30000
+recent_gap_window_ms: 300000
+poll_interval_s: 2.0
+pnl_cache_ttl_s: 0
+mm_active_window_ms: 86400000
+mm_series_max_points: 500
+mm_rebalance_limit: 100
+mm_inventory_cache_ttl_s: 0
+cors_origins: []
+""",
+        encoding="utf-8",
+    )
+    app = create_app(api_config_path=api_yaml)
+    with TestClient(app) as client:
+        r = client.get("/api/bybit-fluxion/pairs")
+        assert r.status_code == 503
+        assert "journal" in r.json()["detail"].lower()
+        # Unscoped legacy path same contract.
+        r2 = client.get("/api/pairs")
+        assert r2.status_code == 503
+
+
+def test_binance_pair_detail_503_when_not_builder_ready(client: TestClient) -> None:
+    """binance-pancake has no PairsConfig builders yet → 503 on detail routes."""
+    r = client.get("/api/binance-pancake/pairs/TSLAB")
+    assert r.status_code == 503
+    assert "wired" in r.json()["detail"].lower() or "accumulat" in r.json()["detail"].lower()
+    t = client.get("/api/binance-pancake/pairs/TSLAB/trades")
+    assert t.status_code == 503

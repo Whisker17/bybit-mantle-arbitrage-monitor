@@ -1,4 +1,4 @@
-"""GET /api/pairs and pair detail / trades / mm (WHI-769)."""
+"""GET /api/pairs and market-scoped pair detail / trades / mm (WHI-769 / WHI-774)."""
 
 from __future__ import annotations
 
@@ -6,8 +6,9 @@ from typing import Any
 
 from fastapi import APIRouter, HTTPException, Request
 
+from monitor.api.routes.common import runtime_or_404
 from monitor.api.serialize import to_json_dict, to_jsonable
-from monitor.api.state import AppState, app_state_from_request
+from monitor.api.state import AppState, MarketRuntime, app_state_from_request
 from monitor.attribution.address_labels import inventory_events_from_ticks
 from monitor.attribution.mm_draft import InventoryEvent
 from monitor.attribution.mm_panel import (
@@ -29,39 +30,95 @@ from monitor.metrics.pnl_snapshot import (
 from monitor.quotes import now_ms
 from monitor.storage import JournalReader
 from monitor.storage.reader import AddressLabelRow
-from monitor.symbols.models import Pair
+from monitor.symbols.models import Pair, PairsConfig
 from monitor.symbols.token_map import quote_is_token0_by_pair
 from monitor.tui.builder import build_overview, build_pair_detail
 from monitor.tui.model import PairDetailModel
 
 router = APIRouter(tags=["pairs"])
 
+_ACCUMULATING_MSG = "Market data accumulating"
 
-def _require_reader(state: AppState) -> JournalReader:
-    reader = state.ensure_reader()
+
+def _require_reader(runtime: MarketRuntime) -> JournalReader:
+    reader = runtime.ensure_reader()
     if reader is None:
         raise HTTPException(
             status_code=503,
-            detail=f"collector journal not found: {state.db_path}",
+            detail=f"collector journal not found: {runtime.db_path}",
         )
     return reader
 
 
-def _pair_or_404(state: AppState, pair_id: str) -> Pair:
+def _require_pairs(runtime: MarketRuntime) -> PairsConfig:
+    """Return PairsConfig or 503 when inventory is not builder-ready."""
+    pairs = runtime.pairs
+    if pairs is None:
+        raise HTTPException(
+            status_code=503,
+            detail=(
+                f"market {runtime.market_id!r} inventory is not yet wired for "
+                f"pair builders ({_ACCUMULATING_MSG})"
+            ),
+        )
+    return pairs
+
+
+def _pair_or_404(runtime: MarketRuntime, pair_id: str) -> Pair:
+    pairs = _require_pairs(runtime)
     try:
-        return state.pairs.pair_by_id(pair_id)
+        return pairs.pair_by_id(pair_id)
     except KeyError as exc:
         raise HTTPException(status_code=404, detail=f"unknown pair_id: {pair_id}") from exc
 
 
+def _market_fields(runtime: MarketRuntime) -> dict[str, Any]:
+    return {
+        "market_id": runtime.market_id,
+        "display_name": runtime.display_name,
+        "has_rfq": runtime.has_rfq,
+        "data_status": runtime.data_status(),
+    }
+
+
+def _empty_overview(state: AppState, runtime: MarketRuntime, *, error: str) -> dict[str, Any]:
+    """Explicit accumulating overview (no dashed placeholder)."""
+    from datetime import UTC, datetime
+
+    from monitor.metrics.session import SessionKind, session_kind
+
+    ts = now_ms()
+    try:
+        sess = session_kind(
+            datetime.fromtimestamp(ts / 1000, tz=UTC),
+            config=runtime.metrics,
+        ).value
+    except ValueError:
+        # Holiday table year not covered yet — treat as closed, not "unknown crash".
+        sess = SessionKind.CLOSED.value
+    tui = runtime.tui
+    return {
+        "generated_ts_ms": ts,
+        "session_now": sess,
+        "sort_key": tui.default_sort,
+        "sort_desc": tui.default_sort_desc,
+        "reference_size_usd": format(tui.reference_size_usd, "f"),
+        "rows": [],
+        "db_path": str(runtime.db_path),
+        "error": error,
+        **_market_fields(runtime),
+    }
+
+
 def _pnl_snapshot_for_pair(
+    runtime: MarketRuntime,
     state: AppState,
     *,
     pair: Pair,
     reader: JournalReader,
 ) -> PnlPairSnapshot:
     """Load ticks + build PnL snapshot, with optional TTL cache (caller holds lock)."""
-    cache = state.pnl_cache
+    cache = runtime.pnl_cache
     if cache is not None:
         hit = cache.get(pair.id)
         if hit is not None:
@@ -73,7 +130,7 @@ def _pnl_snapshot_for_pair(
     rfq_buy, rfq_sell = reader.latest_rfq_sides(pair.id)
     amm = (
         amm_pool_from_pair_tick(
-            pair, amm_tick, quote_decimals=state.quote_decimals
+            pair, amm_tick, quote_decimals=runtime.quote_decimals
         )
         if amm_tick is not None
         else None
@@ -83,13 +140,13 @@ def _pnl_snapshot_for_pair(
         bybit=bybit,
         amm=amm,
         amm_tick=amm_tick,
-        config=state.metrics,
+        config=runtime.metrics,
         depth=depth,
         rfq_buy=rfq_buy,
         rfq_sell=rfq_sell,
         native_decimals=pair.fluxion.native_decimals,
         # Same config switch as attribution (market dex.has_rfq via assembly).
-        rfq_enabled=state.attribution.has_rfq,
+        rfq_enabled=runtime.attribution.has_rfq,
         now_ms=now_ms(),
         stale_ms=state.api.collector_stale_ms,
     )
@@ -99,15 +156,16 @@ def _pnl_snapshot_for_pair(
 
 
 def _inventory_events(
-    state: AppState, reader: JournalReader
+    runtime: MarketRuntime, reader: JournalReader
 ) -> list[InventoryEvent]:
     """Ledger events for MM activity / inventory curves (caller holds lock)."""
-    cache = state.inventory_cache
+    cache = runtime.inventory_cache
     if cache is not None:
         hit = cache.get()
         if hit is not None:
             return hit
-    q0 = quote_is_token0_by_pair(state.pairs)
+    pairs = _require_pairs(runtime)
+    q0 = quote_is_token0_by_pair(pairs)
     events = inventory_events_from_ticks(
         swaps=reader.recent_swaps(),
         rfq_fills=reader.recent_rfq_fills(),
@@ -139,43 +197,54 @@ def _mm_active_for(
     )
 
 
-def _detail_model(state: AppState, pair_id: str) -> tuple[PairDetailModel, PnlPairSnapshot]:
+def _detail_model(
+    state: AppState, runtime: MarketRuntime, pair_id: str
+) -> tuple[PairDetailModel, PnlPairSnapshot]:
     """Build detail + PnL under the process lock (shared by detail + trades)."""
-    reader = _require_reader(state)
-    pair = _pair_or_404(state, pair_id)
-    with state.lock:
+    # Pairs check first so accumulating markets report "not wired" not "no journal".
+    pair = _pair_or_404(runtime, pair_id)
+    reader = _require_reader(runtime)
+    with runtime.lock:
         model = build_pair_detail(
             pair=pair,
             reader=reader,
-            metrics=state.metrics,
-            attribution_cfg=state.attribution,
-            tui=state.tui,
-            edge_state=state.edge_state,
+            metrics=runtime.metrics,
+            attribution_cfg=runtime.attribution,
+            tui=runtime.tui,
+            edge_state=runtime.edge_state,
         )
-        pnl = _pnl_snapshot_for_pair(state, pair=pair, reader=reader)
+        pnl = _pnl_snapshot_for_pair(runtime, state, pair=pair, reader=reader)
         return model, pnl
 
 
-@router.get("/api/pairs")
-def list_pairs(request: Request) -> dict[str, Any]:
-    """Overview table + PnL v2 optimal summary + MM active badge (WHI-769)."""
-    state = app_state_from_request(request)
-    reader = _require_reader(state)
-    with state.lock:
+def _list_pairs_body(state: AppState, runtime: MarketRuntime) -> dict[str, Any]:
+    """Overview table body for one market (shared by legacy + scoped routes).
+
+    Builder-ready markets with a missing journal keep the pre-WHI-774 503
+    contract. Markets without PairsConfig (binance-pancake today) return a
+    200 accumulating empty state instead of crashing the process.
+    """
+    if runtime.pairs is None:
+        return _empty_overview(state, runtime, error=_ACCUMULATING_MSG)
+
+    reader = _require_reader(runtime)
+
+    with runtime.lock:
         model = build_overview(
-            pairs=state.pairs,
+            pairs=runtime.pairs,
             reader=reader,
-            metrics=state.metrics,
-            tui=state.tui,
-            edge_state=state.edge_state,
+            metrics=runtime.metrics,
+            tui=runtime.tui,
+            edge_state=runtime.edge_state,
         )
         body = to_json_dict(model)
+        body.update(_market_fields(runtime))
         label_count = reader.address_label_count()
         mm_labels = (
             reader.address_labels(label=MM_LABEL) if label_count > 0 else []
         )
         inv_events = (
-            _inventory_events(state, reader)
+            _inventory_events(runtime, reader)
             if label_count > 0 and mm_labels
             else []
         )
@@ -184,7 +253,7 @@ def list_pairs(request: Request) -> dict[str, Any]:
         for row in body["rows"]:
             pair_id = row["pair_id"]
             try:
-                pair = state.pairs.pair_by_id(pair_id)
+                pair = runtime.pairs.pair_by_id(pair_id)
             except KeyError:
                 # Builder rows should always be configured pairs; never 404 the list.
                 enriched = dict(row)
@@ -194,7 +263,7 @@ def list_pairs(request: Request) -> dict[str, Any]:
                 enriched["mm_active"] = "unknown"
                 rows_out.append(enriched)
                 continue
-            snap = _pnl_snapshot_for_pair(state, pair=pair, reader=reader)
+            snap = _pnl_snapshot_for_pair(runtime, state, pair=pair, reader=reader)
             enriched = dict(row)
             enriched["pnl_v2"] = overview_pnl_summary(snap).to_dict()
             enriched["mm_active"] = _mm_active_for(
@@ -210,21 +279,21 @@ def list_pairs(request: Request) -> dict[str, Any]:
         return body
 
 
-@router.get("/api/pairs/{pair_id}")
-def get_pair(pair_id: str, request: Request) -> dict[str, Any]:
-    """Detail model + PnL v2 + extended attribution address panel (WHI-769)."""
-    state = app_state_from_request(request)
-    reader = _require_reader(state)
-    model, pnl = _detail_model(state, pair_id)
+def _get_pair_body(
+    state: AppState, runtime: MarketRuntime, pair_id: str
+) -> dict[str, Any]:
+    model, pnl = _detail_model(state, runtime, pair_id)
+    reader = _require_reader(runtime)
     body = to_json_dict(model)
     body["pnl_v2"] = pnl.to_dict()
+    body.update(_market_fields(runtime))
 
-    with state.lock:
+    with runtime.lock:
         label_count = reader.address_label_count()
         all_labels = reader.address_labels() if label_count > 0 else []
         mm_labels = [r for r in all_labels if r.label == MM_LABEL]
         inv = (
-            _inventory_events(state, reader)
+            _inventory_events(runtime, reader)
             if label_count > 0 and mm_labels
             else []
         )
@@ -248,22 +317,21 @@ def get_pair(pair_id: str, request: Request) -> dict[str, Any]:
         panel_rows = build_address_panel_rows(
             attribution=model.attribution,
             labels=labels,
-            top_n=state.attribution.top_takers_n,
+            top_n=runtime.attribution.top_takers_n,
             pair_active=active if label_count > 0 else None,
         )
     body["address_panel"] = [r.to_dict() for r in panel_rows]
     return body
 
 
-@router.get("/api/pairs/{pair_id}/mm")
-def get_pair_mm(pair_id: str, request: Request) -> dict[str, Any]:
-    """MM inventory curves + rebalance timeline for one pair (WHI-769)."""
-    state = app_state_from_request(request)
-    reader = _require_reader(state)
-    _pair_or_404(state, pair_id)
-    with state.lock:
+def _get_pair_mm_body(
+    state: AppState, runtime: MarketRuntime, pair_id: str
+) -> dict[str, Any]:
+    _pair_or_404(runtime, pair_id)
+    reader = _require_reader(runtime)
+    with runtime.lock:
         labels = reader.address_labels()
-        inv = _inventory_events(state, reader)
+        inv = _inventory_events(runtime, reader)
         reb = reader.rebalance_events(
             pair_id=pair_id, limit=state.api.mm_rebalance_limit
         )
@@ -276,20 +344,82 @@ def get_pair_mm(pair_id: str, request: Request) -> dict[str, Any]:
             max_series_points=state.api.mm_series_max_points,
             max_rebalance=state.api.mm_rebalance_limit,
         )
-        return snap.to_dict()
+        body = snap.to_dict()
+        body.update(_market_fields(runtime))
+        return body
 
 
-@router.get("/api/pairs/{pair_id}/trades")
-def get_pair_trades(pair_id: str, request: Request) -> dict[str, Any]:
-    """Trade stream for one pair (subset of the detail model).
-
-    Skeleton reuses ``build_pair_detail`` so trade labels stay identical to the
-    detail page; a cheaper path can land when poll load requires it.
-    """
-    state = app_state_from_request(request)
-    model, _pnl = _detail_model(state, pair_id)
+def _get_pair_trades_body(
+    state: AppState, runtime: MarketRuntime, pair_id: str
+) -> dict[str, Any]:
+    model, _pnl = _detail_model(state, runtime, pair_id)
     return {
         "pair_id": model.pair_id,
         "generated_ts_ms": model.generated_ts_ms,
         "trades": to_jsonable(model.trades),
+        **_market_fields(runtime),
     }
+
+
+# --- Legacy unscoped routes (default market) ---------------------------------
+
+
+@router.get("/api/pairs")
+def list_pairs(request: Request) -> dict[str, Any]:
+    """Legacy overview → default market (bookmark / old client compatible)."""
+    state = app_state_from_request(request)
+    return _list_pairs_body(state, runtime_or_404(state, None))
+
+
+@router.get("/api/pairs/{pair_id}")
+def get_pair(pair_id: str, request: Request) -> dict[str, Any]:
+    """Legacy detail → default market."""
+    state = app_state_from_request(request)
+    return _get_pair_body(state, runtime_or_404(state, None), pair_id)
+
+
+@router.get("/api/pairs/{pair_id}/mm")
+def get_pair_mm(pair_id: str, request: Request) -> dict[str, Any]:
+    """Legacy MM panel → default market."""
+    state = app_state_from_request(request)
+    return _get_pair_mm_body(state, runtime_or_404(state, None), pair_id)
+
+
+@router.get("/api/pairs/{pair_id}/trades")
+def get_pair_trades(pair_id: str, request: Request) -> dict[str, Any]:
+    """Legacy trades → default market."""
+    state = app_state_from_request(request)
+    return _get_pair_trades_body(state, runtime_or_404(state, None), pair_id)
+
+
+# --- Market-scoped routes ----------------------------------------------------
+
+
+@router.get("/api/{market}/pairs")
+def list_market_pairs(market: str, request: Request) -> dict[str, Any]:
+    """Market-scoped overview table + PnL v2 + MM active badge."""
+    state = app_state_from_request(request)
+    return _list_pairs_body(state, runtime_or_404(state, market))
+
+
+@router.get("/api/{market}/pairs/{pair_id}")
+def get_market_pair(market: str, pair_id: str, request: Request) -> dict[str, Any]:
+    """Market-scoped pair detail + PnL v2 + address panel."""
+    state = app_state_from_request(request)
+    return _get_pair_body(state, runtime_or_404(state, market), pair_id)
+
+
+@router.get("/api/{market}/pairs/{pair_id}/mm")
+def get_market_pair_mm(market: str, pair_id: str, request: Request) -> dict[str, Any]:
+    """Market-scoped MM inventory curves + rebalance timeline."""
+    state = app_state_from_request(request)
+    return _get_pair_mm_body(state, runtime_or_404(state, market), pair_id)
+
+
+@router.get("/api/{market}/pairs/{pair_id}/trades")
+def get_market_pair_trades(
+    market: str, pair_id: str, request: Request
+) -> dict[str, Any]:
+    """Market-scoped trade stream."""
+    state = app_state_from_request(request)
+    return _get_pair_trades_body(state, runtime_or_404(state, market), pair_id)
