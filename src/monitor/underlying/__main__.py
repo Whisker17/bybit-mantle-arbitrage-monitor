@@ -3,7 +3,8 @@
 Usage::
 
     uv run python -m monitor.underlying
-    uv run python -m monitor.underlying --tickers AAPL,TSLA,SKHY
+    uv run python -m monitor.underlying --tickers AAPL,TSLA,SKHY,SPCX
+    uv run python -m monitor.underlying --probe-uncovered
 """
 
 from __future__ import annotations
@@ -14,6 +15,7 @@ import sys
 from pathlib import Path
 
 from monitor.underlying.config import load_underlying_config
+from monitor.underlying.coverage_probe import UncoveredCoverageProbe
 from monitor.underlying.poller import UnderlyingPoller
 
 
@@ -29,9 +31,34 @@ def main(argv: list[str] | None = None) -> int:
         default=None,
         help="Path to underlying.yaml (default: config/underlying.yaml)",
     )
+    p.add_argument(
+        "--probe-uncovered",
+        action="store_true",
+        help="WHI-787: probe uncovered tickers for public Yahoo/Pyth coverage "
+        "(standalone; does not require the collector)",
+    )
     args = p.parse_args(argv)
 
     cfg = load_underlying_config(None if args.config is None else Path(args.config))
+
+    if args.probe_uncovered:
+        probe = UncoveredCoverageProbe(cfg)
+        try:
+            outcome = probe.probe_once()
+        finally:
+            probe.close()
+        for m in outcome.mismatches:
+            print(json.dumps({"kind": "mismatch", **m.to_dict()}))
+        for e in outcome.errors:
+            print(json.dumps({"kind": "error", **e.to_dict()}), file=sys.stderr)
+        if not cfg.uncovered_tickers():
+            print("# no uncovered tickers in config", file=sys.stderr)
+        if outcome.mismatches:
+            return 1
+        if outcome.inconclusive:
+            return 2
+        return 0
+
     if args.tickers:
         requested = [t.strip() for t in args.tickers.split(",") if t.strip()]
         unknown = [t for t in requested if t not in cfg.tickers]

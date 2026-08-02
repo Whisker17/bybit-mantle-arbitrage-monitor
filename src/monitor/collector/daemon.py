@@ -62,8 +62,10 @@ from monitor.symbols.token_map import (
 from monitor.underlying.config import UnderlyingConfigError, load_underlying_config
 from monitor.underlying.coverage_probe import (
     META_MISMATCHES,
+    META_PROBE_ERRORS,
     META_PROBE_MS,
     UncoveredCoverageProbe,
+    errors_to_meta_json,
     mismatches_to_meta_json,
 )
 from monitor.underlying.poller import UnderlyingPoller
@@ -726,9 +728,14 @@ class CollectorDaemon:
                 probe_every_ms = int(u_cfg.uncovered_probe_interval_s * 1000)
                 if now - last_uncovered_probe_ms >= probe_every_ms:
                     try:
-                        mismatches = await asyncio.to_thread(coverage.probe_once)
+                        outcome = await asyncio.to_thread(coverage.probe_once)
                         self.store.set_meta(
-                            META_MISMATCHES, mismatches_to_meta_json(mismatches)
+                            META_MISMATCHES,
+                            mismatches_to_meta_json(outcome.mismatches),
+                        )
+                        self.store.set_meta(
+                            META_PROBE_ERRORS,
+                            errors_to_meta_json(outcome.errors),
                         )
                         self.store.set_meta(META_PROBE_MS, str(now))
                         last_uncovered_probe_ms = now

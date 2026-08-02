@@ -103,6 +103,47 @@ def _extract_parsed(body: dict[str, Any] | list[Any]) -> list[Any]:
     return []
 
 
+def hermes_has_equity_feed(
+    feeds: list[Any] | None,
+    *,
+    ticker: str,
+) -> bool:
+    """True when Hermes ``price_feeds`` includes a usable equity for ``ticker``.
+
+    Prefers exact RTH ``Equity.US.{T}/USD``. Also accepts any non-extended-hours
+    ``Equity.*`` symbol whose base equals the ticker (covers future KR/HK
+    listings that would otherwise stay falsely ``uncovered``).
+    """
+    if not feeds:
+        return False
+    t = ticker.upper()
+    want_us_rth = f"Equity.US.{t}/USD"
+    for item in feeds:
+        if not isinstance(item, dict):
+            continue
+        attrs = item.get("attributes")
+        if not isinstance(attrs, dict):
+            continue
+        symbol = str(attrs.get("symbol") or "")
+        if not symbol.startswith("Equity."):
+            continue
+        # Ignore deprecated extended-hours suffixes.
+        if symbol.endswith((".PRE", ".POST", ".ON")):
+            continue
+        if symbol == want_us_rth:
+            return True
+        # Equity.{CCY}.{BASE}/{QUOTE} — match base to ticker.
+        try:
+            rest = symbol.removeprefix("Equity.")
+            base_quote = rest.split(".", 1)[1]  # after region
+            base = base_quote.split("/", 1)[0]
+        except (IndexError, ValueError):
+            continue
+        if base.upper() == t:
+            return True
+    return False
+
+
 class HermesClient:
     """Thin HTTP wrapper around Hermes latest price updates."""
 

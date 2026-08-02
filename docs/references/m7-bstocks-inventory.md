@@ -316,8 +316,9 @@ ranked by DexScreener liq (SOXLB #11, MUUB #12 / broken mid).
 4. **Vision WS soak** — upgrade works; long-run disconnect/rate limits not measured here.
 5. **SPCXB** — SpaceX is Nasdaq-listed (`SPCX`, IPO 2026-06-12); still high-vol /
    special risk despite top liquidity. Underlying is Yahoo gap-fill (WHI-787;
-   Hermes has no `Equity.US.SPCX/USD`). NYSE RTH session rules apply like other
-   US equities for premium labeling.
+   Hermes has no `Equity.US.SPCX/USD`). Premium uses the same NYSE RTH
+   `price_type` labels as other US underlyings for now; revisit only if
+   SPCX-specific session quirks show up in soak.
 6. **PCS Swap topic0 on live bStock pool** — not re-decoded this PR (public RPC
    `eth_getLogs` limit); collector must confirm before production decode.
 7. **V2 / StableSwap exhaustiveness** — re-inventory may want PCS V2 factory

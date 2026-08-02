@@ -9,18 +9,19 @@ from __future__ import annotations
 
 import json
 import logging
-from dataclasses import dataclass
+from dataclasses import dataclass, field
 from typing import Any
 
 from monitor.underlying.config import UnderlyingConfig
-from monitor.underlying.pyth import HermesClient
-from monitor.underlying.yahoo import YahooChartClient
+from monitor.underlying.pyth import HermesClient, hermes_has_equity_feed
+from monitor.underlying.yahoo import YahooChartClient, yahoo_chart_has_price
 
 logger = logging.getLogger(__name__)
 
 # Journal meta keys (collector → health). Keep stable for ops/scripts.
 META_MISMATCHES = "underlying_uncovered_mismatches"
 META_PROBE_MS = "underlying_uncovered_probe_ms"
+META_PROBE_ERRORS = "underlying_uncovered_probe_errors"
 
 
 @dataclass(frozen=True, slots=True)
@@ -38,46 +39,48 @@ class UncoveredMismatch:
             "detail": self.detail,
         }
 
+    @classmethod
+    def from_dict(cls, raw: dict[str, Any]) -> UncoveredMismatch | None:
+        ticker = raw.get("ticker")
+        sources = raw.get("sources")
+        detail = raw.get("detail")
+        if not isinstance(ticker, str) or not ticker:
+            return None
+        if not isinstance(sources, list):
+            return None
+        src_tuple = tuple(str(s) for s in sources if s)
+        if not src_tuple:
+            return None
+        return cls(
+            ticker=ticker,
+            sources=src_tuple,
+            detail=str(detail) if detail is not None else "",
+        )
 
-def yahoo_chart_has_price(body: dict[str, Any] | None) -> bool:
-    """True when Yahoo chart JSON has a positive regularMarketPrice/previousClose."""
-    if not body:
-        return False
-    try:
-        meta = body["chart"]["result"][0]["meta"]
-    except (KeyError, IndexError, TypeError):
-        return False
-    price = meta.get("regularMarketPrice")
-    if price is None:
-        price = meta.get("previousClose")
-    if price is None:
-        return False
-    try:
-        return float(price) > 0
-    except (TypeError, ValueError):
-        return False
+
+@dataclass(frozen=True, slots=True)
+class ProbeError:
+    """Per-ticker source failure during an uncovered probe."""
+
+    ticker: str
+    source: str
+    error: str
+
+    def to_dict(self) -> dict[str, Any]:
+        return {"ticker": self.ticker, "source": self.source, "error": self.error}
 
 
-def hermes_has_us_equity_feed(
-    feeds: list[Any] | None,
-    *,
-    ticker: str,
-) -> bool:
-    """True when Hermes price_feeds includes ``Equity.US.{TICKER}/USD`` (RTH)."""
-    if not feeds:
-        return False
-    want = f"Equity.US.{ticker.upper()}/USD"
-    for item in feeds:
-        if not isinstance(item, dict):
-            continue
-        attrs = item.get("attributes")
-        if not isinstance(attrs, dict):
-            continue
-        symbol = str(attrs.get("symbol") or "")
-        # Exact RTH equity; ignore .PRE / .POST / .ON variants for "has coverage".
-        if symbol == want:
-            return True
-    return False
+@dataclass(frozen=True, slots=True)
+class ProbeOutcome:
+    """Result of one uncovered-coverage probe pass."""
+
+    mismatches: list[UncoveredMismatch] = field(default_factory=list)
+    errors: list[ProbeError] = field(default_factory=list)
+
+    @property
+    def inconclusive(self) -> bool:
+        """True when every uncovered ticker failed both sources (no verdict)."""
+        return bool(self.errors) and not self.mismatches
 
 
 def evaluate_uncovered_probe(
@@ -97,9 +100,9 @@ def evaluate_uncovered_probe(
     if yahoo_error is None and yahoo_chart_has_price(yahoo_chart):
         sources.append("yahoo")
         bits.append("Yahoo chart returned a positive last price")
-    if hermes_error is None and hermes_has_us_equity_feed(hermes_feeds, ticker=ticker):
+    if hermes_error is None and hermes_has_equity_feed(hermes_feeds, ticker=ticker):
         sources.append("pyth_hermes")
-        bits.append(f"Hermes lists Equity.US.{ticker.upper()}/USD")
+        bits.append(f"Hermes lists an Equity feed for {ticker.upper()}")
     if not sources:
         return None
     return UncoveredMismatch(
@@ -126,8 +129,41 @@ def mismatches_from_meta_json(raw: str | None) -> list[dict[str, Any]]:
         return []
     out: list[dict[str, Any]] = []
     for item in data:
-        if isinstance(item, dict) and "ticker" in item:
-            out.append(item)
+        if not isinstance(item, dict):
+            continue
+        parsed = UncoveredMismatch.from_dict(item)
+        if parsed is not None:
+            out.append(parsed.to_dict())
+    return out
+
+
+def errors_to_meta_json(errors: list[ProbeError]) -> str:
+    return json.dumps([e.to_dict() for e in errors], separators=(",", ":"))
+
+
+def errors_from_meta_json(raw: str | None) -> list[dict[str, Any]]:
+    if raw is None or raw == "":
+        return []
+    try:
+        data = json.loads(raw)
+    except json.JSONDecodeError:
+        return []
+    if not isinstance(data, list):
+        return []
+    out: list[dict[str, Any]] = []
+    for item in data:
+        if (
+            isinstance(item, dict)
+            and isinstance(item.get("ticker"), str)
+            and isinstance(item.get("source"), str)
+        ):
+            out.append(
+                {
+                    "ticker": item["ticker"],
+                    "source": item["source"],
+                    "error": str(item.get("error") or ""),
+                }
+            )
     return out
 
 
@@ -161,12 +197,18 @@ class UncoveredCoverageProbe:
         if self._owns_yahoo:
             self._yahoo.close()
 
-    def probe_once(self) -> list[UncoveredMismatch]:
-        """Probe every uncovered ticker; empty list when none or all still dark."""
+    def probe_once(self) -> ProbeOutcome:
+        """Probe every uncovered ticker.
+
+        Returns mismatches (config says uncovered, source has data) and
+        per-source errors so a total outage is not stamped as "all clear".
+        Empty uncovered list → empty outcome (no network).
+        """
         names = self.cfg.uncovered_tickers()
         if not names:
-            return []
+            return ProbeOutcome()
         found: list[UncoveredMismatch] = []
+        errors: list[ProbeError] = []
         for name in names:
             tcfg = self.cfg.tickers[name]
             # Prefer explicit yahoo_symbol if set; else try the canonical ticker.
@@ -177,6 +219,9 @@ class UncoveredCoverageProbe:
                 yahoo_body = self._yahoo.fetch_chart(yahoo_sym)
             except Exception as exc:  # noqa: BLE001
                 yahoo_err = str(exc)
+                errors.append(
+                    ProbeError(ticker=name, source="yahoo", error=yahoo_err)
+                )
                 logger.debug("uncovered probe yahoo failed ticker=%s: %s", name, exc)
 
             hermes_feeds: list[Any] | None = None
@@ -185,6 +230,9 @@ class UncoveredCoverageProbe:
                 hermes_feeds = self._hermes.search_price_feeds(name)
             except Exception as exc:  # noqa: BLE001
                 hermes_err = str(exc)
+                errors.append(
+                    ProbeError(ticker=name, source="pyth_hermes", error=hermes_err)
+                )
                 logger.debug("uncovered probe hermes failed ticker=%s: %s", name, exc)
 
             hit = evaluate_uncovered_probe(
@@ -203,4 +251,10 @@ class UncoveredCoverageProbe:
                     ",".join(hit.sources),
                     hit.detail,
                 )
-        return found
+        if errors and not found:
+            logger.warning(
+                "uncovered coverage probe inconclusive: %d source error(s), "
+                "0 mismatches (cannot confirm still uncovered)",
+                len(errors),
+            )
+        return ProbeOutcome(mismatches=found, errors=errors)

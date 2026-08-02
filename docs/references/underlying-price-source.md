@@ -164,18 +164,38 @@ FROM underlying_prices WHERE ticker IN ('SKHY','SPCX') ORDER BY as_of_ms DESC LI
 ## Coverage audit (WHI-787, probe 2026-08-02)
 
 Live re-check of **every** inventory underlying against Hermes + Yahoo. Config
-must match “actual available source”.
+must match “actual available source”. Yahoo `regularMarketPrice` from
+`query1.finance.yahoo.com/v8/finance/chart/{T}` (weekend / US closed → last
+print / prior close). Hermes via `/v2/price_feeds?query=` + pinned feed ids.
 
-| Ticker | Hermes `Equity.US.{T}/USD` | Yahoo chart | Config (post-WHI-787) | Match? |
-|--------|----------------------------|-------------|------------------------|--------|
-| AAPL, CRCL, GOOGL, HOOD, META, NVDA, TSLA, AMZN, COIN, MCD, SPY, MSFT, INTC, MU | yes (pinned `feed_id`) | yes (unused) | Hermes primary | yes |
-| SKHY | no (`query=SKHY` → `[]`) | yes (~143.73 USD ADR) | `prefer_yahoo` + `yahoo_symbol: SKHY` | yes |
-| SPCX | no (`query=SPCX\|SPACEX` → `[]`) | yes (~108.37 USD, NasdaqGS) | `prefer_yahoo` + `yahoo_symbol: SPCX` | yes (fixed) |
+| Ticker | Hermes | Yahoo (USD) | Config (post-WHI-787) | Match? |
+|--------|--------|-------------|------------------------|--------|
+| AAPL | `Equity.US.AAPL/USD` pinned | 308.91 | Hermes primary | yes |
+| CRCL | pinned | 62.61 | Hermes primary | yes |
+| GOOGL | pinned | 356.13 | Hermes primary | yes |
+| HOOD | pinned | 86.56 | Hermes primary | yes |
+| META | pinned | 556.71 | Hermes primary | yes |
+| NVDA | pinned | 200.75 | Hermes primary | yes |
+| TSLA | pinned | 311.21 | Hermes primary | yes |
+| AMZN | pinned | 271.58 | Hermes primary | yes |
+| COIN | pinned | 146.26 | Hermes primary | yes |
+| MCD | pinned | 270.64 | Hermes primary | yes |
+| SPY | pinned | 747.03 | Hermes primary | yes |
+| MSFT | pinned | 464.72 | Hermes primary | yes |
+| INTC | pinned | 90.2 | Hermes primary | yes |
+| MU | pinned | 823.03 | Hermes primary | yes |
+| SKHY | no (`query=SKHY` → `[]`) | 143.73 (Nasdaq ADR) | `prefer_yahoo` + `yahoo_symbol: SKHY` | yes |
+| SPCX | no (`query=SPCX\|SPACEX` → `[]`) | 108.37 (NasdaqGS) | `prefer_yahoo` + `yahoo_symbol: SPCX` | yes (fixed) |
 | *(none)* | — | — | `uncovered: true` | n/a — no uncovered remain |
 
-Cross-check (tokenized premium sanity): de-multiplied CEX mid for SPCXx ≈
-108.73 vs Yahoo 108.37 → ~+33 bps, a plausible tokenized premium (mapping
-`SPCXx`/`SPCXB` → `SPCX` is correct).
+**Premium recompute (both markets share ticker `SPCX` via `SPCXx` / `SPCXB`):**
+
+* Bybit xStock: de-multiplied CEX mid ≈ **108.73** vs Yahoo **108.37** →
+  ~**+33 bps** (`premium_bps = (mid/und − 1)×10⁴`). Mapping correct.
+* Binance bStock: journal mid is in raw/`ui_multiplier` space; premium uses
+  `equity_equivalent_mid = comparable / ui_multiplier` then the same bps formula
+  against the same Yahoo SPCX print. After collector restart both markets write
+  `underlying_prices` rows for `SPCX` (`source=yahoo`).
 
 ## Uncovered guardrail (WHI-787)
 
@@ -185,13 +205,18 @@ Bug class: a one-time “private / no feed” human judgment freezes in
 1. **Collection path** — tickers with `uncovered: true` are still skipped by the
    price poller (no fake prints). UI empty reason remains `private` for any
    future truly-uncovered name.
-2. **Periodic probe** — every `uncovered_probe_interval_s` (default 3600s) the
-   collector runs `UncoveredCoverageProbe` against Yahoo chart + Hermes
-   `price_feeds` for each uncovered ticker. On a hit: **WARN** log + journal
-   meta `underlying_uncovered_mismatches` / `underlying_uncovered_probe_ms`.
-3. **Health** — `GET /api/health` (and per-market health) exposes
-   `uncovered_coverage_mismatches` + `uncovered_coverage_probe_ms`. Advisory
+2. **Periodic probe** — every `uncovered_probe_interval_s` (YAML required, e.g.
+   3600s) the collector runs `UncoveredCoverageProbe` against Yahoo chart +
+   Hermes `price_feeds` for each uncovered ticker. On a hit: **WARN** log +
+   journal meta. Standalone: `uv run python -m monitor.underlying --probe-uncovered`.
+3. **Journal meta** (also listed in `deploy/README.md`):
+   * `underlying_uncovered_mismatches` — JSON list of `{ticker, sources, detail}`
+   * `underlying_uncovered_probe_errors` — JSON list of `{ticker, source, error}`
+     (total outage ≠ “all clear”)
+   * `underlying_uncovered_probe_ms` — last probe attempt wall time
+4. **Health** — `GET /api/health` exposes `uncovered_coverage_mismatches`,
+   `uncovered_coverage_probe_errors`, `uncovered_coverage_probe_ms`. Advisory
    only — does **not** flip `ok`.
-4. **Empty uncovered list** — probe is a no-op (no network). After WHI-787 the
+5. **Empty uncovered list** — probe is a no-op (no network). After WHI-787 the
    checked-in map has zero uncovered; the path stays for the next private or
    pre-IPO name.

@@ -20,18 +20,24 @@ from monitor.underlying.config import (
 from monitor.underlying.coverage_probe import (
     UncoveredCoverageProbe,
     evaluate_uncovered_probe,
-    hermes_has_us_equity_feed,
     mismatches_from_meta_json,
     mismatches_to_meta_json,
-    yahoo_chart_has_price,
 )
 from monitor.underlying.price_type import classify_price_type
-from monitor.underlying.pyth import parse_hermes_latest, scale_pyth_price
+from monitor.underlying.pyth import (
+    hermes_has_equity_feed,
+    parse_hermes_latest,
+    scale_pyth_price,
+)
 from monitor.underlying.tickers import (
     pair_id_to_underlying_ticker,
     underlying_tickers_for_pairs,
 )
-from monitor.underlying.yahoo import market_state_hint, parse_yahoo_chart
+from monitor.underlying.yahoo import (
+    market_state_hint,
+    parse_yahoo_chart,
+    yahoo_chart_has_price,
+)
 
 
 def _session() -> SessionConfig:
@@ -417,6 +423,7 @@ def test_invalid_underlying_config(tmp_path: Path) -> None:
             stale_after_closed_ms: 1
             yahoo_fallback: false
             yahoo_chart_base_url: https://example
+            uncovered_probe_interval_s: 3600
             session:
               timezone: America/New_York
               open: "09:30"
@@ -520,22 +527,30 @@ def test_yahoo_chart_has_price() -> None:
     )
 
 
-def test_hermes_has_us_equity_feed() -> None:
+def test_hermes_has_equity_feed() -> None:
     feeds = [
         {"attributes": {"symbol": "Equity.US.AAPL/USD.PRE"}},
         {"attributes": {"symbol": "Equity.US.AAPL/USD"}},
         {"attributes": {"symbol": "Crypto.AAPLX/AAPL.RR"}},
     ]
-    assert hermes_has_us_equity_feed(feeds, ticker="AAPL") is True
-    assert hermes_has_us_equity_feed(feeds, ticker="SPCX") is False
-    assert hermes_has_us_equity_feed([], ticker="AAPL") is False
+    assert hermes_has_equity_feed(feeds, ticker="AAPL") is True
+    assert hermes_has_equity_feed(feeds, ticker="SPCX") is False
+    assert hermes_has_equity_feed([], ticker="AAPL") is False
     # PRE alone is not RTH coverage for the guardrail.
     assert (
-        hermes_has_us_equity_feed(
+        hermes_has_equity_feed(
             [{"attributes": {"symbol": "Equity.US.SPCX/USD.PRE"}}],
             ticker="SPCX",
         )
         is False
+    )
+    # Non-US equity base match (SKHY-class false-uncovered prevention).
+    assert (
+        hermes_has_equity_feed(
+            [{"attributes": {"symbol": "Equity.KR.SKHY/KRW"}}],
+            ticker="SKHY",
+        )
+        is True
     )
 
 
@@ -645,7 +660,9 @@ def test_uncovered_probe_empty_when_no_uncovered() -> None:
         cfg, hermes=_BoomHermes(), yahoo=_BoomYahoo()  # type: ignore[arg-type]
     )
     try:
-        assert probe.probe_once() == []
+        outcome = probe.probe_once()
+        assert outcome.mismatches == []
+        assert outcome.errors == []
     finally:
         probe.close()
 
@@ -694,13 +711,57 @@ def test_uncovered_probe_detects_yahoo_for_synthetic_uncovered(
         cfg, hermes=FakeHermes(), yahoo=FakeYahoo()  # type: ignore[arg-type]
     )
     try:
-        hits = probe.probe_once()
+        outcome = probe.probe_once()
     finally:
         probe.close()
-    assert len(hits) == 1
-    assert isinstance(hits[0], UncoveredMismatch)
-    assert hits[0].ticker == "SYNTH"
-    assert hits[0].sources == ("yahoo",)
+    assert len(outcome.mismatches) == 1
+    assert isinstance(outcome.mismatches[0], UncoveredMismatch)
+    assert outcome.mismatches[0].ticker == "SYNTH"
+    assert outcome.mismatches[0].sources == ("yahoo",)
+    assert outcome.errors == []
+
+
+def test_uncovered_probe_records_errors_not_false_clear() -> None:
+    """Both sources fail → errors populated, no mismatch (not 'all clear')."""
+    from monitor.underlying.config import UnderlyingConfig
+
+    base = load_underlying_config()
+    raw = base.model_dump()
+    raw["tickers"] = {
+        "GHOST": {
+            "currency": "USD",
+            "uncovered": True,
+            "uncovered_reason": "test",
+        }
+    }
+    cfg = UnderlyingConfig.model_validate(raw)
+
+    class FailYahoo:
+        def fetch_chart(self, symbol: str) -> dict[str, object]:
+            raise TimeoutError("yahoo down")
+
+        def close(self) -> None:
+            return None
+
+    class FailHermes:
+        def search_price_feeds(self, query: str) -> list[object]:
+            raise TimeoutError("hermes down")
+
+        def close(self) -> None:
+            return None
+
+    probe = UncoveredCoverageProbe(
+        cfg, hermes=FailHermes(), yahoo=FailYahoo()  # type: ignore[arg-type]
+    )
+    try:
+        outcome = probe.probe_once()
+    finally:
+        probe.close()
+    assert outcome.mismatches == []
+    assert len(outcome.errors) == 2
+    assert outcome.inconclusive is True
+    sources = {e.source for e in outcome.errors}
+    assert sources == {"yahoo", "pyth_hermes"}
 
 
 def test_stamp_underlying_poll_meta_even_when_empty(tmp_path: Path) -> None:
