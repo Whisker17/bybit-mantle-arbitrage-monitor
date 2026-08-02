@@ -60,10 +60,9 @@ type Props = {
   emptyMessage?: string;
   /**
    * Full market overview rows used for TVL/Vol badge ranking (WHI-781).
-   * Must be the unfiltered set so hide-low-liq / search does not change ranks.
-   * Defaults to `rows` only when the parent already passes the full set.
+   * Required unfiltered set so hide-low-liq / search does not change ranks.
    */
-  badgeSourceRows?: PairOverviewRow[];
+  badgeSourceRows: PairOverviewRow[];
 };
 
 /** Column groups for the two-row thead (WHI-780). */
@@ -468,14 +467,14 @@ export function PairsTable({
     return map;
   }, [cols]);
 
-  // WHI-781: rank on full market set; tooltips from market policy.
+  // WHI-781: rank on full market set; tooltips from the same policy object.
   const badgePolicy = useMemo(
     () => badgePolicyForMarket(marketId),
     [marketId],
   );
   const badgesByPair = useMemo(
-    () => pairBadgesForRows(badgeSourceRows ?? rows, marketId, badgePolicy),
-    [badgeSourceRows, rows, marketId, badgePolicy],
+    () => pairBadgesForRows(badgeSourceRows, badgePolicy),
+    [badgeSourceRows, badgePolicy],
   );
 
   return (

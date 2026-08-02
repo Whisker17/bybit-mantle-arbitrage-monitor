@@ -39,12 +39,17 @@ export type BadgePolicy = {
   volTitle: string;
 };
 
+/** Product threshold for WHI-781 (not in config/ — UI-only rank cut). */
 const DEFAULT_TOP_N = 5;
 
+const VOL_TITLE =
+  "CEX 24h quote volume rank among this market's pairs (live journal/API) — top 5";
+
 /**
- * Per-market badge policy. Market-id branching is intentional (same pattern as
- * `KNOWN_MARKETS` has_rfq fallback); pair *lists* are never hardcoded — ranks
- * come from overview row fields (`est_liquidity_usd`, `cex_volume_24h`).
+ * Per-market badge policy. Pair *lists* are never hardcoded — ranks come from
+ * overview row fields (`est_liquidity_usd`, `cex_volume_24h`). Policy itself is
+ * a WHI-781 product choice on market id (binance-pancake TVL+Vol; other markets
+ * Vol-only until a third market defines TVL).
  */
 export function badgePolicyForMarket(marketId: string): BadgePolicy {
   if (marketId === "binance-pancake") {
@@ -54,18 +59,17 @@ export function badgePolicyForMarket(marketId: string): BadgePolicy {
       topN: DEFAULT_TOP_N,
       tvlTitle:
         "PCS USDT pool liquidity rank (inventory snapshot) — top 5 in this market",
-      volTitle:
-        "CEX 24h quote volume rank among this market's pairs (live journal/API) — top 5",
+      volTitle: VOL_TITLE,
     };
   }
-  // bybit-fluxion (default): no Fluxion TVL ranking story for the badge.
+  // bybit-fluxion and any future market without a PCS-style inventory rank:
+  // Vol-only until product defines a TVL dimension.
   return {
     enableTvl: false,
     enableVol: true,
     topN: DEFAULT_TOP_N,
     tvlTitle: "",
-    volTitle:
-      "CEX 24h quote volume rank among this market's pairs (live journal/API) — top 5",
+    volTitle: VOL_TITLE,
   };
 }
 
@@ -97,11 +101,12 @@ export function topRankedIds(
  * Compute TVL/Vol badge flags for every overview row under a market policy.
  *
  * @param rows Full market overview rows (not a UI-filtered subset).
+ * @param policy From {@link badgePolicyForMarket} — pass explicitly so rank
+ *   rules cannot drift from the tooltip policy used at render time.
  */
 export function pairBadgesForRows(
   rows: ReadonlyArray<PairOverviewRow>,
-  marketId: string,
-  policy: BadgePolicy = badgePolicyForMarket(marketId),
+  policy: BadgePolicy,
 ): Map<string, PairBadgeFlags> {
   const tvlIds = policy.enableTvl
     ? topRankedIds(

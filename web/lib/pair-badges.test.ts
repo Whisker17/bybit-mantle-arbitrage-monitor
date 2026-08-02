@@ -103,7 +103,8 @@ describe("pairBadgesForRows", () => {
       row({ pair_id: "INTCB", est_liquidity_usd: "15000", cex_volume_24h: "900" }),
       row({ pair_id: "MUB", est_liquidity_usd: "9000", cex_volume_24h: "1000" }),
     ];
-    const badges = pairBadgesForRows(rows, "binance-pancake");
+    const bp = badgePolicyForMarket("binance-pancake");
+    const badges = pairBadgesForRows(rows, bp);
 
     // TVL top 5: SPCXB SKHYB TSLAB SPYB NVDAB
     assert.equal(badges.get("SPCXB")?.hiTvl, true);
@@ -126,7 +127,7 @@ describe("pairBadgesForRows", () => {
       row({ pair_id: "Y", est_liquidity_usd: "2", cex_volume_24h: "2" }),
       row({ pair_id: "Z", est_liquidity_usd: "3", cex_volume_24h: "3" }),
     ];
-    const dualBadges = pairBadgesForRows(dual, "binance-pancake");
+    const dualBadges = pairBadgesForRows(dual, bp);
     assert.equal(dualBadges.get("SPCXB")?.hiTvl, true);
     assert.equal(dualBadges.get("SPCXB")?.hiVol, true);
     assert.equal(dualBadges.get("SKHYB")?.hiTvl, true);
@@ -138,7 +139,7 @@ describe("pairBadgesForRows", () => {
       row({ pair_id: "AAPLx", est_liquidity_usd: "100000", cex_volume_24h: "5000" }),
       row({ pair_id: "TSLAx", est_liquidity_usd: "90000", cex_volume_24h: "4000" }),
     ];
-    const badges = pairBadgesForRows(rows, "bybit-fluxion");
+    const badges = pairBadgesForRows(rows, badgePolicyForMarket("bybit-fluxion"));
     assert.equal(badges.get("AAPLx")?.hiTvl, false);
     assert.equal(badges.get("AAPLx")?.hiVol, true);
     assert.equal(badges.get("TSLAx")?.hiVol, true);
@@ -154,11 +155,12 @@ describe("pairBadgesForRows", () => {
       row({ pair_id: "E", est_liquidity_usd: "30", cex_volume_24h: "5" }),
       row({ pair_id: "F", est_liquidity_usd: "20", cex_volume_24h: "6" }),
     ];
-    const onFull = pairBadgesForRows(full, "binance-pancake");
+    const bp = badgePolicyForMarket("binance-pancake");
+    const onFull = pairBadgesForRows(full, bp);
     assert.equal(onFull.get("A")?.hiTvl, true);
     assert.equal(onFull.get("F")?.hiTvl, false);
     // If a caller wrongly ranks only the filtered subset, F becomes top-1.
-    const filteredOnly = pairBadgesForRows([full[5]!], "binance-pancake");
+    const filteredOnly = pairBadgesForRows([full[5]!], bp);
     assert.equal(filteredOnly.get("F")?.hiTvl, true);
   });
 
