@@ -51,16 +51,16 @@ const VOL_TITLE =
  * plus `cex_volume_24h`). WHI-782: both markets enable TVL once live journal
  * samples exist; inventory est is the cold-start fallback only.
  */
-export function badgePolicyForMarket(marketId: string): BadgePolicy {
-  const tvlTitle =
-    marketId === "binance-pancake"
-      ? "DEX pool TVL rank (live balanceOf when available; else inventory est) — top 5"
-      : "DEX pool TVL rank (live balanceOf when available; else inventory est) — top 5";
+export function badgePolicyForMarket(_marketId: string): BadgePolicy {
+  // Both markets share TVL+Vol top-N after WHI-782 live TVL (inventory est is
+  // cold-start fallback only). marketId kept for call-site symmetry / future
+  // per-market rank cuts.
   return {
     enableTvl: true,
     enableVol: true,
     topN: DEFAULT_TOP_N,
-    tvlTitle,
+    tvlTitle:
+      "DEX pool TVL rank (live balanceOf when available; else inventory est) — top 5",
     volTitle: VOL_TITLE,
   };
 }

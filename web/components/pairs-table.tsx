@@ -54,7 +54,7 @@ function tvlTitle(row: PairOverviewRow): string {
     row.tvl_as_of_ms != null
       ? ` · as of ${fmtUtcHm(row.tvl_as_of_ms)} UTC`
       : "";
-  return `Pool TVL $${row.tvl_usd}${asOf} — capital size, not depth (PnL v2 buckets)`;
+  return `Pool TVL ${fmtNotional(row.tvl_usd)}${asOf} — capital size, not depth (PnL v2 buckets)`;
 }
 
 type Props = {

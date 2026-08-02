@@ -177,7 +177,6 @@ def sort_rows(
             "premium_bps": row.premium_bps,
             "underlying_price": row.underlying_price,
             "tvl_usd": row.tvl_usd,
-            "amm_premium": row.amm_premium_bps,
         }
         return mapping.get(key, row.pair_id)
 

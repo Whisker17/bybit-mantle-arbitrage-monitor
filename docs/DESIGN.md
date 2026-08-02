@@ -265,17 +265,22 @@ without moving price. Tradeable depth is the PnL v2 bucket table (§2.6). UI
 tooltips and column titles must keep that distinction.
 
 **Collection:** throttled wall-clock poll (`tvl_poll_interval_s`, default 30s)
-on both markets — independent of per-block slot0 stride. Two `balanceOf` calls
-per pool via Multicall3 when due; journal table `dex_pool_tvl` (schema v7).
+on both markets. Cadence is independent of the ongoing slot0 stride, but a
+due TVL sample **forces one slot0/mid fetch that block** (needed for
+valuation mid) and may write an extra `fluxion_pool_state` row off-stride.
+Two `balanceOf` calls per pool via Multicall3 when due; journal table
+`dex_pool_tvl` (schema v7).
 
 **Low-liquidity dimming:** overview `low_liquidity` uses live TVL vs the
 inventory threshold (`low_liquidity_threshold_usd`, still config) when a sample
-exists; falls back to the inventory-time flag until the first poll.
+exists; falls back to the inventory-time flag until the first poll. Pairs
+without an AMM pool remain low-liquidity regardless of TVL.
 
-**API / Web:** overview rows expose `tvl_usd` + `tvl_as_of_ms`; detail may
-include `tvl_series`. Web DEX column group shows TVL (`$K`/`$M` via notional
-formatter). Explicit empty state until the first sample — no dashed
-placeholder.
+**API / Web:** overview rows expose `tvl_usd` + `tvl_as_of_ms`; detail includes
+`tvl_series` (asdict on the detail model). Web DEX column group shows TVL
+(`$K`/`$M` via the same notional formatter as volume). Until the first sample,
+the cell uses the project-wide empty glyph (`—`) — not a dashed *feature*
+placeholder; tooltip states “waiting for first sample”.
 
 ## 3. Cross-cutting Policies
 
