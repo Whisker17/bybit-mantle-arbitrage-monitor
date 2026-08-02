@@ -114,8 +114,8 @@ def test_classify_close_on_weekend() -> None:
 
 
 def test_classify_source_live_hint_outside_nyse() -> None:
-    """KRX can be live while NYSE is closed — honor Yahoo REGULAR → live."""
-    now = _ms(2026, 8, 2, 0, 30)  # Sunday evening ET / Monday KRX morning-ish
+    """Honor source REGULAR→live even when our NYSE session is closed."""
+    now = _ms(2026, 8, 2, 0, 30)  # Sunday evening ET
     as_of = now - 5_000
     assert (
         classify_price_type(
