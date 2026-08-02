@@ -87,6 +87,14 @@ class UnderlyingConfig(BaseModel):
         return ids
 
     def needs_fx(self, want: set[str] | None = None) -> bool:
+        """True when Hermes should batch ``fx_usd_krw_feed_id``.
+
+        Requires a non-null FX feed id **and** at least one wanted
+        ``prefer_yahoo`` ticker. Conversion still only applies when Yahoo meta
+        currency is KRW (``parse_yahoo_chart``); USD ADRs ignore a present rate.
+        """
+        if not self.fx_usd_krw_feed_id:
+            return False
         names = self.tickers.keys() if want is None else want
         return any(
             self.tickers[t].prefer_yahoo

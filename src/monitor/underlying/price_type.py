@@ -56,8 +56,8 @@ def classify_price_type(
         if age_ms > stale_after_closed_ms:
             return "stale"
         # Source-explicit session only — never invent pre/post from wall-clock
-        # (Pyth freezes as_of at last RTH print). Honor live too: KRX (SKHY)
-        # trades while NYSE is closed.
+        # (Pyth freezes as_of at last RTH print). Honor live too when the source
+        # reports REGULAR outside our NYSE session window.
         if source_session_hint in ("pre", "post"):
             return source_session_hint
         if source_session_hint == "live" and age_ms <= stale_after_open_ms:
