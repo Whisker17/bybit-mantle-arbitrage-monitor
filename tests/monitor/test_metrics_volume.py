@@ -90,6 +90,27 @@ def test_aggregate_truncated_with_zero_swaps_uses_collector_start() -> None:
     assert win.window_start_ms == 9_000
 
 
+def test_not_truncated_when_earliest_swap_predates_first_start() -> None:
+    """Upgrade path: first-start stamped now, but journal already has history."""
+    metrics = load_metrics_config()
+    now = 200_000_000
+    since = now - 86_400_000
+    first_start = now - 60_000  # just upgraded
+    earliest_swap = since - 1_000  # retained from before deploy
+    swaps = [_swap(recv_ts_ms=since + 1_000, amount0="10", log_index=0)]
+    win = aggregate_dex_volume(
+        swaps,
+        quote_is_token0=True,
+        since_ms=since,
+        now_ms=now,
+        metrics=metrics,
+        collector_started_ms=first_start,
+        earliest_recv_ts_ms=earliest_swap,
+    )
+    assert win.truncated is False
+    assert win.window_start_ms == since
+
+
 def test_not_truncated_when_first_start_is_old() -> None:
     """After restart, write-once first-start keeps full 24h label."""
     metrics = load_metrics_config()

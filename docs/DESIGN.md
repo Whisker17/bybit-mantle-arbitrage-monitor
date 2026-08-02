@@ -390,11 +390,12 @@ python -m monitor.retention --growth-only
 | `bybit_trades` | **7 days** | ≥ TUI 24h volume window (`volume_window_ms`). |
 | `fluxion_pool_state` | **7 days** | Edge rebuild + sparklines. |
 | `fluxion_rfq_quotes` | **3 days** | Poll tape; RFQ notional is small vs book. |
-| `fluxion_swaps` | **permanent** | M4 attribution feedstock (low volume). |
+| `fluxion_swaps` | **permanent** | M4 attribution feedstock (low volume). Also DEX 24h volume feedstock (WHI-777). |
 | `fluxion_rfq_fills` | **permanent** | M4 attribution feedstock (low volume). WHI-768 enriches maker/taker/pair/amounts from receipts. |
 | `erc20_transfers` | **permanent** | WHI-768 native xStock Transfer stream (inventory / rebalance feedstock; low volume). |
 | `address_labels` | **permanent** | WHI-768 address → label + evidence (auto + manual override). |
 | `rebalance_events` | **permanent** | WHI-768 CEX-touch deposit/withdraw stream. |
+| `cex_volume_24h` | **7 days** | WHI-777 CEX REST 24h quote volume snapshots (Bybit `turnover24h` / Binance `quoteVolume`, ~60s poll). UI uses latest row per pair. |
 | `collector_gaps` | **30 days** | Ops history. |
 
 **M3 cumulative P50/P95/P99/max + breach stats** live in process memory
@@ -434,8 +435,9 @@ deploy with `python -m monitor.retention --growth-only` (WHI-755 AC).
    (no destructive migration). v2 = `bybit_book_1m`; v3 = `bybit_depth`
    (WHI-755); v4 = RFQ fill enrichment columns + `erc20_transfers` +
    `address_labels` + `rebalance_events` (WHI-768; ALTER ADD COLUMN for
-   pre-v4 `fluxion_rfq_fills`). Meta key is updated for operators; readers
-   do not gate on the integer.
+   pre-v4 `fluxion_rfq_fills`); v5 = `cex_volume_24h` REST volume snapshots
+   (WHI-777). Meta key is updated for operators; readers degrade gracefully
+   when optional tables are absent (e.g. pre-v5 journals).
 
 #### Disk waterline (`retention.disk`)
 

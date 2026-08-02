@@ -362,6 +362,32 @@ class JournalReader:
         ).fetchall()
         return [_row_to_swap(r) for r in rows]
 
+    def dex_volume_totals(
+        self,
+        pair_id: str,
+        *,
+        since_ms: int,
+        quote_is_token0: bool,
+    ) -> tuple[Decimal, int]:
+        """SQL SUM of quote-leg notional + swap count (overview hot path).
+
+        Avoids hydrating every ``FluxionSwapTick`` for the 2s overview poll.
+        Session splits still use ``swaps_since`` on the detail page.
+        """
+        leg = "amount_token0" if quote_is_token0 else "amount_token1"
+        # ABS via CASE — SQLite ABS on text is wrong after CAST sometimes.
+        row = self._conn.execute(
+            f"""
+            SELECT COUNT(*) AS n,
+                   COALESCE(SUM(ABS(CAST({leg} AS REAL))), 0) AS notional
+            FROM fluxion_swaps
+            WHERE pair_id = ? AND recv_ts_ms >= ?
+              AND direction IN ('buy_native', 'sell_native')
+            """,
+            (pair_id, since_ms),
+        ).fetchone()
+        return Decimal(str(row["notional"])), int(row["n"])
+
     def trades_since(self, pair_id: str, *, since_ms: int) -> list[BybitTradeTick]:
         """CEX journal trades for session-split secondary volume (WHI-777)."""
         rows = self._conn.execute(

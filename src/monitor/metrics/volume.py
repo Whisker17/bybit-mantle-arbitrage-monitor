@@ -104,16 +104,17 @@ def aggregate_dex_volume(
     not the first swap on this pair — an illiquid pair with zero swaps on a
     young collector must still show "since HH:MM" rather than a full 24h zero.
     """
-    # Coverage floor: when the process started (meta), else first observed swap.
-    coverage_start = collector_started_ms
-    if coverage_start is None:
-        coverage_start = earliest_recv_ts_ms
-    if coverage_start is None and swaps:
-        coverage_start = min(s.recv_ts_ms for s in swaps)
-
+    # Coverage floor: min(first-start meta, earliest retained swap). Using min
+    # fixes the upgrade path where first-start is stamped "now" on a journal
+    # that already holds months of permanent swaps.
     earliest = earliest_recv_ts_ms
     if earliest is None and swaps:
         earliest = min(s.recv_ts_ms for s in swaps)
+
+    coverage_candidates = [
+        t for t in (collector_started_ms, earliest) if t is not None
+    ]
+    coverage_start = min(coverage_candidates) if coverage_candidates else None
 
     effective_start = since_ms
     truncated = False

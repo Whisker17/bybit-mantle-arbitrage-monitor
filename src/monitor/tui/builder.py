@@ -159,6 +159,30 @@ def _inventory_quote_is_token0(pair: Pair | BStocksPair) -> bool:
     return quote < base
 
 
+def _collector_coverage_ms(reader: JournalReader) -> int | None:
+    """Write-once first start, falling back to this process start."""
+    started_raw = reader.get_meta("collector_first_started_ms") or reader.get_meta(
+        "collector_started_ms"
+    )
+    if started_raw is None:
+        return None
+    try:
+        return int(started_raw)
+    except ValueError:
+        return None
+
+
+def _quote_is_token0_resolved(
+    pair: Pair | BStocksPair,
+    *,
+    reader: JournalReader,
+    amm: FluxionPoolStateTick | None,
+) -> bool:
+    pool_tick = amm if amm is not None else reader.latest_pool_state(pair.id)
+    q0 = quote_is_token0(pair, pool_tick) if pool_tick is not None else None
+    return q0 if q0 is not None else _inventory_quote_is_token0(pair)
+
+
 def _volume_compare_for_pair(
     pair: Pair | BStocksPair,
     *,
@@ -168,38 +192,84 @@ def _volume_compare_for_pair(
     now_ms: int,
     include_journal_cex: bool = False,
     amm: FluxionPoolStateTick | None = None,
+    full_session_split: bool = False,
 ) -> VolumeCompare:
-    """Load journal rows and assemble CEX REST vs DEX swap volume (WHI-777)."""
+    """Assemble CEX REST vs DEX swap volume (WHI-777).
+
+    Overview path (``full_session_split=False``) uses SQL totals for DEX so
+    the 2s poll does not hydrate every swap row. Detail sets
+    ``full_session_split=True`` for open/closed buckets.
+    """
     cex = reader.latest_cex_volume(pair.id)
-    swaps = reader.swaps_since(pair.id, since_ms=since_ms)
     earliest = reader.earliest_swap_recv_ts_ms(pair.id)
-    # Prefer write-once first start so restarts don't fake-truncate retained swaps.
-    started_raw = reader.get_meta("collector_first_started_ms") or reader.get_meta(
-        "collector_started_ms"
-    )
-    collector_started: int | None = None
-    if started_raw is not None:
-        try:
-            collector_started = int(started_raw)
-        except ValueError:
-            collector_started = None
+    collector_started = _collector_coverage_ms(reader)
+    q0 = _quote_is_token0_resolved(pair, reader=reader, amm=amm)
     journal = (
         reader.trades_since(pair.id, since_ms=since_ms) if include_journal_cex else None
     )
-    pool_tick = amm if amm is not None else reader.latest_pool_state(pair.id)
-    q0 = quote_is_token0(pair, pool_tick) if pool_tick is not None else None
-    if q0 is None:
-        q0 = _inventory_quote_is_token0(pair)
-    return build_volume_compare(
-        cex_tick=cex,
-        swaps=swaps,
-        quote_is_token0=q0,
-        since_ms=since_ms,
+
+    if full_session_split:
+        swaps = reader.swaps_since(pair.id, since_ms=since_ms)
+        return build_volume_compare(
+            cex_tick=cex,
+            swaps=swaps,
+            quote_is_token0=q0,
+            since_ms=since_ms,
+            now_ms=now_ms,
+            metrics=metrics,
+            earliest_swap_recv_ts_ms=earliest,
+            collector_started_ms=collector_started,
+            journal_trades=journal,
+        )
+
+    # Lightweight overview: SQL sum/count + empty session buckets.
+    from monitor.metrics.volume import (
+        DexVolumeWindow,
+        SessionVolumeSlice,
+        VolumeCompare,
+        aggregate_cex_journal_volume,
+        volume_ratio,
+    )
+
+    notional, count = reader.dex_volume_totals(
+        pair.id, since_ms=since_ms, quote_is_token0=q0
+    )
+    # Truncation metadata only (no swap list).
+    coverage_candidates = [
+        t for t in (collector_started, earliest) if t is not None
+    ]
+    coverage_start = min(coverage_candidates) if coverage_candidates else None
+    truncated = coverage_start is not None and coverage_start > since_ms
+    window_start = coverage_start if truncated else since_ms
+    zero = SessionVolumeSlice(volume_usd=Decimal(0), trade_count=0)
+    dex = DexVolumeWindow(
+        volume_usd=notional,
+        trade_count=count,
+        open=zero,
+        closed=zero,
+        window_start_ms=window_start,
+        requested_since_ms=since_ms,
         now_ms=now_ms,
-        metrics=metrics,
-        earliest_swap_recv_ts_ms=earliest,
-        collector_started_ms=collector_started,
-        journal_trades=journal,
+        truncated=truncated,
+        earliest_recv_ts_ms=earliest,
+    )
+    jwin = None
+    if journal is not None:
+        jwin = aggregate_cex_journal_volume(
+            journal, since_ms=since_ms, now_ms=now_ms, metrics=metrics
+        )
+    cex_vol = None if cex is None else cex.volume_quote_24h
+    cex_n = None if cex is None else cex.trade_count_24h
+    if cex_n is None and jwin is not None:
+        cex_n = jwin.trade_count
+    return VolumeCompare(
+        cex_volume_24h=cex_vol,
+        cex_trade_count_24h=cex_n,
+        cex_source=None if cex is None else cex.source,
+        cex_poll_ts_ms=None if cex is None else cex.poll_ts_ms,
+        dex=dex,
+        cex_journal=jwin,
+        volume_ratio=volume_ratio(cex_vol, notional),
     )
 
 
@@ -750,6 +820,7 @@ def build_pair_detail(
         now_ms=ts,
         include_journal_cex=True,
         amm=amm,
+        full_session_split=True,
     )
     overview = build_pair_overview_row(
         pair,

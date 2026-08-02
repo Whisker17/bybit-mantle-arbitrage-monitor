@@ -262,6 +262,8 @@ class CollectorDaemon:
             self._finalize_stop("cex_book")
 
     def _finalize_stop(self, book_label: str) -> None:
+        if self._cex_volume_poller is not None:
+            self._cex_volume_poller.request_stop()
         if self._book_writes_paused and self._book_pause_started_ms is not None:
             end = now_ms()
             self.store.insert_gap(

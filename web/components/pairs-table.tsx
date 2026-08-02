@@ -367,11 +367,18 @@ export function PairsTable({
                     className="px-2 py-1.5 text-right tabular-nums text-muted-foreground"
                     title={
                       row.volume_ratio != null
-                        ? `CEX/DEX = ${row.volume_ratio}`
+                        ? row.dex_volume_truncated
+                          ? `CEX/DEX = ${row.volume_ratio} (DEX window truncated — ratio mixes full CEX 24h vs partial DEX)`
+                          : `CEX/DEX = ${row.volume_ratio}`
                         : "Ratio needs positive DEX volume and a CEX poll"
                     }
                   >
                     {fmtVolumeRatio(row.volume_ratio)}
+                    {row.dex_volume_truncated && row.volume_ratio != null ? (
+                      <span className="ml-0.5 text-[10px] text-amber-400/90">
+                        *
+                      </span>
+                    ) : null}
                   </td>
                   <td className="px-2 py-1.5 text-right">
                     <BucketPnlCell row={row} />
