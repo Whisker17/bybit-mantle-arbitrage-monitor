@@ -200,14 +200,18 @@ polls under ~500 ms P95 on the 1 GB VPS:
 
 - Process-local TTL cache (`monitor.api.pnl_cache.PnlSnapshotCache`) keyed by
   `pair_id`, holding the full dual-direction `PnlPairSnapshot`.
-- TTL default **`pnl_cache_ttl_s: 2.0`** in `config/api.yaml` — aligned with
-  `poll_interval_s` so concurrent overview + detail polls share one compute.
+- TTL default **`pnl_cache_ttl_s: 2.5`** in `config/api.yaml` — slightly above
+  `poll_interval_s: 2.0` so a steady poller still hits cache on the next tick,
+  and concurrent overview + detail polls share one compute.
 - Set `pnl_cache_ttl_s: 0` to recompute every request (tests / debugging).
 - Single uvicorn worker is assumed (same as WHI-757); cache is not shared
   across workers.
-- Depth: journal `bybit_depth` VWAP curves are reconstructed into stepwise
-  levels for the pure engine. Missing depth → overview status `no_depth`
-  (detail still shows L1 tables).
+- Depth: journal `bybit_depth` notional VWAP curves are reconstructed into
+  stepwise levels via cumulative base qty \(Q_i/V_i\) so sloped books round-trip
+  correctly. Missing depth → overview status `no_depth` (detail still shows L1
+  tables).
+- P95 target: keep overview+detail under ~500 ms with this cache; re-measure on
+  first VPS deploy (pair count × optimal samples under `state.lock`).
 
 ## 3. Cross-cutting Policies
 

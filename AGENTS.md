@@ -76,7 +76,8 @@ placeholders. Agents must not assume a module exists until its issue lands. -->
     (journal ticks → dual-direction tables); `/api/pairs` row field `pnl_v2`
     (optimal summary); `/api/pairs/{id}` full `pnl_v2.tables` + costs;
     process-local TTL cache (`pnl_cache_ttl_s` in `config/api.yaml`, default
-    2s). Overview Bucket PnL column + detail bucket panel replace placeholders.
+    2.5s). Overview Bucket PnL column + detail bucket panel replace placeholders.
+
 ## Build, test, run
 
 ```bash

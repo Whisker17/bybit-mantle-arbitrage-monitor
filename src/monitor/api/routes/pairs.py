@@ -108,7 +108,23 @@ def list_pairs(request: Request) -> dict[str, Any]:
         body = to_json_dict(model)
         rows_out: list[dict[str, Any]] = []
         for row in body["rows"]:
-            pair = _pair_or_404(state, row["pair_id"])
+            pair_id = row["pair_id"]
+            try:
+                pair = state.pairs.pair_by_id(pair_id)
+            except KeyError:
+                # Builder rows should always be configured pairs; never 404 the list.
+                enriched = dict(row)
+                enriched["pnl_v2"] = {
+                    "status": "no_pool",
+                    "has_depth": False,
+                    "direction": None,
+                    "optimal_notional_usd": None,
+                    "optimal_net_pnl_usd": None,
+                    "optimal_net_pnl_bps": None,
+                    "bybit_depth_source": None,
+                }
+                rows_out.append(enriched)
+                continue
             snap = _pnl_snapshot_for_pair(state, pair=pair, reader=reader)
             enriched = dict(row)
             enriched["pnl_v2"] = overview_pnl_summary(snap).to_dict()

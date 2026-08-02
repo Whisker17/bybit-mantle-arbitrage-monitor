@@ -5,6 +5,7 @@ import assert from "node:assert/strict";
 import { describe, it } from "node:test";
 
 import {
+  isOptimalBucket,
   isThinDepth,
   overviewPnlCell,
   pickBucketTable,
@@ -137,5 +138,32 @@ describe("isThinDepth / pickBucketTable", () => {
     };
     assert.ok(pickBucketTable(snap, "buy_fluxion_sell_bybit"));
     assert.equal(pickBucketTable(snap, "buy_bybit_sell_fluxion"), null);
+  });
+
+  it("highlights nearest fillable bucket to Q*", () => {
+    const table: PnlBucketTable = {
+      pair_id: "AAPLx",
+      direction: "buy_fluxion_sell_bybit",
+      amm_buckets: [
+        bucket("10", "-0.1"),
+        bucket("100", "1.0"),
+        bucket("1000", "0.5"),
+      ],
+      rfq_rows: [],
+      optimal: {
+        pair_id: "AAPLx",
+        direction: "buy_fluxion_sell_bybit",
+        q_star_usd: "87.3",
+        pnl_usd: "1.1",
+        q_min_usd: "10",
+        q_max_usd: "10000",
+        depth_cap_usd: null,
+        amm_cap_usd: "10000",
+        samples_evaluated: 40,
+        result: bucket("87.3", "1.1"),
+      },
+    };
+    assert.equal(isOptimalBucket(bucket("100", "1.0"), table), true);
+    assert.equal(isOptimalBucket(bucket("10", "-0.1"), table), false);
   });
 });

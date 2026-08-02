@@ -24,9 +24,11 @@ recent_gap_window_ms: 300000
 poll_interval_s: 2.0
 
 # PnL v2 (WHI-766): process-local TTL for pair bucket/optimal snapshots.
-# Align with poll_interval_s so concurrent overview + detail polls share one
-# optimal-size search per pair. 0 = recompute every request (tests).
-pnl_cache_ttl_s: 2.0
+# Slightly above poll_interval_s so a steady 2s poller still hits cache on the
+# next tick (same-wall-clock expiry would force a miss every poll). Overview +
+# detail concurrent polls also share one optimal-size search per pair.
+# 0 = recompute every request (tests).
+pnl_cache_ttl_s: 2.5
 
 # CORS origins for local static-export dogfood. Production nginx serves UI +
 # /api same-origin, so empty list is correct on the VPS.

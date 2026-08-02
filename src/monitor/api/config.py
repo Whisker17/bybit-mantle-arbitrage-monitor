@@ -27,8 +27,8 @@ class ApiConfig(BaseModel):
     recent_gap_window_ms: int = Field(ge=1_000)
     poll_interval_s: float = Field(gt=0, le=60)
     # PnL v2 snapshot TTL (seconds). 0 disables cache (recompute every request).
-    # Default matches poll_interval_s so 2s client polls share one optimal search.
-    pnl_cache_ttl_s: float = Field(default=2.0, ge=0, le=60)
+    # Default slightly above poll_interval_s so steady pollers still hit cache.
+    pnl_cache_ttl_s: float = Field(default=2.5, ge=0, le=60)
     cors_origins: list[str] = Field(default_factory=list)
 
     @field_validator("cors_origins", mode="before")

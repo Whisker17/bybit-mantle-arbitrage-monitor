@@ -64,25 +64,18 @@ class PnlOptimalSummary:
     bybit_depth_source: DepthSource | None = None
 
     def to_dict(self) -> dict[str, Any]:
+        # Match serialize.to_jsonable / PnlResult.to_dict: fixed-point strings,
+        # never scientific notation (format(..., "f")).
+        def _dec(v: Decimal | None) -> str | None:
+            return None if v is None else format(v, "f")
+
         return {
             "status": self.status,
             "has_depth": self.has_depth,
             "direction": self.direction,
-            "optimal_notional_usd": (
-                None
-                if self.optimal_notional_usd is None
-                else format(self.optimal_notional_usd, "f")
-            ),
-            "optimal_net_pnl_usd": (
-                None
-                if self.optimal_net_pnl_usd is None
-                else format(self.optimal_net_pnl_usd, "f")
-            ),
-            "optimal_net_pnl_bps": (
-                None
-                if self.optimal_net_pnl_bps is None
-                else format(self.optimal_net_pnl_bps, "f")
-            ),
+            "optimal_notional_usd": _dec(self.optimal_notional_usd),
+            "optimal_net_pnl_usd": _dec(self.optimal_net_pnl_usd),
+            "optimal_net_pnl_bps": _dec(self.optimal_net_pnl_bps),
             "bybit_depth_source": self.bybit_depth_source,
         }
 
@@ -112,14 +105,18 @@ def levels_from_depth_curve(
 ) -> list[tuple[Decimal, Decimal]]:
     """Rebuild stepwise (price, size) levels from a precomputed notional VWAP curve.
 
-    For successive fillable buckets ``Q_i`` with VWAP ``V_i``:
+    Journal buckets ``Q_i`` are cumulative USD notional; ``V_i`` is the notional
+    VWAP after walking that notional (``spent/qty`` with ``spent == Q_i``). So
+    cumulative base qty is ``Q_i / V_i``. Marginal reconstruction:
 
-        notional_i = Q_i * V_i  (total)
-        marginal notional dN = Q_i*V_i − Q_{i-1}*V_{i-1}
-        marginal price P_i = dN / dQ  where dQ = Q_i − Q_{i-1}
-        size_i = dQ / P_i
+        cum_qty_i = Q_i / V_i
+        d_qty = cum_qty_i − cum_qty_{i-1}
+        d_notional = Q_i − Q_{i-1}
+        P_i = d_notional / d_qty
+        size_i = d_qty
 
-    Stops at the first unfillable rung (None VWAP). Empty when no fillable rung.
+    Round-trips through ``book_vwap_for_notional`` restore ``V_i`` (including
+    sloped curves). Stops at the first unfillable rung (None VWAP).
     """
     curve = depth.bid_vwap_dm if side == "bid" else depth.ask_vwap_dm
     buckets = depth.buckets_usd
@@ -128,24 +125,21 @@ def levels_from_depth_curve(
 
     levels: list[tuple[Decimal, Decimal]] = []
     prev_q = Decimal(0)
-    prev_notional = Decimal(0)
+    prev_qty = Decimal(0)
     for q, vwap in zip(buckets, curve, strict=True):
         if vwap is None or vwap <= 0 or q <= prev_q:
             break
-        total_notional = q * vwap
-        d_q = q - prev_q
-        d_n = total_notional - prev_notional
-        if d_q <= 0 or d_n <= 0:
+        cum_qty = q / vwap
+        d_qty = cum_qty - prev_qty
+        d_notional = q - prev_q
+        if d_qty <= 0 or d_notional <= 0:
             break
-        px = d_n / d_q
+        px = d_notional / d_qty
         if px <= 0:
             break
-        size = d_q / px
-        if size <= 0:
-            break
-        levels.append((px, size))
+        levels.append((px, d_qty))
         prev_q = q
-        prev_notional = total_notional
+        prev_qty = cum_qty
     return levels
 
 
@@ -308,12 +302,9 @@ def build_pnl_pair_snapshot(
 
     base_status: PnlStatus = "ok" if has_depth else "no_depth"
     if not candidates:
-        best = _empty_summary(status="no_fillable", has_depth=has_depth)
-        # Prefer no_depth over no_fillable on the overview when depth missing
-        # so the operator sees the actionable gap first.
+        # Prefer no_depth over no_fillable so overview shows the actionable gap.
         status: PnlStatus = "no_depth" if not has_depth else "no_fillable"
-        if not has_depth:
-            best = _empty_summary(status="no_depth", has_depth=False)
+        best = _empty_summary(status=status, has_depth=has_depth)
         return PnlPairSnapshot(
             status=status, has_depth=has_depth, best=best, tables=tables
         )
@@ -326,8 +317,12 @@ def build_pnl_pair_snapshot(
 
 
 def overview_pnl_summary(snapshot: PnlPairSnapshot) -> PnlOptimalSummary:
-    """Overview column: hide optimal numbers when status is no_depth."""
-    if snapshot.best.status == "no_depth" or snapshot.status == "no_depth":
+    """Overview column: force empty numbers when status is ``no_depth``.
+
+    Detail still receives full L1 tables via ``snapshot.tables``; the overview
+    cell must show the actionable "no depth" label, not an L1-only optimal.
+    """
+    if snapshot.status == "no_depth" or snapshot.best.status == "no_depth":
         return _empty_summary(status="no_depth", has_depth=False)
     return snapshot.best
 

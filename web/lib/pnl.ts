@@ -15,7 +15,13 @@ import type {
 import { fmtDirection, fmtNotional, fmtUsd, parseNum } from "./format";
 
 export type OverviewPnlCell =
-  | { kind: "ok"; pnlUsd: string; notionalUsd: string; direction: Direction; title: string }
+  | {
+      kind: "ok";
+      pnlUsd: string;
+      notionalUsd: string;
+      direction: Direction | null;
+      title: string;
+    }
   | { kind: "status"; label: string; title: string }
   | { kind: "empty"; label: string; title: string };
 
@@ -48,7 +54,7 @@ export function overviewPnlCell(
   if (pnl.status !== "ok" || pnl.optimal_net_pnl_usd == null) {
     return {
       kind: "status",
-      label: STATUS_LABEL[pnl.status] ?? pnl.status,
+      label: STATUS_LABEL[pnl.status],
       title: `PnL v2 status: ${pnl.status}`,
     };
   }
@@ -65,7 +71,7 @@ export function overviewPnlCell(
     kind: "ok",
     pnlUsd: pnl.optimal_net_pnl_usd,
     notionalUsd: notional,
-    direction: dir ?? "buy_fluxion_sell_bybit",
+    direction: dir,
     title,
   };
 }
@@ -96,8 +102,20 @@ export function isOptimalBucket(
   const q = parseNum(table.optimal.q_star_usd);
   const size = parseNum(row.size_usd);
   if (q == null || size == null) return false;
-  // Highlight nearest fixed bucket to Q* (within 1% relative).
-  return Math.abs(size - q) / Math.max(q, 1) < 0.01 || size === q;
+  // Highlight the fixed bucket closest to Q* (log-grid optima land between rungs).
+  let nearest: number | null = null;
+  let nearestDist = Infinity;
+  for (const b of table.amm_buckets) {
+    if (!b.fillable) continue;
+    const s = parseNum(b.size_usd);
+    if (s == null) continue;
+    const d = Math.abs(s - q);
+    if (d < nearestDist) {
+      nearestDist = d;
+      nearest = s;
+    }
+  }
+  return nearest != null && size === nearest;
 }
 
 const USD_COST_ROWS: Array<{ key: keyof PnlCostBreakdownUsd; label: string }> = [

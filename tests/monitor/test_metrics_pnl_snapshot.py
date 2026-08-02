@@ -162,6 +162,8 @@ def _load_aapl_pair() -> Pair:
 
 
 def test_levels_from_flat_vwap_curve_matches_notional() -> None:
+    from monitor.bybit.depth_math import book_vwap_for_notional
+
     depth = _depth()
     bids = levels_from_depth_curve(depth, side="bid")
     assert len(bids) == 6
@@ -170,6 +172,31 @@ def test_levels_from_flat_vwap_curve_matches_notional() -> None:
     assert abs(total - Decimal(10000)) < Decimal("1e-6")
     for p, _s in bids:
         assert abs(p - Decimal(100)) < Decimal("1e-9")
+    for q, v in zip(depth.buckets_usd, depth.bid_vwap_dm, strict=True):
+        assert v is not None
+        got = book_vwap_for_notional(bids, q)
+        assert got is not None
+        assert abs(got - v) < Decimal("1e-9")
+
+
+def test_levels_sloped_curve_round_trips_notional_vwap() -> None:
+    """Sloped VWAPs must reconstruct without understating slip (WHI-766 review)."""
+    from monitor.bybit.depth_math import book_vwap_for_notional
+
+    buckets = (Decimal(100), Decimal(200), Decimal(500))
+    # Rising ask VWAP: 10 → 11 → 12
+    ask_vwap = (Decimal(10), Decimal(11), Decimal(12))
+    depth = _depth(
+        buckets=buckets,
+        bid_vwap=ask_vwap,  # unused for this side
+        ask_vwap=ask_vwap,
+    )
+    asks = levels_from_depth_curve(depth, side="ask")
+    assert len(asks) == 3
+    for q, v in zip(buckets, ask_vwap, strict=True):
+        got = book_vwap_for_notional(asks, q)
+        assert got is not None, f"unfillable at Q={q}"
+        assert abs(got - v) < Decimal("1e-9"), f"Q={q}: got {got} want {v}"
 
 
 def test_levels_stop_at_unfillable_rung() -> None:
