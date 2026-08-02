@@ -106,6 +106,24 @@ def test_classify_close_on_weekend() -> None:
     )
 
 
+def test_classify_source_live_hint_outside_nyse() -> None:
+    """KRX can be live while NYSE is closed — honor Yahoo REGULAR → live."""
+    now = _ms(2026, 8, 2, 0, 30)  # Sunday evening ET / Monday KRX morning-ish
+    as_of = now - 5_000
+    assert (
+        classify_price_type(
+            as_of_ms=as_of,
+            now_ms=now,
+            session=_session(),
+            stale_after_open_ms=120_000,
+            stale_after_closed_ms=432_000_000,
+            stale_after_abs_ms=604_800_000,
+            source_session_hint="live",
+        )
+        == "live"
+    )
+
+
 def test_classify_close_not_post_on_weekday_after_rth() -> None:
     """Pyth freezes publish_time at RTH close — wall-clock post hours ≠ post print."""
     # Friday 17:30 ET (after 16:00 close); as_of = 16:00 close.

@@ -27,7 +27,8 @@ yahoo_chart_base_url: "https://query1.finance.yahoo.com"
 # Convert Yahoo KRW → USD using Pyth FX.USD/KRW when set.
 fx_usd_krw_feed_id: "e539120487c29b4defdf9a53d337316ea022a2688978a468f9efd847201be7e3"
 
-# NYSE RTH hours — must match config/metrics.yaml session (America/New_York).
+# NYSE RTH hours — keep in sync with config/metrics.yaml session (file-level
+# independence so underlying loads without metrics; DEFERRED_ISSUES WHI-778).
 session:
   timezone: America/New_York
   open: "09:30"

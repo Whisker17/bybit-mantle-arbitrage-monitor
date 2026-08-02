@@ -56,6 +56,8 @@ from monitor.symbols.token_map import (
     native_token_decimals,
     native_token_to_pair,
 )
+from monitor.underlying.config import UnderlyingConfigError, load_underlying_config
+from monitor.underlying.poller import UnderlyingPoller
 from monitor.underlying.tickers import underlying_tickers_for_pairs
 
 logger = logging.getLogger(__name__)
@@ -549,12 +551,6 @@ class CollectorDaemon:
         if not self.cfg.underlying_enabled:
             logger.info("underlying poller disabled (collector.yaml underlying.enabled)")
             return
-        from monitor.underlying.config import (
-            UnderlyingConfigError,
-            load_underlying_config,
-        )
-        from monitor.underlying.poller import UnderlyingPoller
-
         try:
             u_cfg = load_underlying_config()
         except UnderlyingConfigError as exc:

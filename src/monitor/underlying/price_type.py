@@ -55,9 +55,13 @@ def classify_price_type(
     if now_kind is SessionKind.CLOSED:
         if age_ms > stale_after_closed_ms:
             return "stale"
-        # Only trust pre/post when the source says so (e.g. Yahoo marketState).
+        # Source-explicit session only — never invent pre/post from wall-clock
+        # (Pyth freezes as_of at last RTH print). Honor live too: KRX (SKHY)
+        # trades while NYSE is closed.
         if source_session_hint in ("pre", "post"):
             return source_session_hint
+        if source_session_hint == "live" and age_ms <= stale_after_open_ms:
+            return "live"
         return "close"
 
     # RTH open now.
@@ -65,6 +69,8 @@ def classify_price_type(
         return "stale"
     if source_session_hint in ("pre", "post"):
         # Source claims extended hours while we think RTH — keep live if fresh.
+        return "live"
+    if source_session_hint == "live":
         return "live"
     # as_of should itself fall in open for a true live print; if as_of is from
     # prior close but age is somehow still small (clock jump), mark close.

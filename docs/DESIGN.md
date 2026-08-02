@@ -283,6 +283,7 @@ Planned `src/monitor/` packages (land with their issues; empty package until the
 | `monitor/fluxion` | AMM state/quotes + RFQ feed; also BSC Pancake poll (parameterized) | M2 (landed WHI-731); M7-3 WHI-772 |
 | `monitor/storage` | SQLite journal for collector ticks + retention | M2 (landed WHI-731); retention WHI-751 |
 | `monitor/collector` | daemon orchestrating feeds → SQLite (+ retention loop); multi-market | M2 (landed WHI-731); M7-3 WHI-772 |
+| `monitor/underlying` | Pyth Hermes (+ optional Yahoo) equity reference → `underlying_prices` | WHI-778 (landed) |
 | `monitor/retention` | thin CLI over `storage.retention` (`python -m monitor.retention`) | WHI-751 |
 | `monitor/metrics` | edge, wear, session stats | M3 (landed WHI-732) |
 | `monitor/attribution` | mechanism + behavior labels (+ MM/rebalancer, WHI-768) | M4 (landed WHI-733); MM productization WHI-768 |

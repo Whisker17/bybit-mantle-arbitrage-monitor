@@ -6,23 +6,13 @@ Unofficial endpoint; see docs/references/underlying-price-source.md license note
 from __future__ import annotations
 
 from decimal import Decimal, InvalidOperation
-from typing import Any, Literal
+from typing import Any
 
 import httpx
 
 from monitor.quotes import UnderlyingPriceTick, now_ms
 from monitor.underlying.config import UnderlyingConfig
 from monitor.underlying.price_type import PriceType, classify_price_type
-
-YahooMarketState = Literal[
-    "PRE",
-    "REGULAR",
-    "POST",
-    "POSTPOST",
-    "PREPRE",
-    "CLOSED",
-    "UNKNOWN",
-]
 
 
 def market_state_hint(state: str | None) -> PriceType | None:
