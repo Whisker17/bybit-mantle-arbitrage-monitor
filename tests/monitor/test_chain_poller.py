@@ -90,3 +90,65 @@ def test_chain_poller_records_gap_on_long_lag() -> None:
     # Processes only the recent window (max_catchup blocks), not full history.
     assert n == 3
     assert poller.last_block == 20
+
+
+def test_chain_poller_bsc_gap_source_and_empty_lop() -> None:
+    """WHI-772: Pancake path uses gap_source=bsc_blocks and skips LOP when empty."""
+    class CountingLogsRpc(FakeRpc):
+        def get_logs(self, *args: Any, **kwargs: Any) -> list[dict[str, Any]]:
+            self.calls.append("get_logs")
+            return []
+
+    gaps: list[CollectorGap] = []
+    rpc = CountingLogsRpc(head=10)
+    poller = ChainPoller(
+        rpc,  # type: ignore[arg-type]
+        pools=[],
+        lop_address="",  # AMM-only
+        head_lag_blocks=0,
+        max_catchup_blocks=2,
+        gap_source="bsc_blocks",
+        pool_state_every_n_blocks=2,
+        on_gap=gaps.append,
+    )
+    poller.poll_once()  # last = 10
+    # No LOP get_logs when lop_address is empty (pools empty → no swap logs either).
+    assert "get_logs" not in rpc.calls
+    rpc.head = 20
+    poller.poll_once()
+    assert any(g.source == "bsc_blocks" for g in gaps)
+
+
+def test_chain_poller_pool_state_stride_still_bootstraps() -> None:
+    """pool_state_every_n_blocks does not skip token bootstrap on first blocks."""
+    from monitor.fluxion.pools import PoolMeta
+
+    class PoolRpc(FakeRpc):
+        def multicall(
+            self, calls: list[Any], block: int | str = "latest", **_: Any
+        ) -> list[Any]:
+            self.calls.append(f"multicall:{len(calls)}")
+            # slot0, liquidity, token0, token1 — no convert (has_erc4626=False).
+            # Return failing so decode skips; we only check the call happened.
+            return [(False, b"")] * len(calls)
+
+    rpc = PoolRpc(head=5)
+    meta = PoolMeta(
+        pair_id="TSLAB",
+        pool="0x" + "aa" * 20,
+        wrapper_token="0x" + "bb" * 20,
+        native_token="0x" + "bb" * 20,
+        quote_token="0x" + "cc" * 20,
+        quote_decimals=18,
+        has_erc4626_wrapper=False,
+    )
+    poller = ChainPoller(
+        rpc,  # type: ignore[arg-type]
+        pools=[meta],
+        lop_address="",
+        head_lag_blocks=0,
+        pool_state_every_n_blocks=2,
+        gap_source="bsc_blocks",
+    )
+    poller.poll_once()  # processes block 5 — bootstrap wants pool state
+    assert any(c.startswith("multicall:") for c in rpc.calls)

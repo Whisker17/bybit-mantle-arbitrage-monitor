@@ -23,6 +23,7 @@ from monitor.markets.ids import (
 from monitor.markets.load import MarketConfigError, load_market_file, market_file_path
 from monitor.markets.models import CexSide, DexSide, MarketCosts, MarketFile
 from monitor.metrics.config import MetricsConfig, load_metrics_config
+from monitor.symbols.bstocks_models import BStocksPairsConfig
 from monitor.symbols.models import PairsConfig
 
 # Re-export for tests that import apply_market_costs from monitor.markets
@@ -43,13 +44,14 @@ class MarketContext:
     """Everything assembly code needs for one market process / API surface.
 
     * ``pairs`` — Bybit⇄Fluxion ``PairsConfig`` when this market uses that
-      inventory shape; ``None`` for markets with a different pair schema
-      (binance-pancake until M7-3 wires a collector/domain path).
+      inventory shape; ``None`` for binance-pancake.
+    * ``bstocks`` — Binance⇄Pancake ``BStocksPairsConfig`` for binance-pancake;
+      ``None`` for bybit-fluxion.
     * ``metrics`` — base metrics.yaml with **venue costs overridden** from the
       market file (fee / gas / quote basis).
     * ``attribution`` — attribution thresholds (currently shared YAML; loaded
       here so consumers go through market assembly, not ad-hoc loaders).
-    * ``collector`` — market-scoped collector section (bybit-fluxion only today).
+    * ``collector`` — market-scoped collector section (both markets after M7-3).
     * ``sqlite_path`` — resolved absolute path to this market's journal.
     """
 
@@ -60,6 +62,7 @@ class MarketContext:
     costs: MarketCosts
     market_file: MarketFile
     pairs: PairsConfig | None
+    bstocks: BStocksPairsConfig | None
     metrics: MetricsConfig
     attribution: AttributionConfig
     collector: CollectorConfig | None
@@ -154,6 +157,19 @@ def _pairs_from_market_file(mf: MarketFile) -> PairsConfig | None:
         ) from exc
 
 
+def _bstocks_from_market_file(mf: MarketFile) -> BStocksPairsConfig | None:
+    """Parse inventory as BStocksPairsConfig for Binance/Pancake markets."""
+    if mf.cex.venue != "binance":
+        return None
+    inv = dict(mf.inventory)
+    try:
+        return BStocksPairsConfig.model_validate(inv)
+    except ValidationError as exc:
+        raise MarketConfigError(
+            f"market {mf.id} inventory is not a valid BStocksPairsConfig: {exc}"
+        ) from exc
+
+
 def load_market_context(
     market_id: str = DEFAULT_MARKET_ID,
     *,
@@ -177,6 +193,7 @@ def load_market_context(
     )
 
     pairs = _pairs_from_market_file(mf)
+    bstocks = _bstocks_from_market_file(mf)
 
     base_metrics = load_metrics_config(metrics_path)
     metrics = apply_market_costs(base_metrics, mf.costs)
@@ -193,17 +210,12 @@ def load_market_context(
                 else collector.resolved_sqlite_path(repo_root=root)
             )
         except CollectorConfigError as exc:
-            if mid == DEFAULT_MARKET_ID:
-                raise MarketConfigError(
-                    f"collector config for market {mid} failed: {exc}"
-                ) from exc
-            # Non-default markets may lack a full Bybit-shaped collector section
-            # until M7-3. Scaffold keys (binance/bsc) are not CollectorConfig yet.
-            collector = None
-            rel = market_sqlite_relpath(mid)
-            configured_db = (
-                sqlite_path if sqlite_path is not None else (root / rel)
-            )
+            # Fail-fast for every known market (both bybit-fluxion and
+            # binance-pancake ship typed collector sections after M7-3).
+            # API/Web that only need journal paths should pass load_collector=False.
+            raise MarketConfigError(
+                f"collector config for market {mid} failed: {exc}"
+            ) from exc
     else:
         rel = market_sqlite_relpath(mid)
         configured_db = sqlite_path if sqlite_path is not None else (root / rel)
@@ -226,6 +238,7 @@ def load_market_context(
         costs=mf.costs,
         market_file=mf,
         pairs=pairs,
+        bstocks=bstocks,
         metrics=metrics,
         attribution=attribution,
         collector=collector,

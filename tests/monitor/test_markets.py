@@ -92,6 +92,9 @@ def test_collector_v2_market_section() -> None:
     cfg = load_collector_config(market_id="bybit-fluxion")
     assert cfg.version == 2
     assert cfg.sqlite_path == "data/monitor-bybit-fluxion.db"
+    assert cfg.bybit is not None
+    assert cfg.mantle is not None
+    assert cfg.rfq is not None
     assert cfg.bybit.book_topic_prefix == "orderbook.50"
     assert cfg.mantle.head_lag_blocks == 1
     assert cfg.rfq.poll_both_sides is True
@@ -223,7 +226,9 @@ def test_load_market_context_legacy_with_config_path(tmp_path: Path) -> None:
 def test_load_market_context_binance_has_inventory_no_pairs_shape() -> None:
     ctx = load_market_context("binance-pancake", load_collector=False)
     assert ctx.market_id == "binance-pancake"
-    assert ctx.pairs is None  # different inventory shape until M7-3
+    assert ctx.pairs is None  # Bybit-shaped inventory not used
+    assert ctx.bstocks is not None  # M7-3 bStocks inventory
+    assert len(ctx.bstocks.pairs) == 10
     assert ctx.cex.multiplier_semantics is MultiplierSemantics.MULTIPLY
     assert ctx.metrics.gas_usd_per_swap == Decimal("0.05")
     assert "binance-pancake" in str(ctx.sqlite_path)
