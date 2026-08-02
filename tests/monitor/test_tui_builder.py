@@ -354,3 +354,49 @@ def test_build_spread_series_includes_rfq_and_bybit_mid() -> None:
     )
     assert bare[0].rfq_spread_bps is None
     assert bare[0].amm_spread_bps is not None
+
+
+def test_build_spread_series_premiums_vs_underlying() -> None:
+    """WHI-783: chart series carries CEX/AMM/RFQ premium vs underlying."""
+    from monitor.tui.builder import build_spread_series
+
+    metrics = load_metrics_config()
+    ts = _open_ts_ms()
+    books = [_book(ts=ts)]
+    pools = [_amm(ts=ts)]
+    rfq = [
+        _rfq("AAPLx", Decimal("99.8"), "buy_native", ts=ts),
+        _rfq("AAPLx", Decimal("99.4"), "sell_native", ts=ts),
+    ]
+    und = [
+        UnderlyingPriceTick(
+            ticker="AAPL",
+            price=Decimal("100"),
+            currency="USD",
+            price_type="live",
+            as_of_ms=ts - 1_000,
+            recv_ts_ms=ts,
+            source="pyth_hermes",
+        )
+    ]
+    series = build_spread_series(
+        books=books,
+        pools=pools,
+        metrics=metrics,
+        max_points=100,
+        rfq_quotes=rfq,
+        underlying=und,
+    )
+    assert len(series) == 1
+    p = series[0]
+    # CEX mid 100.10 → +10 bps; AMM 99.5 → -50 bps; RFQ mean 99.6 → -40 bps
+    assert p.cex_premium_bps == Decimal("10")
+    assert p.amm_premium_bps == Decimal("-50")
+    assert p.rfq_premium_bps == Decimal("-40")
+    # No underlying → premiums stay None
+    bare = build_spread_series(
+        books=books, pools=pools, metrics=metrics, max_points=100, rfq_quotes=rfq
+    )
+    assert bare[0].cex_premium_bps is None
+    assert bare[0].amm_premium_bps is None
+    assert bare[0].rfq_premium_bps is None

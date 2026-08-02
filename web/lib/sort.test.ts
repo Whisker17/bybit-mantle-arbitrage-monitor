@@ -41,6 +41,34 @@ describe("sortRows", () => {
       ["C", "A", "B"],
     );
   });
+
+  it("sorts CEX vs Und via premium_bps key with cex alias (WHI-783)", () => {
+    const rows = [
+      row({ pair_id: "A", premium_bps: "10" }),
+      row({ pair_id: "B", cex_premium_bps: "30" }),
+      row({ pair_id: "C", cex_premium_bps: "5", premium_bps: "99" }),
+      row({ pair_id: "D" }),
+    ];
+    // cex field wins over legacy premium_bps; nulls last.
+    const sorted = sortRows(rows, "premium_bps", true);
+    assert.deepEqual(
+      sorted.map((r) => r.pair_id),
+      ["B", "A", "C", "D"],
+    );
+  });
+
+  it("sorts DEX vs Und via amm_premium key", () => {
+    const rows = [
+      row({ pair_id: "A", amm_premium_bps: "-10" }),
+      row({ pair_id: "B", amm_premium_bps: "20" }),
+      row({ pair_id: "C" }),
+    ];
+    const sorted = sortRows(rows, "amm_premium", true);
+    assert.deepEqual(
+      sorted.map((r) => r.pair_id),
+      ["B", "A", "C"],
+    );
+  });
 });
 
 describe("filterRows", () => {

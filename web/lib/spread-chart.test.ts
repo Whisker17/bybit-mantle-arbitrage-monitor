@@ -23,9 +23,10 @@ describe("prepareSpreadSeries", () => {
     const s = prepareSpreadSeries([]);
     assert.equal(s.xs.length, 0);
     assert.equal(s.hasAmm, false);
+    assert.equal(s.hasPremium, false);
   });
 
-  it("parses decimals and flags presence", () => {
+  it("parses decimals and flags presence by basis (WHI-783)", () => {
     const points: SpreadPoint[] = [
       {
         ts_ms: 1_700_000_000_000,
@@ -33,6 +34,10 @@ describe("prepareSpreadSeries", () => {
         rfq_spread_bps: "3.0",
         bybit_mid: "100.1",
         cex_premium_bps: "50.0",
+        amm_premium_bps: "-20.0",
+        // rfq_premium_bps may be on the API point but is not a chart series
+        // (overview hover only — WHI-783 req 3/5).
+        rfq_premium_bps: "-15.0",
         session: "open",
       },
       {
@@ -41,6 +46,7 @@ describe("prepareSpreadSeries", () => {
         rfq_spread_bps: null,
         bybit_mid: "100.2",
         cex_premium_bps: null,
+        amm_premium_bps: null,
         session: "closed",
       },
     ];
@@ -51,9 +57,12 @@ describe("prepareSpreadSeries", () => {
     assert.equal(s.rfq[0], 3.0);
     assert.equal(s.bybitMid[1], 100.2);
     assert.equal(s.cexPremium[0], 50.0);
+    assert.equal(s.ammPremium[0], -20.0);
     assert.equal(s.hasAmm, true);
     assert.equal(s.hasRfq, true);
     assert.equal(s.hasMid, true);
+    assert.equal(s.hasCexPremium, true);
+    assert.equal(s.hasAmmPremium, true);
     assert.equal(s.hasPremium, true);
     assert.deepEqual(s.openBands, [[0, 0]]);
   });

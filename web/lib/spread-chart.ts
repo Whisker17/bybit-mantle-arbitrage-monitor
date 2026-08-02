@@ -1,6 +1,11 @@
 /**
  * Pure prep for the detail spread chart (uPlot series).
  * Keep free of React so unit tests can pin the shape without a DOM.
+ *
+ * Series are labeled by basis (WHI-783):
+ * - amm / rfq → DEX vs CEX
+ * - cexPremium / ammPremium → CEX / DEX vs underlying
+ * RFQ vs Und stays on the overview hover (req: hover only; not a chart series).
  */
 
 import { parseNum } from "./format";
@@ -9,18 +14,24 @@ import type { SessionKind, SpreadPoint } from "./types";
 export type SpreadChartSeries = {
   /** Unix seconds (uPlot x). */
   xs: number[];
-  /** AMM spread bps; null gaps become null for uPlot. */
+  /** AMM mid vs CEX mid (bps). */
   amm: (number | null)[];
+  /** RFQ mid vs CEX mid (bps). */
   rfq: (number | null)[];
   bybitMid: (number | null)[];
-  /** CEX mid vs underlying premium bps (WHI-779). */
+  /** CEX mid vs underlying (bps). */
   cexPremium: (number | null)[];
+  /** AMM mid vs underlying (bps). */
+  ammPremium: (number | null)[];
   sessions: SessionKind[];
   /** Inclusive [i0, i1] index ranges painted as open-session background. */
   openBands: Array<[number, number]>;
   hasAmm: boolean;
   hasRfq: boolean;
   hasMid: boolean;
+  hasCexPremium: boolean;
+  hasAmmPremium: boolean;
+  /** Any plotted vs-underlying series present (toggle group). */
   hasPremium: boolean;
 };
 
@@ -35,11 +46,14 @@ export function prepareSpreadSeries(
       rfq: [],
       bybitMid: [],
       cexPremium: [],
+      ammPremium: [],
       sessions: [],
       openBands: [],
       hasAmm: false,
       hasRfq: false,
       hasMid: false,
+      hasCexPremium: false,
+      hasAmmPremium: false,
       hasPremium: false,
     };
   }
@@ -51,27 +65,32 @@ export function prepareSpreadSeries(
   const rfq: (number | null)[] = [];
   const bybitMid: (number | null)[] = [];
   const cexPremium: (number | null)[] = [];
+  const ammPremium: (number | null)[] = [];
   const sessions: SessionKind[] = [];
 
   let hasAmm = false;
   let hasRfq = false;
   let hasMid = false;
-  let hasPremium = false;
+  let hasCexPremium = false;
+  let hasAmmPremium = false;
 
   for (const p of sorted) {
     xs.push(p.ts_ms / 1000);
     const a = parseNum(p.amm_spread_bps);
     const r = parseNum(p.rfq_spread_bps ?? null);
     const m = parseNum(p.bybit_mid ?? null);
-    const prem = parseNum(p.cex_premium_bps ?? null);
+    const cexP = parseNum(p.cex_premium_bps ?? null);
+    const ammP = parseNum(p.amm_premium_bps ?? null);
     if (a !== null) hasAmm = true;
     if (r !== null) hasRfq = true;
     if (m !== null) hasMid = true;
-    if (prem !== null) hasPremium = true;
+    if (cexP !== null) hasCexPremium = true;
+    if (ammP !== null) hasAmmPremium = true;
     amm.push(a);
     rfq.push(r);
     bybitMid.push(m);
-    cexPremium.push(prem);
+    cexPremium.push(cexP);
+    ammPremium.push(ammP);
     sessions.push(p.session);
   }
 
@@ -81,12 +100,15 @@ export function prepareSpreadSeries(
     rfq,
     bybitMid,
     cexPremium,
+    ammPremium,
     sessions,
     openBands: sessionOpenBands(sessions),
     hasAmm,
     hasRfq,
     hasMid,
-    hasPremium,
+    hasCexPremium,
+    hasAmmPremium,
+    hasPremium: hasCexPremium || hasAmmPremium,
   };
 }
 

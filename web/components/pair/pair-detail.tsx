@@ -19,6 +19,7 @@ import { EmptyPanel } from "@/components/ui/empty-panel";
 import { fetchJson } from "@/lib/api";
 import {
   bpsTone,
+  cexPremiumBps,
   fmtDirection,
   fmtDirectionTitle,
   fmtNotional,
@@ -206,17 +207,35 @@ export function PairDetail({ marketId, pairId }: Props) {
             />
           )}
           <Field
-            label="AMM bps"
+            label="vs CEX"
             value={fmtSignedBps(o.amm_spread_bps)}
             tone={bpsTone(o.amm_spread_bps)}
+            title="AMM mid vs CEX mid (bps)"
           />
           {hasRfq && (
             <Field
-              label="RFQ bps"
+              label="RFQ vs CEX"
               value={fmtSignedBps(o.rfq_spread_bps)}
               tone={bpsTone(o.rfq_spread_bps)}
+              title="RFQ mid vs CEX mid (bps)"
             />
           )}
+          <VsUndField
+            label="CEX vs Und"
+            privateUnderlying={o.underlying_empty === "private"}
+            value={cexPremiumBps(o)}
+            title="CEX equity-eq mid vs underlying (bps)"
+          />
+          <VsUndField
+            label="DEX vs Und"
+            privateUnderlying={o.underlying_empty === "private"}
+            value={o.amm_premium_bps ?? null}
+            title={
+              hasRfq && o.rfq_premium_bps != null
+                ? `AMM vs Und ${fmtSignedBps(o.amm_premium_bps)} · RFQ vs Und ${fmtSignedBps(o.rfq_premium_bps)}`
+                : "AMM mid vs underlying (bps)"
+            }
+          />
           <Field
             label="Net edge"
             value={fmtSignedBps(o.net_edge_bps)}
@@ -253,11 +272,7 @@ export function PairDetail({ marketId, pairId }: Props) {
                     }`
                   : "—"
             }
-          />
-          <Field
-            label="CEX premium"
-            value={fmtSignedBps(o.premium_bps)}
-            tone={bpsTone(o.premium_bps ?? null)}
+            title="Reference equity price only — venue premiums live above"
           />
         </dl>
       </section>
@@ -270,8 +285,8 @@ export function PairDetail({ marketId, pairId }: Props) {
       </Panel>
 
       <Panel
-        title="Underlying premium"
-        subtitle="tokenized mid vs equity · CEX / AMM / RFQ"
+        title="Premium vs underlying"
+        subtitle="CEX / AMM / RFQ tokenized mid vs equity reference"
       >
         <PremiumPanelView premium={data.premium} hasRfq={hasRfq} />
       </Panel>
@@ -280,8 +295,8 @@ export function PairDetail({ marketId, pairId }: Props) {
         title="Spread history"
         subtitle={
           hasRfq
-            ? "AMM + RFQ vs Bybit mid · CEX premium · session bands"
-            : "AMM vs CEX mid · CEX premium · session bands"
+            ? "DEX vs CEX · CEX/DEX vs Und · session bands"
+            : "AMM vs CEX · CEX/DEX vs Und · session bands"
         }
       >
         <SpreadChart points={data.spread_series} showRfq={hasRfq} />
@@ -386,5 +401,37 @@ function Field({
         {value}
       </dd>
     </div>
+  );
+}
+
+/** Detail header premium field with private-underlying n/a (WHI-783). */
+function VsUndField({
+  label,
+  privateUnderlying,
+  value,
+  title,
+}: {
+  label: string;
+  privateUnderlying: boolean;
+  value: string | null | undefined;
+  title: string;
+}) {
+  if (privateUnderlying) {
+    return (
+      <Field
+        label={label}
+        value="n/a"
+        tone="empty"
+        title="Private underlying — no premium"
+      />
+    );
+  }
+  return (
+    <Field
+      label={label}
+      value={fmtSignedBps(value)}
+      tone={bpsTone(value ?? null)}
+      title={title}
+    />
   );
 }

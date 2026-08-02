@@ -1,4 +1,4 @@
-import { parseNum } from "./format";
+import { cexPremiumBps, parseNum } from "./format";
 import type { PairOverviewRow, SortKey } from "./types";
 
 function rawValue(
@@ -27,7 +27,10 @@ function rawValue(
     case "volume_ratio":
       return parseNum(row.volume_ratio ?? null);
     case "premium_bps":
-      return parseNum(row.premium_bps ?? null);
+      // Sort key id kept as premium_bps (API-compat); value is CEX vs Und.
+      return parseNum(cexPremiumBps(row));
+    case "amm_premium":
+      return parseNum(row.amm_premium_bps ?? null);
     case "underlying_price":
       return parseNum(row.underlying_price ?? null);
   }
@@ -82,9 +85,10 @@ export function filterRows(
 
 export const SORT_KEYS: { key: SortKey; label: string }[] = [
   { key: "net_edge", label: "Net edge" },
-  { key: "amm_spread", label: "AMM bps" },
-  { key: "rfq_spread", label: "RFQ bps" },
-  { key: "premium_bps", label: "Premium" },
+  { key: "amm_spread", label: "vs CEX" },
+  { key: "rfq_spread", label: "RFQ vs CEX" },
+  { key: "premium_bps", label: "CEX vs Und" },
+  { key: "amm_premium", label: "DEX vs Und" },
   { key: "underlying_price", label: "Underlying" },
   { key: "cex_volume_24h", label: "CEX Vol" },
   { key: "dex_volume_24h", label: "DEX Vol" },

@@ -8,6 +8,7 @@ import { describe, it } from "node:test";
 
 import {
   bpsTone,
+  cexPremiumBps,
   directionToggleLabel,
   explorerTxUrl,
   fmtDirection,
@@ -27,6 +28,18 @@ import {
   venueLabel,
   venuesFromMarketId,
 } from "./format";
+
+describe("cexPremiumBps", () => {
+  it("prefers cex_premium_bps over legacy premium_bps", () => {
+    assert.equal(
+      cexPremiumBps({ cex_premium_bps: "5", premium_bps: "99" }),
+      "5",
+    );
+    assert.equal(cexPremiumBps({ premium_bps: "10" }), "10");
+    assert.equal(cexPremiumBps({}), null);
+    assert.equal(cexPremiumBps(null), null);
+  });
+});
 
 describe("fmtPrice", () => {
   it("formats finite numbers and blanks nulls", () => {

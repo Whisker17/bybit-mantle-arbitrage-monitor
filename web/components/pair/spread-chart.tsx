@@ -1,7 +1,8 @@
 "use client";
 
 /**
- * Lightweight uPlot chart for AMM/RFQ spread vs time.
+ * Lightweight uPlot chart for spread / premium series vs time (WHI-783).
+ * Basis-named series: DEX vs CEX (AMM / RFQ), CEX vs Und, DEX vs Und.
  * Canvas path handles 1000+ points; setData on poll (no full remount).
  */
 
@@ -24,7 +25,8 @@ type Props = {
 /** Match Tailwind theme tokens (positive / primary-ish blue / warning). */
 const AMM_COLOR = "hsl(142 55% 45%)";
 const RFQ_COLOR = "hsl(210 70% 55%)";
-const PREMIUM_COLOR = "hsl(280 55% 60%)";
+const CEX_PREM_COLOR = "hsl(280 55% 60%)";
+const AMM_PREM_COLOR = "hsl(320 50% 55%)";
 const MID_COLOR = "hsl(38 80% 55%)";
 const OPEN_BAND = "hsla(142, 40%, 30%, 0.18)";
 const CLOSED_BAND = "hsla(38, 50%, 30%, 0.12)";
@@ -37,7 +39,7 @@ export function SpreadChart({ points, className, showRfq = true }: Props) {
   /** Stable handle for draw hook — updated every render without recreating plot. */
   const seriesRef = useRef<SpreadChartSeries | null>(null);
   const [showMid, setShowMid] = useState(false);
-  // Default off: premium often hundreds of bps and would squash AMM/RFQ scale.
+  // Default off: premium often hundreds of bps and would squash vs-CEX scale.
   const [showPremium, setShowPremium] = useState(false);
 
   const series = useMemo(() => prepareSpreadSeries(points), [points]);
@@ -50,7 +52,7 @@ export function SpreadChart({ points, className, showRfq = true }: Props) {
   const dataKey = useMemo(() => {
     if (series.xs.length === 0) return "";
     const last = series.xs.length - 1;
-    return `${series.xs.length}:${series.xs[0]}:${series.xs[last]}:${series.amm[last]}:${series.rfq[last]}:${series.cexPremium[last]}`;
+    return `${series.xs.length}:${series.xs[0]}:${series.xs[last]}:${series.amm[last]}:${series.rfq[last]}:${series.cexPremium[last]}:${series.ammPremium[last]}`;
   }, [series]);
 
   // Create plot once (or when empty ↔ non-empty / showMid scale changes).
@@ -112,7 +114,7 @@ export function SpreadChart({ points, className, showRfq = true }: Props) {
       series: [
         {},
         {
-          label: "AMM",
+          label: "vs CEX",
           stroke: AMM_COLOR,
           width: 1.5,
           scale: "bps",
@@ -121,7 +123,7 @@ export function SpreadChart({ points, className, showRfq = true }: Props) {
           show: s0.hasAmm,
         },
         {
-          label: "RFQ",
+          label: "RFQ vs CEX",
           stroke: RFQ_COLOR,
           width: 1.5,
           scale: "bps",
@@ -130,17 +132,27 @@ export function SpreadChart({ points, className, showRfq = true }: Props) {
           show: showRfq && s0.hasRfq,
         },
         {
-          label: "CEX prem",
-          stroke: PREMIUM_COLOR,
+          label: "CEX vs Und",
+          stroke: CEX_PREM_COLOR,
           width: 1.5,
           dash: [2, 2],
           scale: "bps",
           spanGaps: false,
           points: { show: false },
-          show: showPremium && s0.hasPremium,
+          show: showPremium && s0.hasCexPremium,
         },
         {
-          label: "Bybit mid",
+          label: "DEX vs Und",
+          stroke: AMM_PREM_COLOR,
+          width: 1.5,
+          dash: [4, 2],
+          scale: "bps",
+          spanGaps: false,
+          points: { show: false },
+          show: showPremium && s0.hasAmmPremium,
+        },
+        {
+          label: "CEX mid",
           stroke: MID_COLOR,
           width: 1,
           dash: [4, 3],
@@ -179,7 +191,14 @@ export function SpreadChart({ points, className, showRfq = true }: Props) {
     plotRef.current?.destroy();
     plotRef.current = new uPlot(
       opts,
-      [s0.xs, s0.amm, s0.rfq, s0.cexPremium, s0.bybitMid],
+      [
+        s0.xs,
+        s0.amm,
+        s0.rfq,
+        s0.cexPremium,
+        s0.ammPremium,
+        s0.bybitMid,
+      ],
       el,
     );
 
@@ -207,14 +226,22 @@ export function SpreadChart({ points, className, showRfq = true }: Props) {
     series.hasAmm,
     series.hasRfq,
     series.hasMid,
-    series.hasPremium,
+    series.hasCexPremium,
+    series.hasAmmPremium,
   ]);
 
   // Push new samples without destroying the plot (keeps zoom/cursor).
   useEffect(() => {
     if (empty || !plotRef.current || !seriesRef.current) return;
     const s = seriesRef.current;
-    plotRef.current.setData([s.xs, s.amm, s.rfq, s.cexPremium, s.bybitMid]);
+    plotRef.current.setData([
+      s.xs,
+      s.amm,
+      s.rfq,
+      s.cexPremium,
+      s.ammPremium,
+      s.bybitMid,
+    ]);
   }, [
     dataKey,
     empty,
@@ -222,14 +249,15 @@ export function SpreadChart({ points, className, showRfq = true }: Props) {
     showPremium,
     series.hasAmm,
     series.hasRfq,
-    series.hasPremium,
+    series.hasCexPremium,
+    series.hasAmmPremium,
   ]);
 
   if (empty) {
     return (
       <EmptyPanel
         className={className}
-        message="No spread history yet — waiting for Bybit book + pool ticks."
+        message="No spread history yet — waiting for CEX book + pool ticks."
       />
     );
   }
@@ -238,9 +266,16 @@ export function SpreadChart({ points, className, showRfq = true }: Props) {
     <div className={cn("space-y-2", className)}>
       <div className="flex flex-wrap items-center justify-between gap-2 text-[10px] text-muted-foreground">
         <div className="flex flex-wrap items-center gap-3">
-          <LegendSwatch color={AMM_COLOR} label="AMM bps" />
-          <LegendSwatch color={RFQ_COLOR} label="RFQ bps" />
-          <LegendSwatch color={PREMIUM_COLOR} label="CEX prem" />
+          {series.hasAmm && <LegendSwatch color={AMM_COLOR} label="vs CEX" />}
+          {showRfq && series.hasRfq && (
+            <LegendSwatch color={RFQ_COLOR} label="RFQ vs CEX" />
+          )}
+          {series.hasCexPremium && (
+            <LegendSwatch color={CEX_PREM_COLOR} label="CEX vs Und" />
+          )}
+          {series.hasAmmPremium && (
+            <LegendSwatch color={AMM_PREM_COLOR} label="DEX vs Und" />
+          )}
           <span className="inline-flex items-center gap-1">
             <span
               className="inline-block h-2.5 w-3 rounded-sm"
@@ -266,7 +301,7 @@ export function SpreadChart({ points, className, showRfq = true }: Props) {
               disabled={!series.hasPremium}
               onChange={(e) => setShowPremium(e.target.checked)}
             />
-            CEX premium
+            vs Und
           </label>
           <label className="inline-flex cursor-pointer items-center gap-1.5">
             <input
@@ -276,7 +311,7 @@ export function SpreadChart({ points, className, showRfq = true }: Props) {
               disabled={!series.hasMid}
               onChange={(e) => setShowMid(e.target.checked)}
             />
-            overlay Bybit mid
+            overlay CEX mid
           </label>
         </div>
       </div>
@@ -299,4 +334,3 @@ function LegendSwatch({ color, label }: { color: string; label: string }) {
     </span>
   );
 }
-
