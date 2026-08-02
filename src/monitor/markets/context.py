@@ -6,8 +6,12 @@ import logging
 from dataclasses import dataclass
 from pathlib import Path
 
+from pydantic import ValidationError
+
+from monitor.attribution.config import AttributionConfig, load_attribution_config
 from monitor.collector.config import (
     CollectorConfig,
+    CollectorConfigError,
     load_collector_config,
 )
 from monitor.markets.ids import (
@@ -43,6 +47,8 @@ class MarketContext:
       (binance-pancake until M7-3 wires a collector/domain path).
     * ``metrics`` — base metrics.yaml with **venue costs overridden** from the
       market file (fee / gas / quote basis).
+    * ``attribution`` — attribution thresholds (currently shared YAML; loaded
+      here so consumers go through market assembly, not ad-hoc loaders).
     * ``collector`` — market-scoped collector section (bybit-fluxion only today).
     * ``sqlite_path`` — resolved absolute path to this market's journal.
     """
@@ -55,6 +61,7 @@ class MarketContext:
     market_file: MarketFile
     pairs: PairsConfig | None
     metrics: MetricsConfig
+    attribution: AttributionConfig
     collector: CollectorConfig | None
     sqlite_path: Path
     inventory_path: Path
@@ -85,42 +92,62 @@ def resolve_market_sqlite(
 ) -> Path:
     """Resolve the journal path for a market (ADR-0001).
 
-    Prefer the configured path. For the default market only, if the configured
-    file is missing but legacy ``data/monitor.db`` exists, use the legacy path
-    so a VPS journal is not orphaned mid-migration.
+    Prefer the configured path. For the default market only, when the
+    configured path is the **convention** path (``data/monitor-bybit-fluxion.db``)
+    and is missing but legacy ``data/monitor.db`` exists, fall back so a VPS
+    journal is not orphaned mid-migration.
+
+    Explicit ``--sqlite`` overrides never fall back (pass
+    ``allow_legacy_fallback=False``).
     """
     mid = normalize_market_id(market_id)
     if configured.is_file():
         return configured
-    if (
-        allow_legacy_fallback
-        and mid == DEFAULT_MARKET_ID
-        and not configured.exists()
-    ):
-        root = repo_root if repo_root is not None else _REPO_ROOT
-        legacy = root / LEGACY_SQLITE_RELPATH
-        if legacy.is_file():
-            logger.warning(
-                "market %s: configured journal %s missing; using legacy %s "
-                "(rename to %s to silence this)",
-                mid,
-                configured,
-                legacy,
-                root / market_sqlite_relpath(mid),
-            )
-            return legacy.resolve()
+    if not allow_legacy_fallback or mid != DEFAULT_MARKET_ID or configured.exists():
+        return configured
+
+    root = repo_root if repo_root is not None else _REPO_ROOT
+    convention = (root / market_sqlite_relpath(mid)).resolve()
+    try:
+        configured_resolved = configured.resolve()
+    except OSError:
+        configured_resolved = configured
+    # Only fall back when the missing path is the default convention (or equal
+    # under relative resolution) — never when the operator passed a custom path.
+    if configured_resolved != convention and configured != Path(market_sqlite_relpath(mid)):
+        # Also accept relative convention without resolve when cwd ≠ repo root.
+        if configured.as_posix() != market_sqlite_relpath(mid):
+            return configured
+
+    legacy = root / LEGACY_SQLITE_RELPATH
+    if legacy.is_file():
+        logger.warning(
+            "market %s: configured journal %s missing; using legacy %s "
+            "(rename to %s to silence this)",
+            mid,
+            configured,
+            legacy,
+            root / market_sqlite_relpath(mid),
+        )
+        return legacy.resolve()
     return configured
 
 
 def _pairs_from_market_file(mf: MarketFile) -> PairsConfig | None:
-    """Parse inventory as PairsConfig for Bybit/Fluxion-shaped markets."""
-    # Only bybit-fluxion inventory is PairsConfig today. Binance uses a
-    # different pair leg shape (binance: / pancake:) — loaders land in M7-3.
-    if mf.id != DEFAULT_MARKET_ID and mf.cex.venue != "bybit":
+    """Parse inventory as PairsConfig for Bybit/Fluxion-shaped markets.
+
+    Non-Bybit markets intentionally return ``None`` (different pair leg shape);
+    a Bybit-shaped inventory that fails validation always raises.
+    """
+    if mf.cex.venue != "bybit":
         return None
     inv = dict(mf.inventory)
-    # Market files nest the former pairs.yaml body under inventory:.
-    return PairsConfig.model_validate(inv)
+    try:
+        return PairsConfig.model_validate(inv)
+    except ValidationError as exc:
+        raise MarketConfigError(
+            f"market {mf.id} inventory is not a valid PairsConfig: {exc}"
+        ) from exc
 
 
 def load_market_context(
@@ -130,6 +157,7 @@ def load_market_context(
     market_path: Path | None = None,
     collector_path: Path | None = None,
     metrics_path: Path | None = None,
+    attribution_path: Path | None = None,
     sqlite_path: Path | None = None,
     repo_root: Path | None = None,
     load_collector: bool = True,
@@ -144,21 +172,15 @@ def load_market_context(
         else market_file_path(mid, markets_dir=markets_dir)
     )
 
-    pairs: PairsConfig | None
-    try:
-        pairs = _pairs_from_market_file(mf)
-    except Exception as exc:  # pydantic ValidationError
-        if mid == DEFAULT_MARKET_ID:
-            raise MarketConfigError(
-                f"default market {mid} inventory is not a valid PairsConfig: {exc}"
-            ) from exc
-        pairs = None
+    pairs = _pairs_from_market_file(mf)
 
     base_metrics = load_metrics_config(metrics_path)
     metrics = apply_market_costs(base_metrics, mf.costs)
+    attribution = load_attribution_config(attribution_path)
 
     collector: CollectorConfig | None = None
     configured_db: Path
+    explicit_sqlite = sqlite_path is not None
     if load_collector:
         try:
             collector = load_collector_config(collector_path, market_id=mid)
@@ -167,12 +189,13 @@ def load_market_context(
                 if sqlite_path is not None
                 else collector.resolved_sqlite_path(repo_root=root)
             )
-        except Exception as exc:
+        except CollectorConfigError as exc:
             if mid == DEFAULT_MARKET_ID:
                 raise MarketConfigError(
                     f"collector config for market {mid} failed: {exc}"
                 ) from exc
-            # Non-default markets may lack a full collector section until M7-3.
+            # Non-default markets may lack a full Bybit-shaped collector section
+            # until M7-3. Scaffold keys (binance/bsc) are not CollectorConfig yet.
             collector = None
             rel = market_sqlite_relpath(mid)
             configured_db = (
@@ -186,6 +209,7 @@ def load_market_context(
         market_id=mid,
         configured=configured_db,
         repo_root=root,
+        allow_legacy_fallback=not explicit_sqlite,
     )
 
     return MarketContext(
@@ -197,6 +221,7 @@ def load_market_context(
         market_file=mf,
         pairs=pairs,
         metrics=metrics,
+        attribution=attribution,
         collector=collector,
         sqlite_path=db,
         inventory_path=inv_path,

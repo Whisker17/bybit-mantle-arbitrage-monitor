@@ -398,6 +398,7 @@ def run_forever(
     sqlite_path: Path | None = None,
 ) -> None:
     from monitor.markets import DEFAULT_MARKET_ID, load_market_context
+    from monitor.markets.context import resolve_market_sqlite
 
     load_dotenv()
     mid = market_id or DEFAULT_MARKET_ID
@@ -405,7 +406,12 @@ def run_forever(
         # Explicit inventory path (tests / overrides): still market-scope collector.
         pairs = load_pairs_config(pairs_path)
         collector = load_collector_config(collector_path, market_id=mid)
-        db_path = sqlite_path or collector.resolved_sqlite_path()
+        configured = sqlite_path or collector.resolved_sqlite_path()
+        db_path = resolve_market_sqlite(
+            market_id=mid,
+            configured=configured,
+            allow_legacy_fallback=sqlite_path is None,
+        )
     else:
         ctx = load_market_context(
             mid,

@@ -165,11 +165,27 @@ def test_load_market_context_bybit_fluxion() -> None:
     assert ctx.pairs is not None
     assert len(ctx.pairs.pairs) == 11
     assert ctx.collector is not None
+    assert ctx.attribution is not None
     assert ctx.metrics.bybit_taker_fee_bps == Decimal(10)
+    # Convention path unless legacy fallback applies (checked separately).
     assert ctx.sqlite_path.name in {
         "monitor-bybit-fluxion.db",
-        "monitor.db",  # legacy fallback if present
+        "monitor.db",
     }
+
+
+def test_explicit_sqlite_does_not_legacy_fallback(tmp_path: Path) -> None:
+    legacy = tmp_path / "data" / "monitor.db"
+    legacy.parent.mkdir(parents=True)
+    legacy.write_bytes(b"")
+    custom = tmp_path / "custom.db"
+    resolved = resolve_market_sqlite(
+        market_id="bybit-fluxion",
+        configured=custom,
+        repo_root=tmp_path,
+        allow_legacy_fallback=False,
+    )
+    assert resolved == custom
 
 
 def test_load_market_context_binance_has_inventory_no_pairs_shape() -> None:

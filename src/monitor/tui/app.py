@@ -12,8 +12,6 @@ from textual.containers import Horizontal, VerticalScroll
 from textual.screen import Screen
 from textual.widgets import DataTable, Footer, Header, Static
 
-from monitor.attribution.config import load_attribution_config
-from monitor.metrics.config import load_metrics_config
 from monitor.metrics.session import SessionKind
 from monitor.metrics.stats import Distribution
 from monitor.storage import JournalReader
@@ -434,42 +432,35 @@ class TuiApp(App[None]):
         attribution_path: Path | None = None,
         db_path: Path | None = None,
     ) -> None:
-        from monitor.markets import DEFAULT_MARKET_ID, load_market_context
-        from monitor.markets.context import resolve_market_sqlite
+        from monitor.markets import DEFAULT_MARKET_ID, load_market_context, normalize_market_id
 
         super().__init__()
         self.tui = tui
-        mid = market_id or tui.market or DEFAULT_MARKET_ID
+        mid = normalize_market_id(market_id or tui.market or DEFAULT_MARKET_ID)
         self.market_id = mid
-        if pairs_path is not None or metrics_path is not None:
+        # Honour tui.sqlite_path only when the selected market matches tui.market
+        # (ops override). Explicit --db always wins. Otherwise use market context.
+        sqlite_override = db_path
+        if sqlite_override is None and mid == normalize_market_id(tui.market):
+            sqlite_override = tui.resolved_sqlite_path()
+        ctx = load_market_context(
+            mid,
+            sqlite_path=sqlite_override,
+            metrics_path=metrics_path,
+            attribution_path=attribution_path,
+            load_collector=True,
+        )
+        if pairs_path is not None:
             self.pairs = load_pairs_config(pairs_path, market_id=mid)
-            self.metrics = (
-                load_metrics_config(metrics_path)
-                if metrics_path is not None
-                else load_market_context(mid, load_collector=False).metrics
-            )
-            configured = (
-                db_path if db_path is not None else tui.resolved_sqlite_path()
-            )
-            self.db_path = resolve_market_sqlite(
-                market_id=mid, configured=configured
-            )
         else:
-            ctx = load_market_context(mid, sqlite_path=db_path, load_collector=True)
             if ctx.pairs is None:
                 raise RuntimeError(
                     f"market {mid!r} has no pairs inventory for the TUI"
                 )
             self.pairs = ctx.pairs
-            self.metrics = ctx.metrics
-            self.db_path = (
-                db_path
-                if db_path is not None
-                else resolve_market_sqlite(
-                    market_id=mid, configured=tui.resolved_sqlite_path()
-                )
-            )
-        self.attribution = load_attribution_config(attribution_path)
+        self.metrics = ctx.metrics
+        self.attribution = ctx.attribution
+        self.db_path = ctx.sqlite_path
         validate_tui_against_metrics(self.tui, self.metrics)
         self.sort_key: SortKey = tui.default_sort
         self.sort_desc: bool = tui.default_sort_desc

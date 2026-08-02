@@ -16,9 +16,7 @@ from monitor.api.pnl_cache import PnlSnapshotCache
 from monitor.api.routes import health as health_routes
 from monitor.api.routes import pairs as pairs_routes
 from monitor.api.state import AppState
-from monitor.attribution.config import load_attribution_config
-from monitor.markets import DEFAULT_MARKET_ID, load_market_context
-from monitor.markets.context import resolve_market_sqlite
+from monitor.markets import DEFAULT_MARKET_ID, load_market_context, normalize_market_id
 from monitor.storage import JournalReader
 from monitor.tui.config import load_tui_config, validate_tui_against_metrics
 
@@ -31,13 +29,20 @@ def build_app_state(
 ) -> AppState:
     """Load configs and open the journal reader when the DB file exists."""
     cfg = api if api is not None else load_api_config(api_config_path)
-    mid = (
+    # MONITOR_MARKET is process bootstrap for uvicorn --reload workers only
+    # (factory apps cannot take kwargs across reload). Not a general config knobs.
+    mid = normalize_market_id(
         market_id
         or os.environ.get("MONITOR_MARKET")
         or cfg.market
         or DEFAULT_MARKET_ID
     )
-    ctx = load_market_context(mid, load_collector=True)
+    # When the selected market matches api.yaml, honour api.sqlite_path (ops
+    # override). Otherwise derive the journal strictly from the market context.
+    sqlite_override: Path | None = None
+    if mid == normalize_market_id(cfg.market):
+        sqlite_override = cfg.resolved_sqlite_path()
+    ctx = load_market_context(mid, sqlite_path=sqlite_override, load_collector=True)
     if ctx.pairs is None:
         raise RuntimeError(
             f"market {mid!r} has no pairs inventory suitable for the API "
@@ -45,14 +50,11 @@ def build_app_state(
         )
     pairs = ctx.pairs
     metrics = ctx.metrics
-    attribution = load_attribution_config()
+    attribution = ctx.attribution
     tui = load_tui_config()
     # Builder reference size / history windows come from tui.yaml (single source).
     validate_tui_against_metrics(tui, metrics)
-    # Prefer explicit api.sqlite_path when it points at an existing journal;
-    # otherwise market-resolved path (with legacy fallback).
-    configured = cfg.resolved_sqlite_path()
-    db_path = resolve_market_sqlite(market_id=mid, configured=configured)
+    db_path = ctx.sqlite_path
     reader: JournalReader | None
     if db_path.is_file():
         reader = JournalReader(db_path)

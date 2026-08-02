@@ -248,6 +248,7 @@ Planned `src/monitor/` packages (land with their issues; empty package until the
 
 | Module (planned) | Responsibility | First issue |
 |------------------|----------------|-------------|
+| `monitor/markets` | market id, inventory/costs assembly, per-market SQLite paths | M7-2 (landed WHI-771) |
 | `monitor/symbols` | fixed xStock list, Bybit multiplier map | M1 |
 | `monitor/bybit` | live Bybit book/trades WS; orderbook.50 + `bybit_depth` VWAP | M2 (WHI-731); depth WHI-755 |
 | `monitor/fluxion` | AMM state/quotes + RFQ feed | M2 (landed WHI-731) |
