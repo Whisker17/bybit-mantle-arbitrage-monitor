@@ -59,6 +59,14 @@ class PancakeAmmPool(BaseModel):
 
 
 class PancakeSide(BaseModel):
+    """On-chain BEP-20 + optional PCS V3 USDT pool.
+
+    ``amm is None`` means **dex:none** for the monitor: CEX legs still run;
+    the chain poller skips the pair via ``pairs_with_amm()`` (WHI-790).
+    The native token address is still recorded for the BEP-20 registry even
+    when no in-scope pool exists (V2-only / WBNB-only / no pool).
+    """
+
     model_config = ConfigDict(extra="forbid", frozen=True)
 
     native_token: Address
@@ -77,9 +85,17 @@ class BStocksPair(BaseModel):
     binance: BinanceSymbol
     pancake: PancakeSide
 
+    def has_amm(self) -> bool:
+        """True when a collector-scope PCS V3 USDT pool is configured."""
+        return self.pancake.amm is not None
+
+    def dex_mode(self) -> Literal["amm", "none"]:
+        """Product label: ``amm`` vs ``none`` (no in-scope DEX pool)."""
+        return "amm" if self.has_amm() else "none"
+
 
 class BStocksPairsConfig(BaseModel):
-    """Root config for the fixed bStocks monitor pair list."""
+    """Root config for the full bStocks monitor pair list (WHI-790: all Binance bases)."""
 
     model_config = ConfigDict(extra="forbid", frozen=True)
 
@@ -127,7 +143,12 @@ class BStocksPairsConfig(BaseModel):
         return [p for p in self.pairs if not p.low_liquidity]
 
     def pairs_with_amm(self) -> list[BStocksPair]:
-        return [p for p in self.pairs if p.pancake.amm is not None]
+        """Pairs with a collector-scope AMM pool (skips dex:none)."""
+        return [p for p in self.pairs if p.has_amm()]
+
+    def pairs_dex_none(self) -> list[BStocksPair]:
+        """CEX-only pairs — no in-scope PCS V3 USDT pool (WHI-790)."""
+        return [p for p in self.pairs if not p.has_amm()]
 
 
 def _expected_low_liquidity(pair: BStocksPair, threshold_usd: float) -> bool:

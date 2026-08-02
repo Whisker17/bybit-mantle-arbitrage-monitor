@@ -1,7 +1,15 @@
 # M7-1 bStocks × PancakeSwap inventory (WHI-770)
 
+> **WHI-790 (2026-08-02) amendment:** inventory is no longer top-10. The monitor
+> records **all 55** Binance spot bStocks. Collector-scope AMM pools are the
+> **PCS V3 factory `getPool` + `token0/1` verified USDT set**
+> (**21** pairs today). Remaining pairs are **dex:none** (CEX-only; chain
+> leg skipped). Re-runnable enum: `scripts/enumerate_bstocks_pools.py` →
+> `docs/references/m7-bstocks-enum-snapshot.json`. Dynamic Top-N UI is WHI-791.
+
 Companion to `config/markets/binance-pancake.yaml` (M7-2 market schema; inventory under `inventory:`).
-Snapshot date: **2026-08-02**.
+Snapshot date: **2026-08-02** (factory enum re-run same day for WHI-790).
+
 
 ## Method
 
@@ -21,9 +29,11 @@ Snapshot date: **2026-08-02**.
    USDT-prefer rank. **Limitation:** negative claims for V2/StableSwap rest on the
    indexer + USDT-prefer filter — not a PCS V2 factory `getPair` or StableSwap registry
    enumeration (open risk).
-3. **Liquidity rank** — DexScreener `liquidity.usd` on the verified best USDT pool.
-   Top **10** by that metric form the monitor set. Est. TVL is an inventory snapshot, not
-   live journal data.
+3. **Liquidity rank (M7-1, superseded for set selection)** — DexScreener
+   `liquidity.usd` ranked top **10** into the first monitor set. **WHI-790** no longer
+   uses that rank to *select* the set: all 55 bases are inventoried; live TVL / volume
+   ranking is a UI concern (WHI-791). Inventory `est_liquidity_usd` is still a
+   balanceOf snapshot for cold-start badges.
 4. **On-chain enrichment** — public BSC RPC `https://bsc-dataseed.binance.org`:
    `fee()`, `slot0()` → AMM mid, `decimals()`, BEP-677 `uiMultiplier()`.
 5. **Price cross-check** — Binance `bookTicker` mid vs pool mid (raw token / USDT).
@@ -102,6 +112,53 @@ use other decimals — always read `decimals()`.)
 
 Of the **55** bases searched, **12** had a verified Pancake USDT pool after on-chain
 filter; liquidity is highly concentrated in the first ~7 of the top-10.
+
+
+## WHI-790 authoritative factory enumeration
+
+**Method (closes M7-1 open risk #7):** for every Binance bStock BEP-20 (contracts from
+Binance public `getNetworkCoinAll` BSC rows — 55/55), call:
+
+| Call | Scope |
+|------|--------|
+| PCS **V3** factory `getPool(token, quote, fee)` | quotes {USDT, USDC, WBNB} × fees {100, 500, 2500, 10000} |
+| PCS **V2** factory `getPair(token, quote)` | same three quotes |
+| StableSwap factories | code presence probe only (no plain getPool registry) |
+
+Every non-zero pool is re-checked with on-chain `token0()` / `token1()` against the
+Binance capital BEP-20 + quote address. TVL = `balanceOf` both sides (USD for
+USDT/USDC). **Best pool** = USDT prefer → max TVL → V3 over V2 → lower fee.
+
+**Collector-scope AMM (V3 + USDT only):** **21** pairs —
+`AAPLB, AMZNB, CRCLB, GOOGLB, INTCB, KORUB, METAB, MRVLB, MSFTB, MUB, MUUB, NOKB, NVDAB, ORCLB, QQQB, SKHYB, SNDKB, SOXLB, SPCXB, SPYB, TSLAB`.
+
+| vs old "12" (DexScreener method) | Bases |
+|----------------------------------|-------|
+| **New** (factory-verified, not in old 12) | AMZNB, CRCLB, KORUB, METAB, MRVLB, NOKB, ORCLB, QQQB, SNDKB |
+| **Gone** from old 12 | — (none) |
+| Out of collector scope (have some pool but not V3/USDT) | TSMB (V2 USDT dust), DRAMB (V3 WBNB only) → **dex:none** |
+
+**Notable corrections vs M7-1 DexScreener path:**
+
+| Asset | M7-1 claim | WHI-790 factory truth |
+|-------|------------|------------------------|
+| **QQQB** | False positive — dropped | **Real** V3 USDT fee=100 pool (`0xe531…b693`), ~$1.9M balanceOf TVL — Binance capital BEP-20 `0x2058…efc7` matches pool tokens |
+| **SNDKB, CRCLB, AMZNB, …** | Missing / dust | Verified V3 USDT pools (mostly thin); included as low_liquidity AMM |
+| **MSFTB** | fee=10000 pool `0x58e4…` | Best is now fee=**2500** `0x5018…be7ea` (higher balanceOf TVL) |
+| **SOXLB / MUUB** | Below top-10 | Still in set as AMM (low TVL); not dropped |
+
+Artifact: `docs/references/m7-bstocks-enum-snapshot.json`. Re-run:
+`uv run python scripts/enumerate_bstocks_pools.py`.
+
+### Capacity (WHI-790 scale math)
+
+| Path | 10 pairs (M7-3) | 55 pairs (WHI-790) | Notes |
+|------|-----------------|--------------------|-------|
+| Binance combined WS | ~30 streams | **165** streams (book+depth+trade) | Path ~3.5 KB; Binance limit 1024 streams/connection — headroom OK on vision host |
+| CEX 24h volume REST | symbols array ≤50 | **full** `/api/v3/ticker/24hr` (no per-symbol loop) | One call, filter client-side |
+| BSC pool multicall | 10 pools / stride | **21** AMM pools / stride | dex:none never on chain loop (`pairs_with_amm`) |
+| TVL `balanceOf` | 10 × 2 | 21 × 2 | Same `tvl_poll_interval_s` |
+| SQLite growth | baseline | ~5.5× on CEX book/trade rows; ~2.1× on pool_state | Feed WHI-751 retention + WHI-775 capacity |
 
 ## Multiplier semantics (比价命门)
 
@@ -301,9 +358,9 @@ ORCLBUSDT, SNXXBUSDT, TQQQBUSDT, AAPLBUSDT, AMATBUSDT, AMZNBUSDT, BEBUSDT,
 DELLBUSDT, FLNCBUSDT, GSBUSDT, PYPLBUSDT, SMHBUSDT, SOXSBUSDT
 ```
 
-**On-chain-verified Pancake USDT pool (any liq):** SPCXB, SKHYB, TSLAB, SPYB, NVDAB,
-AAPLB, GOOGLB, MSFTB, INTCB, MUB, SOXLB, MUUB (12). **Top 10** = first 10 of that set
-ranked by DexScreener liq (SOXLB #11, MUUB #12 / broken mid).
+**Factory-verified collector-scope V3 USDT (WHI-790):** 21 pairs —
+see § WHI-790. Full inventory = **all 55** bases; non-AMM = dex:none.
+Old DexScreener "12" is historical only.
 
 ## Open risks / follow-ups
 
@@ -321,8 +378,9 @@ ranked by DexScreener liq (SOXLB #11, MUUB #12 / broken mid).
    SPCX-specific session quirks show up in soak.
 6. **PCS Swap topic0 on live bStock pool** — not re-decoded this PR (public RPC
    `eth_getLogs` limit); collector must confirm before production decode.
-7. **V2 / StableSwap exhaustiveness** — re-inventory may want PCS V2 factory
-   `getPair(token, USDT)` + StableSwap plain-AMM registry calls, not only DexScreener.
+7. **V2 / StableSwap exhaustiveness** — **closed for V2+V3 factory getPool/getPair
+   (WHI-790)**. StableSwap remains code-presence probe only (no exhaustive registry
+   walk); no bStock StableSwap hit observed. V2-only dust (TSMB) stays dex:none.
 8. **ui_multiplier direction soak** — multiply formula is FAQ/BEP-677-derived; re-check
    CEX mid vs AMM raw across the next non-trivial dividend or split event.
 

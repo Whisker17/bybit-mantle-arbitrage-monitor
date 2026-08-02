@@ -119,3 +119,191 @@ tickers:
     feed_id: null
     yahoo_symbol: "SPCX"
     prefer_yahoo: true
+
+# --- WHI-790: full binance-pancake underlying coverage -------------------
+# Hermes RTH Equity.US.{T}/USD where listed (probe 2026-08-02); Yahoo gap-fill
+# otherwise. PRE/POST/ON session feeds intentionally unused (deprecated).
+# Uncovered only when no single-name public tape is known.
+  AAOI:
+    currency: USD
+    pyth_symbol: Equity.US.AAOI/USD
+    feed_id: "ff68be691d07c6513247fd4e93a6d52b31e0ef7e4899acc43e59cb5c95b3fa76"
+  AMAT:
+    currency: USD
+    pyth_symbol: Equity.US.AMAT/USD
+    feed_id: "b9bc74cc1243b706efacf664ed206d08ab1dda79e8b87752c7c44b3bdf1b9e08"
+  AMD:
+    currency: USD
+    pyth_symbol: Equity.US.AMD/USD
+    feed_id: "3622e381dbca2efd1859253763b1adc63f7f9abb8e76da1aa8e638a57ccde93e"
+  ARM:
+    currency: USD
+    pyth_symbol: Equity.US.ARM/USD
+    feed_id: "957bf692b35cc62f222dbf4dc6929130df42fe17c9f03373f44c01f78b05391e"
+  AVGO:
+    currency: USD
+    pyth_symbol: Equity.US.AVGO/USD
+    feed_id: "d0c9aef79b28308b256db7742a0a9b08aaa5009db67a52ea7fa30ed6853f243b"
+  AXTI:
+    currency: USD
+    pyth_symbol: Equity.US.AXTI/USD
+    feed_id: "56b6d6619fbd0b81ae09dbb8ccca77877b78aebf098b2fb95432a926af8e384c"
+  BABA:
+    currency: USD
+    pyth_symbol: Equity.US.BABA/USD
+    feed_id: "72bc23b1d0afb1f8edef20b7fb60982298993161bc0fd749587d6f60cd1ee9a3"
+  BE:
+    currency: USD
+    pyth_symbol: Equity.US.BE/USD
+    feed_id: "a955f59cec6006d55ac21ab009c92662f2d9250bc22b86fcce16e7962c129c4f"
+  CRWV:
+    currency: USD
+    pyth_symbol: Equity.US.CRWV/USD
+    feed_id: "2a78b78189d6d6eff30a825e4698fd14a0b1ca659bb0079bb7e80521c0e8c75d"
+  DELL:
+    currency: USD
+    pyth_symbol: Equity.US.DELL/USD
+    feed_id: "a2950270a22ce39a22cb3488ba91e60474cd93c6d01da2ecc5a97c1dd40f4995"
+  EWY:
+    currency: USD
+    pyth_symbol: Equity.US.EWY/USD
+    feed_id: "7be2b3f9f9d02b1ffcf61fc26ad5cc6aff4dd02044f9abc22ee57f37b3b5d2e5"
+  GLW:
+    currency: USD
+    pyth_symbol: Equity.US.GLW/USD
+    feed_id: "6ef62b860055ef6819af274064e5aa597aa9d0963ce3109c51d996264844776e"
+  GS:
+    currency: USD
+    pyth_symbol: Equity.US.GS/USD
+    feed_id: "9c68c0c6999765cf6e27adf75ed551b34403126d3b0d5b686a2addb147ed4554"
+  IBM:
+    currency: USD
+    pyth_symbol: Equity.US.IBM/USD
+    feed_id: "cfd44471407f4da89d469242546bb56f5c626d5bef9bd8b9327783065b43c3ef"
+  MRVL:
+    currency: USD
+    pyth_symbol: Equity.US.MRVL/USD
+    feed_id: "7aef4e90557add5289266340ccd1e1aa7a225f1220206b07aaf98e53101ce116"
+  MSTR:
+    currency: USD
+    pyth_symbol: Equity.US.MSTR/USD
+    feed_id: "e1e80251e5f5184f2195008382538e847fafc36f751896889dd3d1b1f6111f09"
+  NBIS:
+    currency: USD
+    pyth_symbol: Equity.US.NBIS/USD
+    feed_id: "691630d65fbbc8d987717df10453c01907bee8caa60a4aaba4dafca64ea16dc4"
+  ORCL:
+    currency: USD
+    pyth_symbol: Equity.US.ORCL/USD
+    feed_id: "e47ff732eaeb6b4163902bdee61572659ddf326511917b1423bae93fcdf3153c"
+  PLTR:
+    currency: USD
+    pyth_symbol: Equity.US.PLTR/USD
+    feed_id: "11a70634863ddffb71f2b11f2cff29f73f3db8f6d0b78c49f2b5f4ad36e885f0"
+  PYPL:
+    currency: USD
+    pyth_symbol: Equity.US.PYPL/USD
+    feed_id: "773c3b11f6be58e8151966a9f5832696d8cd08884ccc43ac8965a7ebea911533"
+  QCOM:
+    currency: USD
+    pyth_symbol: Equity.US.QCOM/USD
+    feed_id: "54350ebf587c3f14857efcfec50e5c4f6e10220770c2266e9fe85bd5e42e4022"
+  QQQ:
+    currency: USD
+    pyth_symbol: Equity.US.QQQ/USD
+    feed_id: "9695e2b96ea7b3859da9ed25b7a46a920a776e2fdae19a7bcfdf2b219230452d"
+  RKLB:
+    currency: USD
+    pyth_symbol: Equity.US.RKLB/USD
+    feed_id: "40589e289317e4fbd997b1a267606e20a1cc7c3e4689f9e5a5992957917816c8"
+  SMH:
+    currency: USD
+    pyth_symbol: Equity.US.SMH/USD
+    feed_id: "2487b620e66468404ba251bfaa6b8382774010cbb5d504ac48ec263e0b1934aa"
+  SNDK:
+    currency: USD
+    pyth_symbol: Equity.US.SNDK/USD
+    feed_id: "c86a1f20cd7d5d07932baea30bcd8e479b775c4f51f82526bf1de6dc79fa3f76"
+  SOXL:
+    currency: USD
+    pyth_symbol: Equity.US.SOXL/USD
+    feed_id: "53008e9cb71db278f91d7ee0011434af626548018b5f9d4c11000c387eac46fb"
+  SOXS:
+    currency: USD
+    pyth_symbol: Equity.US.SOXS/USD
+    feed_id: "7cf66aa378a88b0637d1e8dae8ca0d558ba997338af670399e984a995c496200"
+  TQQQ:
+    currency: USD
+    pyth_symbol: Equity.US.TQQQ/USD
+    feed_id: "5aa9f82dc2e0f5f8271fd163e980010101517da59f4b72b71c7056a5950b2f9d"
+  TSM:
+    currency: USD
+    pyth_symbol: Equity.US.TSM/USD
+    feed_id: "e722560a66e4ab00522ef20a38fa2ba5d1b41f1c5404723ed895d202a7af7cc4"
+  WDC:
+    currency: USD
+    pyth_symbol: Equity.US.WDC/USD
+    feed_id: "37a782cf9bb6061d4cca34a419fb1ae5a8edf71ae8843206ea88b4ba696d4706"
+  FLNC:
+    currency: USD
+    pyth_symbol: null
+    feed_id: null
+    yahoo_symbol: "FLNC"
+    prefer_yahoo: true
+  KORU:
+    currency: USD
+    pyth_symbol: null
+    feed_id: null
+    yahoo_symbol: "KORU"
+    prefer_yahoo: true
+  LITE:
+    currency: USD
+    pyth_symbol: null
+    feed_id: null
+    yahoo_symbol: "LITE"
+    prefer_yahoo: true
+  MUU:
+    currency: USD
+    pyth_symbol: null
+    feed_id: null
+    yahoo_symbol: "MUU"
+    prefer_yahoo: true
+  MVLL:
+    currency: USD
+    pyth_symbol: null
+    feed_id: null
+    yahoo_symbol: "MVLL"
+    prefer_yahoo: true
+  NOK:
+    currency: USD
+    pyth_symbol: null
+    feed_id: null
+    yahoo_symbol: "NOK"
+    prefer_yahoo: true
+# Roundhill Daily DRAM / memory thematic ETF (public tape when listed)
+  DRAM:
+    currency: USD
+    pyth_symbol: null
+    feed_id: null
+    yahoo_symbol: "DRAM"
+    prefer_yahoo: true
+  CBRS:
+    currency: USD
+    pyth_symbol: null
+    feed_id: null
+    uncovered: true
+    uncovered_reason: "bStock label without confirmed public equity/ETF tape"
+# GraniteShares 2x Long INTC Daily ETF
+  INTW:
+    currency: USD
+    pyth_symbol: null
+    feed_id: null
+    yahoo_symbol: "INTW"
+    prefer_yahoo: true
+# Tradr 2X Long SNDK Daily ETF
+  SNXX:
+    currency: USD
+    pyth_symbol: null
+    feed_id: null
+    yahoo_symbol: "SNXX"
+    prefer_yahoo: true

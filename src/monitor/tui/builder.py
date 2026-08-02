@@ -383,7 +383,7 @@ def _est_liquidity_usd(pair: Pair | BStocksPair) -> Decimal | None:
     """Inventory-time pool TVL estimate (not live journal).
 
     Fluxion pairs store it on ``fluxion.amm``; bStocks on ``pancake.amm``.
-    None when the inventory has no AMM pool (still listed, low-liq / no pool).
+    None when the inventory has no AMM pool (still listed, low-liq / dex:none).
     """
     if isinstance(pair, BStocksPair):
         pancake_amm = pair.pancake.amm
@@ -398,7 +398,7 @@ def _est_liquidity_usd(pair: Pair | BStocksPair) -> Decimal | None:
 
 def _pair_has_amm(pair: Pair | BStocksPair) -> bool:
     if isinstance(pair, BStocksPair):
-        return pair.pancake.amm is not None
+        return pair.has_amm()
     return pair.fluxion.amm is not None
 
 

@@ -636,11 +636,20 @@ def test_mismatches_meta_roundtrip() -> None:
     assert mismatches_from_meta_json("not-json") == []
 
 
-def test_uncovered_probe_empty_when_no_uncovered() -> None:
-    """Checked-in config has no uncovered tickers after WHI-787 — probe is no-op."""
+def test_uncovered_probe_skips_when_list_empty() -> None:
+    """Probe is a no-op when the config has zero uncovered tickers."""
+    from monitor.underlying.config import UnderlyingConfig
+
     cfg = load_underlying_config()
-    assert cfg.uncovered_tickers() == []
-    # Inject a fake hermes/yahoo so no network if list were non-empty.
+    # Build a zero-uncovered view: keep one covered ticker only.
+    covered = {
+        k: v for k, v in cfg.tickers.items() if not v.uncovered
+    }
+    assert covered, "need at least one covered ticker in underlying.yaml"
+    slim = UnderlyingConfig.model_validate(
+        {**cfg.model_dump(mode="python"), "tickers": covered}
+    )
+    assert slim.uncovered_tickers() == []
 
     class _BoomHermes:
         def search_price_feeds(self, query: str) -> list[object]:
@@ -657,7 +666,7 @@ def test_uncovered_probe_empty_when_no_uncovered() -> None:
             return None
 
     probe = UncoveredCoverageProbe(
-        cfg, hermes=_BoomHermes(), yahoo=_BoomYahoo()  # type: ignore[arg-type]
+        slim, hermes=_BoomHermes(), yahoo=_BoomYahoo()  # type: ignore[arg-type]
     )
     try:
         outcome = probe.probe_once()
@@ -665,6 +674,16 @@ def test_uncovered_probe_empty_when_no_uncovered() -> None:
         assert outcome.errors == []
     finally:
         probe.close()
+
+
+def test_whi790_synthetic_bstock_underlyings_are_uncovered() -> None:
+    """WHI-790: basket/unknown bStock labels stay uncovered (no single-name tape)."""
+    cfg = load_underlying_config()
+    # CBRS remains the only synthetic/unknown bStock label with no public tape.
+    assert cfg.tickers["CBRS"].uncovered is True
+    for t in ("DRAM", "INTW", "SNXX", "MVLL", "MUU", "KORU"):
+        assert cfg.tickers[t].uncovered is False
+        assert cfg.tickers[t].prefer_yahoo is True
 
 
 def test_uncovered_probe_detects_yahoo_for_synthetic_uncovered(
@@ -835,3 +854,53 @@ def test_stamp_underlying_status_early_exits(tmp_path: Path) -> None:
     daemon._stamp_underlying_status(UNDERLYING_STATUS_STOPPED)
     assert store.get_meta("underlying_status") == "stopped"
     store.close()
+
+
+def test_hermes_fetch_latest_chunks_and_ignore_invalid() -> None:
+    """WHI-790: large feed lists are chunked; invalid ids must not fail the batch."""
+    from monitor.underlying.pyth import HermesClient
+
+    calls: list[list[str]] = []
+
+    class _FakeResp:
+        def __init__(self, body: dict) -> None:
+            self._body = body
+
+        def raise_for_status(self) -> None:
+            return None
+
+        def json(self) -> dict:
+            return self._body
+
+    class _FakeClient:
+        def get(self, url: str, params=None):  # noqa: ANN001
+            ids = [v for k, v in (params or []) if k == "ids[]"]
+            calls.append(ids)
+            # Assert ignore flag present
+            flags = [v for k, v in (params or []) if k == "ignore_invalid_price_ids"]
+            assert flags == ["true"]
+            parsed = [
+                {
+                    "id": i,
+                    "price": {
+                        "price": "1",
+                        "expo": 0,
+                        "conf": "0",
+                        "publish_time": 1,
+                    },
+                }
+                for i in ids
+            ]
+            return _FakeResp({"parsed": parsed})
+
+        def close(self) -> None:
+            return None
+
+    client = HermesClient(base_url="https://hermes.example", client=_FakeClient())  # type: ignore[arg-type]
+    try:
+        ids = [f"{i:064x}" for i in range(25)]
+        body = client.fetch_latest(ids, chunk_size=10)
+        assert len(calls) == 3  # 10+10+5
+        assert len(body["parsed"]) == 25
+    finally:
+        client.close()
