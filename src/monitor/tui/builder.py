@@ -428,16 +428,18 @@ def build_pair_overview_row(
     trades_24h: int,
     metrics: MetricsConfig,
     tui: TuiConfig,
+    low_liquidity_threshold_usd: Decimal,
     ts_ms: int | None = None,
     volume_compare: VolumeCompare | None = None,
     premium: PremiumSnapshot | None = None,
     tvl: DexPoolTvlTick | None = None,
-    low_liquidity_threshold_usd: Decimal | None = None,
 ) -> PairOverviewRow:
     """Build one overview row. Pure: no I/O.
 
     Accepts Fluxion ``Pair`` or Pancake ``BStocksPair`` (M7); pool geometry
     is resolved via ``amm_pool_from_pair_tick``.
+    ``low_liquidity_threshold_usd`` is required from inventory config (no
+    hardcoded default — config/README.md).
     """
     ref = tui.reference_size_usd
     vfields = _volume_fields(volume_compare)
@@ -446,12 +448,9 @@ def build_pair_overview_row(
     )
     pfields = _premium_fields(prem)
     liq = _est_liquidity_usd(pair)
-    threshold = (
-        low_liquidity_threshold_usd
-        if low_liquidity_threshold_usd is not None
-        else Decimal("50000")
+    low_liq = _resolve_row_low_liquidity(
+        pair, tvl=tvl, threshold_usd=low_liquidity_threshold_usd
     )
-    low_liq = _resolve_row_low_liquidity(pair, tvl=tvl, threshold_usd=threshold)
     tvl_usd = None if tvl is None else tvl.tvl_usd
     tvl_as_of = None if tvl is None else tvl.recv_ts_ms
     if bybit is None:
@@ -1042,7 +1041,7 @@ def build_pair_detail(
     edge_state: RunningEdgeState,
     now: int | None = None,
     cold_start: bool = False,
-    low_liquidity_threshold_usd: Decimal | None = None,
+    low_liquidity_threshold_usd: Decimal,
 ) -> PairDetailModel:
     ts = now if now is not None else now_ms()
     since_vol = ts - tui.volume_window_ms
@@ -1050,12 +1049,6 @@ def build_pair_detail(
     amm = reader.latest_pool_state(pair.id)
     rfq_buy, rfq_sell = reader.latest_rfq_sides(pair.id)
     tvl = reader.latest_pool_tvl(pair.id)
-    # Inventory root threshold when caller has it; 50k matches market YAML defaults.
-    threshold = (
-        low_liquidity_threshold_usd
-        if low_liquidity_threshold_usd is not None
-        else Decimal("50000")
-    )
     vol = reader.volume_stats(pair.id, since_ms=since_vol)
     vcmp = _volume_compare_for_pair(
         pair,
@@ -1096,7 +1089,7 @@ def build_pair_detail(
         volume_compare=vcmp,
         premium=prem,
         tvl=tvl,
-        low_liquidity_threshold_usd=threshold,
+        low_liquidity_threshold_usd=low_liquidity_threshold_usd,
     )
     tvl_series = [
         (t.recv_ts_ms, t.tvl_usd)

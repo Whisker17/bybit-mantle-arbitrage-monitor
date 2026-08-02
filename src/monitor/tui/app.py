@@ -3,6 +3,7 @@
 from __future__ import annotations
 
 import argparse
+from decimal import Decimal
 from pathlib import Path
 
 from rich.text import Text
@@ -552,6 +553,9 @@ class TuiApp(App[None]):
                     attribution_cfg=self.attribution,
                     tui=self.tui,
                     edge_state=self.edge_state,
+                    low_liquidity_threshold_usd=Decimal(
+                        str(self.pairs.low_liquidity_threshold_usd)
+                    ),
                 )
             screen.render_detail(model)
         except Exception as exc:

@@ -21,7 +21,7 @@ from decimal import Decimal
 
 from monitor.fluxion.abi import SEL_BALANCE_OF
 from monitor.fluxion.pools import PoolMeta, decode_uint
-from monitor.fluxion.rpc import Rpc, encode_call
+from monitor.fluxion.rpc import Rpc, cs, encode_call
 from monitor.quotes import DexPoolTvlTick
 
 
@@ -78,8 +78,6 @@ def is_low_liquidity(
 
 def balance_of_call(token: str, holder: str) -> tuple[str, bytes]:
     """ERC-20 ``balanceOf(holder)`` call targeting ``token``."""
-    from monitor.fluxion.rpc import cs
-
     return (
         token,
         encode_call(SEL_BALANCE_OF, ["address"], [cs(holder)]),
@@ -87,7 +85,11 @@ def balance_of_call(token: str, holder: str) -> tuple[str, bytes]:
 
 
 def pool_tvl_balance_calls(meta: PoolMeta) -> list[tuple[str, bytes]]:
-    """Two balanceOf calls: base (wrapper/native) then quote, held by pool."""
+    """Two balanceOf calls: non-quote leg then quote, held by the pool.
+
+    ``PoolMeta.wrapper_token`` is the non-quote ERC-20 in the pool (ERC-4626
+    share on Fluxion; native bStock on Pancake where wrapper==native).
+    """
     pool = meta.pool
     return [
         balance_of_call(meta.wrapper_token, pool),

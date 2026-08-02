@@ -365,6 +365,8 @@ class JournalReader:
         limit: int = 500,
     ) -> list[DexPoolTvlTick]:
         """Ascending TVL history for a pair (detail trend; WHI-782)."""
+        if limit < 1:
+            raise ValueError("limit must be >= 1")
         if "dex_pool_tvl" not in self._table_names():
             return []
         rows = self._conn.execute(

@@ -221,22 +221,24 @@ class ChainPoller:
                     "block %s: all %d pool state decodes failed", block, len(self.pools)
                 )
 
-        if want_tvl and states:
-            # Mid for the token held in the pool: wrapper share (Fluxion) or
-            # native (Pancake, where wrapper==native and assets/share=1).
-            mid_by_pair = {s.pair_id: s.mid_usdc_per_wrapper for s in states}
-            tvl_ticks = fetch_pool_tvls(
-                self.rpc,
-                self.pools,
-                mid_by_pair,
-                block_number=block,
-                block_ts=block_ts,
-                recv_ts_ms=0,
-                gap=gap,
-            )
-            # Advance throttle even on partial decode so a permanent failure
-            # does not hammer balanceOf every block.
+        if want_tvl:
+            # Always advance the wall-clock throttle when TVL is due — including
+            # when pool-state decode fails — so BSC free-seed rate limits do not
+            # re-force full slot0 every block via want_tvl → want_pool_state.
             self._last_tvl_poll_ms = now_ms()
+            if states:
+                # Mid for the token held in the pool: wrapper share (Fluxion) or
+                # native (Pancake, where wrapper==native and assets/share=1).
+                mid_by_pair = {s.pair_id: s.mid_usdc_per_wrapper for s in states}
+                tvl_ticks = fetch_pool_tvls(
+                    self.rpc,
+                    self.pools,
+                    mid_by_pair,
+                    block_number=block,
+                    block_ts=block_ts,
+                    recv_ts_ms=0,
+                    gap=gap,
+                )
 
         pool_by_addr = {p.pool.lower(): p for p in self.pools}
         addresses = list(pool_by_addr.keys())
