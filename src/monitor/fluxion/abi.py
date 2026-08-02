@@ -12,6 +12,8 @@ SEL_TOKEN1 = "0xd21220a7"
 SEL_DECIMALS = "0x313ce567"
 SEL_CONVERT_TO_ASSETS = "0x07a2d13a"
 SEL_ASSET = "0x38d52e0f"
+# ERC-20 balanceOf(address) — pool inventory for live TVL (WHI-782).
+SEL_BALANCE_OF = "0x70a08231"
 
 # Uniswap V3 Swap (vanilla) — Fluxion documents UniV3 lineage; re-verify live.
 TOPIC0_V3_SWAP = "0x" + keccak(
