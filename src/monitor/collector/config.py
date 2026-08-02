@@ -14,6 +14,7 @@ from pydantic import BaseModel, ConfigDict, Field, field_validator, model_valida
 _REPO_ROOT = Path(__file__).resolve().parents[3]
 _DEFAULT_COLLECTOR_PATH = _REPO_ROOT / "config" / "collector.yaml"
 PUBLIC_RPC_URL = "https://rpc.mantle.xyz"
+PUBLIC_BSC_RPC_URL = "https://bsc-dataseed.binance.org"
 
 
 class CollectorConfigError(Exception):
@@ -134,6 +135,106 @@ class RfqCollectorConfig(BaseModel):
     http_timeout_s: float = Field(gt=0)
 
 
+class BinanceDepthConfig(BaseModel):
+    """Throttled multi-level VWAP journal for Binance depth20 (WHI-772)."""
+
+    model_config = ConfigDict(extra="forbid", frozen=True)
+
+    enabled: bool = True
+    emit_interval_ms: int = Field(default=1000, ge=50)
+    mid_change_bps: Decimal = Field(default=Decimal("1"), ge=0)
+    buckets_usd: list[Decimal] = Field(default_factory=_default_depth_buckets)
+    # Combined-stream suffix, e.g. depth20@100ms.
+    stream: str = Field(default="depth20@100ms", min_length=1)
+
+    @field_validator("mid_change_bps", mode="before")
+    @classmethod
+    def _mid_as_decimal(cls, v: object) -> Decimal:
+        try:
+            return Decimal(str(v))
+        except (InvalidOperation, ValueError) as exc:
+            raise ValueError(f"mid_change_bps must be a number, got {v!r}") from exc
+
+    @field_validator("buckets_usd", mode="before")
+    @classmethod
+    def _buckets_as_decimals(cls, v: object) -> list[Decimal]:
+        if v is None:
+            from monitor.bybit.depth import DEFAULT_DEPTH_BUCKETS_USD
+
+            return list(DEFAULT_DEPTH_BUCKETS_USD)
+        if not isinstance(v, list):
+            raise ValueError("buckets_usd must be a list")
+        if not v:
+            raise ValueError("binance.depth.buckets_usd must be non-empty")
+        out: list[Decimal] = []
+        for raw in v:
+            try:
+                q = Decimal(str(raw))
+            except (InvalidOperation, ValueError) as exc:
+                raise ValueError(f"invalid bucket {raw!r}") from exc
+            if q <= 0:
+                raise ValueError(f"bucket must be > 0, got {raw!r}")
+            out.append(q)
+        return out
+
+
+class BinanceCollectorConfig(BaseModel):
+    """Binance public market-data streams (no API key). Hosts are config-driven."""
+
+    model_config = ConfigDict(extra="forbid", frozen=True)
+
+    # REST base for optional probes; collector runtime is WS-first.
+    rest_base_url: str = Field(min_length=1)
+    ws_base_url: str = Field(min_length=1)
+    book_stream: str = Field(default="bookTicker", min_length=1)
+    trade_stream: str = Field(default="aggTrade", min_length=1)
+    reconnect_min_s: float = Field(gt=0)
+    reconnect_max_s: float = Field(gt=0)
+    post_reconnect_gap_s: float = Field(ge=0)
+    ping_interval_s: float = Field(gt=0)
+    depth: BinanceDepthConfig = Field(default_factory=BinanceDepthConfig)
+
+    @model_validator(mode="after")
+    def _reconnect_bounds(self) -> BinanceCollectorConfig:
+        if self.reconnect_max_s < self.reconnect_min_s:
+            raise ValueError(
+                f"reconnect_max_s={self.reconnect_max_s} must be >= "
+                f"reconnect_min_s={self.reconnect_min_s}"
+            )
+        return self
+
+
+class BscCollectorConfig(BaseModel):
+    """BSC / PancakeSwap V3 block poller (M7-3 / WHI-772)."""
+
+    model_config = ConfigDict(extra="forbid", frozen=True)
+
+    public_rpc_url: str = Field(min_length=1)
+    multicall3: str = Field(pattern=r"^0x[0-9a-fA-F]{40}$")
+    block_poll_interval_s: float = Field(gt=0)
+    head_lag_blocks: int = Field(ge=0)
+    max_block_gap: int = Field(ge=1)
+    max_catchup_blocks: int = Field(ge=1)
+    rpc_min_interval_s: float = Field(ge=0)
+    rpc_timeout_s: float = Field(gt=0)
+    rpc_retries: int = Field(ge=1)
+    fetch_swap_receipts: bool = True
+    # Sample slot0 every N blocks (1 = every block). Swaps still every block.
+    pool_state_every_n_blocks: int = Field(default=1, ge=1)
+    # BSC USDT decimals (inventory is 18; kept explicit for mid math).
+    quote_decimals: int = Field(default=18, ge=0, le=255)
+    latency_window_blocks: int = Field(ge=1, le=10_000)
+
+    @model_validator(mode="after")
+    def _gap_bounds(self) -> BscCollectorConfig:
+        if self.max_block_gap > self.max_catchup_blocks:
+            raise ValueError(
+                f"max_block_gap={self.max_block_gap} must be <= "
+                f"max_catchup_blocks={self.max_catchup_blocks}"
+            )
+        return self
+
+
 class LoggingConfig(BaseModel):
     model_config = ConfigDict(extra="forbid", frozen=True)
 
@@ -223,17 +324,61 @@ def default_retention_config() -> RetentionConfig:
 
 
 class CollectorConfig(BaseModel):
+    """Collector tunables for one market process.
+
+    Two venue shapes (exactly one required):
+
+    * **bybit-fluxion** — ``bybit`` + ``mantle`` + ``rfq``
+    * **binance-pancake** — ``binance`` + ``bsc`` (no RFQ)
+    """
+
     model_config = ConfigDict(extra="forbid", frozen=True)
 
     version: int = Field(ge=1)
     sqlite_path: str = Field(min_length=1)
-    bybit: BybitCollectorConfig
-    mantle: MantleCollectorConfig
-    rfq: RfqCollectorConfig
+    bybit: BybitCollectorConfig | None = None
+    mantle: MantleCollectorConfig | None = None
+    rfq: RfqCollectorConfig | None = None
+    binance: BinanceCollectorConfig | None = None
+    bsc: BscCollectorConfig | None = None
     logging: LoggingConfig
     retention: RetentionConfig = Field(default_factory=default_retention_config)
     # WHI-768: in-collector address_labels refresh interval (0 = CLI-only).
     attribution_refresh_interval_s: float = Field(default=3600.0, ge=0)
+
+    @model_validator(mode="after")
+    def _venue_shape(self) -> CollectorConfig:
+        bybit_shape = self.bybit is not None
+        binance_shape = self.binance is not None
+        if bybit_shape == binance_shape:
+            raise ValueError(
+                "collector config must define exactly one venue shape: "
+                "(bybit + mantle + rfq) or (binance + bsc)"
+            )
+        if bybit_shape:
+            if self.mantle is None or self.rfq is None:
+                raise ValueError(
+                    "bybit-fluxion shape requires bybit, mantle, and rfq sections"
+                )
+            if self.bsc is not None:
+                raise ValueError("bybit-fluxion shape must not set bsc")
+        else:
+            if self.bsc is None:
+                raise ValueError("binance-pancake shape requires binance and bsc sections")
+            if self.mantle is not None or self.rfq is not None:
+                raise ValueError(
+                    "binance-pancake shape must not set mantle or rfq "
+                    "(Pancake is AMM-only per M7-1)"
+                )
+        return self
+
+    @property
+    def is_binance_pancake(self) -> bool:
+        return self.binance is not None
+
+    @property
+    def is_bybit_fluxion(self) -> bool:
+        return self.bybit is not None
 
     def resolved_sqlite_path(self, repo_root: Path | None = None) -> Path:
         root = repo_root if repo_root is not None else _REPO_ROOT
@@ -261,11 +406,7 @@ def load_dotenv(repo_root: Path | None = None) -> None:
         os.environ.setdefault(key.strip(), value.strip().strip('"').strip("'"))
 
 
-def resolve_mantle_rpc_url(public_fallback: str = PUBLIC_RPC_URL) -> str:
-    """Map optional MANTLE_RPC_URL (wss→https) to an HTTP JSON-RPC endpoint."""
-    raw = os.environ.get("MANTLE_RPC_URL", "").strip()
-    if not raw:
-        return public_fallback
+def _rewrite_ws_rpc_url(raw: str) -> str:
     if raw.startswith("wss://wss-"):
         return raw.replace("wss://wss-", "https://rpc-", 1)
     if raw.startswith("ws://ws-"):
@@ -275,12 +416,34 @@ def resolve_mantle_rpc_url(public_fallback: str = PUBLIC_RPC_URL) -> str:
     return raw
 
 
+def resolve_mantle_rpc_url(public_fallback: str = PUBLIC_RPC_URL) -> str:
+    """Map optional MANTLE_RPC_URL (wss→https) to an HTTP JSON-RPC endpoint."""
+    raw = os.environ.get("MANTLE_RPC_URL", "").strip()
+    if not raw:
+        return public_fallback
+    return _rewrite_ws_rpc_url(raw)
+
+
+def resolve_bsc_rpc_url(public_fallback: str = PUBLIC_BSC_RPC_URL) -> str:
+    """Map optional BSC_RPC_URL (wss→https) to an HTTP JSON-RPC endpoint."""
+    raw = os.environ.get("BSC_RPC_URL", "").strip()
+    if not raw:
+        return public_fallback
+    return _rewrite_ws_rpc_url(raw)
+
+
 def rpc_url_kind(url: str) -> Literal["keyed", "public"]:
     """Classify endpoint for meta/logging without hardcoding host fragments elsewhere."""
     # Mantle keyed tob endpoints rewrite to https://rpc-tob... (see resolve_mantle_rpc_url).
     if "rpc-tob." in url or "wss-tob." in url:
         return "keyed"
-    if url.rstrip("/") == PUBLIC_RPC_URL.rstrip("/"):
+    if url.rstrip("/") in {
+        PUBLIC_RPC_URL.rstrip("/"),
+        PUBLIC_BSC_RPC_URL.rstrip("/"),
+    }:
+        return "public"
+    # Known public BSC dataseeds.
+    if "bsc-dataseed" in url or "1rpc.io/bnb" in url:
         return "public"
     return "keyed" if "/v1/" in url else "public"
 
@@ -325,12 +488,27 @@ def _merge_market_section(
     # Shared process-level knobs (not venue-specific).
     if "attribution_refresh_interval_s" in data:
         flat["attribution_refresh_interval_s"] = data["attribution_refresh_interval_s"]
-    for key in ("bybit", "mantle", "rfq"):
+    for key in ("bybit", "mantle", "rfq", "binance", "bsc"):
         if key in section:
             flat[key] = section[key]
         elif key in data:
             # Rare: shared venue block at root (not preferred).
             flat[key] = data[key]
+    # Normalize legacy scaffold keys → typed BinanceCollectorConfig fields.
+    if "binance" in flat and isinstance(flat["binance"], dict):
+        b = dict(flat["binance"])
+        # Scaffold used book_topic_prefix/trade_topic_prefix; typed uses *_stream.
+        if "book_stream" not in b and "book_topic_prefix" in b:
+            b["book_stream"] = b.pop("book_topic_prefix")
+        elif "book_topic_prefix" in b:
+            b.pop("book_topic_prefix")
+        if "trade_stream" not in b and "trade_topic_prefix" in b:
+            # "trade" scaffold → prefer aggTrade (issue WHI-772).
+            legacy = str(b.pop("trade_topic_prefix"))
+            b["trade_stream"] = "aggTrade" if legacy == "trade" else legacy
+        elif "trade_topic_prefix" in b:
+            b.pop("trade_topic_prefix")
+        flat["binance"] = b
     return flat
 
 

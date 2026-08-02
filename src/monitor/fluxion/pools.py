@@ -26,10 +26,12 @@ class PoolMeta:
     pool: str
     wrapper_token: str
     native_token: str
-    quote_token: str  # USDC address
+    quote_token: str  # quote ERC-20 address (USDC Mantle / USDT BSC)
     native_decimals: int = NATIVE_DECIMALS_DEFAULT
     wrapper_decimals: int = WRAPPER_DECIMALS_DEFAULT
     quote_decimals: int = USDC_DECIMALS
+    # Fluxion uses ERC-4626 wrapper; Pancake bStocks trade native raw (no wrap).
+    has_erc4626_wrapper: bool = True
 
 
 def mid_from_sqrt_price_x96(
@@ -177,37 +179,46 @@ def fetch_pool_states(
     recv_ts_ms: int,
     gap: bool = False,
 ) -> list[FluxionPoolStateTick]:
-    """One Multicall3 round-trip for all pool slot0s + wrapper convertToAssets."""
+    """One Multicall3 round-trip for all pool slot0s (+ optional ERC-4626 convert)."""
     pool_list = list(pools)
     if not pool_list:
         return []
 
+    # Mixed wrapper/non-wrapper batches: encode convert only where needed and
+    # track per-pool result slices (not a fixed stride).
     calls: list[tuple[str, bytes]] = []
-    # Layout per pool: 4 pool calls + 1 convertToAssets
+    slices: list[tuple[int, int, bool]] = []  # (start, end, has_convert)
     for meta in pool_list:
+        start = len(calls)
         calls.extend(pool_state_calls(meta.pool))
-        calls.append(
-            (
-                meta.wrapper_token,
-                encode_call(
-                    SEL_CONVERT_TO_ASSETS,
-                    ["uint256"],
-                    [10**meta.wrapper_decimals],
-                ),
+        if meta.has_erc4626_wrapper:
+            calls.append(
+                (
+                    meta.wrapper_token,
+                    encode_call(
+                        SEL_CONVERT_TO_ASSETS,
+                        ["uint256"],
+                        [10**meta.wrapper_decimals],
+                    ),
+                )
             )
-        )
+            slices.append((start, len(calls), True))
+        else:
+            slices.append((start, len(calls), False))
 
     rets = rpc.multicall(calls, block=block_number, allow_failure=True)
     out: list[FluxionPoolStateTick] = []
-    stride = 5
-    for i, meta in enumerate(pool_list):
-        chunk = rets[i * stride : (i + 1) * stride]
+    for meta, (start, end, has_convert) in zip(pool_list, slices, strict=True):
+        chunk = rets[start:end]
         assets_raw: int | None = None
-        if chunk[4][0] and chunk[4][1]:
+        if has_convert and len(chunk) >= 5 and chunk[4][0] and chunk[4][1]:
             try:
                 assets_raw = decode_uint(chunk[4][1])
             except ValueError:
                 assets_raw = None
+        elif not has_convert:
+            # 1 human native per 1 "wrapper" unit (identity — no vault).
+            assets_raw = 10**meta.native_decimals
         try:
             out.append(
                 decode_pool_state(

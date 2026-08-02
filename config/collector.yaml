@@ -113,32 +113,42 @@ markets:
       # HTTP timeout for quote POSTs.
       http_timeout_s: 20.0
 
-  # --- Binance ⇄ PancakeSwap bStocks (scaffold for M7-3 / WHI-772) ---
-  # Inventory: config/markets/binance-pancake.yaml. Collector process not wired yet.
+  # --- Binance ⇄ PancakeSwap bStocks (M7-3 / WHI-772) ---
+  # Inventory: config/markets/binance-pancake.yaml. Journal: data/monitor-binance-pancake.db
+  # Run: python -m monitor.collector --market binance-pancake
   binance-pancake:
     sqlite_path: data/monitor-binance-pancake.db
-    # Venue blocks below are loadable hints for M7-3; not consumed by
-    # load_collector_config → CollectorConfig (Bybit-shaped) until that issue.
     binance:
-      # US VPS: api.binance.com returns 451 — use vision hosts (WHI-770).
+      # US VPS: api.binance.com returns 451 — use vision hosts (WHI-770). No proxy
+      # hardcoding; override rest/ws URLs here or via non-US egress ops (M7-6).
       rest_base_url: "https://data-api.binance.vision"
       ws_base_url: "wss://data-stream.binance.vision"
-      book_topic_prefix: "depth"
-      trade_topic_prefix: "trade"
+      book_stream: "bookTicker"
+      trade_stream: "aggTrade"
       reconnect_min_s: 1.0
       reconnect_max_s: 60.0
       post_reconnect_gap_s: 5.0
       ping_interval_s: 20.0
+      depth:
+        enabled: true
+        stream: "depth20@100ms"
+        emit_interval_ms: 1000
+        mid_change_bps: 1
+        buckets_usd: ["10", "50", "100", "500", "1000", "10000"]
     bsc:
+      # Optional keyed endpoint: BSC_RPC_URL in .env (public dataseed is throttled).
       public_rpc_url: "https://bsc-dataseed.binance.org"
       multicall3: "0xcA11bde05977b3631167028862bE2a173976CA11"
-      # BSC ~3s blocks; poll budget ~4× Mantle if head-following every block.
-      block_poll_interval_s: 0.5
+      # BSC ~0.45s blocks (M7-1); poll slightly faster than block time.
+      block_poll_interval_s: 0.25
       head_lag_blocks: 1
-      max_block_gap: 1
-      max_catchup_blocks: 15
+      max_block_gap: 2
+      max_catchup_blocks: 30
       rpc_min_interval_s: 0.05
       rpc_timeout_s: 30.0
       rpc_retries: 5
       fetch_swap_receipts: true
+      # Sample slot0 every 2nd block to cut Multicall load; swaps still every block.
+      pool_state_every_n_blocks: 2
+      quote_decimals: 18
       latency_window_blocks: 256

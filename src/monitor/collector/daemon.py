@@ -1,4 +1,10 @@
-"""Orchestrate Bybit WS + Mantle block poll + RFQ poll → SQLite."""
+"""Orchestrate CEX WS + chain poll (+ RFQ) → per-market SQLite.
+
+Supports:
+
+* ``bybit-fluxion`` — Bybit WS + Mantle Fluxion + RFQ (M2)
+* ``binance-pancake`` — Binance WS + BSC Pancake V3, no RFQ (M7-3 / WHI-772)
+"""
 
 from __future__ import annotations
 
@@ -7,15 +13,18 @@ import asyncio
 import logging
 import signal
 import sys
+from collections.abc import Callable
 from dataclasses import replace
 from decimal import Decimal
 from pathlib import Path
 
+from monitor.binance.ws import BinanceWsCollector
 from monitor.bybit.ws import BybitWsCollector
 from monitor.collector.config import (
     CollectorConfig,
     load_collector_config,
     load_dotenv,
+    resolve_bsc_rpc_url,
     resolve_mantle_rpc_url,
     rpc_url_kind,
 )
@@ -38,6 +47,8 @@ from monitor.quotes import (
 )
 from monitor.storage import SqliteStore
 from monitor.symbols import load_pairs_config
+from monitor.symbols.bstocks_load import load_bstocks_pairs_config
+from monitor.symbols.bstocks_models import BStocksPairsConfig
 from monitor.symbols.models import PairsConfig
 from monitor.symbols.token_map import (
     inventory_token_to_pair,
@@ -53,18 +64,29 @@ class CollectorDaemon:
 
     def __init__(
         self,
-        pairs: PairsConfig,
+        pairs: PairsConfig | None,
         collector: CollectorConfig,
         store: SqliteStore,
         *,
+        bstocks: BStocksPairsConfig | None = None,
         rpc_url: str | None = None,
+        market_id: str = DEFAULT_MARKET_ID,
     ) -> None:
+        if collector.is_bybit_fluxion and pairs is None:
+            raise ValueError("bybit-fluxion collector requires pairs inventory")
+        if collector.is_binance_pancake and bstocks is None:
+            raise ValueError("binance-pancake collector requires bstocks inventory")
         self.pairs = pairs
+        self.bstocks = bstocks
         self.cfg = collector
         self.store = store
-        self.rpc_url = rpc_url or resolve_mantle_rpc_url(
-            collector.mantle.public_rpc_url
-        )
+        self.market_id = market_id
+        if collector.is_binance_pancake:
+            assert collector.bsc is not None
+            self.rpc_url = rpc_url or resolve_bsc_rpc_url(collector.bsc.public_rpc_url)
+        else:
+            assert collector.mantle is not None
+            self.rpc_url = rpc_url or resolve_mantle_rpc_url(collector.mantle.public_rpc_url)
         self._stop = asyncio.Event()
         self._rfq_gap = False
         # Set by retention loop under disk-critical waterline (WHI-751).
@@ -72,16 +94,23 @@ class CollectorDaemon:
         self._book_pause_logged = False
         self._book_pause_started_ms: int | None = None
         # After resume, mark all pairs' books gap=1 until this wall-clock ms
-        # (mirrors BybitWsCollector post-reconnect gap window).
+        # (mirrors WS collector post-reconnect gap window).
         self._book_gap_until_ms: int = 0
-        # Last written L1 row fingerprint — skip duplicate rows under orderbook.50
-        # even while sticky gap=True (include gap so first gapped tick still lands).
+        # Last written L1 row fingerprint — skip duplicate rows under hot books.
         self._last_book_l1: dict[str, tuple[Decimal, Decimal, bool]] = {}
 
     def request_stop(self) -> None:
         self._stop.set()
 
     async def run(self) -> None:
+        if self.cfg.is_binance_pancake:
+            await self._run_binance_pancake()
+        else:
+            await self._run_bybit_fluxion()
+
+    async def _run_bybit_fluxion(self) -> None:
+        assert self.pairs is not None
+        assert self.cfg.bybit is not None
         pair_id_by_symbol = {p.bybit.symbol.upper(): p.id for p in self.pairs.pairs}
         mult_by_symbol = {
             p.bybit.symbol.upper(): p.bybit.multiplier for p in self.pairs.pairs
@@ -97,7 +126,6 @@ class CollectorDaemon:
             on_book=self._on_book,
             on_trade=self._on_trade,
             on_gap=self._on_gap,
-            # on_depth None disables VWAP path in the WS collector.
             on_depth=self._on_depth if depth_cfg.enabled else None,
             book_topic_prefix=self.cfg.bybit.book_topic_prefix,
             trade_topic_prefix=self.cfg.bybit.trade_topic_prefix,
@@ -113,7 +141,7 @@ class CollectorDaemon:
 
         tasks = [
             asyncio.create_task(bybit.run(), name="bybit_ws"),
-            asyncio.create_task(self._chain_loop(), name="mantle_chain"),
+            asyncio.create_task(self._chain_loop_mantle(), name="mantle_chain"),
             asyncio.create_task(self._rfq_loop(), name="rfq_poll"),
             asyncio.create_task(self._retention_loop(), name="retention"),
             asyncio.create_task(
@@ -121,10 +149,12 @@ class CollectorDaemon:
             ),
         ]
         self.store.set_meta("collector_started_ms", str(now_ms()))
+        self.store.set_meta("market_id", self.market_id)
         self.store.set_meta("rpc_url_kind", rpc_url_kind(self.rpc_url))
         logger.info(
-            "collector started pairs=%d amm_pools=%d sqlite=%s rpc_kind=%s "
+            "collector started market=%s pairs=%d amm_pools=%d sqlite=%s rpc_kind=%s "
             "retention=%s bybit_book=%s depth=%s",
+            self.market_id,
             len(self.pairs.pairs),
             len(self.pairs.pairs_with_amm()),
             self.store.path,
@@ -140,26 +170,93 @@ class CollectorDaemon:
             for t in tasks:
                 t.cancel()
             await asyncio.gather(*tasks, return_exceptions=True)
-            # If we shut down while disk-critical, still record the pause window.
-            if self._book_writes_paused and self._book_pause_started_ms is not None:
-                end = now_ms()
-                self.store.insert_gap(
-                    CollectorGap(
-                        source="disk_critical",
-                        gap_start_ms=self._book_pause_started_ms,
-                        gap_end_ms=end,
-                        detail="collector stopped while bybit_book writes paused",
-                    )
+            self._finalize_stop("bybit_book")
+
+    async def _run_binance_pancake(self) -> None:
+        assert self.bstocks is not None
+        assert self.cfg.binance is not None
+        assert self.cfg.bsc is not None
+        pair_id_by_symbol = {
+            p.binance.symbol.upper(): p.id for p in self.bstocks.pairs
+        }
+        mult_by_symbol = {
+            p.binance.symbol.upper(): p.binance.ui_multiplier for p in self.bstocks.pairs
+        }
+        symbols = list(pair_id_by_symbol.keys())
+        depth_cfg = self.cfg.binance.depth
+
+        binance = BinanceWsCollector(
+            ws_base_url=self.cfg.binance.ws_base_url,
+            symbols=symbols,
+            pair_id_by_symbol=pair_id_by_symbol,
+            ui_multiplier_by_symbol=mult_by_symbol,
+            on_book=self._on_book,
+            on_trade=self._on_trade,
+            on_gap=self._on_gap,
+            on_depth=self._on_depth if depth_cfg.enabled else None,
+            book_stream=self.cfg.binance.book_stream,
+            depth_stream=depth_cfg.stream,
+            trade_stream=self.cfg.binance.trade_stream,
+            reconnect_min_s=self.cfg.binance.reconnect_min_s,
+            reconnect_max_s=self.cfg.binance.reconnect_max_s,
+            post_reconnect_gap_s=self.cfg.binance.post_reconnect_gap_s,
+            ping_interval_s=self.cfg.binance.ping_interval_s,
+            depth_enabled=depth_cfg.enabled,
+            depth_buckets_usd=depth_cfg.buckets_usd,
+            depth_emit_interval_ms=depth_cfg.emit_interval_ms,
+            depth_mid_change_bps=depth_cfg.mid_change_bps,
+        )
+
+        tasks = [
+            asyncio.create_task(binance.run(), name="binance_ws"),
+            asyncio.create_task(self._chain_loop_bsc(), name="bsc_chain"),
+            asyncio.create_task(self._retention_loop(), name="retention"),
+            # No RFQ / MM attribution refresh for AMM-only pancake market.
+        ]
+        self.store.set_meta("collector_started_ms", str(now_ms()))
+        self.store.set_meta("market_id", self.market_id)
+        self.store.set_meta("rpc_url_kind", rpc_url_kind(self.rpc_url))
+        logger.info(
+            "collector started market=%s pairs=%d amm_pools=%d sqlite=%s rpc_kind=%s "
+            "retention=%s binance_ws=%s depth=%s pool_stride=%d",
+            self.market_id,
+            len(self.bstocks.pairs),
+            len(self.bstocks.pairs_with_amm()),
+            self.store.path,
+            rpc_url_kind(self.rpc_url),
+            self.cfg.retention.enabled,
+            self.cfg.binance.ws_base_url,
+            depth_cfg.enabled,
+            self.cfg.bsc.pool_state_every_n_blocks,
+        )
+        try:
+            await self._stop.wait()
+        finally:
+            binance.request_stop()
+            for t in tasks:
+                t.cancel()
+            await asyncio.gather(*tasks, return_exceptions=True)
+            self._finalize_stop("cex_book")
+
+    def _finalize_stop(self, book_label: str) -> None:
+        if self._book_writes_paused and self._book_pause_started_ms is not None:
+            end = now_ms()
+            self.store.insert_gap(
+                CollectorGap(
+                    source="disk_critical",
+                    gap_start_ms=self._book_pause_started_ms,
+                    gap_end_ms=end,
+                    detail=f"collector stopped while {book_label} writes paused",
                 )
-            self.store.set_meta("collector_stopped_ms", str(now_ms()))
-            logger.info("collector stopped")
+            )
+        self.store.set_meta("collector_stopped_ms", str(now_ms()))
+        logger.info("collector stopped market=%s", self.market_id)
 
     async def _on_book(self, tick: BybitBookTick) -> None:
         if self._book_writes_paused:
-            # One log line per pause episode — not per tick (~7+/s).
             if not self._book_pause_logged:
                 logger.error(
-                    "skip bybit_book writes: disk critical (retention pause active)"
+                    "skip book writes: disk critical (retention pause active)"
                 )
                 self._book_pause_logged = True
             return
@@ -167,8 +264,6 @@ class CollectorDaemon:
             not tick.gap and now_ms() < self._book_gap_until_ms
         ):
             tick = replace(tick, gap=True)
-        # orderbook.50 fires often for non-L1 levels; only journal when L1 or
-        # gap flag changes (sticky gap must not re-amplify full delta rate).
         key = (tick.bid, tick.ask, tick.gap)
         if self._last_book_l1.get(tick.pair_id) == key:
             return
@@ -176,7 +271,7 @@ class CollectorDaemon:
         await asyncio.to_thread(self.store.insert_bybit_book, [tick])
 
     async def _on_depth(self, tick: BybitDepthTick) -> None:
-        """Persist a precomputed VWAP curve (already throttled in BybitWsCollector)."""
+        """Persist a precomputed VWAP curve (already throttled in the WS collector)."""
         if self._book_writes_paused:
             return
         if tick.recv_ts_ms < self._book_gap_until_ms or (
@@ -197,7 +292,9 @@ class CollectorDaemon:
             gap.gap_end_ms - gap.gap_start_ms,
         )
 
-    async def _chain_loop(self) -> None:
+    async def _chain_loop_mantle(self) -> None:
+        assert self.pairs is not None
+        assert self.cfg.mantle is not None
         pools = [
             PoolMeta(
                 pair_id=p.id,
@@ -217,48 +314,7 @@ class CollectorDaemon:
             timeout=self.cfg.mantle.rpc_timeout_s,
             retries=self.cfg.mantle.rpc_retries,
         )
-
-        # Rolling block_ts→recv latency (one sample per block via on_block_done).
-        latency_tracker = LatencyTracker(
-            window=self.cfg.mantle.latency_window_blocks
-        )
-
-        def on_state(ticks: list[FluxionPoolStateTick]) -> None:
-            self.store.insert_pool_state(ticks)
-
-        def on_swaps(ticks: list[FluxionSwapTick]) -> None:
-            self.store.insert_swaps(ticks)
-
-        def on_fills(ticks: list[FluxionRfqFillTick]) -> None:
-            self.store.insert_rfq_fills(ticks)
-
-        def on_transfers(ticks: list[Erc20TransferTick]) -> None:
-            self.store.insert_erc20_transfers(ticks)
-
-        def on_gap(gap: CollectorGap) -> None:
-            self.store.insert_gap(gap)
-            logger.warning("chain gap: %s", gap.detail)
-
-        def on_block_done(
-            block_number: int, block_ts: int, _discovered_ms: int, recv_ts_ms: int
-        ) -> None:
-            latency_ms = block_ingest_latency_ms(block_ts, recv_ts_ms)
-            report = latency_tracker.add(latency_ms)
-            self.store.set_meta("last_block_ingest_latency_ms", str(latency_ms))
-            self.store.set_meta("last_block", str(block_number))
-            # Distribution meta — WHI-749; do not treat last_* as P95.
-            # LatencyTracker.add always leaves count >= 1, so p50/p95/p99 are set.
-            self.store.set_meta(
-                "block_ingest_latency_p50_ms", str(int(report.p50 or 0))
-            )
-            self.store.set_meta(
-                "block_ingest_latency_p95_ms", str(int(report.p95 or 0))
-            )
-            self.store.set_meta(
-                "block_ingest_latency_p99_ms", str(int(report.p99 or 0))
-            )
-            self.store.set_meta("block_ingest_latency_n", str(report.count))
-
+        latency_tracker = LatencyTracker(window=self.cfg.mantle.latency_window_blocks)
         transfer_map = (
             native_token_to_pair(self.pairs)
             if self.cfg.mantle.collect_erc20_transfers
@@ -277,13 +333,119 @@ class CollectorDaemon:
             transfer_tokens=transfer_map,
             transfer_decimals=native_token_decimals(self.pairs),
             enrich_rfq_fills=self.cfg.mantle.enrich_rfq_fills,
-            on_pool_state=on_state,
-            on_swaps=on_swaps,
-            on_rfq_fills=on_fills,
-            on_transfers=on_transfers if transfer_map else None,
-            on_gap=on_gap,
-            on_block_done=on_block_done,
+            gap_source="mantle_blocks",
+            on_pool_state=self._on_pool_state,
+            on_swaps=self._on_swaps,
+            on_rfq_fills=self._on_rfq_fills,
+            on_transfers=self._on_transfers if transfer_map else None,
+            on_gap=self._on_chain_gap,
+            on_block_done=self._make_on_block_done(latency_tracker),
         )
+        await self._poll_chain(
+            poller,
+            rpc,
+            interval_s=self.cfg.mantle.block_poll_interval_s,
+            gap_source="mantle_blocks",
+        )
+
+    async def _chain_loop_bsc(self) -> None:
+        assert self.bstocks is not None
+        assert self.cfg.bsc is not None
+        quote_dec = self.cfg.bsc.quote_decimals
+        pools = [
+            PoolMeta(
+                pair_id=p.id,
+                pool=p.pancake.amm.pool,
+                # No ERC-4626 wrapper — native trades raw in the V3 pool.
+                wrapper_token=p.pancake.native_token,
+                native_token=p.pancake.native_token,
+                quote_token=p.pancake.quote_token_address,
+                native_decimals=p.pancake.native_decimals,
+                wrapper_decimals=p.pancake.native_decimals,
+                quote_decimals=quote_dec,
+                has_erc4626_wrapper=False,
+            )
+            for p in self.bstocks.pairs_with_amm()
+            if p.pancake.amm is not None
+        ]
+        rpc = Rpc(
+            self.rpc_url,
+            multicall3=self.cfg.bsc.multicall3,
+            min_interval=self.cfg.bsc.rpc_min_interval_s,
+            timeout=self.cfg.bsc.rpc_timeout_s,
+            retries=self.cfg.bsc.rpc_retries,
+        )
+        latency_tracker = LatencyTracker(window=self.cfg.bsc.latency_window_blocks)
+        poller = ChainPoller(
+            rpc,
+            pools=pools,
+            lop_address="",  # AMM-only — no RFQ / LOP
+            head_lag_blocks=self.cfg.bsc.head_lag_blocks,
+            max_block_gap=self.cfg.bsc.max_block_gap,
+            max_catchup_blocks=self.cfg.bsc.max_catchup_blocks,
+            fetch_swap_receipts=self.cfg.bsc.fetch_swap_receipts,
+            enrich_rfq_fills=False,
+            gap_source="bsc_blocks",
+            pool_state_every_n_blocks=self.cfg.bsc.pool_state_every_n_blocks,
+            on_pool_state=self._on_pool_state,
+            on_swaps=self._on_swaps,
+            on_gap=self._on_chain_gap,
+            on_block_done=self._make_on_block_done(latency_tracker),
+        )
+        await self._poll_chain(
+            poller,
+            rpc,
+            interval_s=self.cfg.bsc.block_poll_interval_s,
+            gap_source="bsc_blocks",
+        )
+
+    def _on_pool_state(self, ticks: list[FluxionPoolStateTick]) -> None:
+        self.store.insert_pool_state(ticks)
+
+    def _on_swaps(self, ticks: list[FluxionSwapTick]) -> None:
+        self.store.insert_swaps(ticks)
+
+    def _on_rfq_fills(self, ticks: list[FluxionRfqFillTick]) -> None:
+        self.store.insert_rfq_fills(ticks)
+
+    def _on_transfers(self, ticks: list[Erc20TransferTick]) -> None:
+        self.store.insert_erc20_transfers(ticks)
+
+    def _on_chain_gap(self, gap: CollectorGap) -> None:
+        self.store.insert_gap(gap)
+        logger.warning("chain gap: %s", gap.detail)
+
+    def _make_on_block_done(
+        self, latency_tracker: LatencyTracker
+    ) -> Callable[[int, int, int, int], None]:
+        def on_block_done(
+            block_number: int, block_ts: int, _discovered_ms: int, recv_ts_ms: int
+        ) -> None:
+            latency_ms = block_ingest_latency_ms(block_ts, recv_ts_ms)
+            report = latency_tracker.add(latency_ms)
+            self.store.set_meta("last_block_ingest_latency_ms", str(latency_ms))
+            self.store.set_meta("last_block", str(block_number))
+            self.store.set_meta(
+                "block_ingest_latency_p50_ms", str(int(report.p50 or 0))
+            )
+            self.store.set_meta(
+                "block_ingest_latency_p95_ms", str(int(report.p95 or 0))
+            )
+            self.store.set_meta(
+                "block_ingest_latency_p99_ms", str(int(report.p99 or 0))
+            )
+            self.store.set_meta("block_ingest_latency_n", str(report.count))
+
+        return on_block_done
+
+    async def _poll_chain(
+        self,
+        poller: ChainPoller,
+        rpc: Rpc,
+        *,
+        interval_s: float,
+        gap_source: str,
+    ) -> None:
         try:
             while not self._stop.is_set():
                 try:
@@ -293,23 +455,22 @@ class CollectorDaemon:
                     await asyncio.to_thread(
                         self.store.insert_gap,
                         CollectorGap(
-                            source="mantle_blocks",
+                            source=gap_source,
                             gap_start_ms=now_ms(),
                             gap_end_ms=now_ms(),
                             detail=f"poll error: {exc}",
                         ),
                     )
                 try:
-                    await asyncio.wait_for(
-                        self._stop.wait(),
-                        timeout=self.cfg.mantle.block_poll_interval_s,
-                    )
+                    await asyncio.wait_for(self._stop.wait(), timeout=interval_s)
                 except TimeoutError:
                     pass
         finally:
             rpc.close()
 
     async def _rfq_loop(self) -> None:
+        assert self.pairs is not None
+        assert self.cfg.rfq is not None
         poller = RfqPoller(
             pairs=list(self.pairs.pairs),
             rfq=self.pairs.rfq,
@@ -319,7 +480,6 @@ class CollectorDaemon:
             poll_both_sides=self.cfg.rfq.poll_both_sides,
             http_timeout_s=self.cfg.rfq.http_timeout_s,
         )
-        # Fill the global budget: one HTTP call every 60/rate_limit seconds.
         interval = poller.poll_interval_s()
         try:
             while not self._stop.is_set():
@@ -352,7 +512,6 @@ class CollectorDaemon:
         if interval <= 0:
             logger.info("attribution refresh disabled (interval_s=0)")
             return
-        # Defer first pass so chain/RFQ have a sample window after boot.
         first = True
         while not self._stop.is_set():
             delay = 30.0 if first else interval
@@ -378,8 +537,6 @@ class CollectorDaemon:
         if not cfg.enabled:
             logger.info("retention disabled in collector.yaml")
             return
-        # First pass shortly after boot so a full disk is addressed without
-        # waiting a full interval; subsequent passes honor interval_s.
         first = True
         while not self._stop.is_set():
             if not first:
@@ -399,7 +556,7 @@ class CollectorDaemon:
                     self._book_pause_logged = False
                     self._book_pause_started_ms = report.now_ms
                     logger.error(
-                        "disk critical free=%s — bybit_book writes paused until "
+                        "disk critical free=%s — book writes paused until "
                         "retention frees space",
                         report.free_bytes,
                     )
@@ -407,7 +564,6 @@ class CollectorDaemon:
                     start = self._book_pause_started_ms or report.now_ms
                     self._book_pause_logged = False
                     self._book_pause_started_ms = None
-                    # Cover all pairs for a few seconds (same idea as WS reconnect).
                     self._book_gap_until_ms = report.now_ms + 5_000
                     await asyncio.to_thread(
                         self.store.insert_gap,
@@ -416,11 +572,11 @@ class CollectorDaemon:
                             gap_start_ms=start,
                             gap_end_ms=report.now_ms,
                             detail=(
-                                f"bybit_book writes resumed free={report.free_bytes}"
+                                f"book writes resumed free={report.free_bytes}"
                             ),
                         ),
                     )
-                    logger.info("disk recovered — bybit_book writes resumed")
+                    logger.info("disk recovered — book writes resumed")
                 elif report.disk_level != "ok":
                     logger.warning(
                         "disk %s free=%s deleted=%s",
@@ -449,36 +605,48 @@ def run_forever(
 ) -> None:
     load_dotenv()
     mid = market_id or DEFAULT_MARKET_ID
+    pairs: PairsConfig | None = None
+    bstocks: BStocksPairsConfig | None = None
+
     if pairs_path is not None:
-        # Explicit inventory path (tests / overrides): still market-scope collector.
-        pairs = load_pairs_config(pairs_path)
         collector = load_collector_config(collector_path, market_id=mid)
         configured = sqlite_path or collector.resolved_sqlite_path()
-        # Convention-path-only legacy fallback (custom --sqlite never redirects).
         db_path = resolve_market_sqlite(market_id=mid, configured=configured)
+        if collector.is_binance_pancake:
+            bstocks = load_bstocks_pairs_config(pairs_path)
+        else:
+            pairs = load_pairs_config(pairs_path)
     else:
         ctx = load_market_context(
             mid,
             collector_path=collector_path,
             sqlite_path=sqlite_path,
         )
-        if ctx.pairs is None:
-            raise SystemExit(
-                f"market {mid!r} has no Bybit/Fluxion pairs inventory; "
-                "collector runtime for this market is not wired yet (see M7-3)"
-            )
         if ctx.collector is None:
             raise SystemExit(
                 f"market {mid!r} has no collector section in collector.yaml"
             )
-        pairs = ctx.pairs
         collector = ctx.collector
         db_path = ctx.sqlite_path
+        if collector.is_binance_pancake:
+            if ctx.bstocks is None:
+                raise SystemExit(
+                    f"market {mid!r} has no bStocks inventory for binance-pancake"
+                )
+            bstocks = ctx.bstocks
+        else:
+            if ctx.pairs is None:
+                raise SystemExit(
+                    f"market {mid!r} has no Bybit/Fluxion pairs inventory"
+                )
+            pairs = ctx.pairs
 
     _configure_logging(collector.logging.level)
     logger.info("collector market=%s sqlite=%s", mid, db_path)
     store = SqliteStore(db_path)
-    daemon = CollectorDaemon(pairs, collector, store)
+    daemon = CollectorDaemon(
+        pairs, collector, store, bstocks=bstocks, market_id=mid
+    )
 
     loop = asyncio.new_event_loop()
     asyncio.set_event_loop(loop)
@@ -502,7 +670,9 @@ def run_forever(
 
 def main(argv: list[str] | None = None) -> None:
     parser = argparse.ArgumentParser(
-        description="M2 live collector: Bybit WS + Fluxion chain + RFQ → SQLite"
+        description=(
+            "Live collector: Bybit⇄Fluxion or Binance⇄Pancake → per-market SQLite"
+        )
     )
     parser.add_argument(
         "--market",

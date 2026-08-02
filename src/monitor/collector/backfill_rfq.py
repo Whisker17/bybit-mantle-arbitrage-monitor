@@ -143,9 +143,11 @@ def main(argv: list[str] | None = None) -> int:
     )
     load_dotenv()
     collector = load_collector_config()
+    if collector.mantle is None:
+        raise SystemExit("backfill_rfq requires bybit-fluxion (mantle) collector config")
     pairs = load_pairs_config()
     db = args.sqlite or collector.resolved_sqlite_path()
-    rpc_url = resolve_mantle_rpc_url(collector)
+    rpc_url = resolve_mantle_rpc_url(collector.mantle.public_rpc_url)
     store = SqliteStore(db)
     rpc = Rpc(
         rpc_url,

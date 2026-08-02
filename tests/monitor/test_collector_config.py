@@ -22,6 +22,9 @@ def test_load_checked_in_collector_config() -> None:
     assert path.is_file()
     cfg = load_collector_config()
     assert cfg.version == 2
+    assert cfg.bybit is not None
+    assert cfg.mantle is not None
+    assert cfg.rfq is not None
     assert cfg.bybit.book_topic_prefix == "orderbook.50"
     assert cfg.bybit.depth.enabled is True
     assert cfg.bybit.depth.buckets_usd[0] == Decimal("10")

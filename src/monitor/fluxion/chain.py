@@ -47,7 +47,7 @@ class ChainPoller:
         rpc: Rpc,
         *,
         pools: list[PoolMeta],
-        lop_address: str,
+        lop_address: str = "",
         head_lag_blocks: int = 0,
         max_block_gap: int = 1,
         fetch_swap_receipts: bool = True,
@@ -59,6 +59,11 @@ class ChainPoller:
         # token_addr → decimals for Transfer amount decode (default 18).
         transfer_decimals: Mapping[str, int] | None = None,
         enrich_rfq_fills: bool = True,
+        # Source label for collector_gaps (mantle_blocks | bsc_blocks).
+        gap_source: str = "mantle_blocks",
+        # Fetch slot0/liquidity only every N blocks (1 = every block). Swaps still
+        # every block. BSC ~0.45s blocks may want 2 (M7-1 / WHI-772).
+        pool_state_every_n_blocks: int = 1,
         on_pool_state: Callable[[list[FluxionPoolStateTick]], None] | None = None,
         on_swaps: Callable[[list[FluxionSwapTick]], None] | None = None,
         on_rfq_fills: Callable[[list[FluxionRfqFillTick]], None] | None = None,
@@ -68,9 +73,11 @@ class ChainPoller:
         # discovered_ms is wall clock just before getBlock; recv after all RPC.
         on_block_done: Callable[[int, int, int, int], None] | None = None,
     ) -> None:
+        if pool_state_every_n_blocks < 1:
+            raise ValueError("pool_state_every_n_blocks must be >= 1")
         self.rpc = rpc
         self.pools = list(pools)
-        self.lop_address = lop_address
+        self.lop_address = (lop_address or "").strip()
         self.head_lag_blocks = head_lag_blocks
         self.max_block_gap = max_block_gap
         self.fetch_swap_receipts = fetch_swap_receipts
@@ -86,6 +93,8 @@ class ChainPoller:
             k.lower(): int(v) for k, v in (transfer_decimals or {}).items()
         }
         self.enrich_rfq_fills = enrich_rfq_fills
+        self.gap_source = gap_source
+        self.pool_state_every_n_blocks = pool_state_every_n_blocks
         self.on_pool_state = on_pool_state
         self.on_swaps = on_swaps
         self.on_rfq_fills = on_rfq_fills
@@ -121,7 +130,7 @@ class ChainPoller:
             if self.on_gap:
                 self.on_gap(
                     CollectorGap(
-                        source="mantle_blocks",
+                        source=self.gap_source,
                         gap_start_ms=now,
                         gap_end_ms=now,
                         detail=(
@@ -161,7 +170,7 @@ class ChainPoller:
             if self.on_gap:
                 self.on_gap(
                     CollectorGap(
-                        source="mantle_blocks",
+                        source=self.gap_source,
                         gap_start_ms=miss_ts,
                         gap_end_ms=now_ms(),
                         detail=f"block {block} not found",
@@ -172,7 +181,17 @@ class ChainPoller:
         block_ts = int(blk["timestamp"], 16)
 
         states: list[FluxionPoolStateTick] = []
-        if self.pools:
+        # Always sample until every pool has token0/1 cached (needed for swap decode);
+        # then honor pool_state_every_n_blocks (BSC may use 2 — M7-1).
+        need_token_bootstrap = self.pools and any(
+            p.pool.lower() not in self._token_order for p in self.pools
+        )
+        want_pool_state = bool(self.pools) and (
+            need_token_bootstrap
+            or self.pool_state_every_n_blocks == 1
+            or (block % self.pool_state_every_n_blocks == 0)
+        )
+        if want_pool_state:
             # Temporary recv; rewritten after all RPC for this block completes.
             states = fetch_pool_states(
                 self.rpc,
@@ -241,24 +260,25 @@ class ChainPoller:
                     swaps.append(tick)
 
         fills: list[FluxionRfqFillTick] = []
-        try:
-            lop_logs = self.rpc.get_logs(
-                [self.lop_address],
-                block,
-                block,
-                topics=[[TOPIC0_ORDER_FILLED]],
-            )
-        except Exception as exc:  # noqa: BLE001
-            logger.warning("LOP getLogs failed at block %s: %s", block, exc)
-            lop_logs = []
-        for lg in lop_logs:
-            fill = decode_lop_fill_log(lg, block_ts=block_ts, recv_ts_ms=0, gap=gap)
-            if fill is not None:
-                fills.append(fill)
+        if self.lop_address:
+            try:
+                lop_logs = self.rpc.get_logs(
+                    [self.lop_address],
+                    block,
+                    block,
+                    topics=[[TOPIC0_ORDER_FILLED]],
+                )
+            except Exception as exc:  # noqa: BLE001
+                logger.warning("LOP getLogs failed at block %s: %s", block, exc)
+                lop_logs = []
+            for lg in lop_logs:
+                fill = decode_lop_fill_log(lg, block_ts=block_ts, recv_ts_ms=0, gap=gap)
+                if fill is not None:
+                    fills.append(fill)
 
-        # WHI-768: receipt-enrich RFQ fills (volume is tiny; one receipt per fill).
-        if fills and self.enrich_rfq_fills and self.usdc:
-            fills = [self._enrich_rfq_fill(f) for f in fills]
+            # WHI-768: receipt-enrich RFQ fills (volume is tiny; one receipt per fill).
+            if fills and self.enrich_rfq_fills and self.usdc:
+                fills = [self._enrich_rfq_fill(f) for f in fills]
 
         # WHI-768: native xStock ERC-20 Transfer stream (prefer native inventory asset).
         transfers: list[Erc20TransferTick] = []
@@ -279,7 +299,7 @@ class ChainPoller:
                 if pair_id is None:
                     continue
                 dec = self.transfer_decimals.get(token, NATIVE_DECIMALS_DEFAULT)
-                tick = decode_erc20_transfer_log(
+                xfer = decode_erc20_transfer_log(
                     lg,
                     pair_id=pair_id,
                     token=token,
@@ -288,8 +308,8 @@ class ChainPoller:
                     decimals=dec,
                     gap=gap,
                 )
-                if tick is not None:
-                    transfers.append(tick)
+                if xfer is not None:
+                    transfers.append(xfer)
 
         # Stamp after all RPC for this block — matches block_ts → DB latency AC.
         recv = now_ms()
@@ -337,7 +357,7 @@ class ChainPoller:
             return fill
         decoded = decode_rfq_fill_from_receipt(
             tx_hash=txh,
-            logs=logs,  # type: ignore[arg-type]
+            logs=logs,
             usdc=self.usdc,
             lop=self.lop_address,
             settlement_router=None,

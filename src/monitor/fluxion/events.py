@@ -82,11 +82,12 @@ def decode_v3_swap_log(
     quote = meta.quote_token.lower()
     wrapper = meta.wrapper_token.lower()
     t0a, t1a = token0.lower(), token1.lower()
-    # Decimals: quote=6, wrapper=18 for all inventory pools.
+    # Quote decimals from PoolMeta (USDC=6 on Mantle; USDT=18 on BSC).
+    quote_dec = meta.quote_decimals if meta.quote_decimals else USDC_DECIMALS
     if t0a == quote and t1a == wrapper:
-        dec0, dec1 = USDC_DECIMALS, meta.wrapper_decimals
+        dec0, dec1 = quote_dec, meta.wrapper_decimals
     elif t0a == wrapper and t1a == quote:
-        dec0, dec1 = meta.wrapper_decimals, USDC_DECIMALS
+        dec0, dec1 = meta.wrapper_decimals, quote_dec
     else:
         return None
 

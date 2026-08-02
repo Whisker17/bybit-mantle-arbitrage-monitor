@@ -103,7 +103,14 @@ placeholders. Agents must not assume a module exists until its issue lands. -->
     SQLite `data/monitor-{market}.db` (ADR-0001), CLI `--market` (default
     `bybit-fluxion`), metrics costs parameterized from market file, systemd
     `xstocks-collector@.service` + `DEV_MARKET` in `scripts/dev-web.sh`.
-    Binance collector runtime is M7-3; Web multi-market bar is M7-5.
+  - **M7-3 collectors (WHI-772) landed:** `monitor/binance` (bookTicker +
+    depth20@100ms VWAP + aggTrade, multiply `ui_multiplier` into comparable
+    columns) + BSC Pancake V3 chain poll via parameterized `ChainPoller`
+    (no RFQ; `pool_state_every_n_blocks`; PCS Swap topic0). Journal
+    `data/monitor-binance-pancake.db` reuses existing table names (ADR-0001).
+    Config `markets.binance-pancake` in `collector.yaml`; optional
+    `BSC_RPC_URL`. Run: `python -m monitor.collector --market binance-pancake`.
+    Web multi-market bar is M7-5; metrics/attribution for this market is M7-4.
 
 ## Build, test, run
 
@@ -116,6 +123,8 @@ uv run mypy                                   # type check
 uv run python -u -m mba.m5_report             # regenerate report/ from local parquet
 # Phase-2 live collector (M2 / WHI-731); needs network + optional MANTLE_RPC_URL:
 uv run python -m monitor.collector --market bybit-fluxion
+# M7-3 Binance ⇄ Pancake collector; optional BSC_RPC_URL (vision WS hosts default):
+uv run python -m monitor.collector --market binance-pancake
 # Phase-2 TUI (M5 / WHI-734); reads collector SQLite (default data/monitor-bybit-fluxion.db):
 uv run python -m monitor.tui --market bybit-fluxion
 # Optional: uv run python -m monitor.tui --db /path/to/monitor-bybit-fluxion.db
@@ -163,6 +172,8 @@ Module layout is fixed by `docs/DESIGN.md` §4.2. Short mirror:
   - **`monitor/symbols`** (M1) — fixed pair list + Bybit multiplier helpers (default market inventory).
   - **`monitor/bybit`**, **`monitor/fluxion`**, **`monitor/storage`**,
     **`monitor/collector`** (M2) — live feeds → per-market SQLite.
+  - **`monitor/binance`** (M7-3) — Binance public combined streams for
+    binance-pancake; journal rows reuse `bybit_*` table names.
   - **`monitor/metrics`** (M3 + WHI-756 + WHI-766) — edge/wear (M3 ladder),
     session stats, PnL v2 cash-flow engine (`pnl_v2.py`) + journal snapshot
     assembly (`pnl_snapshot.py`).
