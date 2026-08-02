@@ -34,11 +34,9 @@ pairs:
     binance:
       symbol: SPCXBUSDT
       base_coin: SPCXB
-      # BEP-677 scaled UI amount (float); live refresh via uiMultiplier().
       ui_multiplier: "1"
       ui_multiplier_source: bep677_uiMultiplier
     pancake:
-      # BEP-20 address (no ERC-4626 wrapper layer like Fluxion xStocks).
       native_token: "0xbe9D156892E55e7154BcD3cB0FEA677F9D3103E1"
       native_decimals: 18
       quote_token: USDT
@@ -55,11 +53,9 @@ pairs:
     binance:
       symbol: SKHYBUSDT
       base_coin: SKHYB
-      # BEP-677 scaled UI amount (float); live refresh via uiMultiplier().
       ui_multiplier: "1"
       ui_multiplier_source: bep677_uiMultiplier
     pancake:
-      # BEP-20 address (no ERC-4626 wrapper layer like Fluxion xStocks).
       native_token: "0xCA750eF65f295BBECd685Abf54e82CAf297BDB61"
       native_decimals: 18
       quote_token: USDT
@@ -76,11 +72,9 @@ pairs:
     binance:
       symbol: TSLABUSDT
       base_coin: TSLAB
-      # BEP-677 scaled UI amount (float); live refresh via uiMultiplier().
       ui_multiplier: "1"
       ui_multiplier_source: bep677_uiMultiplier
     pancake:
-      # BEP-20 address (no ERC-4626 wrapper layer like Fluxion xStocks).
       native_token: "0x5b1910eAaD6450E50f816082Aa078C41F10C292f"
       native_decimals: 18
       quote_token: USDT
@@ -97,11 +91,9 @@ pairs:
     binance:
       symbol: SPYBUSDT
       base_coin: SPYB
-      # BEP-677 scaled UI amount (float); live refresh via uiMultiplier().
       ui_multiplier: "1"
       ui_multiplier_source: bep677_uiMultiplier
     pancake:
-      # BEP-20 address (no ERC-4626 wrapper layer like Fluxion xStocks).
       native_token: "0x7138b48df7D98D7e3cc221BfE7192D0a178182D8"
       native_decimals: 18
       quote_token: USDT
@@ -118,11 +110,9 @@ pairs:
     binance:
       symbol: NVDABUSDT
       base_coin: NVDAB
-      # BEP-677 scaled UI amount (float); live refresh via uiMultiplier().
       ui_multiplier: "1"
       ui_multiplier_source: bep677_uiMultiplier
     pancake:
-      # BEP-20 address (no ERC-4626 wrapper layer like Fluxion xStocks).
       native_token: "0x02Fca66C1D1aFB4E2A7884261eB00F63598a7436"
       native_decimals: 18
       quote_token: USDT
@@ -139,11 +129,9 @@ pairs:
     binance:
       symbol: AAPLBUSDT
       base_coin: AAPLB
-      # BEP-677 scaled UI amount (float); live refresh via uiMultiplier().
       ui_multiplier: "1"
       ui_multiplier_source: bep677_uiMultiplier
     pancake:
-      # BEP-20 address (no ERC-4626 wrapper layer like Fluxion xStocks).
       native_token: "0x431a3BEE82E2ca41e49895CbECE5bB0F76A89b7A"
       native_decimals: 18
       quote_token: USDT
@@ -160,11 +148,9 @@ pairs:
     binance:
       symbol: GOOGLBUSDT
       base_coin: GOOGLB
-      # BEP-677 scaled UI amount (float); live refresh via uiMultiplier().
       ui_multiplier: "1"
       ui_multiplier_source: bep677_uiMultiplier
     pancake:
-      # BEP-20 address (no ERC-4626 wrapper layer like Fluxion xStocks).
       native_token: "0x3F53De71c126BdaBAe20f9cD64848d317f6C3238"
       native_decimals: 18
       quote_token: USDT
@@ -181,11 +167,9 @@ pairs:
     binance:
       symbol: MSFTBUSDT
       base_coin: MSFTB
-      # BEP-677 scaled UI amount (float); live refresh via uiMultiplier().
       ui_multiplier: "1"
       ui_multiplier_source: bep677_uiMultiplier
     pancake:
-      # BEP-20 address (no ERC-4626 wrapper layer like Fluxion xStocks).
       native_token: "0x80106cb3EAD06659A5ad19DF39D9b4733863B9b0"
       native_decimals: 18
       quote_token: USDT
@@ -202,11 +186,9 @@ pairs:
     binance:
       symbol: INTCBUSDT
       base_coin: INTCB
-      # BEP-677 scaled UI amount (float); live refresh via uiMultiplier().
       ui_multiplier: "1"
       ui_multiplier_source: bep677_uiMultiplier
     pancake:
-      # BEP-20 address (no ERC-4626 wrapper layer like Fluxion xStocks).
       native_token: "0xe614E2fc6C787035FF51f452e8E826Bfd32D5283"
       native_decimals: 18
       quote_token: USDT
@@ -223,11 +205,9 @@ pairs:
     binance:
       symbol: MUBUSDT
       base_coin: MUB
-      # BEP-677 scaled UI amount (float); live refresh via uiMultiplier().
       ui_multiplier: "1.0001075125688057"
       ui_multiplier_source: bep677_uiMultiplier
     pancake:
-      # BEP-20 address (no ERC-4626 wrapper layer like Fluxion xStocks).
       native_token: "0xcdf2f3e0fa43C47A6662a91C9E4a7C5f69762699"
       native_decimals: 18
       quote_token: USDT

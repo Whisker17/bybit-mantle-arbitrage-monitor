@@ -18,15 +18,23 @@ Snapshot date: **2026-08-02**.
    were false positives and dropped). **No StableSwap pool** appeared in DexScreener
    results for these symbols; surviving verified USDT pools are all **V3** (`fee()`
    present). V2 pairs that showed up were either non-USDT (WBNB) or dust and lost the
-   USDT-prefer rank.
+   USDT-prefer rank. **Limitation:** negative claims for V2/StableSwap rest on the
+   indexer + USDT-prefer filter — not a PCS V2 factory `getPair` or StableSwap registry
+   enumeration (open risk).
 3. **Liquidity rank** — DexScreener `liquidity.usd` on the verified best USDT pool.
    Top **10** by that metric form the monitor set. Est. TVL is an inventory snapshot, not
    live journal data.
 4. **On-chain enrichment** — public BSC RPC `https://bsc-dataseed.binance.org`:
    `fee()`, `slot0()` → AMM mid, `decimals()`, BEP-677 `uiMultiplier()`.
 5. **Price cross-check** — Binance `bookTicker` mid vs pool mid (raw token / USDT).
+   Snapshot taken **2026-08-02 Sunday** (US equities **closed**); weekend basis can
+   widen CEX⇄AMM mids (cf. WHI-753 closed-session work). Re-check on a NYSE open day
+   before treating bps columns as open-session typical.
 6. **Geo** — REST/WS probes from deploy VPS `whi715-vps` / `107.175.234.202`
    (Los Angeles, US) vs research host (Singapore).
+7. **Dex coverage** — DexScreener search was run for **all 55** Appendix A bases
+   (sequential, rate-limited); on-chain verification then filtered to pools whose
+   `token0/1` match the resolved BEP-20.
 
 ## Product background (primary sources)
 
@@ -141,11 +149,16 @@ comparable_binance_as_raw = binance_mid * ui_multiplier_float
 spread uses (amm_mid - comparable_binance_as_raw) / …
 ```
 
-At `uiMultiplier == 1.0` (almost all names today), raw mid ≈ Binance mid — confirmed
-empirically within a few to tens of bps on liquid names (TSLAB ~−1 bps, SPCXB ~−1 bps).
+At `uiMultiplier == 1.0` (almost all names today), raw mid ≈ Binance mid within a few
+to tens of bps on liquid names (TSLAB ~−1 bps, SPCXB ~−1 bps) — a **consistency check
+only** (multiply vs divide are indistinguishable when mult≈1). The **multiply**
+direction is **doc-derived** (FAQ 10-for-1 split: display qty ×10, price per display
+÷10 ⇒ raw notional = display_mid × ui_mult) plus BEP-677, not empirically separated
+on this snapshot (MUB’s mult 1.0001 is ~1 bp, below mid noise). Validate across a real
+split/dividend event when one lands.
+
 **Do not reuse Bybit’s divide formula** (`monitor.symbols.de_multiplied_price`) without
-flipping the model; the direction is **multiply** Binance mid by UI mult to get
-raw-comparable price. Draft YAML uses field name **`ui_multiplier`** (not `multiplier`)
+flipping the model. Draft YAML uses field name **`ui_multiplier`** (not `multiplier`)
 so M7-2 cannot silently wire the Bybit helper.
 
 When mult moves (splits), failing to apply this will look like a 10× “arb.”
@@ -288,6 +301,10 @@ ranked by DexScreener liq (SOXLB #11, MUUB #12 / broken mid).
    despite top liquidity.
 6. **PCS Swap topic0 on live bStock pool** — not re-decoded this PR (public RPC
    `eth_getLogs` limit); collector must confirm before production decode.
+7. **V2 / StableSwap exhaustiveness** — re-inventory may want PCS V2 factory
+   `getPair(token, USDT)` + StableSwap plain-AMM registry calls, not only DexScreener.
+8. **ui_multiplier direction soak** — multiply formula is FAQ/BEP-677-derived; re-check
+   CEX mid vs AMM raw across the next non-trivial dividend or split event.
 
 ## Evidence index
 
@@ -301,7 +318,7 @@ ranked by DexScreener liq (SOXLB #11, MUUB #12 / broken mid).
 | Pancake Terminal | https://blog.pancakeswap.finance/articles/bstocks-on-pancakeswap · https://pancakeswap.finance/stocks |
 | BEP-677 | https://github.com/bnb-chain/BEPs/blob/master/BEPs/BEP-677.md |
 | Maxwell 0.75s | https://www.bnbchain.org/en/blog/bnb-chain-announces-maxwell-hardfork-bsc-moves-to-0-75-second-block-times |
-| Fermi ~0.45s (context) | public BNB Chain Fermi notes; live sample via `eth_getBlockByNumber` on bsc-dataseed 2026-08-02 |
+| Fermi ~0.45s (context) | https://docs.bnbchain.org/announce/fermi-bsc/ (and secondary write-ups); live sample via `eth_getBlockByNumber` on bsc-dataseed 2026-08-02 |
 | Geo probe | SSH `whi715-vps` / `107.175.234.202` 2026-08-02: `api.binance.com` → 451; `data-api.binance.vision` → 200 bookTicker; `data-stream.binance.vision` → WS 101; `stream.binance.com` → 451 |
 | On-chain reads | `uiMultiplier()`, `fee()`, `slot0()`, `token0/1` via `https://bsc-dataseed.binance.org` |
 | Liquidity | DexScreener `api.dexscreener.com/latest/dex/search?q=<BASE>` inventory-time |
