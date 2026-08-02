@@ -18,6 +18,7 @@ dex:
   chain_id: 5000
   pool_kind: v3
   quote_asset: USDC
+  quote_decimals: 6
   has_rfq: true
 costs:
   cex_taker_fee_bps: 10

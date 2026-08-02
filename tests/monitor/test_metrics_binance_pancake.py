@@ -362,3 +362,45 @@ def test_cli_binance_pancake_smoke() -> None:
         ]
     )
     assert rc == 0
+
+
+def test_cli_unknown_pair_fails_loud() -> None:
+    from monitor.metrics.__main__ import main
+
+    rc = main(
+        [
+            "--market",
+            "binance-pancake",
+            "--pair-id",
+            "NOT_A_PAIR",
+            "--json",
+        ]
+    )
+    assert rc == 2
+
+
+def test_comparable_mid_with_ui_multiplier_not_one() -> None:
+    """BEP-677 multiply: journal comparable = display * mult; metrics use columns as-is."""
+    from monitor.symbols.multipliers import multiplied_price
+
+    ctx = load_market_context("binance-pancake", load_collector=False)
+    cfg = ctx.metrics
+    display = Decimal(100)
+    mult = Decimal("1.0001075125688057")  # MUB inventory
+    comparable = multiplied_price(display, mult)
+    assert comparable != display
+    amm = _deep_pool_at_mid(comparable, pool_fee=2500)
+    r = compute_pnl_usd(
+        pair_id="MUB",
+        bybit_bid=comparable,
+        bybit_ask=comparable,
+        size_usd=Decimal(1000),
+        direction="buy_fluxion_sell_bybit",
+        venue="amm",
+        config=cfg,
+        amm=amm,
+    )
+    assert r.fillable
+    # Mid-aligned on comparable space → negative fee/gas only (not 10× ghost arb).
+    assert r.pnl_usd < 0
+    assert abs(r.bybit_mid - comparable) < Decimal("1e-12")

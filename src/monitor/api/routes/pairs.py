@@ -82,7 +82,8 @@ def _pnl_snapshot_for_pair(
         rfq_buy=rfq_buy,
         rfq_sell=rfq_sell,
         native_decimals=pair.fluxion.native_decimals,
-        rfq_enabled=True,
+        # Same config switch as attribution (market dex.has_rfq via assembly).
+        rfq_enabled=state.attribution.has_rfq,
         now_ms=now_ms(),
         stale_ms=state.api.collector_stale_ms,
     )

@@ -31,9 +31,6 @@ def _pool(
     base_decimals: int,
 ) -> AmmPoolState:
     """Deep synthetic pool at ``mid`` quote/base (hand-checkable slip ≈ 0)."""
-    # sqrt(P) with P = token1/token0 raw adjusted for decimals:
-    # mid_quote_per_base = f(sqrt, token0_is_quote, decimals).
-    # token0=quote → ratio raw = 10^(base-quote) / mid.
     exp = base_decimals - quote_decimals
     ratio = (Decimal(10) ** exp) / mid
     sqrt_price_x96 = int(ratio.sqrt() * Decimal(2**96))
@@ -47,39 +44,36 @@ def _pool(
     )
 
 
-def _resolve_pool_fee_and_decimals(
-    market_id: str,
+def _inventory_pool_fee_and_base_decimals(
+    ctx: object,
     pair_id: str,
-    pool_fee_arg: int | None,
-) -> tuple[int, int, int]:
-    """Return (pool_fee, quote_decimals, base_decimals) for the synthetic pool."""
-    from monitor.markets import load_market_context
+) -> tuple[int, int] | None:
+    """Look up (pool_fee, base_decimals) from whichever inventory the market has.
 
-    ctx = load_market_context(market_id, load_collector=False)
-    # Defaults: Fluxion-style USDC 6 / base 18; Pancake USDT 18 / base 18.
+    Returns None when the pair id is absent or has no AMM — caller decides
+    whether that is an error.
+    """
+    from monitor.markets.context import MarketContext
+
+    assert isinstance(ctx, MarketContext)
     if ctx.bstocks is not None:
-        quote_dec, base_dec = 18, 18
-        fee = 0 if pool_fee_arg is None else pool_fee_arg
-        if pool_fee_arg is None and pair_id != "DEMO":
-            try:
-                bp = ctx.bstocks.pair_by_id(pair_id)
-            except KeyError:
-                bp = None
-            if bp is not None and bp.pancake.amm is not None:
-                fee = bp.pancake.amm.fee
-                base_dec = bp.pancake.native_decimals
-        return fee, quote_dec, base_dec
-
-    quote_dec, base_dec = 6, 18
-    fee = 0 if pool_fee_arg is None else pool_fee_arg
-    if pool_fee_arg is None and ctx.pairs is not None and pair_id != "DEMO":
         try:
-            pair = ctx.pairs.pair_by_id(pair_id)
+            bpair = ctx.bstocks.pair_by_id(pair_id)
         except KeyError:
-            pair = None
-        if pair is not None and pair.fluxion.amm is not None:
-            fee = pair.fluxion.amm.fee
-    return fee, quote_dec, base_dec
+            return None
+        if bpair.pancake.amm is None:
+            return None
+        return bpair.pancake.amm.fee, bpair.pancake.native_decimals
+    if ctx.pairs is not None:
+        try:
+            fpair = ctx.pairs.pair_by_id(pair_id)
+        except KeyError:
+            return None
+        if fpair.fluxion.amm is None:
+            return None
+        # Wrapper pool uses 18d base side (same as monitor.fluxion.pools).
+        return fpair.fluxion.amm.fee, 18
+    return None
 
 
 def main(argv: list[str] | None = None) -> int:
@@ -91,7 +85,11 @@ def main(argv: list[str] | None = None) -> int:
         default=DEFAULT_MARKET_ID,
         help=f"Market id for fee/gas costs (default: {DEFAULT_MARKET_ID})",
     )
-    p.add_argument("--pair-id", default="DEMO")
+    p.add_argument(
+        "--pair-id",
+        default=None,
+        help="Inventory pair id (loads pool fee / base decimals). Omit for synthetic DEMO.",
+    )
     p.add_argument(
         "--mid",
         type=Decimal,
@@ -110,7 +108,7 @@ def main(argv: list[str] | None = None) -> int:
         "--pool-fee",
         type=int,
         default=None,
-        help="UniV3 fee units (3000=30bps). Default: 0, or inventory fee when --pair-id set",
+        help="UniV3 fee units (3000=30bps). Default: inventory fee when --pair-id set, else 0",
     )
     p.add_argument(
         "--direction",
@@ -120,21 +118,37 @@ def main(argv: list[str] | None = None) -> int:
     p.add_argument("--json", action="store_true", help="Emit JSON")
     args = p.parse_args(argv)
 
-    # Venue costs come from the market file; algorithm knobs from metrics.yaml.
     ctx = load_market_context(args.market, load_collector=False)
     cfg = ctx.metrics
     cex_mid = args.mid
     amm_mid = args.amm_mid if args.amm_mid is not None else cex_mid
-    pool_fee, quote_dec, base_dec = _resolve_pool_fee_and_decimals(
-        args.market, args.pair_id, args.pool_fee
-    )
+
+    # Quote decimals always from market file (config-injected).
+    quote_dec = ctx.dex.quote_decimals
+    base_dec = 18
+    pool_fee = 0 if args.pool_fee is None else args.pool_fee
+    pair_id = args.pair_id or "DEMO"
+
+    if args.pair_id is not None:
+        looked = _inventory_pool_fee_and_base_decimals(ctx, args.pair_id)
+        if looked is None:
+            print(
+                f"error: pair {args.pair_id!r} not found (or has no AMM) "
+                f"in market {ctx.market_id}",
+                file=sys.stderr,
+            )
+            return 2
+        inv_fee, base_dec = looked
+        if args.pool_fee is None:
+            pool_fee = inv_fee
+
     amm = _pool(
         amm_mid, pool_fee, quote_decimals=quote_dec, base_decimals=base_dec
     )
     direction: Direction = args.direction
 
     table = pnl_bucket_table(
-        pair_id=args.pair_id,
+        pair_id=pair_id,
         bybit_bid=cex_mid,
         bybit_ask=cex_mid,
         direction=direction,
@@ -149,6 +163,7 @@ def main(argv: list[str] | None = None) -> int:
         payload["cex_taker_fee_bps"] = str(cfg.bybit_taker_fee_bps)
         payload["gas_usd_per_swap"] = str(cfg.gas_usd_per_swap)
         payload["pool_fee"] = pool_fee
+        payload["quote_decimals"] = quote_dec
         json.dump(payload, sys.stdout, indent=2)
         sys.stdout.write("\n")
         return 0

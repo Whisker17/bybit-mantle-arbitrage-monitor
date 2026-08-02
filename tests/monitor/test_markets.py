@@ -47,11 +47,13 @@ def test_list_and_load_checked_in_markets() -> None:
     assert bf.cex.venue == "bybit"
     assert bf.cex.multiplier_semantics is MultiplierSemantics.DIVIDE
     assert bf.dex.has_rfq is True
+    assert bf.dex.quote_decimals == 6
     assert bf.costs.cex_taker_fee_bps == Decimal(10)
     assert bf.costs.gas_usd_per_swap == Decimal("0.01")
 
     bp = load_market_file("binance-pancake")
     assert bp.id == "binance-pancake"
+    assert bp.dex.quote_decimals == 18
     assert bp.cex.multiplier_semantics is MultiplierSemantics.MULTIPLY
     assert bp.dex.has_rfq is False
     assert bp.dex.chain_id == 56
