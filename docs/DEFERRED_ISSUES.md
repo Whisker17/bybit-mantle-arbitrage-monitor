@@ -31,6 +31,26 @@ soon — anything touching key handling, RPC credentials defaults to at least Hi
 
 ## Open
 
+- **WHI-790: no 30-minute dual-market collector soak in the PR** (Medium, WHI-790 → ops).
+  Acceptance asked for a stable 30m run with full 55-pair inventory. Unit tests +
+  capacity math (DESIGN §WHI-790) cover structure; live soak needs
+  `xstocks-collector@binance-pancake` on the VPS after deploy, then check
+  `bybit_book` / `pool_state` row growth and error log spam for dex:none pairs.
+  Fix: ops soak checklist on first post-merge deploy.
+
+- **WHI-790: PCS StableSwap registry not exhaustively walked** (Low, WHI-790).
+  `scripts/enumerate_bstocks_pools.py` only probes StableSwap factory bytecode
+  presence. V2+V3 factory enumeration is complete; no bStock StableSwap hit
+  observed. Fix: walk StableSwap plain-pool registry if PCS documents a stable
+  getPool equivalent and a listing appears.
+
+- **WHI-790: residual prefer_yahoo underlyings still serial** (Low, WHI-790).
+  After Hermes RTH pin for 30 liquid names, ~8 tickers remain Yahoo gap-fill
+  (SKHY, SPCX, FLNC, KORU, LITE, MUU, MVLL, NOK). `UnderlyingPoller` still
+  fetches them serially. Acceptable load now; if more Yahoo-only names land,
+  add concurrency/throttle or raise closed/open poll intervals for Yahoo-heavy
+  markets.
+
 - **Optional-table name literals + sqlite_master probes duplicated** (Low, WHI-789).
   `monitor/storage/reader.py::JournalReader._table_names` (six call-site string
   guards) and a second `sqlite_master` shape in `monitor/storage/retention.py` —

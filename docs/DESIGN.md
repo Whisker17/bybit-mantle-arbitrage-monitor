@@ -559,7 +559,7 @@ Probe: `python -m monitor.collector.latency_probe`.
 Enum script + snapshot: `scripts/enumerate_bstocks_pools.py`,
 `docs/references/m7-bstocks-enum-snapshot.json`. Dynamic Top-N display is WHI-791.
 
-**Capacity (measured + derived, research host 2026-08-02):**
+**Capacity (research host 2026-08-02; rows marked measured vs derived):**
 
 | Path | Number | Notes |
 |------|--------|-------|
@@ -568,6 +568,7 @@ Enum script + snapshot: `scripts/enumerate_bstocks_pools.py`,
 | CEX 24h volume REST | **1** full `/api/v3/ticker/24hr` | ~1.9 MB body, ~2.6 s wall; filter 55 symbols client-side |
 | BSC pool multicall | **21** AMM pools / stride | dex:none never enter `ChainPoller` |
 | Disk (derived) | ~5.5× CEX book/trade rows vs top-10; ~2.1× pool_state | Feed WHI-751 / WHI-775 |
+| Underlying Yahoo (post Hermes pin) | **~8** prefer_yahoo tickers | SKHY/SPCX + thin ETFs; 30 new names Hermes-batched |
 
 
 
