@@ -216,6 +216,26 @@ class Erc20TransferTick:
 
 
 @dataclass(frozen=True, slots=True)
+class UnderlyingPriceTick:
+    """Underlying equity reference print (WHI-778).
+
+    Shared by ticker across markets (not pair_id). ``price_type`` must be
+    respected by premium UI — never treat ``close`` as live RTH.
+    """
+
+    ticker: str
+    price: Decimal
+    currency: str
+    price_type: Literal["live", "pre", "post", "close", "stale"]
+    as_of_ms: int
+    recv_ts_ms: int
+    source: str
+    feed_id: str | None = None
+    conf: Decimal | None = None
+    gap: bool = False
+
+
+@dataclass(frozen=True, slots=True)
 class CexVolumeTick:
     """Exchange-reported rolling 24h quote volume (WHI-777 REST poll).
 

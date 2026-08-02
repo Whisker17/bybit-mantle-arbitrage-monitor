@@ -15,6 +15,11 @@ logging:
 # 0 disables the in-collector loop (CLI still works: python -m monitor.attribution.refresh).
 attribution_refresh_interval_s: 3600
 
+# WHI-778: underlying equity reference (Pyth Hermes + optional Yahoo gap-fill).
+# Feed map / cadence: config/underlying.yaml. Toggle only here.
+underlying:
+  enabled: true
+
 # Default retention (WHI-751). Per-market override: markets.<id>.retention.
 # Bounds SQLite growth on small VPS disks. Derivation: docs/DESIGN.md §5.1.
 retention:
@@ -35,6 +40,7 @@ retention:
   rebalance_events_ms: null         # permanent — WHI-768 CEX-touch rebalance events
   cex_volume_24h_ms: 604800000      # 7 days REST snapshots (WHI-777; UI uses latest)
   collector_gaps_ms: 2592000000     # 30 days
+  underlying_prices_ms: 604800000   # 7 days underlying equity prints (WHI-778)
   delete_batch_size: 5000
   # After DELETE, free pages for reuse; pages=0 skips. Full VACUUM is opt-in.
   incremental_vacuum_pages: 1000

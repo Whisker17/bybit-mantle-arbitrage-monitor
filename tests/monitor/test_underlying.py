@@ -1,0 +1,328 @@
+"""Seams: pair→ticker map, price_type classify, Hermes parse, store insert (WHI-778)."""
+
+from __future__ import annotations
+
+from datetime import datetime
+from decimal import Decimal
+from pathlib import Path
+from textwrap import dedent
+
+import pytest
+
+from monitor.metrics.config import SessionConfig
+from monitor.quotes import UnderlyingPriceTick
+from monitor.storage import SqliteStore
+from monitor.storage.schema import SCHEMA_VERSION
+from monitor.underlying.config import (
+    UnderlyingConfigError,
+    load_underlying_config,
+)
+from monitor.underlying.price_type import classify_price_type
+from monitor.underlying.pyth import parse_hermes_latest, scale_pyth_price
+from monitor.underlying.tickers import (
+    pair_id_to_underlying_ticker,
+    underlying_tickers_for_pairs,
+)
+from monitor.underlying.yahoo import market_state_hint, parse_yahoo_chart
+
+
+def _session() -> SessionConfig:
+    return SessionConfig(
+        timezone="America/New_York",
+        open="09:30",
+        close="16:00",
+        early_close="13:00",
+    )
+
+
+def test_pair_id_to_underlying_ticker() -> None:
+    assert pair_id_to_underlying_ticker("AAPLx") == "AAPL"
+    assert pair_id_to_underlying_ticker("AAPLB") == "AAPL"
+    assert pair_id_to_underlying_ticker("TSLAB") == "TSLA"
+    assert pair_id_to_underlying_ticker("MUB") == "MU"
+    assert pair_id_to_underlying_ticker("SKHYB") == "SKHY"
+    assert pair_id_to_underlying_ticker("SPCXx") == "SPCX"
+    assert pair_id_to_underlying_ticker("SPCXB") == "SPCX"
+    assert underlying_tickers_for_pairs(["AAPLx", "AAPLB", "TSLAx"]) == [
+        "AAPL",
+        "TSLA",
+    ]
+
+
+def test_load_checked_in_underlying_config() -> None:
+    cfg = load_underlying_config()
+    assert cfg.version == 1
+    assert "AAPL" in cfg.tickers
+    assert cfg.tickers["AAPL"].feed_id is not None
+    assert cfg.tickers["SPCX"].uncovered is True
+    assert cfg.tickers["SKHY"].prefer_yahoo is True
+    assert "AAPL" in cfg.covered_tickers()
+    assert "SPCX" in cfg.uncovered_tickers()
+
+
+def test_scale_pyth_price() -> None:
+    assert scale_pyth_price("30985484", -5) == Decimal("309.85484")
+
+
+def _ms(year: int, month: int, day: int, hour: int, minute: int) -> int:
+    """America/New_York wall clock → epoch ms (handles DST via zoneinfo)."""
+    from zoneinfo import ZoneInfo
+
+    dt = datetime(year, month, day, hour, minute, tzinfo=ZoneInfo("America/New_York"))
+    return int(dt.timestamp() * 1000)
+
+
+def test_classify_live_during_rth() -> None:
+    # 2026-07-31 Friday 10:00 ET — RTH open; as_of 1s earlier.
+    now = _ms(2026, 7, 31, 10, 0)
+    as_of = now - 1_000
+    assert (
+        classify_price_type(
+            as_of_ms=as_of,
+            now_ms=now,
+            session=_session(),
+            stale_after_open_ms=120_000,
+            stale_after_closed_ms=432_000_000,
+            stale_after_abs_ms=604_800_000,
+        )
+        == "live"
+    )
+
+
+def test_classify_close_on_weekend() -> None:
+    # 2026-08-02 Sunday — closed; as_of = prior Friday 16:00 ET close.
+    now = _ms(2026, 8, 2, 12, 0)
+    as_of = _ms(2026, 7, 31, 16, 0)
+    assert (
+        classify_price_type(
+            as_of_ms=as_of,
+            now_ms=now,
+            session=_session(),
+            stale_after_open_ms=120_000,
+            stale_after_closed_ms=432_000_000,
+            stale_after_abs_ms=604_800_000,
+        )
+        == "close"
+    )
+
+
+def test_classify_source_live_hint_outside_nyse() -> None:
+    """KRX can be live while NYSE is closed — honor Yahoo REGULAR → live."""
+    now = _ms(2026, 8, 2, 0, 30)  # Sunday evening ET / Monday KRX morning-ish
+    as_of = now - 5_000
+    assert (
+        classify_price_type(
+            as_of_ms=as_of,
+            now_ms=now,
+            session=_session(),
+            stale_after_open_ms=120_000,
+            stale_after_closed_ms=432_000_000,
+            stale_after_abs_ms=604_800_000,
+            source_session_hint="live",
+        )
+        == "live"
+    )
+
+
+def test_classify_close_not_post_on_weekday_after_rth() -> None:
+    """Pyth freezes publish_time at RTH close — wall-clock post hours ≠ post print."""
+    # Friday 17:30 ET (after 16:00 close); as_of = 16:00 close.
+    now = _ms(2026, 7, 31, 17, 30)
+    as_of = _ms(2026, 7, 31, 16, 0)
+    assert (
+        classify_price_type(
+            as_of_ms=as_of,
+            now_ms=now,
+            session=_session(),
+            stale_after_open_ms=120_000,
+            stale_after_closed_ms=432_000_000,
+            stale_after_abs_ms=604_800_000,
+        )
+        == "close"
+    )
+    # Explicit source hint still allows post.
+    assert (
+        classify_price_type(
+            as_of_ms=as_of,
+            now_ms=now,
+            session=_session(),
+            stale_after_open_ms=120_000,
+            stale_after_closed_ms=432_000_000,
+            stale_after_abs_ms=604_800_000,
+            source_session_hint="post",
+        )
+        == "post"
+    )
+
+
+def test_classify_stale_dead_feed() -> None:
+    now = _ms(2026, 8, 2, 12, 0)
+    as_of = _ms(2025, 8, 29, 6, 30)  # ~1y old
+    assert (
+        classify_price_type(
+            as_of_ms=as_of,
+            now_ms=now,
+            session=_session(),
+            stale_after_open_ms=120_000,
+            stale_after_closed_ms=432_000_000,
+            stale_after_abs_ms=604_800_000,
+        )
+        == "stale"
+    )
+
+
+def test_classify_stale_during_open_if_old() -> None:
+    now = _ms(2026, 7, 31, 10, 0)
+    as_of = now - 300_000  # 5 min
+    assert (
+        classify_price_type(
+            as_of_ms=as_of,
+            now_ms=now,
+            session=_session(),
+            stale_after_open_ms=120_000,
+            stale_after_closed_ms=432_000_000,
+            stale_after_abs_ms=604_800_000,
+        )
+        == "stale"
+    )
+
+
+def test_parse_hermes_latest_maps_feed() -> None:
+    cfg = load_underlying_config()
+    aapl_id = cfg.tickers["AAPL"].feed_id
+    assert aapl_id is not None
+    # Friday close epoch used in classify_close_on_weekend.
+    publish = int(_ms(2026, 7, 31, 16, 0) / 1000)
+    body = {
+        "parsed": [
+            {
+                "id": aapl_id,
+                "price": {
+                    "price": "30985484",
+                    "conf": "84984",
+                    "expo": -5,
+                    "publish_time": publish,
+                },
+            }
+        ]
+    }
+    now = _ms(2026, 8, 2, 12, 0)
+    ticks, by_feed = parse_hermes_latest(
+        body,
+        cfg=cfg,
+        tickers={"AAPL"},
+        recv_ts_ms=now,
+        now_ms_value=now,
+    )
+    assert len(ticks) == 1
+    t = ticks[0]
+    assert t.ticker == "AAPL"
+    assert t.price == Decimal("309.85484")
+    assert t.currency == "USD"
+    assert t.price_type == "close"
+    assert t.source == "pyth_hermes"
+    assert t.as_of_ms == publish * 1000
+    assert aapl_id.lower().removeprefix("0x") in by_feed
+
+
+def test_parse_yahoo_chart_krw_to_usd() -> None:
+    cfg = load_underlying_config()
+    as_of_s = int(_ms(2026, 8, 1, 2, 0) / 1000)  # KRX session-ish
+    body = {
+        "chart": {
+            "result": [
+                {
+                    "meta": {
+                        "regularMarketPrice": 1_442_960.57,
+                        "regularMarketTime": as_of_s,
+                        "currency": "KRW",
+                        "marketState": "CLOSED",
+                    }
+                }
+            ]
+        }
+    }
+    now = _ms(2026, 8, 2, 12, 0)
+    tick = parse_yahoo_chart(
+        body,
+        ticker="SKHY",
+        currency="USD",
+        cfg=cfg,
+        recv_ts_ms=now,
+        now_ms_value=now,
+        usd_krw=Decimal("1442.96057"),
+    )
+    assert tick is not None
+    assert tick.ticker == "SKHY"
+    assert tick.currency == "USD"
+    assert tick.source == "yahoo+pyth_fx"
+    assert tick.price == Decimal("1000")
+    assert tick.price_type in {"close", "stale", "post", "pre"}
+
+
+def test_market_state_hint() -> None:
+    assert market_state_hint("PRE") == "pre"
+    assert market_state_hint("REGULAR") == "live"
+    assert market_state_hint("CLOSED") == "close"
+
+
+def test_insert_underlying_prices(tmp_path: Path) -> None:
+    assert SCHEMA_VERSION >= 5
+    store = SqliteStore(tmp_path / "u.db")
+    tick = UnderlyingPriceTick(
+        ticker="AAPL",
+        price=Decimal("309.85"),
+        currency="USD",
+        price_type="close",
+        as_of_ms=1_700_000_000_000,
+        recv_ts_ms=1_700_000_000_050,
+        source="pyth_hermes",
+        feed_id="abc",
+        conf=Decimal("0.1"),
+        gap=False,
+    )
+    assert store.insert_underlying_prices([tick]) == 1
+    assert store.count("underlying_prices") == 1
+    # Same (ticker, as_of, source) is ignored (closed-session re-poll).
+    assert store.insert_underlying_prices([tick]) == 1  # row attempted
+    assert store.count("underlying_prices") == 1
+    row = store._conn.execute(
+        "SELECT ticker, price, price_type, source FROM underlying_prices"
+    ).fetchone()
+    assert row["ticker"] == "AAPL"
+    assert row["price"] == "309.85"
+    assert row["price_type"] == "close"
+    assert row["source"] == "pyth_hermes"
+    store.close()
+
+
+def test_invalid_underlying_config(tmp_path: Path) -> None:
+    p = tmp_path / "bad.yaml"
+    p.write_text(
+        dedent(
+            """
+            version: 1
+            hermes_base_url: https://example
+            open_poll_interval_s: 30
+            closed_poll_interval_s: 300
+            http_timeout_s: 20
+            stale_after_open_ms: 1
+            stale_after_abs_ms: 1
+            stale_after_closed_ms: 1
+            yahoo_fallback: false
+            yahoo_chart_base_url: https://example
+            session:
+              timezone: America/New_York
+              open: "09:30"
+              close: "16:00"
+              early_close: "13:00"
+            tickers:
+              FOO:
+                currency: USD
+                # neither feed nor yahoo
+            """
+        ),
+        encoding="utf-8",
+    )
+    with pytest.raises(UnderlyingConfigError):
+        load_underlying_config(p)
