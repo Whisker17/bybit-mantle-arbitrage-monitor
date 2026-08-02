@@ -42,14 +42,7 @@ def quotable_amm_mid(
     return mid, None
 
 
-def is_pool_quotable(tick: FluxionPoolStateTick | None) -> bool:
-    """True when the tick yields a positive mid with in-range liquidity."""
-    mid, _reason = quotable_amm_mid(tick)
-    return mid is not None
-
-
 __all__ = [
     "AmmQuoteReason",
-    "is_pool_quotable",
     "quotable_amm_mid",
 ]

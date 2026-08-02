@@ -23,7 +23,6 @@ from monitor.metrics.amm_pool import (
 )
 from monitor.metrics.amm_quote import (
     AmmQuoteReason,
-    is_pool_quotable,
     quotable_amm_mid,
 )
 from monitor.metrics.config import (
@@ -122,7 +121,6 @@ __all__ = [
     "compute_pnl_usd",
     "default_metrics_path",
     "equity_equivalent_mid",
-    "is_pool_quotable",
     "is_us_rth_open",
     "levels_from_depth_curve",
     "load_metrics_config",

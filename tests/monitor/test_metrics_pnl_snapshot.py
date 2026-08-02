@@ -298,7 +298,8 @@ def test_snapshot_empty_pool_not_no_fillable() -> None:
     )
     assert snap.status == "empty_pool"
     assert snap.best.status == "empty_pool"
-    assert snap.tables == {}
+    # Tables still materialize (AMM unfillable); RFQ can still attach when present.
+    assert snap.tables != {}
 
 
 def test_snapshot_invalid_mid_status_matches_quote_reason() -> None:
@@ -333,7 +334,7 @@ def test_snapshot_invalid_mid_status_matches_quote_reason() -> None:
     )
     assert snap.status == "invalid_mid"
     assert snap.best.status == "invalid_mid"
-    assert snap.tables == {}
+    assert snap.tables != {}
 
 
 def test_snapshot_no_depth_hides_overview_optimal() -> None:
