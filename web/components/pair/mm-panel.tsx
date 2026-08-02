@@ -106,8 +106,18 @@ function InventoryChart({
 }) {
   const hostRef = useRef<HTMLDivElement>(null);
   const plotRef = useRef<uPlot | null>(null);
+  /** Stable handle for setData — updated every render without recreating plot. */
+  const seriesRef = useRef(prepareInventorySeries(addresses));
   const series = useMemo(() => prepareInventorySeries(addresses), [addresses]);
+  seriesRef.current = series;
 
+  const empty = series.length === 0;
+  // Shape key: recreate plot only when address set changes (not every poll).
+  const shapeKey = useMemo(
+    () => series.map((s) => s.address).join("|"),
+    [series],
+  );
+  // Data key: setData on poll without full remount (spread-chart pattern).
   const dataKey = useMemo(() => {
     if (series.length === 0) return "";
     return series
@@ -115,14 +125,16 @@ function InventoryChart({
       .join("|");
   }, [series]);
 
+  // Create plot once per address set (or empty ↔ non-empty).
   useEffect(() => {
-    if (series.length === 0 || !hostRef.current) {
+    if (empty || !hostRef.current) {
       plotRef.current?.destroy();
       plotRef.current = null;
       return;
     }
 
-    const aligned = alignInventorySeries(series);
+    const s0 = seriesRef.current;
+    const aligned = alignInventorySeries(s0);
     const data: uPlot.AlignedData = [aligned.xs, ...aligned.columns];
 
     const el = hostRef.current;
@@ -153,11 +165,12 @@ function InventoryChart({
       ],
       series: [
         {},
-        ...series.map((s, i) => ({
+        ...s0.map((s, i) => ({
           label: s.shortLabel,
           stroke: COLORS[i % COLORS.length],
           width: 1.5,
           points: { show: s.xs.length < 40 },
+          // Inventory is forward-filled in alignInventorySeries — no gaps.
           spanGaps: false,
         })),
       ],
@@ -179,11 +192,22 @@ function InventoryChart({
       plotRef.current?.destroy();
       plotRef.current = null;
     };
-  }, [dataKey, series]);
+    // eslint-disable-next-line react-hooks/exhaustive-deps -- shape only
+  }, [empty, shapeKey]);
 
-  if (series.length === 0) {
+  // setData on poll (preserve cursor / zoom).
+  useEffect(() => {
+    if (!plotRef.current || empty) return;
+    const aligned = alignInventorySeries(seriesRef.current);
+    plotRef.current.setData([aligned.xs, ...aligned.columns]);
+  }, [dataKey, empty]);
+
+  if (empty) {
     return (
-      <EmptyPanel message="Market makers labeled, but no inventory events yet for this pair." />
+      <EmptyPanel
+        variant="solid"
+        message="Market makers labeled, but no inventory events yet for this pair."
+      />
     );
   }
 

@@ -40,8 +40,11 @@ export function prepareInventorySeries(
 }
 
 /**
- * Union timestamps → one x-axis + sparse y columns for multi-line uPlot.
- * Matches the spread-chart pure-helper pattern.
+ * Union timestamps → one x-axis + per-address columns for multi-line uPlot.
+ *
+ * Inventory is a step function: between events the position is unchanged.
+ * Forward-fill the last known inventory so multi-address series stay
+ * continuous (null only before each address's first event).
  */
 export function alignInventorySeries(
   series: InventoryChartSeries[],
@@ -54,7 +57,15 @@ export function alignInventorySeries(
   const xs = Array.from(allTs).sort((a, b) => a - b);
   const columns = series.map((s) => {
     const map = new Map(s.xs.map((x, i) => [x, s.ys[i]]));
-    return xs.map((t) => map.get(t) ?? null);
+    let last: number | null = null;
+    return xs.map((t) => {
+      const v = map.get(t);
+      if (v !== undefined && v !== null) {
+        last = v;
+        return v;
+      }
+      return last;
+    });
   });
   return { xs, columns };
 }

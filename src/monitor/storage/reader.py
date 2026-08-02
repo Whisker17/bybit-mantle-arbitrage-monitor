@@ -456,7 +456,7 @@ class JournalReader:
                    block_number, block_ts, recv_ts_ms, tx_hash, log_index
             FROM rebalance_events
             {where}
-            ORDER BY block_ts DESC, log_index DESC
+            ORDER BY block_ts DESC, block_number DESC, log_index DESC
             LIMIT ?
             """,
             params,
