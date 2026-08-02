@@ -400,34 +400,21 @@ function UnderlyingCell({ row }: { row: PairOverviewRow }) {
 }
 
 /**
- * Venue vs-underlying bps cell (WHI-783). Shared empty/private handling;
- * titleParts name who-vs-whom for the hover line.
+ * Venue vs-underlying bps cell (WHI-783). Shared private/empty handling;
+ * titleParts name who-vs-whom (kept on hover even when the primary value
+ * is missing so RFQ-only hover lines still surface).
  */
 function VsUndCell({
+  row,
   value,
   emptyTitle,
   titleParts,
 }: {
+  row: PairOverviewRow;
   value: string | null;
   emptyTitle: string;
   titleParts: Array<string | null | false | undefined>;
 }) {
-  if (value == null) {
-    return (
-      <span className="text-muted-foreground" title={emptyTitle}>
-        —
-      </span>
-    );
-  }
-  return (
-    <span title={titleParts.filter(Boolean).join(" · ")}>
-      <BpsCell value={value} />
-    </span>
-  );
-}
-
-/** CEX group "vs Und": CEX equity-eq mid vs underlying. */
-function CexVsUndCell({ row }: { row: PairOverviewRow }) {
   if (row.underlying_empty === "private") {
     return (
       <span
@@ -438,9 +425,28 @@ function CexVsUndCell({ row }: { row: PairOverviewRow }) {
       </span>
     );
   }
+  const title =
+    titleParts.filter(Boolean).join(" · ") || emptyTitle;
+  if (value == null) {
+    return (
+      <span className="text-muted-foreground" title={title}>
+        —
+      </span>
+    );
+  }
+  return (
+    <span title={title}>
+      <BpsCell value={value} />
+    </span>
+  );
+}
+
+/** CEX group "vs Und": CEX equity-eq mid vs underlying. */
+function CexVsUndCell({ row }: { row: PairOverviewRow }) {
   const value = cexPremiumBps(row);
   return (
     <VsUndCell
+      row={row}
       value={value}
       emptyTitle="Needs de-multiplied CEX mid + underlying print"
       titleParts={[
@@ -464,23 +470,15 @@ function DexVsUndCell({
   row: PairOverviewRow;
   hasRfq: boolean;
 }) {
-  if (row.underlying_empty === "private") {
-    return (
-      <span
-        className="text-muted-foreground"
-        title="Private underlying — no premium"
-      >
-        n/a
-      </span>
-    );
-  }
+  const amm = row.amm_premium_bps ?? null;
   return (
     <VsUndCell
-      value={row.amm_premium_bps ?? null}
+      row={row}
+      value={amm}
       emptyTitle="Needs AMM mid + underlying print"
       titleParts={[
-        row.amm_premium_bps != null
-          ? `AMM mid vs underlying: ${fmtSignedBps(row.amm_premium_bps)} bps`
+        amm != null
+          ? `AMM mid vs underlying: ${fmtSignedBps(amm)} bps`
           : null,
         hasRfq && row.rfq_premium_bps != null
           ? `RFQ mid vs underlying: ${fmtSignedBps(row.rfq_premium_bps)} bps`

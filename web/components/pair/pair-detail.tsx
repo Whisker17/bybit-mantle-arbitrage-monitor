@@ -222,18 +222,40 @@ export function PairDetail({ marketId, pairId }: Props) {
           )}
           <Field
             label="CEX vs Und"
-            value={fmtSignedBps(cexPremiumBps(o))}
-            tone={bpsTone(cexPremiumBps(o))}
-            title="CEX equity-eq mid vs underlying (bps)"
+            value={
+              o.underlying_empty === "private"
+                ? "n/a"
+                : fmtSignedBps(cexPremiumBps(o))
+            }
+            tone={
+              o.underlying_empty === "private"
+                ? "empty"
+                : bpsTone(cexPremiumBps(o))
+            }
+            title={
+              o.underlying_empty === "private"
+                ? "Private underlying — no premium"
+                : "CEX equity-eq mid vs underlying (bps)"
+            }
           />
           <Field
             label="DEX vs Und"
-            value={fmtSignedBps(o.amm_premium_bps)}
-            tone={bpsTone(o.amm_premium_bps ?? null)}
+            value={
+              o.underlying_empty === "private"
+                ? "n/a"
+                : fmtSignedBps(o.amm_premium_bps)
+            }
+            tone={
+              o.underlying_empty === "private"
+                ? "empty"
+                : bpsTone(o.amm_premium_bps ?? null)
+            }
             title={
-              hasRfq && o.rfq_premium_bps != null
-                ? `AMM vs Und ${fmtSignedBps(o.amm_premium_bps)} · RFQ vs Und ${fmtSignedBps(o.rfq_premium_bps)}`
-                : "AMM mid vs underlying (bps)"
+              o.underlying_empty === "private"
+                ? "Private underlying — no premium"
+                : hasRfq && o.rfq_premium_bps != null
+                  ? `AMM vs Und ${fmtSignedBps(o.amm_premium_bps)} · RFQ vs Und ${fmtSignedBps(o.rfq_premium_bps)}`
+                  : "AMM mid vs underlying (bps)"
             }
           />
           <Field

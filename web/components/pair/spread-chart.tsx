@@ -266,10 +266,16 @@ export function SpreadChart({ points, className, showRfq = true }: Props) {
     <div className={cn("space-y-2", className)}>
       <div className="flex flex-wrap items-center justify-between gap-2 text-[10px] text-muted-foreground">
         <div className="flex flex-wrap items-center gap-3">
-          <LegendSwatch color={AMM_COLOR} label="vs CEX" />
-          {showRfq && <LegendSwatch color={RFQ_COLOR} label="RFQ vs CEX" />}
-          <LegendSwatch color={CEX_PREM_COLOR} label="CEX vs Und" />
-          <LegendSwatch color={AMM_PREM_COLOR} label="DEX vs Und" />
+          {series.hasAmm && <LegendSwatch color={AMM_COLOR} label="vs CEX" />}
+          {showRfq && series.hasRfq && (
+            <LegendSwatch color={RFQ_COLOR} label="RFQ vs CEX" />
+          )}
+          {series.hasCexPremium && (
+            <LegendSwatch color={CEX_PREM_COLOR} label="CEX vs Und" />
+          )}
+          {series.hasAmmPremium && (
+            <LegendSwatch color={AMM_PREM_COLOR} label="DEX vs Und" />
+          )}
           <span className="inline-flex items-center gap-1">
             <span
               className="inline-block h-2.5 w-3 rounded-sm"
