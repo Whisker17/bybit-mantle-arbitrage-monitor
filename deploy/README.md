@@ -97,10 +97,11 @@ done
 # underlying_last_poll_ms advances on every attempt (incl. empty/error);
 # underlying_last_n is the tick count of the last attempt; last_error holds
 # the most recent poll exception (not cleared by empty successful polls).
-# WHI-787 uncovered guardrail meta (also on GET /api/health):
+# WHI-787 / WHI-794 coverage guardrail meta (also on GET /api/health):
 #   underlying_uncovered_mismatches   — JSON [{ticker, sources, detail}]
 #   underlying_uncovered_probe_errors — JSON [{ticker, source, error}]
 #   underlying_uncovered_probe_ms     — last probe attempt (ms)
+#   underlying_unpublished_feeds      — JSON never-published Hermes pins (WHI-794)
 ```
 
 Local dogfood: restart each collector process after `git pull` / feature merge

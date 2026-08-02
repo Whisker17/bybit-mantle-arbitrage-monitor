@@ -64,11 +64,13 @@ from monitor.underlying.coverage_probe import (
     META_MISMATCHES,
     META_PROBE_ERRORS,
     META_PROBE_MS,
+    META_UNPUBLISHED,
     ProbeError,
     ProbeOutcome,
     UncoveredCoverageProbe,
     errors_to_meta_json,
     mismatches_to_meta_json,
+    unpublished_to_meta_json,
 )
 from monitor.underlying.poller import UnderlyingPoller
 from monitor.underlying.tickers import underlying_tickers_for_pairs
@@ -668,12 +670,19 @@ class CollectorDaemon:
             self._set_underlying_error("")
 
     def _stamp_uncovered_probe(self, outcome: ProbeOutcome, *, probe_ms: int) -> None:
-        """Persist WHI-787 uncovered coverage probe outcome to journal meta."""
+        """Persist WHI-787/794 coverage probe outcome to journal meta."""
         self.store.set_meta(
             META_MISMATCHES, mismatches_to_meta_json(outcome.mismatches)
         )
         self.store.set_meta(META_PROBE_ERRORS, errors_to_meta_json(outcome.errors))
         self.store.set_meta(META_PROBE_MS, str(probe_ms))
+        # Do not blank unpublished advisory on Hermes-latest transport failure
+        # (same "outage ≠ all clear" rule as WHI-787 mismatches).
+        if outcome.hermes_latest_ok:
+            self.store.set_meta(
+                META_UNPUBLISHED,
+                unpublished_to_meta_json(outcome.unpublished_feeds),
+            )
 
     async def _underlying_loop(self) -> None:
         """Poll Pyth Hermes (+ optional Yahoo) into underlying_prices (WHI-778)."""
@@ -733,7 +742,9 @@ class CollectorDaemon:
                             detail=f"poll error: {exc}",
                         ),
                     )
-                # Uncovered coverage re-check (no network when uncovered list empty).
+                # Coverage re-check (WHI-787 uncovered reverse + WHI-794
+                # unpublished Hermes pins). Always batches Hermes latest for
+                # pinned feed ids even when uncovered list is empty.
                 # Always advance the wall-clock throttle when due — including on
                 # outer failure — so a broken probe cannot hot-loop every poll.
                 now = now_ms()
@@ -757,6 +768,8 @@ class CollectorDaemon:
                                         error=str(exc)[:400],
                                     )
                                 ],
+                                # Outer failure: do not blank unpublished meta.
+                                hermes_latest_ok=False,
                             ),
                             probe_ms=now,
                         )

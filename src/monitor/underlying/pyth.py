@@ -2,6 +2,7 @@
 
 from __future__ import annotations
 
+from dataclasses import dataclass
 from decimal import Decimal, InvalidOperation
 from typing import Any
 
@@ -17,6 +18,67 @@ def scale_pyth_price(price_raw: str | int, expo: int) -> Decimal:
     return Decimal(str(price_raw)) * (Decimal(10) ** int(expo))
 
 
+def hermes_quote_is_valid(*, price: Decimal, publish_time: int) -> bool:
+    """True when Hermes price payload is a real print (WHI-794).
+
+    Registered-but-never-published feeds return ``price=0`` and
+    ``publish_time=0``. Those must not be stored as equity reference prices.
+    """
+    return publish_time > 0 and price > 0
+
+
+@dataclass(frozen=True, slots=True)
+class HermesFeedQuote:
+    """One Hermes latest price row after scale + id normalize (WHI-794)."""
+
+    feed_id: str
+    price: Decimal
+    publish_time: int
+    conf: Decimal | None
+
+
+def iter_hermes_quotes(
+    body: dict[str, Any] | list[Any],
+) -> list[HermesFeedQuote]:
+    """Parse Hermes latest JSON into scaled feed quotes (valid and invalid).
+
+    Shared by ``parse_hermes_latest`` (drops invalid) and the unpublished-feed
+    detector (flags invalid). Does not map feed → ticker.
+    """
+    out: list[HermesFeedQuote] = []
+    for item in _extract_parsed(body):
+        if not isinstance(item, dict):
+            continue
+        raw_id = str(item.get("id") or "").lower().removeprefix("0x")
+        if not raw_id:
+            continue
+        price_obj = item.get("price")
+        if not isinstance(price_obj, dict):
+            continue
+        try:
+            expo = int(price_obj["expo"])
+            px = scale_pyth_price(price_obj["price"], expo)
+            publish_time = int(price_obj["publish_time"])
+        except (KeyError, TypeError, ValueError, InvalidOperation):
+            continue
+        conf: Decimal | None = None
+        conf_raw = price_obj.get("conf")
+        if conf_raw is not None:
+            try:
+                conf = scale_pyth_price(conf_raw, expo)
+            except (TypeError, ValueError, InvalidOperation):
+                conf = None
+        out.append(
+            HermesFeedQuote(
+                feed_id=raw_id,
+                price=px,
+                publish_time=publish_time,
+                conf=conf,
+            )
+        )
+    return out
+
+
 def parse_hermes_latest(
     body: dict[str, Any] | list[Any],
     *,
@@ -29,37 +91,22 @@ def parse_hermes_latest(
     """Map Hermes latest JSON → ticks + raw feed prices by feed id.
 
     Returns ``(ticks, prices_by_feed_id)``. FX feeds are only in the map, not
-    as equity ticks.
+    as equity ticks. Invalid quotes (``publish_time == 0`` or ``price <= 0``)
+    are dropped entirely so Yahoo gap-fill can run (WHI-794).
     """
     recv = recv_ts_ms if recv_ts_ms is not None else now_ms()
     now = now_ms_value if now_ms_value is not None else recv
-    parsed = _extract_parsed(body)
     feed_to_ticker = cfg.feed_id_to_ticker()
     prices_by_feed: dict[str, Decimal] = {}
     ticks: list[UnderlyingPriceTick] = []
 
-    for item in parsed:
-        if not isinstance(item, dict):
+    for q in iter_hermes_quotes(body):
+        # WHI-794: never-published / non-positive Hermes rows are not data.
+        if not hermes_quote_is_valid(price=q.price, publish_time=q.publish_time):
             continue
-        raw_id = str(item.get("id") or "").lower().removeprefix("0x")
-        price_obj = item.get("price")
-        if not isinstance(price_obj, dict):
-            continue
-        try:
-            px = scale_pyth_price(price_obj["price"], int(price_obj["expo"]))
-            publish_time = int(price_obj["publish_time"])
-        except (KeyError, TypeError, ValueError, InvalidOperation):
-            continue
-        prices_by_feed[raw_id] = px
-        conf_raw = price_obj.get("conf")
-        conf: Decimal | None = None
-        if conf_raw is not None:
-            try:
-                conf = scale_pyth_price(conf_raw, int(price_obj["expo"]))
-            except (TypeError, ValueError, InvalidOperation):
-                conf = None
+        prices_by_feed[q.feed_id] = q.price
 
-        ticker = feed_to_ticker.get(raw_id)
+        ticker = feed_to_ticker.get(q.feed_id)
         if ticker is None:
             continue
         tcfg = cfg.tickers.get(ticker)
@@ -68,7 +115,7 @@ def parse_hermes_latest(
         if tickers is not None and ticker not in tickers:
             continue
 
-        as_of_ms = publish_time * 1000
+        as_of_ms = q.publish_time * 1000
         price_type = classify_price_type(
             as_of_ms=as_of_ms,
             now_ms=now,
@@ -80,14 +127,14 @@ def parse_hermes_latest(
         ticks.append(
             UnderlyingPriceTick(
                 ticker=ticker,
-                price=px,
+                price=q.price,
                 currency=tcfg.currency,
                 price_type=price_type,
                 as_of_ms=as_of_ms,
                 recv_ts_ms=recv,
                 source="pyth_hermes",
-                feed_id=raw_id,
-                conf=conf,
+                feed_id=q.feed_id,
+                conf=q.conf,
                 gap=gap,
             )
         )

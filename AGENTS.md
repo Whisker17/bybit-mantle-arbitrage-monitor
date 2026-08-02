@@ -183,6 +183,11 @@ placeholders. Agents must not assume a module exists until its issue lands. -->
     notes: restart **both** `xstocks-collector@bybit-fluxion` and
     `@binance-pancake` after collector code ships (`deploy/README.md`;
     `deploy-web.sh` only restarts API).
+  - **Pyth unpublished feeds (WHI-794) landed:** Hermes `price=0` /
+    `publish_time=0` rejected at parse; Yahoo gap-fill for AAOI/AXTI/BE/EWY/
+    NBIS/SOXL; UI/premium treat ≤0 or `as_of_ms==0` as n/a; reverse health
+    `unpublished_pyth_feeds` + audit table in
+    `docs/references/underlying-price-source.md`.
 
 ## Build, test, run
 

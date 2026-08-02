@@ -120,6 +120,7 @@ def test_unavailable_health() -> None:
     assert h.uncovered_coverage_mismatches == []
     assert h.uncovered_coverage_probe_ms is None
     assert h.uncovered_coverage_probe_errors == []
+    assert h.unpublished_pyth_feeds == []
 
 
 def test_build_health_exposes_uncovered_mismatches(tmp_path: Path) -> None:
@@ -175,3 +176,46 @@ def test_build_health_exposes_uncovered_mismatches(tmp_path: Path) -> None:
     assert health.uncovered_coverage_probe_errors == [
         {"ticker": "GHOST", "source": "yahoo", "error": "timeout"}
     ]
+    assert health.unpublished_pyth_feeds == []
+
+
+def test_build_health_exposes_unpublished_pyth_feeds(tmp_path: Path) -> None:
+    """WHI-794: journal meta for never-published Hermes feeds on /api/health."""
+    from monitor.underlying.coverage_probe import (
+        META_UNPUBLISHED,
+        UnpublishedFeed,
+        unpublished_to_meta_json,
+    )
+
+    db = tmp_path / "m.db"
+    store = SqliteStore(db)
+    ts = now_ms()
+    store.set_meta("collector_started_ms", str(ts - 60_000))
+    _seed_book(store, ts=ts - 1_000)
+    store.set_meta(
+        META_UNPUBLISHED,
+        unpublished_to_meta_json(
+            [
+                UnpublishedFeed(
+                    ticker="SOXL",
+                    feed_id="53008e9cb71d",
+                    publish_time=0,
+                    price="0",
+                    detail="never published",
+                )
+            ]
+        ),
+    )
+    store.close()
+
+    with JournalReader(db) as reader:
+        health = build_health(
+            reader,
+            now=ts,
+            stale_ms=30_000,
+            gap_window_ms=300_000,
+        )
+    assert health.ok is True
+    assert len(health.unpublished_pyth_feeds) == 1
+    assert health.unpublished_pyth_feeds[0]["ticker"] == "SOXL"
+    assert health.unpublished_pyth_feeds[0]["publish_time"] == 0

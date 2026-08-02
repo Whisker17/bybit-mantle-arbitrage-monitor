@@ -18,6 +18,7 @@ import {
   fmtUsd,
   fmtUtcHm,
   fmtVolumeRatio,
+  isRealUnderlyingPrint,
   priceTypeBadgeVariant,
   resolveVenues,
   usdTone,
@@ -371,7 +372,8 @@ function UnderlyingCell({ row }: { row: PairOverviewRow }) {
       </span>
     );
   }
-  if (row.underlying_price == null) {
+  // WHI-794: price<=0 or as_of_ms==0 is not a real equity print.
+  if (!isRealUnderlyingPrint(row.underlying_price, row.underlying_as_of_ms)) {
     return (
       <span
         className="text-muted-foreground"
@@ -385,13 +387,14 @@ function UnderlyingCell({ row }: { row: PairOverviewRow }) {
       </span>
     );
   }
+  const undAsOf = row.underlying_as_of_ms ?? null;
   const badge = row.underlying_price_type ?? row.premium_type_label;
   return (
     <span
       className="inline-flex items-center justify-end gap-1"
       title={
-        row.underlying_as_of_ms != null
-          ? `${row.underlying_ticker} ${row.underlying_source ?? ""} as_of ${new Date(row.underlying_as_of_ms).toISOString()}`
+        undAsOf != null
+          ? `${row.underlying_ticker} ${row.underlying_source ?? ""} as_of ${new Date(undAsOf).toISOString()}`
           : (row.underlying_ticker ?? undefined)
       }
     >

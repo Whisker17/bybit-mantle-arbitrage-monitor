@@ -26,6 +26,7 @@ import {
   fmtPrice,
   fmtSession,
   fmtSignedBps,
+  isRealUnderlyingPrint,
   resolveVenues,
   type DirectionVenues,
 } from "@/lib/format";
@@ -264,7 +265,10 @@ export function PairDetail({ marketId, pairId }: Props) {
             value={
               o.underlying_empty === "private"
                 ? "n/a private"
-                : o.underlying_price != null
+                : isRealUnderlyingPrint(
+                      o.underlying_price,
+                      o.underlying_as_of_ms,
+                    )
                   ? `${fmtPrice(o.underlying_price)}${
                       o.underlying_price_type
                         ? ` (${o.underlying_price_type})`
