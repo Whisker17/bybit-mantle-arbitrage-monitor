@@ -16,6 +16,7 @@ from monitor.attribution.mm_draft import InventoryEvent
 from monitor.markets.ids import normalize_market_id
 from monitor.metrics.config import MetricsConfig
 from monitor.storage import JournalReader
+from monitor.symbols.bstocks_models import BStocksPairsConfig
 from monitor.symbols.models import PairsConfig
 from monitor.tui.config import TuiConfig
 from monitor.tui.model import RunningEdgeState
@@ -64,6 +65,9 @@ class MarketRuntime:
     tui: TuiConfig
     db_path: Path
     reader: JournalReader | None
+    # Binance ⇄ Pancake inventory (M7). When set, overview/detail builders use
+    # BStocksPair paths; ``pairs`` stays None for this market.
+    bstocks: BStocksPairsConfig | None = None
     # From market dex.quote_decimals (USDC=6 / USDT=18) — never hardcode at call sites.
     quote_decimals: int = 6
     edge_state: RunningEdgeState = field(default_factory=RunningEdgeState)
@@ -90,17 +94,21 @@ class MarketRuntime:
     def data_status(self) -> str:
         """Wire status for overview / markets list.
 
-        * ``ok`` — builder-ready inventory (PairsConfig) available
-        * ``accumulating`` — inventory shape not yet wired into overview
-          builders (e.g. binance-pancake until bStocks builders land)
+        * ``ok`` — builder-ready inventory (PairsConfig or BStocksPairsConfig)
+        * ``accumulating`` — no inventory shape that overview builders accept
 
         Missing journals on a builder-ready market are an error path (HTTP
-        503 on pair routes), not ``accumulating`` — that label is reserved
-        for markets that cannot produce overview rows yet (WHI-774).
+        503 on pair routes), not ``accumulating``.
         """
-        if self.pairs is None:
+        if self.pairs is None and self.bstocks is None:
             return "accumulating"
         return "ok"
+
+    def inventory_pairs(self) -> PairsConfig | BStocksPairsConfig | None:
+        """Return the wired inventory root, if any."""
+        if self.pairs is not None:
+            return self.pairs
+        return self.bstocks
 
 
 @dataclass

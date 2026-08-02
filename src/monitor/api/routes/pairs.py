@@ -30,6 +30,7 @@ from monitor.metrics.pnl_snapshot import (
 from monitor.quotes import now_ms
 from monitor.storage import JournalReader
 from monitor.storage.reader import AddressLabelRow
+from monitor.symbols.bstocks_models import BStocksPair, BStocksPairsConfig
 from monitor.symbols.models import Pair, PairsConfig
 from monitor.symbols.token_map import quote_is_token0_by_pair
 from monitor.tui.builder import build_overview, build_pair_detail
@@ -38,6 +39,8 @@ from monitor.tui.model import PairDetailModel
 router = APIRouter(tags=["pairs"])
 
 _ACCUMULATING_MSG = "Market data accumulating"
+InventoryConfig = PairsConfig | BStocksPairsConfig
+InventoryPair = Pair | BStocksPair
 
 
 def _require_reader(runtime: MarketRuntime) -> JournalReader:
@@ -50,10 +53,10 @@ def _require_reader(runtime: MarketRuntime) -> JournalReader:
     return reader
 
 
-def _require_pairs(runtime: MarketRuntime) -> PairsConfig:
-    """Return PairsConfig or 503 when inventory is not builder-ready."""
-    pairs = runtime.pairs
-    if pairs is None:
+def _require_inventory(runtime: MarketRuntime) -> InventoryConfig:
+    """Return wired inventory (Fluxion or bStocks) or 503 when not builder-ready."""
+    inv = runtime.inventory_pairs()
+    if inv is None:
         raise HTTPException(
             status_code=503,
             detail=(
@@ -61,15 +64,47 @@ def _require_pairs(runtime: MarketRuntime) -> PairsConfig:
                 f"pair builders ({_ACCUMULATING_MSG})"
             ),
         )
+    return inv
+
+
+def _require_pairs(runtime: MarketRuntime) -> PairsConfig:
+    """Fluxion-only inventory (legacy call sites that need wrapper/RFQ maps)."""
+    pairs = runtime.pairs
+    if pairs is None:
+        raise HTTPException(
+            status_code=503,
+            detail=(
+                f"market {runtime.market_id!r} requires Fluxion PairsConfig "
+                f"for this endpoint ({_ACCUMULATING_MSG})"
+            ),
+        )
     return pairs
 
 
-def _pair_or_404(runtime: MarketRuntime, pair_id: str) -> Pair:
-    pairs = _require_pairs(runtime)
+def _pair_or_404(runtime: MarketRuntime, pair_id: str) -> InventoryPair:
+    inv = _require_inventory(runtime)
     try:
-        return pairs.pair_by_id(pair_id)
+        return inv.pair_by_id(pair_id)
     except KeyError as exc:
         raise HTTPException(status_code=404, detail=f"unknown pair_id: {pair_id}") from exc
+
+
+def _native_decimals(pair: InventoryPair) -> int:
+    if isinstance(pair, BStocksPair):
+        return pair.pancake.native_decimals
+    return pair.fluxion.native_decimals
+
+
+def _quote_is_token0_map(inv: InventoryConfig) -> dict[str, bool]:
+    """USDC/USDT is token0 when its address sorts before the base token."""
+    if isinstance(inv, PairsConfig):
+        return quote_is_token0_by_pair(inv)
+    out: dict[str, bool] = {}
+    for p in inv.pairs:
+        q = p.pancake.quote_token_address.lower()
+        base = p.pancake.native_token.lower()
+        out[p.id] = q < base
+    return out
 
 
 def _market_fields(runtime: MarketRuntime) -> dict[str, Any]:
@@ -114,7 +149,7 @@ def _pnl_snapshot_for_pair(
     runtime: MarketRuntime,
     state: AppState,
     *,
-    pair: Pair,
+    pair: InventoryPair,
     reader: JournalReader,
 ) -> PnlPairSnapshot:
     """Load ticks + build PnL snapshot, with optional TTL cache (caller holds lock)."""
@@ -144,7 +179,7 @@ def _pnl_snapshot_for_pair(
         depth=depth,
         rfq_buy=rfq_buy,
         rfq_sell=rfq_sell,
-        native_decimals=pair.fluxion.native_decimals,
+        native_decimals=_native_decimals(pair),
         # Same config switch as attribution (market dex.has_rfq via assembly).
         rfq_enabled=runtime.attribution.has_rfq,
         now_ms=now_ms(),
@@ -164,8 +199,8 @@ def _inventory_events(
         hit = cache.get()
         if hit is not None:
             return hit
-    pairs = _require_pairs(runtime)
-    q0 = quote_is_token0_by_pair(pairs)
+    inv = _require_inventory(runtime)
+    q0 = _quote_is_token0_map(inv)
     events = inventory_events_from_ticks(
         swaps=reader.recent_swaps(),
         rfq_fills=reader.recent_rfq_fills(),
@@ -220,18 +255,19 @@ def _detail_model(
 def _list_pairs_body(state: AppState, runtime: MarketRuntime) -> dict[str, Any]:
     """Overview table body for one market (shared by legacy + scoped routes).
 
-    Builder-ready markets with a missing journal keep the pre-WHI-774 503
-    contract. Markets without PairsConfig (binance-pancake today) return a
-    200 accumulating empty state instead of crashing the process.
+    Builder-ready markets (Fluxion ``pairs`` or bStocks inventory) with a
+    missing journal keep the 503 contract. Markets with no inventory shape at
+    all return a 200 accumulating empty state.
     """
-    if runtime.pairs is None:
+    inv = runtime.inventory_pairs()
+    if inv is None:
         return _empty_overview(state, runtime, error=_ACCUMULATING_MSG)
 
     reader = _require_reader(runtime)
 
     with runtime.lock:
         model = build_overview(
-            pairs=runtime.pairs,
+            pairs=inv,
             reader=reader,
             metrics=runtime.metrics,
             tui=runtime.tui,
@@ -253,7 +289,7 @@ def _list_pairs_body(state: AppState, runtime: MarketRuntime) -> dict[str, Any]:
         for row in body["rows"]:
             pair_id = row["pair_id"]
             try:
-                pair = runtime.pairs.pair_by_id(pair_id)
+                pair = inv.pair_by_id(pair_id)
             except KeyError:
                 # Builder rows should always be configured pairs; never 404 the list.
                 enriched = dict(row)

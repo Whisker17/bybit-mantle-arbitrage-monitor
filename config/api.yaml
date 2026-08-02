@@ -44,7 +44,9 @@ mm_series_max_points: 500
 mm_rebalance_limit: 100
 mm_inventory_cache_ttl_s: 2.5   # 0 = rebuild every request
 
-# CORS origins for local static-export dogfood. Production nginx serves UI +
-# /api same-origin, so empty list is correct on the VPS.
-# Example local: ["http://127.0.0.1:3000", "http://localhost:3000"]
-cors_origins: []
+# CORS origins for local Next dogfood (NEXT_PUBLIC_API_BASE → :8000 is
+# cross-origin). Empty list is correct on the VPS (nginx same-origin).
+# Without these, the browser reports "API unreachable / Failed to fetch".
+cors_origins:
+  - "http://127.0.0.1:3000"
+  - "http://localhost:3000"

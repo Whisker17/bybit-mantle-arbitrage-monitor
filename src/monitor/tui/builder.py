@@ -49,6 +49,7 @@ from monitor.quotes import (
     rfq_side_leg,
 )
 from monitor.storage import JournalReader
+from monitor.symbols.bstocks_models import BStocksPair, BStocksPairsConfig
 from monitor.symbols.models import Pair, PairsConfig
 from monitor.tui.config import SortKey, TuiConfig
 from monitor.tui.format import downsample, sort_rows
@@ -124,7 +125,7 @@ def _rfq_spread_for_series(
 
 
 def build_pair_overview_row(
-    pair: Pair,
+    pair: Pair | BStocksPair,
     *,
     bybit: BybitBookTick | None,
     amm: FluxionPoolStateTick | None,
@@ -136,7 +137,11 @@ def build_pair_overview_row(
     tui: TuiConfig,
     ts_ms: int | None = None,
 ) -> PairOverviewRow:
-    """Build one overview row. Pure: no I/O."""
+    """Build one overview row. Pure: no I/O.
+
+    Accepts Fluxion ``Pair`` or Pancake ``BStocksPair`` (M7); pool geometry
+    is resolved via ``amm_pool_from_pair_tick``.
+    """
     ref = tui.reference_size_usd
     if bybit is None:
         return PairOverviewRow(
@@ -205,7 +210,7 @@ def build_pair_overview_row(
 
 def build_overview(
     *,
-    pairs: PairsConfig,
+    pairs: PairsConfig | BStocksPairsConfig,
     reader: JournalReader,
     metrics: MetricsConfig,
     tui: TuiConfig,
@@ -218,6 +223,7 @@ def build_overview(
 
     Passing ``edge_state`` keeps cumulative series warm while the operator stays
     on the overview page (detail cold-start then has continuous history).
+    Accepts Bybit/Fluxion or Binance/Pancake inventory roots.
     """
     ts = now if now is not None else now_ms()
     key = sort_key if sort_key is not None else tui.default_sort
@@ -357,7 +363,7 @@ def observe_edges(
 def rebuild_edge_history(
     state: RunningEdgeState,
     *,
-    pair: Pair,
+    pair: Pair | BStocksPair,
     books: Sequence[BybitBookTick],
     pools: Sequence[FluxionPoolStateTick],
     rfq_quotes: Sequence[FluxionRfqQuoteTick],
@@ -520,7 +526,7 @@ def _pool_mid_pre(
 
 def build_amm_trade_events(
     *,
-    pair: Pair,
+    pair: Pair | BStocksPair,
     swaps: Sequence[FluxionSwapTick],
     pools: Sequence[FluxionPoolStateTick],
     bybit_mids: Sequence[tuple[int, Decimal]],
@@ -628,7 +634,7 @@ def build_trade_stream(
 
 def build_pair_detail(
     *,
-    pair: Pair,
+    pair: Pair | BStocksPair,
     reader: JournalReader,
     metrics: MetricsConfig,
     attribution_cfg: AttributionConfig,

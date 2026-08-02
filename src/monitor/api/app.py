@@ -65,6 +65,7 @@ def _build_market_runtime(
         cex_venue=ctx.cex.venue,
         dex_venue=ctx.dex.venue,
         pairs=ctx.pairs,
+        bstocks=ctx.bstocks,
         pair_count=pair_count,
         metrics=ctx.metrics,
         attribution=ctx.attribution,
