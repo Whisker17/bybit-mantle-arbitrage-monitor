@@ -116,6 +116,9 @@ export type PairOverviewRow = {
   mm_active?: MmActiveStatus | null;
 };
 
+/** Market journal readiness for overview / markets list (WHI-774). */
+export type MarketDataStatus = "ok" | "accumulating";
+
 export type OverviewResponse = {
   generated_ts_ms: number;
   session_now: SessionKind;
@@ -125,6 +128,11 @@ export type OverviewResponse = {
   rows: PairOverviewRow[];
   db_path: string;
   error?: string | null;
+  /** Present after WHI-774 multi-market routes. */
+  market_id?: string;
+  display_name?: string;
+  has_rfq?: boolean;
+  data_status?: MarketDataStatus;
 };
 
 /** Full pair detail model from GET /api/pairs/{id} (TUI PairDetailModel + PnL v2). */
@@ -148,6 +156,11 @@ export type PairDetailResponse = {
   /** Extended address table (labels + evidence) — WHI-769. */
   address_panel?: AddressPanelRow[] | null;
   error?: string | null;
+  /** Present after WHI-774 multi-market routes. */
+  market_id?: string;
+  display_name?: string;
+  has_rfq?: boolean;
+  data_status?: MarketDataStatus;
 };
 
 export type SpreadPoint = {
@@ -358,6 +371,30 @@ export type HealthResponse = {
   recent_gaps: CollectorGap[];
   poll_interval_s: number | null;
   error?: string | null;
+  /** Present after WHI-774 multi-market routes. */
+  market_id?: string;
+  display_name?: string;
+  has_rfq?: boolean;
+  data_status?: MarketDataStatus;
+};
+
+/** One market card from GET /api/markets (WHI-774). */
+export type MarketSummary = {
+  id: string;
+  display_name: string;
+  has_rfq: boolean;
+  cex_venue: string;
+  dex_venue: string;
+  pair_count: number;
+  data_status: MarketDataStatus;
+  db_path: string;
+  health: HealthResponse;
+};
+
+export type MarketsResponse = {
+  default_market_id: string;
+  poll_interval_s: number;
+  markets: MarketSummary[];
 };
 
 /** Client-side sort keys (subset of TUI SortKey + pair name). */

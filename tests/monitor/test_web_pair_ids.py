@@ -1,4 +1,4 @@
-"""Static-export pair paths must track default market inventory (WHI-758 / WHI-771)."""
+"""Static-export pair paths must track market inventory (WHI-758 / WHI-771 / WHI-774)."""
 
 from __future__ import annotations
 
@@ -23,10 +23,20 @@ def test_market_inventory_ids_match_symbols_loader() -> None:
 
 
 def test_web_pair_ids_ts_source_uses_market_inventory() -> None:
-    """The TS loader must read config/markets/bybit-fluxion.yaml (not a hand list)."""
+    """The TS loader must read config/markets/{id}.yaml (not a hand list)."""
     root = Path(__file__).resolve().parents[2]
     src = (root / "web" / "lib" / "pair-ids.ts").read_text(encoding="utf-8")
-    assert "bybit-fluxion.yaml" in src
+    assert "config" in src and "markets" in src
     assert "loadPairIdsFromConfig" in src
-    # No hand-maintained 11-id array literal left in the module.
+    assert "loadAllMarketPairParams" in src
+    # No hand-maintained pair-id array literal left in the module.
     assert "AAPLx" not in src
+    assert "TSLAB" not in src
+
+
+def test_web_markets_ts_knows_both_markets() -> None:
+    root = Path(__file__).resolve().parents[2]
+    src = (root / "web" / "lib" / "markets.ts").read_text(encoding="utf-8")
+    assert "bybit-fluxion" in src
+    assert "binance-pancake" in src
+    assert "marketOverviewPath" in src

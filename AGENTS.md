@@ -107,7 +107,13 @@ placeholders. Agents must not assume a module exists until its issue lands. -->
     SQLite `data/monitor-{market}.db` (ADR-0001), CLI `--market` (default
     `bybit-fluxion`), metrics costs parameterized from market file, systemd
     `xstocks-collector@.service` + `DEV_MARKET` in `scripts/dev-web.sh`.
-    Binance collector runtime is M7-3; Web multi-market bar is M7-5.
+    Binance collector runtime is M7-3.
+  - **M7-5 Web/API multi-market (WHI-774) landed:** `GET /api/markets` +
+    market-scoped `/api/{market}/pairs|health|…` (legacy unscoped routes map
+    to default `bybit-fluxion`); Web `MarketSwitcher` + routes
+    `/m/{market}/` and `/m/{market}/pair/{id}/` (root + legacy `/pair/{id}/`
+    redirect to default market); RFQ columns hidden when `has_rfq` is false;
+    explicit accumulating empty state when a market journal is not ready.
 
 ## Build, test, run
 

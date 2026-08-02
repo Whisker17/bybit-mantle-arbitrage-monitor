@@ -5,7 +5,8 @@ import "./globals.css";
 
 export const metadata: Metadata = {
   title: "xStocks monitor",
-  description: "Bybit ⇄ Fluxion xStocks paper-arb panel (read-only)",
+  description:
+    "Multi-market tokenized-stocks paper-arb panel (Bybit ⇄ Fluxion, Binance ⇄ PancakeSwap) — read-only",
 };
 
 export default function RootLayout({ children }: { children: ReactNode }) {

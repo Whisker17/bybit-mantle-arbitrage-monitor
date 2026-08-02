@@ -17,6 +17,8 @@ import type { SpreadPoint } from "@/lib/types";
 type Props = {
   points: SpreadPoint[];
   className?: string;
+  /** When false, RFQ series is omitted (AMM-only markets, WHI-774). */
+  showRfq?: boolean;
 };
 
 /** Match Tailwind theme tokens (positive / primary-ish blue / warning). */
@@ -28,7 +30,7 @@ const CLOSED_BAND = "hsla(38, 50%, 30%, 0.12)";
 const AXIS = "hsl(215 12% 58%)";
 const GRID = "hsla(220, 10%, 40%, 0.25)";
 
-export function SpreadChart({ points, className }: Props) {
+export function SpreadChart({ points, className, showRfq = true }: Props) {
   const hostRef = useRef<HTMLDivElement>(null);
   const plotRef = useRef<uPlot | null>(null);
   /** Stable handle for draw hook — updated every render without recreating plot. */
@@ -37,7 +39,9 @@ export function SpreadChart({ points, className }: Props) {
 
   const series = useMemo(() => prepareSpreadSeries(points), [points]);
   seriesRef.current = series;
-  const empty = series.xs.length === 0 || (!series.hasAmm && !series.hasRfq);
+  const empty =
+    series.xs.length === 0 ||
+    (!series.hasAmm && !(showRfq && series.hasRfq));
 
   // Fingerprint data for setData (identity of `points` array changes every poll).
   const dataKey = useMemo(() => {
@@ -120,10 +124,10 @@ export function SpreadChart({ points, className }: Props) {
           scale: "bps",
           spanGaps: false,
           points: { show: false },
-          show: s0.hasRfq,
+          show: showRfq && s0.hasRfq,
         },
         {
-          label: "Bybit mid",
+          label: "CEX mid",
           stroke: MID_COLOR,
           width: 1,
           dash: [4, 3],
@@ -178,7 +182,7 @@ export function SpreadChart({ points, className }: Props) {
     };
     // Recreate when empty flips, mid axis toggles, or AMM/RFQ presence changes
     // (series.show is fixed at construction; setData alone cannot unhide).
-  }, [empty, showMid, series.hasAmm, series.hasRfq, series.hasMid]);
+  }, [empty, showMid, showRfq, series.hasAmm, series.hasRfq, series.hasMid]);
 
   // Push new samples without destroying the plot (keeps zoom/cursor).
   useEffect(() => {

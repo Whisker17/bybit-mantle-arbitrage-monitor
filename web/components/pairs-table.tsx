@@ -2,6 +2,7 @@
 
 import Link from "next/link";
 import { useRouter } from "next/navigation";
+import { useMemo } from "react";
 
 import { Badge } from "@/components/ui/badge";
 import { cn } from "@/lib/cn";
@@ -15,6 +16,7 @@ import {
   fmtUsd,
   usdTone,
 } from "@/lib/format";
+import { marketPairPath } from "@/lib/markets";
 import { mmActiveLabel, mmActiveTitle } from "@/lib/mm";
 import { overviewPnlCell } from "@/lib/pnl";
 import type { MmActiveStatus, PairOverviewRow, SortKey } from "@/lib/types";
@@ -24,6 +26,12 @@ type Props = {
   sortKey: SortKey;
   sortDesc: boolean;
   onSort: (key: SortKey) => void;
+  /** Market id for row → detail links (WHI-774). */
+  marketId: string;
+  /** Hide RFQ columns entirely when the market has no RFQ (binance-pancake). */
+  hasRfq?: boolean;
+  /** Empty-table message (filter miss vs market accumulating). */
+  emptyMessage?: string;
 };
 
 type Col = {
@@ -31,6 +39,8 @@ type Col = {
   label: string;
   align?: "left" | "right";
   title?: string;
+  /** Column is RFQ-only; omitted when hasRfq is false. */
+  rfq?: boolean;
 };
 
 const COLS: Col[] = [
@@ -39,12 +49,28 @@ const COLS: Col[] = [
   { key: null, label: "Bid", align: "right" },
   { key: null, label: "Ask", align: "right" },
   { key: "bybit_mid", label: "Mid", align: "right" },
-  { key: null, label: "AMM", align: "right", title: "Fluxion AMM mid" },
-  { key: null, label: "RFQb", align: "right", title: "RFQ buy (taker buys base)" },
-  { key: null, label: "RFQs", align: "right", title: "RFQ sell" },
+  { key: null, label: "AMM", align: "right", title: "AMM mid" },
+  {
+    key: null,
+    label: "RFQb",
+    align: "right",
+    title: "RFQ buy (taker buys base)",
+    rfq: true,
+  },
+  { key: null, label: "RFQs", align: "right", title: "RFQ sell", rfq: true },
   { key: "amm_spread", label: "AMM bps", align: "right" },
-  { key: "rfq_spread", label: "RFQ bps", align: "right" },
-  { key: "net_edge", label: "Net", align: "right", title: "Net edge at ref size (AMM)" },
+  {
+    key: "rfq_spread",
+    label: "RFQ bps",
+    align: "right",
+    rfq: true,
+  },
+  {
+    key: "net_edge",
+    label: "Net",
+    align: "right",
+    title: "Net edge at ref size (AMM)",
+  },
   { key: null, label: "Dir", title: "Arb direction" },
   { key: null, label: "Ven" },
   { key: "volume_24h", label: "Vol24h", align: "right" },
@@ -120,15 +146,32 @@ function MmActiveCell({ status }: { status: MmActiveStatus | null | undefined })
   );
 }
 
-export function PairsTable({ rows, sortKey, sortDesc, onSort }: Props) {
+export function PairsTable({
+  rows,
+  sortKey,
+  sortDesc,
+  onSort,
+  marketId,
+  hasRfq = true,
+  emptyMessage = "No pairs match the current filter.",
+}: Props) {
   const router = useRouter();
+  const cols = useMemo(
+    () => COLS.filter((c) => hasRfq || !c.rfq),
+    [hasRfq],
+  );
 
   return (
     <div className="overflow-x-auto rounded-md border border-border">
-      <table className="w-full min-w-[1160px] border-collapse text-xs">
+      <table
+        className={cn(
+          "w-full border-collapse text-xs",
+          hasRfq ? "min-w-[1160px]" : "min-w-[980px]",
+        )}
+      >
         <thead>
           <tr className="border-b border-border bg-muted/40 text-muted-foreground">
-            {COLS.map((col) => {
+            {cols.map((col) => {
               const sortable = col.key != null;
               const active = col.key === sortKey;
               const arrow = active ? (sortDesc ? " ↓" : " ↑") : "";
@@ -161,16 +204,16 @@ export function PairsTable({ rows, sortKey, sortDesc, onSort }: Props) {
           {rows.length === 0 ? (
             <tr>
               <td
-                colSpan={COLS.length}
+                colSpan={cols.length}
                 className="px-3 py-8 text-center text-muted-foreground"
               >
-                No pairs match the current filter.
+                {emptyMessage}
               </td>
             </tr>
           ) : (
             rows.map((row) => {
               const dim = row.low_liquidity || row.stale;
-              const href = `/pair/${row.pair_id}/`;
+              const href = marketPairPath(marketId, row.pair_id);
               return (
                 <tr
                   key={row.pair_id}
@@ -243,18 +286,24 @@ export function PairsTable({ rows, sortKey, sortDesc, onSort }: Props) {
                   <td className="px-2 py-1.5 text-right tabular-nums">
                     {fmtPrice(row.amm_mid)}
                   </td>
-                  <td className="px-2 py-1.5 text-right tabular-nums">
-                    {fmtPrice(row.rfq_buy)}
-                  </td>
-                  <td className="px-2 py-1.5 text-right tabular-nums">
-                    {fmtPrice(row.rfq_sell)}
-                  </td>
+                  {hasRfq && (
+                    <>
+                      <td className="px-2 py-1.5 text-right tabular-nums">
+                        {fmtPrice(row.rfq_buy)}
+                      </td>
+                      <td className="px-2 py-1.5 text-right tabular-nums">
+                        {fmtPrice(row.rfq_sell)}
+                      </td>
+                    </>
+                  )}
                   <td className="px-2 py-1.5 text-right">
                     <BpsCell value={row.amm_spread_bps} />
                   </td>
-                  <td className="px-2 py-1.5 text-right">
-                    <BpsCell value={row.rfq_spread_bps} />
-                  </td>
+                  {hasRfq && (
+                    <td className="px-2 py-1.5 text-right">
+                      <BpsCell value={row.rfq_spread_bps} />
+                    </td>
+                  )}
                   <td className="px-2 py-1.5 text-right font-medium">
                     <BpsCell value={row.net_edge_bps} />
                   </td>

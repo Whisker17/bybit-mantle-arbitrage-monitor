@@ -9,6 +9,8 @@ type Props = {
   pollMs: number;
   rowCount: number;
   filteredCount: number;
+  /** Market display name for the status strip (WHI-774). */
+  displayName?: string | null;
 };
 
 export function StatusBar({
@@ -17,15 +19,19 @@ export function StatusBar({
   pollMs,
   rowCount,
   filteredCount,
+  displayName,
 }: Props) {
   const alive = health?.collector_alive ?? false;
   const session = overview?.session_now ?? null;
+  const title =
+    displayName ??
+    overview?.display_name ??
+    health?.display_name ??
+    "xStocks · Bybit ⇄ Fluxion";
 
   return (
     <div className="mb-3 flex flex-wrap items-center gap-x-3 gap-y-1.5 rounded-md border border-border bg-card px-3 py-2 text-[11px] text-muted-foreground">
-      <span className="font-semibold tracking-wide text-foreground">
-        xStocks · Bybit ⇄ Fluxion
-      </span>
+      <span className="font-semibold tracking-wide text-foreground">{title}</span>
 
       <span className="text-border">|</span>
 

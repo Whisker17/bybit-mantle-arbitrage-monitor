@@ -35,6 +35,8 @@ type Props = {
   amm: EdgePanel;
   rfq: EdgePanel;
   pnl?: PnlPairSnapshot | null;
+  /** Hide RFQ venue card when market has no RFQ (WHI-774). */
+  hasRfq?: boolean;
 };
 
 const DIRECTIONS: Array<{ id: Direction; label: string }> = [
@@ -42,7 +44,7 @@ const DIRECTIONS: Array<{ id: Direction; label: string }> = [
   { id: "buy_bybit_sell_fluxion", label: "B→F (buy Bybit)" },
 ];
 
-export function EdgeStatsPanel({ amm, rfq, pnl }: Props) {
+export function EdgeStatsPanel({ amm, rfq, pnl, hasRfq = true }: Props) {
   const [direction, setDirection] = useState<Direction>(
     "buy_fluxion_sell_bybit",
   );
@@ -66,9 +68,20 @@ export function EdgeStatsPanel({ amm, rfq, pnl }: Props) {
         (each distribution row prints its own n=). PnL v2 below is cash-flow
         at fixed USD buckets + sample-best optimal size.
       </p>
-      <div className="grid gap-3 lg:grid-cols-2">
+      <div
+        className={cn(
+          "grid gap-3",
+          hasRfq ? "lg:grid-cols-2" : "lg:grid-cols-1",
+        )}
+      >
         <VenueEdgeCard title="AMM" panel={amm} />
-        <VenueEdgeCard title="RFQ" panel={rfq} note="unslipped ladder (see DEFERRED)" />
+        {hasRfq && (
+          <VenueEdgeCard
+            title="RFQ"
+            panel={rfq}
+            note="unslipped ladder (see DEFERRED)"
+          />
+        )}
       </div>
       <BucketPnlPanel
         snap={pnl}

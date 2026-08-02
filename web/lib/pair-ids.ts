@@ -1,27 +1,32 @@
 import fs from "node:fs";
 import path from "node:path";
 
+import { KNOWN_MARKETS } from "./markets";
+
 /**
- * Build-time pair id list from the default market inventory
- * (`config/markets/bybit-fluxion.yaml` — M7-2 / WHI-771).
- * Used only by generateStaticParams for Next static export of /pair/{id}/.
+ * Build-time pair id list from a market inventory YAML
+ * (`config/markets/{id}.yaml` — M7-2 / WHI-771).
+ * Used by generateStaticParams for Next static export of
+ * `/m/{market}/pair/{id}/` (and legacy `/pair/{id}/`).
  * Do not retype the inventory here.
- *
- * Multi-market static routes land in M7-5; until then the web panel is the
- * Bybit ⇄ Fluxion market only.
  */
-export function loadPairIdsFromConfig(): string[] {
+export function loadPairIdsFromConfig(marketId = "bybit-fluxion"): string[] {
   const candidates = [
-    path.join(process.cwd(), "config", "markets", "bybit-fluxion.yaml"),
-    path.join(process.cwd(), "..", "config", "markets", "bybit-fluxion.yaml"),
-    // Legacy path (pre-M7-2) — kept so an old checkout still builds.
-    path.join(process.cwd(), "config", "pairs.yaml"),
-    path.join(process.cwd(), "..", "config", "pairs.yaml"),
+    path.join(process.cwd(), "config", "markets", `${marketId}.yaml`),
+    path.join(process.cwd(), "..", "config", "markets", `${marketId}.yaml`),
   ];
+  // Legacy path only for the original Bybit market.
+  if (marketId === "bybit-fluxion") {
+    candidates.push(
+      path.join(process.cwd(), "config", "pairs.yaml"),
+      path.join(process.cwd(), "..", "config", "pairs.yaml"),
+    );
+  }
   const yamlPath = candidates.find((p) => fs.existsSync(p));
   if (!yamlPath) {
     throw new Error(
-      `market inventory not found (cwd=${process.cwd()}); expected config/markets/bybit-fluxion.yaml`,
+      `market inventory not found for ${marketId} (cwd=${process.cwd()}); ` +
+        `expected config/markets/${marketId}.yaml`,
     );
   }
   const text = fs.readFileSync(yamlPath, "utf8");
@@ -45,4 +50,19 @@ export function loadPairIdsFromConfig(): string[] {
     throw new Error(`no pair ids parsed from ${yamlPath}`);
   }
   return ids;
+}
+
+/** All static params for /m/{market}/pair/{pairId}/. */
+export function loadAllMarketPairParams(): { market: string; pairId: string }[] {
+  const out: { market: string; pairId: string }[] = [];
+  for (const m of KNOWN_MARKETS) {
+    for (const pairId of loadPairIdsFromConfig(m.id)) {
+      out.push({ market: m.id, pairId });
+    }
+  }
+  return out;
+}
+
+export function loadMarketIds(): string[] {
+  return KNOWN_MARKETS.map((m) => m.id);
 }

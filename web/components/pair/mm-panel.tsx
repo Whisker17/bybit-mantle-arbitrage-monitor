@@ -22,6 +22,7 @@ import {
   alignInventorySeries,
   prepareInventorySeries,
 } from "@/lib/inventory-chart";
+import { marketApiPairMmPath } from "@/lib/markets";
 import { mmEmptyMessage } from "@/lib/mm";
 import type { MmPairResponse } from "@/lib/types";
 
@@ -36,25 +37,26 @@ const AXIS = "hsl(215 12% 58%)";
 const GRID = "hsla(220, 10%, 40%, 0.25)";
 
 type Props = {
+  marketId: string;
   pairId: string;
   pollMs: number;
 };
 
-export function MmPanel({ pairId, pollMs }: Props) {
+export function MmPanel({ marketId, pairId, pollMs }: Props) {
   const [data, setData] = useState<MmPairResponse | null>(null);
   const [err, setErr] = useState<string | null>(null);
 
   const refresh = useCallback(async () => {
     try {
       const d = await fetchJson<MmPairResponse>(
-        `/api/pairs/${encodeURIComponent(pairId)}/mm`,
+        marketApiPairMmPath(marketId, pairId),
       );
       setData(d);
       setErr(null);
     } catch (e) {
       setErr(e instanceof Error ? e.message : String(e));
     }
-  }, [pairId]);
+  }, [marketId, pairId]);
 
   useEffect(() => {
     void refresh();

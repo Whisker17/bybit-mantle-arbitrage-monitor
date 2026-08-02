@@ -1,8 +1,8 @@
 "use client";
 
 /**
- * Full pair detail (WHI-759): header quotes, spread chart, trade stream,
- * edge stats + cost waterfall, attribution panel. Polls same-origin API.
+ * Full pair detail (WHI-759 / WHI-774): header quotes, spread chart, trade stream,
+ * edge stats + cost waterfall, attribution panel. Polls market-scoped API.
  */
 
 import { useCallback, useEffect, useState, type ReactNode } from "react";
@@ -13,6 +13,7 @@ import { MmPanel } from "@/components/pair/mm-panel";
 import { SpreadChart } from "@/components/pair/spread-chart";
 import { TradeStream } from "@/components/pair/trade-stream";
 import { Badge } from "@/components/ui/badge";
+import { EmptyPanel } from "@/components/ui/empty-panel";
 import { fetchJson } from "@/lib/api";
 import {
   bpsTone,
@@ -22,6 +23,12 @@ import {
   fmtSession,
   fmtSignedBps,
 } from "@/lib/format";
+import {
+  marketAccumulatingMessage,
+  marketApiHealthPath,
+  marketApiPairPath,
+  marketCard,
+} from "@/lib/markets";
 import { mmActiveLabel, mmActiveTitle } from "@/lib/mm";
 import type {
   HealthResponse,
@@ -34,40 +41,62 @@ import { cn } from "@/lib/cn";
 const DEFAULT_POLL_MS = 2000;
 
 type Props = {
+  marketId: string;
   pairId: string;
 };
 
-export function PairDetail({ pairId }: Props) {
+export function PairDetail({ marketId, pairId }: Props) {
   const [data, setData] = useState<PairDetailResponse | null>(null);
   const [err, setErr] = useState<string | null>(null);
   const [pollMs, setPollMs] = useState(DEFAULT_POLL_MS);
+  const [hasRfq, setHasRfq] = useState(
+    () => marketCard(marketId)?.has_rfq ?? true,
+  );
+  const [accumulating, setAccumulating] = useState(false);
+  const [displayName, setDisplayName] = useState(
+    () => marketCard(marketId)?.display_name ?? marketId,
+  );
 
   const refresh = useCallback(async () => {
     try {
       const d = await fetchJson<PairDetailResponse>(
-        `/api/pairs/${encodeURIComponent(pairId)}`,
+        marketApiPairPath(marketId, pairId),
       );
       setData(d);
       setErr(null);
+      if (d.has_rfq != null) setHasRfq(d.has_rfq);
+      if (d.display_name) setDisplayName(d.display_name);
+      setAccumulating(d.data_status === "accumulating");
     } catch (e) {
       // Keep last good snapshot so panels do not flash empty on a blip.
-      setErr(e instanceof Error ? e.message : String(e));
+      const msg = e instanceof Error ? e.message : String(e);
+      setErr(msg);
+      if (/503|accumulat/i.test(msg)) {
+        setAccumulating(true);
+      }
     }
-  }, [pairId]);
+  }, [marketId, pairId]);
 
-  // poll_interval_s changes only on API restart — fetch once, not every tick.
+  // poll_interval_s + market metadata — fetch once per market, not every tick.
   useEffect(() => {
     let cancelled = false;
+    setData(null);
+    setErr(null);
+    setAccumulating(false);
+    setHasRfq(marketCard(marketId)?.has_rfq ?? true);
+    setDisplayName(marketCard(marketId)?.display_name ?? marketId);
     void (async () => {
       try {
-        const h = await fetchJson<HealthResponse>("/api/health");
-        if (
-          !cancelled &&
-          h.poll_interval_s &&
-          h.poll_interval_s > 0
-        ) {
+        const h = await fetchJson<HealthResponse>(
+          marketApiHealthPath(marketId),
+        );
+        if (cancelled) return;
+        if (h.poll_interval_s && h.poll_interval_s > 0) {
           setPollMs(Math.round(h.poll_interval_s * 1000));
         }
+        if (h.has_rfq != null) setHasRfq(h.has_rfq);
+        if (h.display_name) setDisplayName(h.display_name);
+        if (h.data_status === "accumulating") setAccumulating(true);
       } catch {
         // Keep DEFAULT_POLL_MS.
       }
@@ -75,7 +104,7 @@ export function PairDetail({ pairId }: Props) {
     return () => {
       cancelled = true;
     };
-  }, []);
+  }, [marketId]);
 
   useEffect(() => {
     void refresh();
@@ -84,6 +113,16 @@ export function PairDetail({ pairId }: Props) {
     }, pollMs);
     return () => window.clearInterval(id);
   }, [refresh, pollMs]);
+
+  if (accumulating && !data) {
+    return (
+      <EmptyPanel
+        variant="solid"
+        message={marketAccumulatingMessage(displayName)}
+        className="py-10"
+      />
+    );
+  }
 
   if (!data && err) {
     return (
@@ -127,22 +166,26 @@ export function PairDetail({ pairId }: Props) {
           )}
         </div>
         <dl className="grid grid-cols-2 gap-x-4 gap-y-1.5 text-xs sm:grid-cols-3 lg:grid-cols-4">
-          <Field label="Bybit mid" value={fmtPrice(o.bybit_mid)} />
+          <Field label="CEX mid" value={fmtPrice(o.bybit_mid)} />
           <Field label="AMM mid" value={fmtPrice(o.amm_mid)} />
-          <Field
-            label="RFQ b/s"
-            value={`${fmtPrice(o.rfq_buy)} / ${fmtPrice(o.rfq_sell)}`}
-          />
+          {hasRfq && (
+            <Field
+              label="RFQ b/s"
+              value={`${fmtPrice(o.rfq_buy)} / ${fmtPrice(o.rfq_sell)}`}
+            />
+          )}
           <Field
             label="AMM bps"
             value={fmtSignedBps(o.amm_spread_bps)}
             tone={bpsTone(o.amm_spread_bps)}
           />
-          <Field
-            label="RFQ bps"
-            value={fmtSignedBps(o.rfq_spread_bps)}
-            tone={bpsTone(o.rfq_spread_bps)}
-          />
+          {hasRfq && (
+            <Field
+              label="RFQ bps"
+              value={fmtSignedBps(o.rfq_spread_bps)}
+              tone={bpsTone(o.rfq_spread_bps)}
+            />
+          )}
           <Field
             label="Net edge"
             value={fmtSignedBps(o.net_edge_bps)}
@@ -157,14 +200,18 @@ export function PairDetail({ pairId }: Props) {
         </dl>
       </section>
 
-      <Panel title="Spread history" subtitle="AMM + RFQ vs Bybit mid · session bands">
-        <SpreadChart points={data.spread_series} />
+      <Panel
+        title="Spread history"
+        subtitle={
+          hasRfq
+            ? "AMM + RFQ vs CEX mid · session bands"
+            : "AMM vs CEX mid · session bands"
+        }
+      >
+        <SpreadChart points={data.spread_series} showRfq={hasRfq} />
       </Panel>
 
-      <Panel
-        title="Fluxion fills"
-        subtitle={`latest ${data.trades.length}`}
-      >
+      <Panel title="DEX fills" subtitle={`latest ${data.trades.length}`}>
         <TradeStream trades={data.trades} />
       </Panel>
 
@@ -173,6 +220,7 @@ export function PairDetail({ pairId }: Props) {
           amm={data.edge_amm}
           rfq={data.edge_rfq}
           pnl={data.pnl_v2}
+          hasRfq={hasRfq}
         />
       </Panel>
 
@@ -192,15 +240,17 @@ export function PairDetail({ pairId }: Props) {
         title="Market makers"
         subtitle="inventory curves · rebalance timeline"
       >
-        <MmPanel pairId={pairId} pollMs={pollMs} />
+        <MmPanel marketId={marketId} pairId={pairId} pollMs={pollMs} />
       </Panel>
 
       <p className="text-[10px] text-muted-foreground">
         Poll every {pollMs / 1000}s · generated{" "}
-        {new Date(data.generated_ts_ms).toLocaleTimeString()} · TUI-parity
-        builders via <code className="text-foreground">/api/pairs/{"{id}"}</code>
+        {new Date(data.generated_ts_ms).toLocaleTimeString()} · market{" "}
+        <code className="text-foreground">{marketId}</code>
         {" · "}
-        <code className="text-foreground">/api/pairs/{"{id}"}/mm</code>
+        <code className="text-foreground">
+          /api/{marketId}/pairs/{"{id}"}
+        </code>
       </p>
     </div>
   );

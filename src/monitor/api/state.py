@@ -1,4 +1,4 @@
-"""Process-lifetime app state shared by request handlers."""
+"""Process-lifetime app state shared by request handlers (multi-market)."""
 
 from __future__ import annotations
 
@@ -13,6 +13,7 @@ from monitor.api.config import ApiConfig
 from monitor.api.pnl_cache import PnlSnapshotCache
 from monitor.attribution.config import AttributionConfig
 from monitor.attribution.mm_draft import InventoryEvent
+from monitor.markets.ids import normalize_market_id
 from monitor.metrics.config import MetricsConfig
 from monitor.storage import JournalReader
 from monitor.symbols.models import PairsConfig
@@ -44,17 +45,20 @@ class InventoryEventsCache:
 
 
 @dataclass
-class AppState:
-    """Loaded configs + optional reader + running edge stats.
+class MarketRuntime:
+    """Per-market journal reader + builder configs (M7-5 / WHI-774).
 
-    Sync FastAPI handlers run on Starlette's threadpool. ``lock`` serializes
-    builder calls that mutate ``edge_state`` *and* reader open/reopen — so
-    concurrent polls queue rather than interleave EdgeStats updates. Acceptable
-    for the 2s client poll + single-operator VPS; split later if latency shows.
+    One runtime per ``config/markets/{id}.yaml``. Readers open independently
+    so a missing/corrupt journal on one market cannot block the other.
     """
 
-    api: ApiConfig
-    pairs: PairsConfig
+    market_id: str
+    display_name: str
+    has_rfq: bool
+    cex_venue: str
+    dex_venue: str
+    pairs: PairsConfig | None
+    pair_count: int
     metrics: MetricsConfig
     attribution: AttributionConfig
     tui: TuiConfig
@@ -80,6 +84,48 @@ class AppState:
             if self.reader is not None:
                 self.reader.close()
                 self.reader = None
+
+    def data_status(self) -> str:
+        """Wire status for overview / markets list.
+
+        * ``ok`` — builder-ready inventory + journal file present
+        * ``accumulating`` — market configured but no journal yet, or inventory
+          shape not yet wired into overview builders (e.g. binance-pancake
+          until collector + bStocks builders land)
+        """
+        if self.pairs is None:
+            return "accumulating"
+        if not self.db_path.is_file() and self.reader is None:
+            return "accumulating"
+        return "ok"
+
+
+@dataclass
+class AppState:
+    """Multi-market process state for the read-only API (WHI-774).
+
+    Sync FastAPI handlers run on Starlette's threadpool. Each
+    ``MarketRuntime.lock`` serializes builder calls that mutate that market's
+    ``edge_state`` *and* reader open/reopen — concurrent polls queue per market
+    rather than interleave EdgeStats updates.
+    """
+
+    api: ApiConfig
+    tui: TuiConfig
+    markets: dict[str, MarketRuntime]
+    default_market_id: str
+
+    def market(self, market_id: str | None = None) -> MarketRuntime:
+        """Resolve a market runtime; default is the process default market."""
+        mid = normalize_market_id(market_id or self.default_market_id)
+        try:
+            return self.markets[mid]
+        except KeyError as exc:
+            raise KeyError(mid) from exc
+
+    def close(self) -> None:
+        for runtime in self.markets.values():
+            runtime.close()
 
 
 def app_state_from_request(request: Request) -> AppState:
