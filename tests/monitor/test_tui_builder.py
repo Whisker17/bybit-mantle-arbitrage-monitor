@@ -9,8 +9,14 @@ from zoneinfo import ZoneInfo
 
 from monitor.attribution import load_attribution_config
 from monitor.metrics import build_edge_snapshot, load_metrics_config
+from monitor.metrics.premium import PremiumSnapshot, build_premium_snapshot
 from monitor.metrics.session import SessionKind
-from monitor.quotes import BybitBookTick, FluxionPoolStateTick, FluxionRfqQuoteTick
+from monitor.quotes import (
+    BybitBookTick,
+    FluxionPoolStateTick,
+    FluxionRfqQuoteTick,
+    UnderlyingPriceTick,
+)
 from monitor.storage import JournalReader, SqliteStore
 from monitor.symbols import load_pairs_config
 from monitor.tui.builder import (
@@ -132,6 +138,74 @@ def test_overview_row_matches_m3_edge() -> None:
     assert row.net_edge_venue == "amm"
     assert row.net_edge_direction == expected.direction
     assert not row.low_liquidity
+
+
+def test_overview_row_wires_premium_fields() -> None:
+    """WHI-779: premium snapshot lands on PairOverviewRow (API asdict path)."""
+    pairs = load_pairs_config()
+    pair = pairs.pair_by_id("AAPLx")
+    metrics = load_metrics_config()
+    tui = load_tui_config()
+    und = UnderlyingPriceTick(
+        ticker="AAPL",
+        price=Decimal("100"),
+        currency="USD",
+        price_type="close",
+        as_of_ms=_open_ts_ms() - 60_000,
+        recv_ts_ms=_open_ts_ms(),
+        source="pyth_hermes",
+    )
+    # CEX mid = 100.10 → +10 bps vs underlying 100
+    bybit = _book()
+    prem = build_premium_snapshot(
+        ticker="AAPL",
+        underlying=und,
+        cex_mid=Decimal("100.10"),
+        amm_mid=Decimal("99.5"),
+        rfq_mid=Decimal("99.6"),
+        private=False,
+    )
+    assert prem.premium_bps == Decimal("10")
+    row = build_pair_overview_row(
+        pair,
+        bybit=bybit,
+        amm=_amm(),
+        rfq_buy=_rfq("AAPLx", Decimal("99.8"), "buy_native"),
+        rfq_sell=_rfq("AAPLx", Decimal("99.4"), "sell_native"),
+        volume_24h=Decimal(0),
+        trades_24h=0,
+        metrics=metrics,
+        tui=tui,
+        ts_ms=_open_ts_ms(),
+        premium=prem,
+    )
+    assert row.underlying_price == Decimal("100")
+    assert row.underlying_price_type == "close"
+    assert row.underlying_as_of_ms == und.as_of_ms
+    assert row.premium_bps == Decimal("10")
+    assert row.cex_premium_bps == Decimal("10")
+    assert row.amm_premium_bps == Decimal("-50")
+    assert row.premium_type_label == "vs close"
+    assert row.underlying_empty is None
+
+    private = PremiumSnapshot.empty(ticker="SPCX", reason="private")
+    # SPCXx may not be in fluxion inventory — use AAPLx with private snap to
+    # prove the empty path still serializes explicit fields.
+    row_priv = build_pair_overview_row(
+        pair,
+        bybit=None,
+        amm=None,
+        rfq_buy=None,
+        rfq_sell=None,
+        volume_24h=Decimal(0),
+        trades_24h=0,
+        metrics=metrics,
+        tui=tui,
+        premium=private,
+    )
+    assert row_priv.underlying_empty == "private"
+    assert row_priv.premium_bps is None
+    assert row_priv.underlying_price is None
 
 
 def test_amm_pool_from_tick_token_order() -> None:

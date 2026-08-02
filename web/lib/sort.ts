@@ -26,6 +26,10 @@ function rawValue(
       return parseNum(row.dex_volume_24h ?? null);
     case "volume_ratio":
       return parseNum(row.volume_ratio ?? null);
+    case "premium_bps":
+      return parseNum(row.premium_bps ?? null);
+    case "underlying_price":
+      return parseNum(row.underlying_price ?? null);
   }
 }
 
@@ -80,6 +84,8 @@ export const SORT_KEYS: { key: SortKey; label: string }[] = [
   { key: "net_edge", label: "Net edge" },
   { key: "amm_spread", label: "AMM bps" },
   { key: "rfq_spread", label: "RFQ bps" },
+  { key: "premium_bps", label: "Premium" },
+  { key: "underlying_price", label: "Underlying" },
   { key: "cex_volume_24h", label: "CEX Vol" },
   { key: "dex_volume_24h", label: "DEX Vol" },
   { key: "volume_ratio", label: "CEX/DEX" },

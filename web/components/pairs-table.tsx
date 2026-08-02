@@ -16,6 +16,7 @@ import {
   fmtUsd,
   fmtUtcHm,
   fmtVolumeRatio,
+  priceTypeBadgeVariant,
   usdTone,
 } from "@/lib/format";
 import { marketPairPath } from "@/lib/markets";
@@ -105,6 +106,19 @@ const COLS: Col[] = [
     title: "CEX ÷ DEX 24h notional ratio (core volume gap metric)",
   },
   {
+    key: "underlying_price",
+    label: "Underlying",
+    align: "right",
+    title: "Underlying equity reference (Pyth/Yahoo) + price_type badge",
+  },
+  {
+    key: "premium_bps",
+    label: "Premium",
+    align: "right",
+    title:
+      "CEX de-multiplied mid vs underlying (bps). Hover for AMM/RFQ premiums",
+  },
+  {
     key: null,
     label: "Bucket PnL",
     align: "right",
@@ -175,6 +189,101 @@ function MmActiveCell({ status }: { status: MmActiveStatus | null | undefined })
   );
 }
 
+function UnderlyingCell({ row }: { row: PairOverviewRow }) {
+  if (row.underlying_empty === "private") {
+    return (
+      <span
+        className="text-muted-foreground"
+        title={`${row.underlying_ticker ?? "underlying"} is private — no public equity feed`}
+      >
+        n/a private
+      </span>
+    );
+  }
+  if (row.underlying_price == null) {
+    return (
+      <span
+        className="text-muted-foreground"
+        title={
+          row.underlying_ticker
+            ? `Waiting for underlying print (${row.underlying_ticker})`
+            : "No underlying ticker"
+        }
+      >
+        —
+      </span>
+    );
+  }
+  const badge = row.underlying_price_type ?? row.premium_type_label;
+  return (
+    <span
+      className="inline-flex items-center justify-end gap-1"
+      title={
+        row.underlying_as_of_ms != null
+          ? `${row.underlying_ticker} ${row.underlying_source ?? ""} as_of ${new Date(row.underlying_as_of_ms).toISOString()}`
+          : (row.underlying_ticker ?? undefined)
+      }
+    >
+      <span className="tabular-nums">{fmtPrice(row.underlying_price)}</span>
+      {badge && (
+        <Badge
+          variant={priceTypeBadgeVariant(row.underlying_price_type)}
+          className="normal-case"
+        >
+          {row.underlying_price_type ?? badge}
+        </Badge>
+      )}
+    </span>
+  );
+}
+
+function PremiumCell({ row }: { row: PairOverviewRow }) {
+  if (row.underlying_empty === "private") {
+    return (
+      <span className="text-muted-foreground" title="Private underlying — no premium">
+        n/a
+      </span>
+    );
+  }
+  if (row.premium_bps == null) {
+    return (
+      <span
+        className="text-muted-foreground"
+        title="Needs de-multiplied CEX mid + underlying print"
+      >
+        —
+      </span>
+    );
+  }
+  const title = [
+    `CEX vs underlying: ${fmtSignedBps(row.premium_bps)} bps`,
+    row.amm_premium_bps != null
+      ? `AMM vs underlying: ${fmtSignedBps(row.amm_premium_bps)} bps`
+      : null,
+    row.rfq_premium_bps != null
+      ? `RFQ vs underlying: ${fmtSignedBps(row.rfq_premium_bps)} bps`
+      : null,
+    row.premium_type_label ? `Underlying: ${row.premium_type_label}` : null,
+  ]
+    .filter(Boolean)
+    .join(" · ");
+  return (
+    <span className="inline-flex items-center justify-end gap-1" title={title}>
+      <BpsCell value={row.premium_bps} />
+      {row.premium_type_label &&
+        row.underlying_price_type &&
+        row.underlying_price_type !== "live" && (
+          <Badge
+            variant={priceTypeBadgeVariant(row.underlying_price_type)}
+            className="normal-case"
+          >
+            {row.premium_type_label}
+          </Badge>
+        )}
+    </span>
+  );
+}
+
 export function PairsTable({
   rows,
   sortKey,
@@ -195,7 +304,7 @@ export function PairsTable({
       <table
         className={cn(
           "w-full border-collapse text-xs",
-          hasRfq ? "min-w-[1160px]" : "min-w-[980px]",
+          hasRfq ? "min-w-[1320px]" : "min-w-[1140px]",
         )}
       >
         <thead>
@@ -379,6 +488,12 @@ export function PairsTable({
                         *
                       </span>
                     ) : null}
+                  </td>
+                  <td className="px-2 py-1.5 text-right">
+                    <UnderlyingCell row={row} />
+                  </td>
+                  <td className="px-2 py-1.5 text-right">
+                    <PremiumCell row={row} />
                   </td>
                   <td className="px-2 py-1.5 text-right">
                     <BucketPnlCell row={row} />

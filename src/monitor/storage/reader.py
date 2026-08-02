@@ -30,6 +30,7 @@ from monitor.quotes import (
     FluxionRfqQuoteTick,
     FluxionSwapTick,
     RfqSideLeg,
+    UnderlyingPriceTick,
 )
 
 
@@ -337,6 +338,59 @@ class JournalReader:
         ).fetchone()
         return None if row is None else _row_to_cex_volume(row)
 
+    def latest_underlying_price(self, ticker: str) -> UnderlyingPriceTick | None:
+        """Most recent underlying equity print for a canonical ticker (WHI-778/779).
+
+        Returns None when the table is absent (pre-v5 journal) or no rows yet.
+        """
+        if "underlying_prices" not in self._table_names():
+            return None
+        row = self._conn.execute(
+            """
+            SELECT * FROM underlying_prices
+            WHERE ticker = ?
+            ORDER BY as_of_ms DESC, recv_ts_ms DESC, id DESC
+            LIMIT 1
+            """,
+            (ticker,),
+        ).fetchone()
+        return None if row is None else _row_to_underlying(row)
+
+    def latest_underlying_prices(
+        self, tickers: list[str] | tuple[str, ...]
+    ) -> dict[str, UnderlyingPriceTick]:
+        """Batch latest print per ticker (overview hot path). Missing → omitted."""
+        out: dict[str, UnderlyingPriceTick] = {}
+        if not tickers or "underlying_prices" not in self._table_names():
+            return out
+        for t in tickers:
+            hit = self.latest_underlying_price(t)
+            if hit is not None:
+                out[t] = hit
+        return out
+
+    def underlying_prices(
+        self, ticker: str, *, limit: int = 500
+    ) -> list[UnderlyingPriceTick]:
+        """Recent underlying prints ascending by as_of (premium series join)."""
+        if limit < 1:
+            raise ValueError("limit must be >= 1")
+        if "underlying_prices" not in self._table_names():
+            return []
+        rows = self._conn.execute(
+            """
+            SELECT * FROM (
+                SELECT * FROM underlying_prices
+                WHERE ticker = ?
+                ORDER BY as_of_ms DESC, recv_ts_ms DESC, id DESC
+                LIMIT ?
+            )
+            ORDER BY as_of_ms ASC, recv_ts_ms ASC, id ASC
+            """,
+            (ticker, limit),
+        ).fetchall()
+        return [_row_to_underlying(r) for r in rows]
+
     def earliest_swap_recv_ts_ms(self, pair_id: str) -> int | None:
         """Oldest swap wall-clock for truncation labels (WHI-777)."""
         row = self._conn.execute(
@@ -615,6 +669,25 @@ def _row_to_cex_volume(row: sqlite3.Row) -> CexVolumeTick:
         volume_quote_24h=_d(row["volume_quote_24h"]),
         trade_count_24h=None if count_raw is None else int(count_raw),
         source=src,  # type: ignore[arg-type]
+        gap=bool(row["gap"]),
+    )
+
+
+def _row_to_underlying(row: sqlite3.Row) -> UnderlyingPriceTick:
+    pt = str(row["price_type"])
+    if pt not in ("live", "pre", "post", "close", "stale"):
+        raise ValueError(f"invalid underlying_prices.price_type={pt!r}")
+    conf_raw = row["conf"]
+    return UnderlyingPriceTick(
+        ticker=str(row["ticker"]),
+        price=_d(row["price"]),
+        currency=str(row["currency"]),
+        price_type=pt,  # type: ignore[arg-type]
+        as_of_ms=int(row["as_of_ms"]),
+        recv_ts_ms=int(row["recv_ts_ms"]),
+        source=str(row["source"]),
+        feed_id=None if row["feed_id"] is None else str(row["feed_id"]),
+        conf=None if conf_raw is None else _d(conf_raw),
         gap=bool(row["gap"]),
     )
 

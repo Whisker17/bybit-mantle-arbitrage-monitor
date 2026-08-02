@@ -10,6 +10,7 @@ import { useCallback, useEffect, useState, type ReactNode } from "react";
 import { AttributionPanel } from "@/components/pair/attribution-panel";
 import { EdgeStatsPanel } from "@/components/pair/edge-panel";
 import { MmPanel } from "@/components/pair/mm-panel";
+import { PremiumPanelView } from "@/components/pair/premium-panel";
 import { SpreadChart } from "@/components/pair/spread-chart";
 import { TradeStream } from "@/components/pair/trade-stream";
 import { VolumePanel } from "@/components/pair/volume-panel";
@@ -224,6 +225,25 @@ export function PairDetail({ marketId, pairId }: Props) {
                 : fmtNotional(o.dex_volume_24h)
             }
           />
+          <Field
+            label="Underlying"
+            value={
+              o.underlying_empty === "private"
+                ? "n/a private"
+                : o.underlying_price != null
+                  ? `${fmtPrice(o.underlying_price)}${
+                      o.underlying_price_type
+                        ? ` (${o.underlying_price_type})`
+                        : ""
+                    }`
+                  : "—"
+            }
+          />
+          <Field
+            label="CEX premium"
+            value={fmtSignedBps(o.premium_bps)}
+            tone={bpsTone(o.premium_bps ?? null)}
+          />
         </dl>
       </section>
 
@@ -235,11 +255,18 @@ export function PairDetail({ marketId, pairId }: Props) {
       </Panel>
 
       <Panel
+        title="Underlying premium"
+        subtitle="tokenized mid vs equity · CEX / AMM / RFQ"
+      >
+        <PremiumPanelView premium={data.premium} hasRfq={hasRfq} />
+      </Panel>
+
+      <Panel
         title="Spread history"
         subtitle={
           hasRfq
-            ? "AMM + RFQ vs Bybit mid · session bands"
-            : "AMM vs CEX mid · session bands"
+            ? "AMM + RFQ vs Bybit mid · CEX premium · session bands"
+            : "AMM vs CEX mid · CEX premium · session bands"
         }
       >
         <SpreadChart points={data.spread_series} showRfq={hasRfq} />

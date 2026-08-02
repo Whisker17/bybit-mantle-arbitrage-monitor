@@ -2,6 +2,16 @@ import type { Direction, SessionKind } from "./types";
 
 const DASH = "—";
 
+/** Badge variant for underlying price_type (WHI-779). */
+export function priceTypeBadgeVariant(
+  pt: string | null | undefined,
+): "open" | "closed" | "warning" | "muted" {
+  if (pt === "live") return "open";
+  if (pt === "stale") return "warning";
+  if (pt === "pre" || pt === "post" || pt === "close") return "closed";
+  return "muted";
+}
+
 export function fmtPrice(
   value: string | number | null | undefined,
   digits = 4,

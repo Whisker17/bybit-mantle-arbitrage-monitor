@@ -130,7 +130,12 @@ placeholders. Agents must not assume a module exists until its issue lands. -->
     Yahoo gap-fill for SKHY; SPCX uncovered/private); journal table
     `underlying_prices` (schema v5); `monitor/underlying` poller wired into
     both collectors; config `config/underlying.yaml` +
-    `collector.yaml` `underlying.enabled`. Display/premium column is WHI-779.
+    `collector.yaml` `underlying.enabled`.
+  - **Underlying premium panel (WHI-779) landed:**
+    `monitor/metrics/premium.py` (de-multiplied mid / underlying − 1 → bps);
+    overview Underlying + Premium columns (price_type badge, hover CEX/AMM/RFQ);
+    detail premium panel + CEX-premium series on spread chart; API fields on
+    pairs/detail (`underlying_*`, `premium_bps`, nested `premium` panel).
   - **CEX/DEX 24h volume (WHI-777) landed:** CEX REST poll (Bybit
     `turnover24h` / Binance `quoteVolume`, 60s) → journal `cex_volume_24h`
     (schema v6); DEX volume from collected swaps with truncation label when

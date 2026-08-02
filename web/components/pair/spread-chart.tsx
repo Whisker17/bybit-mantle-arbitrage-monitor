@@ -24,6 +24,7 @@ type Props = {
 /** Match Tailwind theme tokens (positive / primary-ish blue / warning). */
 const AMM_COLOR = "hsl(142 55% 45%)";
 const RFQ_COLOR = "hsl(210 70% 55%)";
+const PREMIUM_COLOR = "hsl(280 55% 60%)";
 const MID_COLOR = "hsl(38 80% 55%)";
 const OPEN_BAND = "hsla(142, 40%, 30%, 0.18)";
 const CLOSED_BAND = "hsla(38, 50%, 30%, 0.12)";
@@ -36,18 +37,20 @@ export function SpreadChart({ points, className, showRfq = true }: Props) {
   /** Stable handle for draw hook — updated every render without recreating plot. */
   const seriesRef = useRef<SpreadChartSeries | null>(null);
   const [showMid, setShowMid] = useState(false);
+  // Default off: premium often hundreds of bps and would squash AMM/RFQ scale.
+  const [showPremium, setShowPremium] = useState(false);
 
   const series = useMemo(() => prepareSpreadSeries(points), [points]);
   seriesRef.current = series;
   const empty =
     series.xs.length === 0 ||
-    (!series.hasAmm && !(showRfq && series.hasRfq));
+    (!series.hasAmm && !(showRfq && series.hasRfq) && !series.hasPremium);
 
   // Fingerprint data for setData (identity of `points` array changes every poll).
   const dataKey = useMemo(() => {
     if (series.xs.length === 0) return "";
     const last = series.xs.length - 1;
-    return `${series.xs.length}:${series.xs[0]}:${series.xs[last]}:${series.amm[last]}:${series.rfq[last]}`;
+    return `${series.xs.length}:${series.xs[0]}:${series.xs[last]}:${series.amm[last]}:${series.rfq[last]}:${series.cexPremium[last]}`;
   }, [series]);
 
   // Create plot once (or when empty ↔ non-empty / showMid scale changes).
@@ -127,6 +130,16 @@ export function SpreadChart({ points, className, showRfq = true }: Props) {
           show: showRfq && s0.hasRfq,
         },
         {
+          label: "CEX prem",
+          stroke: PREMIUM_COLOR,
+          width: 1.5,
+          dash: [2, 2],
+          scale: "bps",
+          spanGaps: false,
+          points: { show: false },
+          show: showPremium && s0.hasPremium,
+        },
+        {
           label: "Bybit mid",
           stroke: MID_COLOR,
           width: 1,
@@ -164,7 +177,11 @@ export function SpreadChart({ points, className, showRfq = true }: Props) {
     };
 
     plotRef.current?.destroy();
-    plotRef.current = new uPlot(opts, [s0.xs, s0.amm, s0.rfq, s0.bybitMid], el);
+    plotRef.current = new uPlot(
+      opts,
+      [s0.xs, s0.amm, s0.rfq, s0.cexPremium, s0.bybitMid],
+      el,
+    );
 
     const ro = new ResizeObserver(() => {
       if (!hostRef.current || !plotRef.current) return;
@@ -180,16 +197,33 @@ export function SpreadChart({ points, className, showRfq = true }: Props) {
       plotRef.current?.destroy();
       plotRef.current = null;
     };
-    // Recreate when empty flips, mid axis toggles, or AMM/RFQ presence changes
+    // Recreate when empty flips, mid axis toggles, or series presence changes
     // (series.show is fixed at construction; setData alone cannot unhide).
-  }, [empty, showMid, showRfq, series.hasAmm, series.hasRfq, series.hasMid]);
+  }, [
+    empty,
+    showMid,
+    showPremium,
+    showRfq,
+    series.hasAmm,
+    series.hasRfq,
+    series.hasMid,
+    series.hasPremium,
+  ]);
 
   // Push new samples without destroying the plot (keeps zoom/cursor).
   useEffect(() => {
     if (empty || !plotRef.current || !seriesRef.current) return;
     const s = seriesRef.current;
-    plotRef.current.setData([s.xs, s.amm, s.rfq, s.bybitMid]);
-  }, [dataKey, empty, showMid, series.hasAmm, series.hasRfq]);
+    plotRef.current.setData([s.xs, s.amm, s.rfq, s.cexPremium, s.bybitMid]);
+  }, [
+    dataKey,
+    empty,
+    showMid,
+    showPremium,
+    series.hasAmm,
+    series.hasRfq,
+    series.hasPremium,
+  ]);
 
   if (empty) {
     return (
@@ -206,6 +240,7 @@ export function SpreadChart({ points, className, showRfq = true }: Props) {
         <div className="flex flex-wrap items-center gap-3">
           <LegendSwatch color={AMM_COLOR} label="AMM bps" />
           <LegendSwatch color={RFQ_COLOR} label="RFQ bps" />
+          <LegendSwatch color={PREMIUM_COLOR} label="CEX prem" />
           <span className="inline-flex items-center gap-1">
             <span
               className="inline-block h-2.5 w-3 rounded-sm"
@@ -222,16 +257,28 @@ export function SpreadChart({ points, className, showRfq = true }: Props) {
           </span>
           <span className="tabular-nums">n={series.xs.length}</span>
         </div>
-        <label className="inline-flex cursor-pointer items-center gap-1.5">
-          <input
-            type="checkbox"
-            className="accent-primary"
-            checked={showMid}
-            disabled={!series.hasMid}
-            onChange={(e) => setShowMid(e.target.checked)}
-          />
-          overlay Bybit mid
-        </label>
+        <div className="flex flex-wrap items-center gap-3">
+          <label className="inline-flex cursor-pointer items-center gap-1.5">
+            <input
+              type="checkbox"
+              className="accent-primary"
+              checked={showPremium}
+              disabled={!series.hasPremium}
+              onChange={(e) => setShowPremium(e.target.checked)}
+            />
+            CEX premium
+          </label>
+          <label className="inline-flex cursor-pointer items-center gap-1.5">
+            <input
+              type="checkbox"
+              className="accent-primary"
+              checked={showMid}
+              disabled={!series.hasMid}
+              onChange={(e) => setShowMid(e.target.checked)}
+            />
+            overlay Bybit mid
+          </label>
+        </div>
       </div>
       <div
         ref={hostRef}

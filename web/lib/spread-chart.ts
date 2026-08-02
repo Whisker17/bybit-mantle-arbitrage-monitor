@@ -13,12 +13,15 @@ export type SpreadChartSeries = {
   amm: (number | null)[];
   rfq: (number | null)[];
   bybitMid: (number | null)[];
+  /** CEX mid vs underlying premium bps (WHI-779). */
+  cexPremium: (number | null)[];
   sessions: SessionKind[];
   /** Inclusive [i0, i1] index ranges painted as open-session background. */
   openBands: Array<[number, number]>;
   hasAmm: boolean;
   hasRfq: boolean;
   hasMid: boolean;
+  hasPremium: boolean;
 };
 
 /** Build aligned series from API spread_series (already downsampled server-side). */
@@ -31,11 +34,13 @@ export function prepareSpreadSeries(
       amm: [],
       rfq: [],
       bybitMid: [],
+      cexPremium: [],
       sessions: [],
       openBands: [],
       hasAmm: false,
       hasRfq: false,
       hasMid: false,
+      hasPremium: false,
     };
   }
 
@@ -45,23 +50,28 @@ export function prepareSpreadSeries(
   const amm: (number | null)[] = [];
   const rfq: (number | null)[] = [];
   const bybitMid: (number | null)[] = [];
+  const cexPremium: (number | null)[] = [];
   const sessions: SessionKind[] = [];
 
   let hasAmm = false;
   let hasRfq = false;
   let hasMid = false;
+  let hasPremium = false;
 
   for (const p of sorted) {
     xs.push(p.ts_ms / 1000);
     const a = parseNum(p.amm_spread_bps);
     const r = parseNum(p.rfq_spread_bps ?? null);
     const m = parseNum(p.bybit_mid ?? null);
+    const prem = parseNum(p.cex_premium_bps ?? null);
     if (a !== null) hasAmm = true;
     if (r !== null) hasRfq = true;
     if (m !== null) hasMid = true;
+    if (prem !== null) hasPremium = true;
     amm.push(a);
     rfq.push(r);
     bybitMid.push(m);
+    cexPremium.push(prem);
     sessions.push(p.session);
   }
 
@@ -70,11 +80,13 @@ export function prepareSpreadSeries(
     amm,
     rfq,
     bybitMid,
+    cexPremium,
     sessions,
     openBands: sessionOpenBands(sessions),
     hasAmm,
     hasRfq,
     hasMid,
+    hasPremium,
   };
 }
 
