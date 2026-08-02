@@ -47,10 +47,13 @@ def test_optional_table_accessors_refresh_after_late_create(tmp_path: Path) -> N
         assert store.get_meta("schema_version") == str(SCHEMA_VERSION)
 
     # Simulate a pre-v7 (or partially migrated) journal: optional tables gone.
-    with sqlite3.connect(db) as conn:
+    conn = sqlite3.connect(db)
+    try:
         for name in _OPTIONAL_TABLES:
             conn.execute(f"DROP TABLE IF EXISTS {name}")
         conn.commit()
+    finally:
+        conn.close()
 
     with JournalReader(db) as reader:
         # First probes: tables absent → empty / None (and used to poison cache).

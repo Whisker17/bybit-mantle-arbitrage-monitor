@@ -317,7 +317,8 @@ class JournalReader:
         appear after API start when the collector migrates a journal that was
         empty or pre-schema at process boot. Memoizing the first negative
         snapshot made those accessors permanently None until API restart
-        (WHI-789). ``sqlite_master`` is memory-backed; re-query is cheap.
+        (WHI-789). Re-query is cheap: ``sqlite_master`` is tiny and almost
+        always already in the SQLite page cache.
         """
         rows = self._conn.execute(
             "SELECT name FROM sqlite_master WHERE type='table'"
