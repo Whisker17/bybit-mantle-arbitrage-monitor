@@ -24,9 +24,10 @@ stale_after_closed_ms: 432000000  # 5d (covers long weekends + one holiday)
 # Unofficial; disable for compliance-strict deploys.
 yahoo_fallback: true
 yahoo_chart_base_url: "https://query1.finance.yahoo.com"
-# Optional: convert Yahoo KRW → USD using Pyth FX.USD/KRW when a prefer_yahoo
-# ticker quotes KRW (Korean listings). Not used for USD ADRs (SKHY).
-fx_usd_krw_feed_id: "e539120487c29b4defdf9a53d337316ea022a2688978a468f9efd847201be7e3"
+# Optional Pyth FX.USD/KRW for Yahoo KRW quotes. Null while no prefer_yahoo
+# ticker quotes KRW (SKHY is USD ADR — WHI-785). Re-enable when adding a KR
+# listing, e.g. e539120487c29b4defdf9a53d337316ea022a2688978a468f9efd847201be7e3
+fx_usd_krw_feed_id: null
 
 # NYSE RTH hours — keep in sync with config/metrics.yaml session (file-level
 # independence so underlying loads without metrics; DEFERRED_ISSUES WHI-778).

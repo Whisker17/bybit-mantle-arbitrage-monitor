@@ -61,6 +61,8 @@ def test_load_checked_in_underlying_config() -> None:
     assert skhy.yahoo_symbol == "SKHY"
     assert skhy.feed_id is None
     assert skhy.pyth_symbol is None
+    assert cfg.fx_usd_krw_feed_id is None
+    assert cfg.needs_fx({"SKHY"}) is False
     assert "AAPL" in cfg.covered_tickers()
     assert "SPCX" in cfg.uncovered_tickers()
 
@@ -273,7 +275,7 @@ def test_parse_yahoo_chart_usd_no_fx() -> None:
 
 
 def test_parse_yahoo_chart_krw_to_usd() -> None:
-    """KRW Yahoo path still converts when FX is supplied (dormant infra)."""
+    """Parser still converts KRW when caller supplies FX (no live KR ticker)."""
     cfg = load_underlying_config()
     as_of_s = int(_ms(2026, 7, 31, 16, 0) / 1000)
     body = {
@@ -293,7 +295,7 @@ def test_parse_yahoo_chart_krw_to_usd() -> None:
     now = _ms(2026, 8, 2, 12, 0)
     tick = parse_yahoo_chart(
         body,
-        ticker="KRTEST",
+        ticker="SYNTH_KRW",  # not a config ticker; pure parser unit test
         currency="USD",
         cfg=cfg,
         recv_ts_ms=now,
@@ -301,7 +303,7 @@ def test_parse_yahoo_chart_krw_to_usd() -> None:
         usd_krw=Decimal("1442.96057"),
     )
     assert tick is not None
-    assert tick.ticker == "KRTEST"
+    assert tick.ticker == "SYNTH_KRW"
     assert tick.currency == "USD"
     assert tick.source == "yahoo+pyth_fx"
     assert tick.price == Decimal("1000")

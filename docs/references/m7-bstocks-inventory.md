@@ -316,7 +316,7 @@ ranked by DexScreener liq (SOXLB #11, MUUB #12 / broken mid).
 4. **Vision WS soak** — upgrade works; long-run disconnect/rate limits not measured here.
 5. **SPCXB** — SpaceX not a traditional public equity; treat as high-vol / special risk
    despite top liquidity. **Session calendar:** M3 NYSE open/closed segmentation does
-   **not** apply cleanly — SPCXB (private) and SKHYB (US ADR underlying `SKHY`, not KRX — WHI-785) need per-asset
+   **not** apply cleanly — SPCXB (private SpaceX, no public tape) needs per-asset
    session rules in M7 metrics, not a hard copy of xStocks NYSE hours.
 6. **PCS Swap topic0 on live bStock pool** — not re-decoded this PR (public RPC
    `eth_getLogs` limit); collector must confirm before production decode.

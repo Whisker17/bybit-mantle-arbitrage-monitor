@@ -87,13 +87,11 @@ class UnderlyingConfig(BaseModel):
         return ids
 
     def needs_fx(self, want: set[str] | None = None) -> bool:
-        """True when Hermes should also batch ``fx_usd_krw_feed_id``.
+        """True when Hermes should batch ``fx_usd_krw_feed_id``.
 
-        Any ``prefer_yahoo`` ticker may historically have quoted KRW; conversion
-        still only applies when Yahoo meta currency is KRW (see
-        ``parse_yahoo_chart``). USD ADRs such as SKHY (WHI-785) ignore a present
-        FX rate. No configured ticker currently needs KRW — feed stays optional
-        for a future KR listing.
+        Requires a non-null FX feed id **and** at least one wanted
+        ``prefer_yahoo`` ticker. Conversion still only applies when Yahoo meta
+        currency is KRW (``parse_yahoo_chart``); USD ADRs ignore a present rate.
         """
         if not self.fx_usd_krw_feed_id:
             return False
