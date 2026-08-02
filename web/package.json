@@ -7,7 +7,7 @@
     "build": "next build",
     "start": "next start",
     "lint": "next lint",
-    "test": "tsx --test lib/format.test.ts lib/sort.test.ts lib/pair-ids.test.ts lib/spread-chart.test.ts"
+    "test": "tsx --test lib/format.test.ts lib/sort.test.ts lib/pair-ids.test.ts lib/spread-chart.test.ts lib/pnl.test.ts"
   },
   "dependencies": {
     "clsx": "^2.1.1",

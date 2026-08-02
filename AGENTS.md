@@ -59,24 +59,25 @@ placeholders. Agents must not assume a module exists until its issue lands. -->
     ($10/$50/$100/$500/$1K/$10K), `optimal_size` (log grid + peak refine),
     RFQ poll-keyed rows, `OptimalPnlStats` session distributions. Config
     `pnl_v2:` in `config/metrics.yaml`. CLI: `python -m monitor.metrics`.
-    Does not change M3 TUI ladder / `OverviewModel`; Web column wiring is a
-    follow-on.
+    Does not change M3 TUI ladder / `OverviewModel`.
   - **Web skeleton (WHI-757) landed:** `monitor/api` (FastAPI read-only over
     SQLite; reuses TUI builders), `web/` (Next.js static export), `deploy/` +
     `scripts/deploy-web.sh` (systemd + nginx). Tunables in `config/api.yaml`.
     TUI frozen for new features — Web is the surface for new metrics.
   - **Web overview (WHI-758) landed:** dark Tailwind overview table (TUI-parity
     columns + status bar + stale yellow banner + sort/filter + 2s poll + row
-    → `/pair/{id}/`). Bucket PnL column still placeholder until API/Web
-    consume WHI-756 models.
+    → `/pair/{id}/`).
   - **Web pair detail (WHI-759) landed:** `/pair/{id}/` full detail — uPlot
     spread series (AMM+RFQ, open/closed bands, optional Bybit mid), Fluxion
     trade stream, edge stats + cost waterfall + session distributions,
-    attribution (top takers + mechanism donut). Bucket/optimal PnL placeholder
-    until Web wires WHI-756. SpreadPoint gains rfq_spread_bps + bybit_mid for
-    the chart.
-  - **Not landed yet:** Web/API consumption of PnL v2 bucket table + optimal
-    size. Do not assume those routes exist until a wiring issue lands.
+    attribution (top takers + mechanism donut). SpreadPoint gains
+    rfq_spread_bps + bybit_mid for the chart.
+  - **Web/API PnL v2 (WHI-766) landed:** `monitor/metrics/pnl_snapshot.py`
+    (journal ticks → dual-direction tables); `/api/pairs` row field `pnl_v2`
+    (optimal summary); `/api/pairs/{id}` full `pnl_v2.tables` + costs;
+    process-local TTL cache (`pnl_cache_ttl_s` in `config/api.yaml`, default
+    2.5s). Overview Bucket PnL column + detail bucket panel replace placeholders.
+
 ## Build, test, run
 
 ```bash
@@ -128,16 +129,17 @@ Module layout is fixed by `docs/DESIGN.md` §4.2. Short mirror:
   - **`monitor/symbols`** (M1) — fixed pair list + Bybit multiplier helpers.
   - **`monitor/bybit`**, **`monitor/fluxion`**, **`monitor/storage`**,
     **`monitor/collector`** (M2) — live feeds → SQLite.
-  - **`monitor/metrics`** (M3 + WHI-756) — edge/wear (M3 ladder), session stats,
-    and PnL v2 cash-flow engine (`pnl_v2.py`: buckets + optimal size).
+  - **`monitor/metrics`** (M3 + WHI-756 + WHI-766) — edge/wear (M3 ladder),
+    session stats, PnL v2 cash-flow engine (`pnl_v2.py`) + journal snapshot
+    assembly (`pnl_snapshot.py`).
   - **`monitor/attribution`** (M4) — mechanism + behavior labels / aggregates.
   - **`monitor/tui`** (M5) — Textual overview + detail panel over SQLite
     (**frozen** for new features).
-  - **`monitor/api`** (WHI-757) — FastAPI read-only JSON over the journal.
+  - **`monitor/api`** (WHI-757 + WHI-766) — FastAPI read-only JSON over the
+    journal; PnL v2 fields on overview/detail with TTL cache.
   - **`web/`** (WHI-757+) — Next.js static export; overview (WHI-758);
-    pair detail (WHI-759); deploy via `scripts/deploy-web.sh` + `deploy/`.
-  - Still to land: Web/API PnL v2 column wiring over `pnl_bucket_table` /
-    `optimal_size`.
+    pair detail (WHI-759); PnL v2 column + bucket panel (WHI-766); deploy via
+    `scripts/deploy-web.sh` + `deploy/`.
   Reuse pieces from `mba` per DESIGN §4.2 table; do not import whole stages.
 
 ## Git workflow (mandatory)
