@@ -377,6 +377,23 @@ def _volume_compare_for_pair(
     )
 
 
+def _est_liquidity_usd(pair: Pair | BStocksPair) -> Decimal | None:
+    """Inventory-time pool TVL estimate (not live journal).
+
+    Fluxion pairs store it on ``fluxion.amm``; bStocks on ``pancake.amm``.
+    None when the inventory has no AMM pool (still listed, low-liq / no pool).
+    """
+    if isinstance(pair, BStocksPair):
+        pancake_amm = pair.pancake.amm
+        if pancake_amm is None:
+            return None
+        return Decimal(str(pancake_amm.est_liquidity_usd))
+    fluxion_amm = pair.fluxion.amm
+    if fluxion_amm is None:
+        return None
+    return Decimal(str(fluxion_amm.est_liquidity_usd))
+
+
 def build_pair_overview_row(
     pair: Pair | BStocksPair,
     *,
@@ -403,6 +420,7 @@ def build_pair_overview_row(
         ticker=pair_id_to_underlying_ticker(pair.id), reason="no_data"
     )
     pfields = _premium_fields(prem)
+    liq = _est_liquidity_usd(pair)
     if bybit is None:
         return PairOverviewRow(
             pair_id=pair.id,
@@ -426,6 +444,7 @@ def build_pair_overview_row(
             volume_24h=volume_24h,
             trades_24h=trades_24h,
             stale=True,
+            est_liquidity_usd=liq,
             **vfields,  # type: ignore[arg-type]
             **pfields,  # type: ignore[arg-type]
         )
@@ -467,6 +486,7 @@ def build_pair_overview_row(
         volume_24h=volume_24h,
         trades_24h=trades_24h,
         stale=False,
+        est_liquidity_usd=liq,
         **vfields,  # type: ignore[arg-type]
         **pfields,  # type: ignore[arg-type]
     )

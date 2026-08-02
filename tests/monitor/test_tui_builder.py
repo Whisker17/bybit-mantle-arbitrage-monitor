@@ -138,6 +138,9 @@ def test_overview_row_matches_m3_edge() -> None:
     assert row.net_edge_venue == "amm"
     assert row.net_edge_direction == expected.direction
     assert not row.low_liquidity
+    # WHI-781: inventory est_liquidity_usd for Web TVL ranking.
+    assert pair.fluxion.amm is not None
+    assert row.est_liquidity_usd == Decimal(str(pair.fluxion.amm.est_liquidity_usd))
 
 
 def test_overview_row_wires_premium_fields() -> None:

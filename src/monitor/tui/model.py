@@ -63,6 +63,9 @@ class PairOverviewRow:
     amm_premium_bps: Decimal | None = None
     rfq_premium_bps: Decimal | None = None
     premium_type_label: str | None = None
+    # WHI-781: inventory snapshot pool TVL (DexScreener/est); not live journal.
+    # Web ranks this for the TVL badge (binance-pancake); null when no AMM.
+    est_liquidity_usd: Decimal | None = None
 
 
 @dataclass(frozen=True, slots=True)
