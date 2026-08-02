@@ -395,9 +395,10 @@ def test_list_markets_includes_both(client: TestClient) -> None:
     assert bybit["health"]["collector_alive"] is True
     bsc = next(m for m in body["markets"] if m["id"] == "binance-pancake")
     assert bsc["has_rfq"] is False
-    assert bsc["data_status"] == "accumulating"
+    # bStocks inventory is builder-ready (overview accepts BStocksPair).
+    assert bsc["data_status"] == "ok"
     assert bsc["pair_count"] >= 1
-    assert bsc["health"]["ok"] is False
+    assert "health" in bsc
 
 
 def test_market_scoped_pairs_matches_legacy(client: TestClient) -> None:
@@ -430,16 +431,100 @@ def test_market_scoped_health_and_detail(client: TestClient) -> None:
     assert t.json()["pair_id"] == "AAPLx"
 
 
-def test_binance_pancake_accumulating_empty_overview(client: TestClient) -> None:
+def test_binance_pancake_no_longer_accumulating(client: TestClient) -> None:
+    """bStocks is builder-ready: never the empty accumulating placeholder.
+
+    Journal path is resolved against the real repo root (collector config), so
+    a local dogfood ``data/monitor-binance-pancake.db`` yields 200 + rows;
+    clean CI without that file yields 503 missing journal.
+    """
     r = client.get("/api/binance-pancake/pairs")
-    assert r.status_code == 200
-    body = r.json()
-    assert body["market_id"] == "binance-pancake"
-    assert body["has_rfq"] is False
-    assert body["data_status"] == "accumulating"
-    assert body["rows"] == []
-    assert body["error"]
-    assert "accumulat" in body["error"].lower()
+    if r.status_code == 200:
+        body = r.json()
+        assert body["data_status"] == "ok"
+        assert body["has_rfq"] is False
+        assert isinstance(body["rows"], list)
+        assert len(body["rows"]) >= 1
+    else:
+        assert r.status_code == 503
+        assert "journal" in r.json()["detail"].lower()
+
+
+def test_binance_pancake_overview_with_journal(
+    tmp_path: Path, monkeypatch: pytest.MonkeyPatch
+) -> None:
+    """Seeded L1 book for a bStocks pair surfaces on the scoped overview."""
+    from monitor.symbols import load_bstocks_pairs_config
+
+    bstocks = load_bstocks_pairs_config()
+    pair = bstocks.pairs[0]
+    db = tmp_path / "monitor-binance-pancake.db"
+    store = SqliteStore(db)
+    ts = now_ms()
+    store.set_meta("collector_started_ms", str(ts - 5_000))
+    store.set_meta("market_id", "binance-pancake")
+    store.insert_bybit_book(
+        [
+            BybitBookTick(
+                pair_id=pair.id,
+                symbol=pair.binance.symbol,
+                exchange_ts_ms=ts,
+                recv_ts_ms=ts,
+                bid=Decimal("100"),
+                ask=Decimal("100.20"),
+                bid_de_multiplied=Decimal("100"),
+                ask_de_multiplied=Decimal("100.20"),
+                multiplier=pair.binance.ui_multiplier,
+            )
+        ]
+    )
+    store.close()
+
+    # api.yaml market still bybit-fluxion (default); binance uses convention path.
+    bybit_db = tmp_path / "monitor-bybit.db"
+    _seed_store(bybit_db, with_depth=False)
+    monkeypatch.chdir(tmp_path)
+    # Place binance journal where resolve_market_sqlite expects it.
+    data_dir = tmp_path / "data"
+    data_dir.mkdir(exist_ok=True)
+    target = data_dir / "monitor-binance-pancake.db"
+    target.write_bytes(db.read_bytes())
+    # Also need bybit default journal path for the multi-market app.
+    (data_dir / "monitor-bybit-fluxion.db").write_bytes(bybit_db.read_bytes())
+
+    api_yaml = tmp_path / "config" / "api.yaml"
+    api_yaml.parent.mkdir(parents=True, exist_ok=True)
+    api_yaml.write_text(
+        f"""version: 1
+host: 127.0.0.1
+port: 8000
+market: bybit-fluxion
+sqlite_path: {data_dir / "monitor-bybit-fluxion.db"}
+collector_stale_ms: 30000
+recent_gap_window_ms: 300000
+poll_interval_s: 2.0
+pnl_cache_ttl_s: 0
+mm_active_window_ms: 86400000
+mm_series_max_points: 500
+mm_rebalance_limit: 100
+mm_inventory_cache_ttl_s: 0
+cors_origins: []
+""",
+        encoding="utf-8",
+    )
+    app = create_app(api_config_path=api_yaml)
+    with TestClient(app) as c:
+        r = c.get("/api/binance-pancake/pairs")
+        assert r.status_code == 200
+        body = r.json()
+        assert body["market_id"] == "binance-pancake"
+        assert body["data_status"] == "ok"
+        assert body["has_rfq"] is False
+        ids = {row["pair_id"] for row in body["rows"]}
+        assert pair.id in ids
+        row = next(x for x in body["rows"] if x["pair_id"] == pair.id)
+        assert row["bybit_mid"] is not None
+        assert row["stale"] is False
 
 
 def test_unknown_market_404(client: TestClient) -> None:
@@ -497,10 +582,14 @@ cors_origins: []
         assert r2.status_code == 503
 
 
-def test_binance_pair_detail_503_when_not_builder_ready(client: TestClient) -> None:
-    """binance-pancake has no PairsConfig builders yet → 503 on detail routes."""
+def test_binance_pair_detail_builder_ready(client: TestClient) -> None:
+    """bStocks detail is builder-ready (200 with journal, 503 without)."""
     r = client.get("/api/binance-pancake/pairs/TSLAB")
-    assert r.status_code == 503
-    assert "wired" in r.json()["detail"].lower() or "accumulat" in r.json()["detail"].lower()
-    t = client.get("/api/binance-pancake/pairs/TSLAB/trades")
-    assert t.status_code == 503
+    if r.status_code == 200:
+        body = r.json()
+        assert body["pair_id"] == "TSLAB"
+        assert body["market_id"] == "binance-pancake"
+        assert body["data_status"] == "ok"
+    else:
+        assert r.status_code == 503
+        assert "journal" in r.json()["detail"].lower()
