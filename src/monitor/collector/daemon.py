@@ -650,8 +650,8 @@ class CollectorDaemon:
                 "block_ingest_latency_p99_ms", str(int(report.p99 or 0))
             )
             self.store.set_meta("block_ingest_latency_n", str(report.count))
-            # Chain progress even with empty block logs — not a dead process.
-            self._note_data_write(recv_ts_ms)
+            # Meta-only progress does not arm the watchdog: tick-table inserts
+            # (pool/swap/book/…) are the "any 入库" signal (WHI-825).
 
         return on_block_done
 

@@ -15,16 +15,12 @@ from monitor.quotes import CollectorGap
 
 SOURCE_COLLECTOR_DOWN = "collector_down"
 
-# Skip routine bounce noise (config reload / brief stop). Real outages are
-# minutes+; 30s still captures short kill-restart cycles for ops visibility.
-DEFAULT_MIN_COLLECTOR_DOWN_MS = 30_000
-
 
 def collector_down_gap(
     *,
     last_write_ms: int,
     first_write_ms: int,
-    min_gap_ms: int = DEFAULT_MIN_COLLECTOR_DOWN_MS,
+    min_gap_ms: int,
     market_id: str | None = None,
 ) -> CollectorGap | None:
     """Build a ``collector_down`` gap for ``[last_write, first_write]`` or None.

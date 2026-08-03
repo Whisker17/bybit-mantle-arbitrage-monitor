@@ -126,22 +126,20 @@ def classify_feed_state(
     collector_alive: bool,
     data_age_ms: int | None,
     quiet_ms: int,
-    gap_recent: bool,
     collector_down_gap_recent: bool,
 ) -> FeedState:
-    """Three-state (+ ok) feed vocabulary for the panel banner (WHI-825).
+    """Three-state (+ ok) feed vocabulary for the panel (WHI-825).
 
     Priority: feed_down > gap > feed_quiet > ok.
+
+    Only ``collector_down`` gaps elevate ``feed_state`` to ``gap``. Other gap
+    sources (WS reconnect, block lag) stay on ``ok``/``feed_quiet`` and are
+    still listed in ``recent_gaps`` / ``gap_recent``.
     """
     if not collector_alive:
         return "feed_down"
-    if collector_down_gap_recent or gap_recent:
-        # Known hole while process is back — surface as gap, not green ok.
-        if collector_down_gap_recent:
-            return "gap"
-        # Other gap sources (WS reconnect, block lag) still flag gap_recent
-        # without forcing the banner when data is fresh; only collector_down
-        # elevates feed_state to gap. Non-down gaps keep ok/quiet.
+    if collector_down_gap_recent:
+        return "gap"
     if data_age_ms is not None and data_age_ms > quiet_ms:
         return "feed_quiet"
     return "ok"
@@ -250,7 +248,6 @@ def build_health(
         collector_alive=alive,
         data_age_ms=data_age,
         quiet_ms=quiet_ms,
-        gap_recent=bool(gaps),
         collector_down_gap_recent=down_recent,
     )
     hint = recovery_hint_for_state(

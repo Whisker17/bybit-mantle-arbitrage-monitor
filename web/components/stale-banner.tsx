@@ -78,24 +78,29 @@ export function StaleBanner({ health, fetchError, pairsError }: Props) {
     reasons.push(`overview refresh failed: ${pairsError}`);
   }
 
+  // Banner only for hard/actionable states. feed_quiet is status-bar only
+  // (closed-session silence is normal — WHI-821 / WHI-825 same family).
   const feedBad =
     health != null &&
     (health.feed_state === "feed_down" ||
-      health.feed_state === "feed_quiet" ||
       health.feed_state === "gap" ||
       !health.ok ||
       Boolean(health.collector_down_gap_recent));
-  if (!feedBad && !pairsError && reasons.length === 0) return null;
+  if (!feedBad && !pairsError) return null;
   if (health == null && !pairsError) return null;
+
+  // Drop soft quiet reasons from the banner body when we only showed them
+  // because of pairsError / other hard states.
+  const hardReasons = reasons.filter(
+    (r) => !r.startsWith("feed quiet"),
+  );
 
   const title =
     health?.feed_state === "feed_down"
       ? "Feed down — collector not writing"
       : health?.feed_state === "gap"
         ? "Collector downtime gap — numbers skip this hole"
-        : health?.feed_state === "feed_quiet"
-          ? "Feed quiet — process alive, tick data aged"
-          : "Data feed warning — numbers may be frozen";
+        : "Data feed warning — numbers may be frozen";
 
   return (
     <div
@@ -108,7 +113,11 @@ export function StaleBanner({ health, fetchError, pairsError }: Props) {
           {title}
         </div>
         <div className="text-warning/90">
-          {reasons.length > 0 ? reasons.join(" · ") : "collector health degraded"}
+          {hardReasons.length > 0
+            ? hardReasons.join(" · ")
+            : reasons.length > 0
+              ? reasons.join(" · ")
+              : "collector health degraded"}
         </div>
       </div>
     </div>

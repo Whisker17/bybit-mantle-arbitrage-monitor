@@ -3,6 +3,7 @@
 from __future__ import annotations
 
 from decimal import Decimal
+from pathlib import Path
 
 from monitor.collector.gaps import (
     SOURCE_COLLECTOR_DOWN,
@@ -12,12 +13,15 @@ from monitor.collector.gaps import (
 )
 from monitor.metrics.session import SessionKind
 from monitor.metrics.stats import EdgeStats
+from monitor.quotes import BybitBookTick
+from monitor.storage import JournalReader, SqliteStore
 
 
 def test_collector_down_gap_records_interval() -> None:
     gap = collector_down_gap(
         last_write_ms=1_000_000,
         first_write_ms=1_000_000 + 90 * 60_000,  # 90 min
+        min_gap_ms=30_000,
         market_id="binance-pancake",
     )
     assert gap is not None
@@ -40,8 +44,14 @@ def test_collector_down_gap_skips_short_bounce() -> None:
 
 
 def test_collector_down_gap_rejects_non_positive() -> None:
-    assert collector_down_gap(last_write_ms=100, first_write_ms=100) is None
-    assert collector_down_gap(last_write_ms=200, first_write_ms=100) is None
+    assert (
+        collector_down_gap(last_write_ms=100, first_write_ms=100, min_gap_ms=0)
+        is None
+    )
+    assert (
+        collector_down_gap(last_write_ms=200, first_write_ms=100, min_gap_ms=0)
+        is None
+    )
 
 
 def test_interval_overlaps_gaps() -> None:
@@ -80,6 +90,46 @@ def test_inter_sample_weight_zeros_on_collector_down_overlap() -> None:
         )
         == 1_000
     )
+
+
+def test_store_records_collector_down_and_reader_sees_it(tmp_path: Path) -> None:
+    """Restart-shaped: last write → first write becomes a journal gap row."""
+    db = tmp_path / "g.db"
+    store = SqliteStore(db)
+    last = 1_000_000
+    store.insert_bybit_book(
+        [
+            BybitBookTick(
+                pair_id="AAPLx",
+                symbol="AAPLUSDT",
+                exchange_ts_ms=last,
+                recv_ts_ms=last,
+                bid=Decimal("100"),
+                ask=Decimal("100.1"),
+                bid_de_multiplied=Decimal("100"),
+                ask_de_multiplied=Decimal("100.1"),
+                multiplier=Decimal(1),
+            )
+        ]
+    )
+    freshest = store.freshest_recv_ts_ms()
+    assert freshest == last
+    first = last + 90 * 60_000
+    gap = collector_down_gap(
+        last_write_ms=freshest,
+        first_write_ms=first,
+        min_gap_ms=30_000,
+        market_id="binance-pancake",
+    )
+    assert gap is not None
+    store.insert_gap(gap)
+    store.close()
+
+    with JournalReader(db) as reader:
+        gaps = reader.recent_gaps(since_ms=0, limit=10)
+        assert any(g.source == SOURCE_COLLECTOR_DOWN for g in gaps)
+        assert gaps[0].gap_start_ms == last
+        assert gaps[0].gap_end_ms == first
 
 
 def test_edge_stats_excludes_collector_down_interval() -> None:

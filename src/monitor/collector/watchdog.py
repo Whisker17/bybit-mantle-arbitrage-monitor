@@ -52,11 +52,7 @@ def evaluate_watchdog(
         return WatchdogAction.OK
     if writes_paused:
         return WatchdogAction.OK
-    if reconnect_idle_ms <= 0 or exit_idle_ms <= 0:
-        return WatchdogAction.OK
-    if exit_idle_ms < reconnect_idle_ms:
-        # Misconfig: treat as exit-only at the larger bound.
-        reconnect_idle_ms = exit_idle_ms
+    # Thresholds are validated by WatchdogConfig (gt=0, exit >= reconnect).
 
     if now_ms - process_started_ms < startup_grace_ms:
         return WatchdogAction.OK

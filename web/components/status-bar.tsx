@@ -31,12 +31,7 @@ export function StatusBar({
         : alive
           ? "alive"
           : "down";
-  const collectorVariant =
-    collectorLabel === "alive"
-      ? "open"
-      : collectorLabel === "quiet" || collectorLabel === "gap"
-        ? "warning"
-        : "warning";
+  const collectorVariant = collectorLabel === "alive" ? "open" : "warning";
   const session = overview?.session_now ?? null;
   // Prefer API display_name (human) over raw market id fallbacks.
   const fromApi = overview?.display_name ?? health?.display_name;

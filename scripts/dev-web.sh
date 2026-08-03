@@ -109,10 +109,6 @@ pid_col() { echo "$DEV_DIR_ABS/collector-$1.pid"; }
 log_col() { echo "$DEV_DIR_ABS/collector-$1.log"; }
 sqlite_for() { echo "data/monitor-$1.db"; }
 
-pid_col() { echo "$DEV_DIR_ABS/collector-$1.pid"; }
-log_col() { echo "$DEV_DIR_ABS/collector-$1.log"; }
-sqlite_for() { echo "data/monitor-$1.db"; }
-
 API_BASE="http://${API_HOST}:${API_PORT}"
 WEB_URL="http://localhost:${WEB_PORT}"
 
@@ -329,6 +325,8 @@ start_one_collector() {
   info "starting collector market=${market} (journal ${sqlite})"
   : >"$log"
   (
+    # set -e is inherited from the parent; capture exit without aborting the loop.
+    set +e
     cd "$ROOT"
     while true; do
       uv run python -u -m monitor.collector --market "$market" --sqlite "$sqlite" \
@@ -595,6 +593,15 @@ cmd_clean() {
     freed_kb=$(( freed_kb + before ))
     info "truncated $(basename "$f") (freed ${before}KB)"
   done
+  # WHI-825: drop pre-market-aware naming fork (manual binance start).
+  if [[ -f "$DEV_DIR_ABS/collector-binance.log" ]]; then
+    rm -f "$DEV_DIR_ABS/collector-binance.log"
+    info "removed legacy collector-binance.log (use collector-binance-pancake.log)"
+  fi
+  if [[ -f "$DEV_DIR_ABS/collector.pid" ]]; then
+    rm -f "$DEV_DIR_ABS/collector.pid"
+    info "removed legacy collector.pid (use collector-{market}.pid)"
+  fi
   if [[ "$any" -eq 0 ]]; then
     info "no logs under ${DEV_DIR_REL}/ — nothing to clean"
   else

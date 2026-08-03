@@ -122,6 +122,7 @@ or kill + re-run `python -m monitor.collector --market …` per market).
   `collector_gaps.source=collector_down` (skip &lt; `min_down_gap_ms`). EdgeStats
   zero-weights that interval so cumulative P50/P95 are not polluted.
 - Panel: `feed_state` is `ok | feed_down | feed_quiet | gap` with `recovery_hint`.
+
 ## Redeploy (one command from a laptop)
 
 ```bash
