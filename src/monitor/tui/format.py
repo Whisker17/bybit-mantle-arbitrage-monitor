@@ -180,6 +180,9 @@ def sort_rows(
             "premium_bps": row.premium_bps,
             "underlying_price": row.underlying_price,
             "tvl_usd": row.tvl_usd,
+            # WHI-824: flat fields only set when pnl_v2 status is ok (numeric).
+            "pnl_optimal_usd": row.pnl_optimal_net_usd,
+            "pnl_optimal_bps": row.pnl_optimal_net_bps,
         }
         return mapping.get(key, row.pair_id)
 

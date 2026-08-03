@@ -51,6 +51,12 @@ PnlStatus = Literal[
     "stale",
 ]
 
+
+def _dec_str(v: Decimal | None) -> str | None:
+    """Fixed-point Decimal → JSON string (never scientific notation)."""
+    return None if v is None else format(v, "f")
+
+
 _DIRECTIONS: tuple[Direction, Direction] = (
     "buy_fluxion_sell_bybit",
     "buy_bybit_sell_fluxion",
@@ -92,21 +98,38 @@ class PnlOptimalSummary:
     def to_dict(self) -> dict[str, Any]:
         # Match serialize.to_jsonable / PnlResult.to_dict: fixed-point strings,
         # never scientific notation (format(..., "f")).
-        def _dec(v: Decimal | None) -> str | None:
-            return None if v is None else format(v, "f")
-
         return {
             "status": self.status,
             "has_depth": self.has_depth,
             "direction": self.direction,
-            "optimal_notional_usd": _dec(self.optimal_notional_usd),
-            "optimal_net_pnl_usd": _dec(self.optimal_net_pnl_usd),
-            "optimal_net_pnl_bps": _dec(self.optimal_net_pnl_bps),
+            "optimal_notional_usd": _dec_str(self.optimal_notional_usd),
+            "optimal_net_pnl_usd": _dec_str(self.optimal_net_pnl_usd),
+            "optimal_net_pnl_bps": _dec_str(self.optimal_net_pnl_bps),
             "bybit_depth_source": self.bybit_depth_source,
             "quote_aged": self.quote_aged,
             "cex_quote_age_ms": self.cex_quote_age_ms,
             "amm_quote_age_ms": self.amm_quote_age_ms,
             "depth_quote_age_ms": self.depth_quote_age_ms,
+        }
+
+    def flat_sort_fields(self) -> tuple[Decimal | None, Decimal | None]:
+        """USD / bps for overview sort keys (WHI-824).
+
+        Only ``status == "ok"`` (including ``quote_aged`` ok) participates in
+        numeric sort. Other statuses return ``(None, None)`` so callers park
+        the row last and Top-N skips it. Does not special-case ``stale`` —
+        when a row recovers to ok with numbers it sorts normally.
+        """
+        if self.status != "ok":
+            return None, None
+        return self.optimal_net_pnl_usd, self.optimal_net_pnl_bps
+
+    def flat_sort_wire(self) -> dict[str, str | None]:
+        """JSON-ready flat sort keys (fixed-point strings or null)."""
+        usd, bps = self.flat_sort_fields()
+        return {
+            "pnl_optimal_net_usd": _dec_str(usd),
+            "pnl_optimal_net_bps": _dec_str(bps),
         }
 
 

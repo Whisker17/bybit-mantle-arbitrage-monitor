@@ -245,6 +245,19 @@ def test_pairs_overview_with_depth_exposes_optimal(client_with_depth: TestClient
         "buy_fluxion_sell_bybit",
         "buy_bybit_sell_fluxion",
     )
+    # WHI-824: flat sort keys mirror ok numeric optimal (fixed-point strings).
+    assert aapl["pnl_optimal_net_usd"] == pnl["optimal_net_pnl_usd"]
+    assert aapl["pnl_optimal_net_bps"] == pnl["optimal_net_pnl_bps"]
+
+
+def test_pairs_overview_flat_pnl_null_when_no_depth(client: TestClient) -> None:
+    """WHI-824: non-ok pnl_v2 leaves flat sort fields None (nulls last / no Top-N)."""
+    r = client.get("/api/pairs")
+    assert r.status_code == 200
+    aapl = next(row for row in r.json()["rows"] if row["pair_id"] == "AAPLx")
+    assert aapl["pnl_v2"]["status"] == "no_depth"
+    assert aapl["pnl_optimal_net_usd"] is None
+    assert aapl["pnl_optimal_net_bps"] is None
 
 
 def test_pair_detail_pnl_buckets_with_depth(client_with_depth: TestClient) -> None:

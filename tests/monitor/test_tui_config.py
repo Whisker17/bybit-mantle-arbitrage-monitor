@@ -36,6 +36,34 @@ def test_invalid_config_fails(tmp_path: Path) -> None:
         load_tui_config(path)
 
 
+def test_web_only_pnl_default_sort_rejected(tmp_path: Path) -> None:
+    """WHI-824: PnL SortKeys are valid for Web; TUI default would silently no-op."""
+    src = load_tui_config()
+    path = tmp_path / "tui.yaml"
+    # Minimal valid ship skeleton with a Web-only sort key.
+    path.write_text(
+        "\n".join(
+            [
+                f"version: {src.version}",
+                f"refresh_interval_s: {src.refresh_interval_s}",
+                f"sqlite_path: {src.sqlite_path}",
+                f"reference_size_usd: {src.reference_size_usd}",
+                "default_sort: pnl_optimal_usd",
+                f"default_sort_desc: {str(src.default_sort_desc).lower()}",
+                f"volume_window_ms: {src.volume_window_ms}",
+                f"spread_history_max_points: {src.spread_history_max_points}",
+                f"trade_stream_limit: {src.trade_stream_limit}",
+                f"edge_history_max_samples: {src.edge_history_max_samples}",
+                f"sparkline_width: {src.sparkline_width}",
+                "",
+            ]
+        ),
+        encoding="utf-8",
+    )
+    with pytest.raises(TuiConfigError, match="Web-only"):
+        load_tui_config(path)
+
+
 def test_resolved_sqlite_path_relative(tmp_path: Path) -> None:
     cfg = load_tui_config()
     assert cfg.market == "bybit-fluxion"

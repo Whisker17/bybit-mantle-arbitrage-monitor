@@ -400,6 +400,8 @@ def test_snapshot_no_depth_hides_overview_optimal() -> None:
     ov = overview_pnl_summary(snap)
     assert ov.status == "no_depth"
     assert ov.optimal_net_pnl_usd is None
+    # WHI-824: non-ok → flat sort fields None.
+    assert ov.flat_sort_fields() == (None, None)
     # Detail tables still have 6 buckets each.
     for table in snap.tables.values():
         assert len(table.amm_buckets) == 6
@@ -428,6 +430,11 @@ def test_snapshot_with_depth_matches_engine_bucket_pnl() -> None:
     assert snap.status == "ok"
     assert snap.has_depth is True
     assert snap.best.optimal_net_pnl_usd is not None
+    # WHI-824: ok → flat fields carry the numeric optimal for sort keys.
+    assert snap.best.flat_sort_fields() == (
+        snap.best.optimal_net_pnl_usd,
+        snap.best.optimal_net_pnl_bps,
+    )
 
     bids = levels_from_depth_curve(depth, side="bid")
     asks = levels_from_depth_curve(depth, side="ask")

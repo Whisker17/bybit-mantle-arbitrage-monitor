@@ -4,16 +4,21 @@ import { describe, it } from "node:test";
 import {
   applyTopN,
   buildOverviewSearch,
+  bucketPnlHeaderLabel,
+  bucketPnlSortTitle,
   dexNonTradeableReason,
   filterRows,
   isDexTradeable,
+  isPnlSortKey,
+  isSortKey,
+  nextPnlSortState,
   parseOverviewSearch,
   sortKeyLabel,
   sortRows,
   topNSummary,
   TOP_N_DEFAULT,
 } from "./sort";
-import type { PairOverviewRow } from "./types";
+import type { PairOverviewRow, PnlOptimalSummary } from "./types";
 
 function row(partial: Partial<PairOverviewRow> & { pair_id: string }): PairOverviewRow {
   return {
@@ -80,7 +85,131 @@ describe("sortRows", () => {
       ["B", "A", "C"],
     );
   });
+
+  it("sorts pnl_optimal_usd desc; non-ok status nulls last (WHI-824)", () => {
+    const rows = [
+      row({
+        pair_id: "neg_big",
+        pnl_optimal_net_usd: "-5",
+        pnl_optimal_net_bps: "-50",
+        pnl_v2: okPnl({ optimal_net_pnl_usd: "-5", optimal_net_pnl_bps: "-50" }),
+      }),
+      row({
+        pair_id: "pos",
+        pnl_optimal_net_usd: "2",
+        pnl_optimal_net_bps: "5",
+        pnl_v2: okPnl({ optimal_net_pnl_usd: "2", optimal_net_pnl_bps: "5" }),
+      }),
+      row({
+        pair_id: "no_depth",
+        pnl_v2: {
+          status: "no_depth",
+          has_depth: false,
+          direction: null,
+          optimal_notional_usd: null,
+          optimal_net_pnl_usd: null,
+          optimal_net_pnl_bps: null,
+          bybit_depth_source: null,
+        },
+      }),
+      row({
+        pair_id: "neg_small",
+        pnl_optimal_net_usd: "-0.5",
+        pnl_optimal_net_bps: "-100",
+        pnl_v2: okPnl({
+          optimal_net_pnl_usd: "-0.5",
+          optimal_net_pnl_bps: "-100",
+        }),
+      }),
+    ];
+    const sorted = sortRows(rows, "pnl_optimal_usd", true);
+    assert.deepEqual(
+      sorted.map((r) => r.pair_id),
+      ["pos", "neg_small", "neg_big", "no_depth"],
+    );
+  });
+
+  it("sorts pnl_optimal_bps independently of USD (WHI-824)", () => {
+    const rows = [
+      row({
+        pair_id: "big_usd",
+        pnl_optimal_net_usd: "10",
+        pnl_optimal_net_bps: "5",
+      }),
+      row({
+        pair_id: "high_bps",
+        pnl_optimal_net_usd: "1",
+        pnl_optimal_net_bps: "50",
+      }),
+      row({ pair_id: "missing" }),
+    ];
+    assert.deepEqual(
+      sortRows(rows, "pnl_optimal_usd", true).map((r) => r.pair_id),
+      ["big_usd", "high_bps", "missing"],
+    );
+    assert.deepEqual(
+      sortRows(rows, "pnl_optimal_bps", true).map((r) => r.pair_id),
+      ["high_bps", "big_usd", "missing"],
+    );
+  });
+
+  it("falls back to nested pnl_v2 when flat fields absent (WHI-824)", () => {
+    const rows = [
+      row({
+        pair_id: "A",
+        pnl_v2: okPnl({ optimal_net_pnl_usd: "1", optimal_net_pnl_bps: "10" }),
+      }),
+      row({
+        pair_id: "B",
+        pnl_v2: okPnl({ optimal_net_pnl_usd: "3", optimal_net_pnl_bps: "5" }),
+      }),
+      row({
+        pair_id: "C",
+        pnl_v2: {
+          status: "empty_pool",
+          has_depth: false,
+          direction: null,
+          optimal_notional_usd: null,
+          optimal_net_pnl_usd: null,
+          optimal_net_pnl_bps: null,
+          bybit_depth_source: null,
+        },
+      }),
+    ];
+    assert.deepEqual(
+      sortRows(rows, "pnl_optimal_usd", true).map((r) => r.pair_id),
+      ["B", "A", "C"],
+    );
+  });
+
+  it("negative-only USD desc is least loss first (WHI-824)", () => {
+    const rows = [
+      row({ pair_id: "worst", pnl_optimal_net_usd: "-20" }),
+      row({ pair_id: "least", pnl_optimal_net_usd: "-1" }),
+      row({ pair_id: "mid", pnl_optimal_net_usd: "-8" }),
+    ];
+    assert.deepEqual(
+      sortRows(rows, "pnl_optimal_usd", true).map((r) => r.pair_id),
+      ["least", "mid", "worst"],
+    );
+  });
 });
+
+function okPnl(
+  partial: Partial<PnlOptimalSummary> & {
+    optimal_net_pnl_usd: string;
+    optimal_net_pnl_bps: string;
+  },
+): PnlOptimalSummary {
+  return {
+    status: "ok",
+    has_depth: true,
+    direction: "buy_fluxion_sell_bybit",
+    optimal_notional_usd: "1000",
+    bybit_depth_source: "book",
+    ...partial,
+  };
+}
 
 describe("filterRows", () => {
   it("filters by query and flags", () => {
@@ -553,6 +682,117 @@ describe("topNSummary / sortKeyLabel (WHI-791 + WHI-796)", () => {
       topNSummary(view, "tvl_usd"),
       "Showing all 2 pairs · sorted by TVL (1 tradeable on DEX)",
     );
+  });
+
+  it("collapsed: non-numeric PnL status does not take Top-N seats (WHI-824)", () => {
+    // Sorted by pnl_optimal_usd desc with nulls last.
+    const sorted = [
+      row({
+        pair_id: "WIN",
+        amm_mid: "100",
+        low_liquidity: false,
+        pnl_optimal_net_usd: "2",
+        pnl_v2: okPnl({ optimal_net_pnl_usd: "2", optimal_net_pnl_bps: "10" }),
+      }),
+      row({
+        pair_id: "LOSS",
+        amm_mid: "100",
+        low_liquidity: false,
+        pnl_optimal_net_usd: "-1",
+        pnl_v2: okPnl({
+          optimal_net_pnl_usd: "-1",
+          optimal_net_pnl_bps: "-5",
+        }),
+      }),
+      row({
+        pair_id: "NO_DEPTH",
+        amm_mid: "100",
+        low_liquidity: false,
+        // tradeable AMM but no PnL number → must not pad Top-N
+        pnl_v2: {
+          status: "no_depth",
+          has_depth: false,
+          direction: null,
+          optimal_notional_usd: null,
+          optimal_net_pnl_usd: null,
+          optimal_net_pnl_bps: null,
+          bybit_depth_source: null,
+        },
+      }),
+      row({
+        pair_id: "NO_POOL",
+        amm_mid: null,
+        low_liquidity: true,
+        pnl_v2: {
+          status: "no_pool",
+          has_depth: false,
+          direction: null,
+          optimal_notional_usd: null,
+          optimal_net_pnl_usd: null,
+          optimal_net_pnl_bps: null,
+          bybit_depth_source: null,
+        },
+      }),
+    ];
+    const view = applyTopN(sorted, "pnl_optimal_usd", { n: 10, showAll: false });
+    assert.deepEqual(
+      view.rows.map((r) => r.pair_id),
+      ["WIN", "LOSS"],
+    );
+    assert.equal(view.presentCount, 2);
+    assert.equal(view.tradeableCount, 3); // WIN, LOSS, NO_DEPTH
+    assert.match(
+      topNSummary(view, "pnl_optimal_usd", { sortDesc: true }),
+      /Top 2 of 4 by Bucket PnL \(\$\) \(3 tradeable on DEX\) · 2 with data · desc = least loss/,
+    );
+    // Ascending omits the least-loss note.
+    assert.equal(
+      topNSummary(view, "pnl_optimal_usd", { sortDesc: false }).includes(
+        "least loss",
+      ),
+      false,
+    );
+  });
+});
+
+describe("PnL sort keys meta (WHI-824)", () => {
+  it("accepts both PnL keys in URL parse / isSortKey", () => {
+    assert.equal(isSortKey("pnl_optimal_usd"), true);
+    assert.equal(isSortKey("pnl_optimal_bps"), true);
+    assert.equal(isPnlSortKey("pnl_optimal_usd"), true);
+    assert.equal(isPnlSortKey("net_edge"), false);
+    const parsed = parseOverviewSearch("?sort=pnl_optimal_bps&desc=1");
+    assert.equal(parsed.sortKey, "pnl_optimal_bps");
+    assert.equal(parsed.sortDesc, true);
+    assert.equal(
+      buildOverviewSearch({
+        sortKey: "pnl_optimal_usd",
+        sortDesc: true,
+        showAll: false,
+      }),
+      "?sort=pnl_optimal_usd&desc=1",
+    );
+  });
+
+  it("labels and tooltip name the active unit", () => {
+    assert.equal(sortKeyLabel("pnl_optimal_usd"), "Bucket PnL ($)");
+    assert.equal(sortKeyLabel("pnl_optimal_bps"), "Bucket PnL (bps)");
+    assert.equal(bucketPnlHeaderLabel("pnl_optimal_usd"), "Bucket PnL $");
+    assert.equal(bucketPnlHeaderLabel("pnl_optimal_bps"), "Bucket PnL bps");
+    assert.equal(bucketPnlHeaderLabel("net_edge"), "Bucket PnL");
+    assert.match(bucketPnlSortTitle("pnl_optimal_usd"), /USD/);
+    assert.match(bucketPnlSortTitle("pnl_optimal_bps"), /bps/);
+  });
+
+  it("header click cycles usd↓ → usd↑ → bps↓ → bps↑ → usd↓", () => {
+    let s = nextPnlSortState("pnl_optimal_usd", true);
+    assert.deepEqual(s, { key: "pnl_optimal_usd", desc: false });
+    s = nextPnlSortState(s.key, s.desc);
+    assert.deepEqual(s, { key: "pnl_optimal_bps", desc: true });
+    s = nextPnlSortState(s.key, s.desc);
+    assert.deepEqual(s, { key: "pnl_optimal_bps", desc: false });
+    s = nextPnlSortState(s.key, s.desc);
+    assert.deepEqual(s, { key: "pnl_optimal_usd", desc: true });
   });
 });
 

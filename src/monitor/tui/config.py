@@ -15,7 +15,8 @@ from monitor.metrics.config import MetricsConfig
 _REPO_ROOT = Path(__file__).resolve().parents[3]
 _DEFAULT_TUI_PATH = _REPO_ROOT / "config" / "tui.yaml"
 
-# Web/API may sort on cex/dex volume keys; TUI only renders legacy volume_24h.
+# Web/API may sort on cex/dex volume / PnL keys; TUI only renders legacy volume_24h.
+# PnL keys (WHI-824) are Web-primary; TUI default_sort stays net_edge.
 SortKey = Literal[
     "pair_id",
     "net_edge",
@@ -30,6 +31,8 @@ SortKey = Literal[
     "premium_bps",
     "underlying_price",
     "tvl_usd",
+    "pnl_optimal_usd",
+    "pnl_optimal_bps",
 ]
 
 
@@ -59,6 +62,20 @@ class TuiConfig(BaseModel):
     def _to_decimal(cls, value: object) -> object:
         if isinstance(value, (int, float, str)):
             return Decimal(str(value))
+        return value
+
+    @field_validator("default_sort")
+    @classmethod
+    def _no_web_only_pnl_default(cls, value: SortKey) -> SortKey:
+        # WHI-824: SortKey includes Web-only PnL keys so type-check stays shared,
+        # but TUI never fills pnl_optimal_net_* — defaulting to them would sort
+        # every row as missing (silent no-op). Reject at config load.
+        if value in ("pnl_optimal_usd", "pnl_optimal_bps"):
+            raise ValueError(
+                f"tui.default_sort={value!r} is Web-only (WHI-824); "
+                "TUI overview does not populate PnL flat fields. "
+                "Use net_edge / amm_spread / … for the Textual panel."
+            )
         return value
 
     def resolved_sqlite_path(self, *, cwd: Path | None = None) -> Path:
