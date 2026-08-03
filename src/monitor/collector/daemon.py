@@ -140,6 +140,7 @@ class CollectorDaemon:
         self._process_started_ms = now_ms()
         self._last_write_ms: int | None = None
         self._pre_start_last_write_ms: int | None = None
+        self._pre_start_snapshotted = False
         self._collector_down_gap_recorded = False
         self._cex_ws: BybitWsCollector | BinanceWsCollector | None = None
         self._watchdog_reconnect_armed = False
@@ -154,7 +155,8 @@ class CollectorDaemon:
         fire. Heartbeat is liveness for /api/health only (WHI-825).
         """
         t = ts if ts is not None else now_ms()
-        self._last_write_ms = t
+        prev = self._last_write_ms
+        self._last_write_ms = t if prev is None else max(prev, t)
         if not self._collector_down_gap_recorded:
             self._maybe_record_collector_down_gap(first_write_ms=t)
 
@@ -162,10 +164,12 @@ class CollectorDaemon:
         """On first write after boot, book [prev last write, now] as collector_down."""
         if self._collector_down_gap_recorded:
             return
-        self._collector_down_gap_recorded = True
         prev = self._pre_start_last_write_ms
+        # Do not latch when prev is unknown (empty journal / first ever boot) —
+        # a later write after pre-start is snapshotted still records correctly.
         if prev is None:
             return
+        self._collector_down_gap_recorded = True
         gap = collector_down_gap(
             last_write_ms=prev,
             first_write_ms=first_write_ms,
@@ -183,16 +187,23 @@ class CollectorDaemon:
             gap.detail,
         )
 
+    def _snapshot_pre_start_last_write(self) -> None:
+        """Capture prior-process freshest tick before any feed tasks start."""
+        if self._pre_start_snapshotted:
+            return
+        self._pre_start_last_write_ms = self.store.freshest_recv_ts_ms()
+        self._pre_start_snapshotted = True
+
     def _stamp_collector_meta(self) -> None:
         """Wall-clock start + write-once first-ever start (WHI-777 truncation).
 
         ``collector_started_ms`` is this process (rewritten every boot).
         ``collector_first_started_ms`` is permanent so volume windows still
         look like a full 24h after a routine restart when swaps are retained.
-        Snapshot pre-start freshest recv for WHI-825 collector_down gap.
+        Pre-start freshest must already be snapshotted via
+        ``_snapshot_pre_start_last_write`` before feed tasks start (WHI-825).
         """
-        # Capture last activity from the prior process before we overwrite meta.
-        self._pre_start_last_write_ms = self.store.freshest_recv_ts_ms()
+        self._snapshot_pre_start_last_write()
         ts = now_ms()
         self._process_started_ms = ts
         self.store.set_meta("collector_started_ms", str(ts))
@@ -242,6 +253,8 @@ class CollectorDaemon:
             depth_mid_change_bps=depth_cfg.mid_change_bps,
         )
         self._cex_ws = bybit
+        # Snapshot downtime baseline *before* any feed task can write.
+        self._snapshot_pre_start_last_write()
 
         tasks = [
             asyncio.create_task(bybit.run(), name="bybit_ws"),
@@ -315,6 +328,7 @@ class CollectorDaemon:
             depth_mid_change_bps=depth_cfg.mid_change_bps,
         )
         self._cex_ws = binance
+        self._snapshot_pre_start_last_write()
 
         tasks = [
             asyncio.create_task(binance.run(), name="binance_ws"),

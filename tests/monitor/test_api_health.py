@@ -70,6 +70,40 @@ def test_reader_recent_gaps(tmp_path: Path) -> None:
         assert gaps[0].detail == "reconnect"
 
 
+def test_reader_recent_gaps_source_filter_before_limit(tmp_path: Path) -> None:
+    """WHI-825: source filter must apply before LIMIT so spam cannot crowd out."""
+    db = tmp_path / "m.db"
+    store = SqliteStore(db)
+    # Many recent non-down gaps + one older collector_down.
+    for i in range(20):
+        store.insert_gap(
+            CollectorGap(
+                source="mantle_blocks",
+                gap_start_ms=10_000 + i,
+                gap_end_ms=20_000 + i,
+                detail="lag spam",
+            )
+        )
+    store.insert_gap(
+        CollectorGap(
+            source="collector_down",
+            gap_start_ms=1_000,
+            gap_end_ms=5_000,
+            detail="downtime",
+        )
+    )
+    store.close()
+
+    with JournalReader(db) as reader:
+        # Without source filter, limit=5 would miss collector_down.
+        spam = reader.recent_gaps(since_ms=0, limit=5)
+        assert all(g.source == "mantle_blocks" for g in spam)
+        downs = reader.recent_gaps(since_ms=0, limit=5, source="collector_down")
+        assert len(downs) == 1
+        assert downs[0].source == "collector_down"
+        assert downs[0].detail == "downtime"
+
+
 def test_build_health_alive(tmp_path: Path) -> None:
     db = tmp_path / "m.db"
     store = SqliteStore(db)

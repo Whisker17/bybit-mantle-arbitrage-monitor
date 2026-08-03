@@ -106,12 +106,12 @@ def sync_exclude_intervals(
     """
     ts = now if now is not None else now_ms()
     since = max(0, ts - _EXCLUDE_GAPS_LOOKBACK_MS)
-    gaps = reader.recent_gaps(since_ms=since, limit=200)
-    intervals = tuple(
-        (g.gap_start_ms, g.gap_end_ms)
-        for g in gaps
-        if g.source == SOURCE_COLLECTOR_DOWN
+    # Filter by source in SQL before LIMIT — block-lag spam must not crowd out
+    # collector_down rows (WHI-825 review).
+    gaps = reader.recent_gaps(
+        since_ms=since, limit=200, source=SOURCE_COLLECTOR_DOWN
     )
+    intervals = tuple((g.gap_start_ms, g.gap_end_ms) for g in gaps)
     if intervals == edge_state.exclude_intervals:
         return
     edge_state.exclude_intervals = intervals

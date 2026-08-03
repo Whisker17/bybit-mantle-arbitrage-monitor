@@ -7,6 +7,7 @@ from typing import Any, Literal
 
 from monitor.collector.gaps import SOURCE_COLLECTOR_DOWN
 from monitor.collector.watchdog import META_HEARTBEAT
+from monitor.markets.ids import DEFAULT_MARKET_ID
 from monitor.quotes import CollectorGap, now_ms
 from monitor.storage import JournalReader
 from monitor.underlying.coverage_probe import (
@@ -146,7 +147,7 @@ def classify_feed_state(
 
 
 def _recovery_hint_missing_db(*, db_path: str, market_id: str | None) -> str:
-    mid = market_id or "bybit-fluxion"
+    mid = market_id or DEFAULT_MARKET_ID
     return (
         f"journal missing at {db_path}. "
         f"Start collector: ./scripts/dev-web.sh start "
@@ -164,7 +165,7 @@ def recovery_hint_for_state(
     recent_gaps: list[CollectorGap],
 ) -> str | None:
     """Actionable one-liner for operators (local + VPS)."""
-    mid = market_id or "bybit-fluxion"
+    mid = market_id or DEFAULT_MARKET_ID
     age = ""
     if age_ms is not None:
         if age_ms >= 3_600_000:

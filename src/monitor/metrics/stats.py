@@ -278,26 +278,21 @@ class OptimalPnlStats:
 
     Same time-weight / gap-cap rules as ``EdgeStats`` (DESIGN §2.4). One instance
     is one series (pair × direction). Unfillable / missing optimal samples are
-    skipped (not recorded as zero). Optional ``exclude_intervals`` (WHI-825).
+    skipped (not recorded as zero).
+
+    Note: WHI-825 ``collector_down`` exclusion is wired on ``EdgeStats`` (the
+    cold-start cumulative path). Optimal-size series are live samples only and
+    already zero-weight long inter-sample gaps via ``max_gap_ms``.
     """
 
     max_gap_ms: int
-    exclude_intervals: tuple[tuple[int, int], ...] = ()
     _all: _SeriesState = field(default_factory=_SeriesState)
     _open: _SeriesState = field(default_factory=_SeriesState)
     _closed: _SeriesState = field(default_factory=_SeriesState)
 
     @classmethod
-    def from_config(
-        cls,
-        config: MetricsConfig,
-        *,
-        exclude_intervals: tuple[tuple[int, int], ...] = (),
-    ) -> OptimalPnlStats:
-        return cls(
-            max_gap_ms=config.max_breach_gap_ms,
-            exclude_intervals=exclude_intervals,
-        )
+    def from_config(cls, config: MetricsConfig) -> OptimalPnlStats:
+        return cls(max_gap_ms=config.max_breach_gap_ms)
 
     def observe(
         self,
@@ -339,7 +334,7 @@ class OptimalPnlStats:
                 state.last_ts_ms,
                 ts_ms,
                 max_gap_ms=self.max_gap_ms,
-                exclude_intervals=self.exclude_intervals,
+                exclude_intervals=None,
             )
             if state.samples:
                 prev_val, _ = state.samples[-1]
