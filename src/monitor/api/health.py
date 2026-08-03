@@ -244,10 +244,20 @@ def build_health(
     # Process liveness: heartbeat first, else tick freshest (legacy journals).
     liveness_age = heartbeat_age if heartbeat is not None else data_age
     alive = liveness_age is not None and liveness_age <= stale_ms
-    # If collector wrote a stop timestamp after start, treat as down even if
-    # residual rows still look fresh (edge case on clean shutdown).
-    if started is not None and stopped is not None and stopped >= started:
-        alive = False
+    # Clean-shutdown marker: only trust ``collector_stopped_ms`` when nothing
+    # fresher has been written afterwards. A later heartbeat / tick means a new
+    # process is up (restart race can leave a stale stop after a new start).
+    if (
+        alive
+        and started is not None
+        and stopped is not None
+        and stopped >= started
+    ):
+        progressive = max(
+            x for x in (heartbeat, freshest) if x is not None
+        ) if (heartbeat is not None or freshest is not None) else None
+        if progressive is None or progressive <= stopped:
+            alive = False
 
     since = ts - gap_window_ms
     # Source-filter collector_down before LIMIT so block-lag spam cannot hide
