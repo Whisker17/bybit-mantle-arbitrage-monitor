@@ -145,6 +145,8 @@ export function hasSortValue(row: PairOverviewRow, key: SortKey): boolean {
  * live pools; do not pad with no_pool / empty_pool / dust / anomaly rows.
  */
 export function isDexTradeable(row: PairOverviewRow): boolean {
+  // amm_quote_reason is authoritative; pnl_v2.status is belt-and-braces when
+  // only the PnL payload is present (same guard populates both on API rows).
   const ammOk =
     row.amm_mid != null &&
     !row.low_liquidity &&

@@ -76,16 +76,9 @@ export function fmtOrAmmReason(
 export function ammQuoteReasonTitle(
   reason: AmmQuoteReason | null | undefined,
 ): string | undefined {
-  if (reason === "empty_pool") {
-    return "Pool has zero in-range liquidity — residual slot0 mid suppressed";
-  }
-  if (reason === "invalid_mid") {
-    return "AMM mid non-positive — suppressed";
-  }
-  if (reason === "pricing_anomaly") {
-    return DEX_NON_TRADEABLE_TITLE.pricing_anomaly;
-  }
-  return undefined;
+  if (reason == null) return undefined;
+  // AmmQuoteReason ⊆ DexNonTradeableReason for title copy.
+  return DEX_NON_TRADEABLE_TITLE[reason];
 }
 
 /**

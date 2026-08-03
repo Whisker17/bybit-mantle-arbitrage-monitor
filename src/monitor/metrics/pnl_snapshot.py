@@ -439,7 +439,7 @@ def build_pnl_pair_snapshot(
         # Prefer unquotable reason (empty_pool / invalid_mid / pricing_anomaly)
         # over no_fillable so overview agrees with vs CEX. Prefer no_depth over
         # bare no_fillable.
-        if not is_tradable_amm_quote(quote_reason) and quote_reason is not None:
+        if quote_reason is not None:
             # AmmQuoteReason ⊆ PnlStatus (empty_pool / invalid_mid / pricing_anomaly).
             unfillable_status: PnlStatus = quote_reason
         elif not has_depth:
