@@ -200,6 +200,10 @@ placeholders. Agents must not assume a module exists until its issue lands. -->
     NBIS/SOXL; UI/premium treat ≤0 or `as_of_ms==0` as n/a; reverse health
     `unpublished_pyth_feeds` + audit table in
     `docs/references/underlying-price-source.md`.
+  - **PnL quiet-CEX stale fix (WHI-821) landed:** stop wiping bucket tables when
+    event-driven CEX book age &gt; 30s; `collector_stale_ms` = process liveness
+    only; `quote_max_age_ms` annotates `quote_aged` + per-leg ages; UI labels
+    disambiguated (no book / price stale / quote aged / feed down). DESIGN §2.6.5.
 
 ## Build, test, run
 

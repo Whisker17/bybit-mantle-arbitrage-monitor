@@ -195,7 +195,14 @@ export function PairDetail({ marketId, pairId }: Props) {
           <Badge variant={session === "open" ? "open" : "closed"}>
             {fmtSession(session)}
           </Badge>
-          {o.stale && <Badge variant="warning">stale</Badge>}
+          {o.stale && (
+            <Badge
+              variant="warning"
+              title="No CEX book tick in journal (distinct from quote aged / price stale)"
+            >
+              no book
+            </Badge>
+          )}
           {o.mm_active === "active" && (
             <Badge variant="mm" title={mmActiveTitle(o.mm_active)}>
               {mmActiveLabel(o.mm_active)}

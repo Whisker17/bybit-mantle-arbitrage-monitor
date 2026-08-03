@@ -110,8 +110,31 @@ describe("overviewPnlCell", () => {
       assert.equal(cell.kind, "status");
       if (cell.kind === "status") {
         assert.notEqual(cell.label, "no depth");
-        assert.match(cell.label, /book|pool|stale|mid/);
+        assert.match(cell.label, /book|pool|aged|mid/);
       }
+    }
+  });
+
+  it("keeps numbers when quote_aged and annotates title (WHI-821)", () => {
+    const cell = overviewPnlCell({
+      status: "ok",
+      has_depth: true,
+      direction: "buy_fluxion_sell_bybit",
+      optimal_notional_usd: "1000",
+      optimal_net_pnl_usd: "2.5",
+      optimal_net_pnl_bps: "25",
+      bybit_depth_source: "book",
+      quote_aged: true,
+      cex_quote_age_ms: 45_000,
+      amm_quote_age_ms: 800,
+    });
+    assert.equal(cell.kind, "ok");
+    if (cell.kind === "ok") {
+      assert.equal(cell.pnlUsd, "2.5");
+      assert.equal(cell.quoteAged, true);
+      assert.equal(cell.ageHint, "aged");
+      assert.match(cell.title, /quote aged/);
+      assert.match(cell.title, /CEX/);
     }
   });
 

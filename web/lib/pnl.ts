@@ -27,6 +27,9 @@ export type OverviewPnlCell =
       notionalUsd: string;
       direction: Direction | null;
       title: string;
+      /** WHI-821: quiet CEX / aged legs — still show numbers. */
+      quoteAged?: boolean;
+      ageHint?: string;
     }
   | { kind: "status"; label: string; title: string }
   | { kind: "empty"; label: string; title: string };
@@ -39,8 +42,30 @@ const STATUS_LABEL: Record<PnlStatus, string> = {
   invalid_mid: "invalid mid",
   no_depth: "no depth",
   no_fillable: "unfillable",
-  stale: "stale",
+  // Legacy wire status (pre-WHI-821 wipe path). Prefer quote_aged annotation.
+  stale: "quote aged",
 };
+
+/** Format recv age for UI tooltips (ms → "45s" / "2m"). */
+export function fmtQuoteAgeMs(ms: number | null | undefined): string | null {
+  if (ms == null || !Number.isFinite(ms) || ms < 0) return null;
+  if (ms < 1000) return `${Math.round(ms)}ms`;
+  const s = ms / 1000;
+  if (s < 60) return `${s < 10 ? s.toFixed(1) : Math.round(s)}s`;
+  const m = s / 60;
+  if (m < 60) return `${m < 10 ? m.toFixed(1) : Math.round(m)}m`;
+  return `${(m / 60).toFixed(1)}h`;
+}
+
+function quoteAgeTitle(pnl: PnlOptimalSummary): string {
+  const parts: string[] = [];
+  const cex = fmtQuoteAgeMs(pnl.cex_quote_age_ms);
+  const amm = fmtQuoteAgeMs(pnl.amm_quote_age_ms);
+  if (cex != null) parts.push(`CEX ${cex} ago`);
+  if (amm != null) parts.push(`AMM ${amm} ago`);
+  if (parts.length === 0) return "quote aged (quiet book)";
+  return `quote aged · ${parts.join(" · ")}`;
+}
 
 export function overviewPnlCell(
   pnl: PnlOptimalSummary | null | undefined,
@@ -54,7 +79,7 @@ export function overviewPnlCell(
       title: "PnL v2 not present in API response",
     };
   }
-  // Status first — no_book / no_pool / stale must not collapse into "no depth".
+  // Status first — no_book / no_pool / legacy stale must not collapse into "no depth".
   if (pnl.status !== "ok" && pnl.status !== "no_depth") {
     return {
       kind: "status",
@@ -78,19 +103,25 @@ export function overviewPnlCell(
   }
   const dir = pnl.direction;
   const notional = pnl.optimal_notional_usd ?? "—";
-  const title =
+  let title =
     dir != null
       ? `Optimal ${fmtDirection(dir, venues, marketId)} @ $${fmtNotional(notional)} · ${fmtUsd(pnl.optimal_net_pnl_usd)} USD` +
         (pnl.optimal_net_pnl_bps != null
           ? ` (${Number(pnl.optimal_net_pnl_bps).toFixed(1)} bps)`
           : "")
       : `Optimal PnL ${fmtUsd(pnl.optimal_net_pnl_usd)}`;
+  const aged = Boolean(pnl.quote_aged);
+  if (aged) {
+    title = `${title} · ${quoteAgeTitle(pnl)}`;
+  }
   return {
     kind: "ok",
     pnlUsd: pnl.optimal_net_pnl_usd,
     notionalUsd: notional,
     direction: dir,
     title,
+    quoteAged: aged,
+    ageHint: aged ? "aged" : undefined,
   };
 }
 

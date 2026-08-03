@@ -314,6 +314,8 @@ function BucketPnlPanel({
             Cash-flow paper arb · $10–$10K AMM buckets
             {!snap.has_depth && " · L1 (no depth curve)"}
             {thin && " · thin depth (large sizes unfillable)"}
+            {(snap.quote_aged || best.quote_aged) &&
+              " · quote aged (quiet book — still computed)"}
           </p>
         </div>
         <div className="flex gap-1">
@@ -355,6 +357,26 @@ function BucketPnlPanel({
             @ ${fmtNotional(best.optimal_notional_usd)}{" "}
             {fmtDirection(best.direction, venues, marketId)}
           </span>
+          {(snap.quote_aged || best.quote_aged) && (
+            <span
+              className="ml-2 text-[10px] text-warning"
+              title={[
+                snap.cex_quote_age_ms != null
+                  ? `CEX age ${snap.cex_quote_age_ms}ms`
+                  : null,
+                snap.amm_quote_age_ms != null
+                  ? `AMM age ${snap.amm_quote_age_ms}ms`
+                  : null,
+                snap.depth_quote_age_ms != null
+                  ? `depth age ${snap.depth_quote_age_ms}ms`
+                  : null,
+              ]
+                .filter(Boolean)
+                .join(" · ")}
+            >
+              quote aged
+            </span>
+          )}
         </p>
       )}
 

@@ -48,6 +48,10 @@ export type PnlOptimalSummary = {
   optimal_net_pnl_usd: string | null;
   optimal_net_pnl_bps: string | null;
   bybit_depth_source: PnlDepthSource | null;
+  /** WHI-821: true when any leg exceeds quote_max_age_ms (quiet ≠ dead). */
+  quote_aged?: boolean;
+  cex_quote_age_ms?: number | null;
+  amm_quote_age_ms?: number | null;
 };
 
 export type PnlCostBreakdownUsd = {
@@ -104,6 +108,11 @@ export type PnlPairSnapshot = {
   has_depth: boolean;
   best: PnlOptimalSummary;
   tables: Partial<Record<Direction, PnlBucketTable>>;
+  /** WHI-821: per-leg recv ages; null when API omitted now_ms. */
+  cex_quote_age_ms?: number | null;
+  amm_quote_age_ms?: number | null;
+  depth_quote_age_ms?: number | null;
+  quote_aged?: boolean;
 };
 
 export type PairOverviewRow = {

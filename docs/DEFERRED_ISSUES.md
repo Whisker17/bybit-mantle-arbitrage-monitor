@@ -181,10 +181,11 @@ soon — anything touching key handling, RPC credentials defaults to at least Hi
   Bybit slip on the $1K/$5K/$20K ladder is a separate change.
 
 - **PnL v2 align / RFQ-age guards incomplete** (Medium, WHI-766 → polish).
-  WHI-766 applies `collector_stale_ms` to Bybit book + pool recv age before
-  accepting a live snapshot (`status=stale`). Still missing: dual-leg
-  `align_skew_ms`, RFQ-only age, and pool block lag (`pool_stale_blocks`) from
-  DESIGN §2.6.5 / hummingbot-pnl §6.
+  WHI-821 stopped reusing `collector_stale_ms` as a pair-level wipe gate:
+  ages are annotations (`quote_aged` + `*_quote_age_ms`) via
+  `quote_max_age_ms`. Still missing: dual-leg `align_skew_ms`, RFQ-only age,
+  and pool block lag (`pool_stale_blocks`) from DESIGN §2.6.5 /
+  hummingbot-pnl §6.
 
 - **RFQ poll notional ≠ edge ladder sizes** (Medium, WHI-732 → M5 / collector).
   `config/collector.yaml` polls ~100 USDC / 0.1 native while `metrics.yaml` ladder

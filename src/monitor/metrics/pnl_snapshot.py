@@ -45,6 +45,8 @@ PnlStatus = Literal[
     "invalid_mid",
     "no_depth",
     "no_fillable",
+    # Kept for wire/UI compat. WHI-821 no longer early-returns this to wipe
+    # tables — quiet CEX is annotated via quote_aged + *_quote_age_ms instead.
     "stale",
 ]
 
@@ -65,6 +67,10 @@ class PnlOptimalSummary:
     optimal_net_pnl_usd: Decimal | None = None
     optimal_net_pnl_bps: Decimal | None = None
     bybit_depth_source: DepthSource | None = None
+    # WHI-821: quiet event-driven CEX ≠ dead feed — annotate, don't blank.
+    quote_aged: bool = False
+    cex_quote_age_ms: int | None = None
+    amm_quote_age_ms: int | None = None
 
     def to_dict(self) -> dict[str, Any]:
         # Match serialize.to_jsonable / PnlResult.to_dict: fixed-point strings,
@@ -80,6 +86,9 @@ class PnlOptimalSummary:
             "optimal_net_pnl_usd": _dec(self.optimal_net_pnl_usd),
             "optimal_net_pnl_bps": _dec(self.optimal_net_pnl_bps),
             "bybit_depth_source": self.bybit_depth_source,
+            "quote_aged": self.quote_aged,
+            "cex_quote_age_ms": self.cex_quote_age_ms,
+            "amm_quote_age_ms": self.amm_quote_age_ms,
         }
 
 
@@ -91,6 +100,12 @@ class PnlPairSnapshot:
     has_depth: bool
     best: PnlOptimalSummary
     tables: dict[Direction, PnlBucketTable]
+    # WHI-821 per-leg recv ages (ms). None when now_ms not supplied.
+    cex_quote_age_ms: int | None = None
+    amm_quote_age_ms: int | None = None
+    depth_quote_age_ms: int | None = None
+    # True when any computed leg age exceeds quote_max_age_ms.
+    quote_aged: bool = False
 
     def to_dict(self) -> dict[str, Any]:
         return {
@@ -98,6 +113,10 @@ class PnlPairSnapshot:
             "has_depth": self.has_depth,
             "best": self.best.to_dict(),
             "tables": {d: t.to_dict() for d, t in self.tables.items()},
+            "cex_quote_age_ms": self.cex_quote_age_ms,
+            "amm_quote_age_ms": self.amm_quote_age_ms,
+            "depth_quote_age_ms": self.depth_quote_age_ms,
+            "quote_aged": self.quote_aged,
         }
 
 
@@ -185,8 +204,17 @@ def _empty_summary(
     *,
     status: PnlStatus,
     has_depth: bool,
+    quote_aged: bool = False,
+    cex_quote_age_ms: int | None = None,
+    amm_quote_age_ms: int | None = None,
 ) -> PnlOptimalSummary:
-    return PnlOptimalSummary(status=status, has_depth=has_depth)
+    return PnlOptimalSummary(
+        status=status,
+        has_depth=has_depth,
+        quote_aged=quote_aged,
+        cex_quote_age_ms=cex_quote_age_ms,
+        amm_quote_age_ms=amm_quote_age_ms,
+    )
 
 
 def _summary_from_optimal(
@@ -194,6 +222,9 @@ def _summary_from_optimal(
     *,
     status: PnlStatus,
     has_depth: bool,
+    quote_aged: bool = False,
+    cex_quote_age_ms: int | None = None,
+    amm_quote_age_ms: int | None = None,
 ) -> PnlOptimalSummary:
     pnl_bps: Decimal | None = None
     if opt.q_star_usd > 0:
@@ -206,23 +237,38 @@ def _summary_from_optimal(
         optimal_net_pnl_usd=opt.pnl_usd,
         optimal_net_pnl_bps=pnl_bps,
         bybit_depth_source=opt.result.bybit_depth_source,
+        quote_aged=quote_aged,
+        cex_quote_age_ms=cex_quote_age_ms,
+        amm_quote_age_ms=amm_quote_age_ms,
     )
 
 
-def _ticks_stale(
+def _quote_ages(
     *,
     bybit: BybitBookTick,
     amm: FluxionPoolStateTick,
+    depth: BybitDepthTick | None,
     now_ms: int | None,
-    stale_ms: int | None,
-) -> bool:
-    if now_ms is None or stale_ms is None or stale_ms <= 0:
-        return False
-    if now_ms - bybit.recv_ts_ms > stale_ms:
-        return True
-    if now_ms - amm.recv_ts_ms > stale_ms:
-        return True
-    return False
+    quote_max_age_ms: int | None,
+) -> tuple[int | None, int | None, int | None, bool]:
+    """Return (cex_age, amm_age, depth_age, quote_aged).
+
+    Ages are ``now − recv_ts`` when ``now_ms`` is set. ``quote_aged`` is true
+    only when a computed age exceeds ``quote_max_age_ms`` — this annotates quiet
+    event-driven books; it never blanks tables (WHI-821). Collector process
+    liveness uses a separate ``collector_stale_ms`` on /api/health.
+    """
+    if now_ms is None:
+        return None, None, None, False
+    cex_age = now_ms - bybit.recv_ts_ms
+    amm_age = now_ms - amm.recv_ts_ms
+    depth_age = None if depth is None else now_ms - depth.recv_ts_ms
+    if quote_max_age_ms is None or quote_max_age_ms <= 0:
+        return cex_age, amm_age, depth_age, False
+    aged = cex_age > quote_max_age_ms or amm_age > quote_max_age_ms
+    if depth_age is not None and depth_age > quote_max_age_ms:
+        aged = True
+    return cex_age, amm_age, depth_age, aged
 
 
 def build_pnl_pair_snapshot(
@@ -238,22 +284,28 @@ def build_pnl_pair_snapshot(
     native_decimals: int = 18,
     rfq_enabled: bool = True,
     now_ms: int | None = None,
-    stale_ms: int | None = None,
+    quote_max_age_ms: int | None = None,
     include_optimal: bool = True,
 ) -> PnlPairSnapshot:
     """Build dual-direction PnL tables + best-of optimal summary.
 
     ``amm`` is the metrics pool geometry (caller builds via
     ``monitor.metrics.amm_pool.amm_pool_from_tick`` or the TUI wrapper).
-    ``amm_tick`` is only used for freshness. Overview consumers read
-    ``.best``; detail consumers read ``.tables``. When depth is missing or
-    reconstructs empty, tables still compute on L1 but status is ``no_depth``
-    so the overview can render that label.
+    ``amm_tick`` is used for quotability and for per-leg age annotation.
+    Overview consumers read ``.best``; detail consumers read ``.tables``.
+    When depth is missing or reconstructs empty, tables still compute on L1
+    but status is ``no_depth`` so the overview can render that label.
 
     Inventory-shape free: pass ``pair_id`` + optional RFQ ``native_decimals``.
     When ``rfq_enabled`` is False (AMM-only markets), RFQ poll rows are ignored.
     CEX bid/ask must already be in **comparable** space (journal
     ``*_de_multiplied`` — divide for Bybit, multiply for Binance BEP-677).
+
+    Freshness (WHI-821): a quiet CEX book (event-driven bookTicker, no push
+    while the price is flat) is **not** treated as missing data. Ages and
+    ``quote_aged`` are annotations only; only true absence (no book / no pool)
+    returns empty ``tables``. Process liveness is ``collector_stale_ms`` on
+    health — never pass that threshold here as a wipe gate.
     """
     if bybit is None:
         empty = _empty_summary(status="no_book", has_depth=False)
@@ -277,11 +329,13 @@ def build_pnl_pair_snapshot(
     # Overview status prefers quote_reason over no_fillable when optimal is empty.
     _quotable_mid, quote_reason = quotable_amm_mid(amm_tick)
 
-    if _ticks_stale(bybit=bybit, amm=amm_tick, now_ms=now_ms, stale_ms=stale_ms):
-        empty = _empty_summary(status="stale", has_depth=False)
-        return PnlPairSnapshot(
-            status="stale", has_depth=False, best=empty, tables={}
-        )
+    cex_age, amm_age, depth_age, quote_aged = _quote_ages(
+        bybit=bybit,
+        amm=amm_tick,
+        depth=depth,
+        now_ms=now_ms,
+        quote_max_age_ms=quote_max_age_ms,
+    )
 
     bybit_bids: list[tuple[Decimal, Decimal]] | None = None
     bybit_asks: list[tuple[Decimal, Decimal]] | None = None
@@ -340,18 +394,42 @@ def build_pnl_pair_snapshot(
             unfillable_status = "no_depth"
         else:
             unfillable_status = "no_fillable"
-        best = _empty_summary(status=unfillable_status, has_depth=has_depth)
+        best = _empty_summary(
+            status=unfillable_status,
+            has_depth=has_depth,
+            quote_aged=quote_aged,
+            cex_quote_age_ms=cex_age,
+            amm_quote_age_ms=amm_age,
+        )
         return PnlPairSnapshot(
             status=unfillable_status,
             has_depth=has_depth,
             best=best,
             tables=tables,
+            cex_quote_age_ms=cex_age,
+            amm_quote_age_ms=amm_age,
+            depth_quote_age_ms=depth_age,
+            quote_aged=quote_aged,
         )
 
     winner = max(candidates, key=lambda o: (o.pnl_usd, -o.q_star_usd))
-    best = _summary_from_optimal(winner, status=base_status, has_depth=has_depth)
+    best = _summary_from_optimal(
+        winner,
+        status=base_status,
+        has_depth=has_depth,
+        quote_aged=quote_aged,
+        cex_quote_age_ms=cex_age,
+        amm_quote_age_ms=amm_age,
+    )
     return PnlPairSnapshot(
-        status=base_status, has_depth=has_depth, best=best, tables=tables
+        status=base_status,
+        has_depth=has_depth,
+        best=best,
+        tables=tables,
+        cex_quote_age_ms=cex_age,
+        amm_quote_age_ms=amm_age,
+        depth_quote_age_ms=depth_age,
+        quote_aged=quote_aged,
     )
 
 
@@ -360,9 +438,16 @@ def overview_pnl_summary(snapshot: PnlPairSnapshot) -> PnlOptimalSummary:
 
     Detail still receives full L1 tables via ``snapshot.tables``; the overview
     cell must show the actionable "no depth" label, not an L1-only optimal.
+    Age annotations from the snapshot are preserved either way (WHI-821).
     """
     if snapshot.status == "no_depth" or snapshot.best.status == "no_depth":
-        return _empty_summary(status="no_depth", has_depth=False)
+        return _empty_summary(
+            status="no_depth",
+            has_depth=False,
+            quote_aged=snapshot.quote_aged,
+            cex_quote_age_ms=snapshot.cex_quote_age_ms,
+            amm_quote_age_ms=snapshot.amm_quote_age_ms,
+        )
     return snapshot.best
 
 

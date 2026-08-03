@@ -373,10 +373,16 @@ function BucketPnlCell({
           tone === "pos" && "text-positive",
           tone === "neg" && "text-negative",
           tone === "empty" && "text-muted-foreground",
+          cell.quoteAged && "opacity-80",
         )}
         title={cell.title}
       >
         {fmtUsd(cell.pnlUsd)}
+        {cell.quoteAged && (
+          <span className="ml-1 text-[10px] font-normal text-muted-foreground">
+            aged
+          </span>
+        )}
       </span>
     );
   }
@@ -446,7 +452,12 @@ function UnderlyingCell({ row }: { row: PairOverviewRow }) {
     );
   }
   const undAsOf = row.underlying_as_of_ms ?? null;
-  const badge = row.underlying_price_type ?? row.premium_type_label;
+  // Prefer type_label (WHI-821: "price stale" not raw "stale") over enum wire.
+  const badge =
+    row.premium_type_label ??
+    (row.underlying_price_type === "stale"
+      ? "price stale"
+      : row.underlying_price_type);
   return (
     <span
       className="inline-flex items-center justify-end gap-1"
@@ -462,7 +473,7 @@ function UnderlyingCell({ row }: { row: PairOverviewRow }) {
           variant={priceTypeBadgeVariant(row.underlying_price_type)}
           className="normal-case"
         >
-          {row.underlying_price_type ?? badge}
+          {badge}
         </Badge>
       )}
     </span>
@@ -724,8 +735,12 @@ export function PairsTable({
                         {row.pair_id}
                       </Link>
                       {row.stale && (
-                        <Badge variant="warning" className="normal-case">
-                          stale
+                        <Badge
+                          variant="warning"
+                          className="normal-case"
+                          title="No CEX book tick in journal (distinct from quote aged / price stale)"
+                        >
+                          no book
                         </Badge>
                       )}
                       <DexStatusBadge row={row} />

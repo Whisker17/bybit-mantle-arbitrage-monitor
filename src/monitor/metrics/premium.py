@@ -38,7 +38,8 @@ _TYPE_LABELS: dict[str, str] = {
     "pre": "vs pre",
     "post": "vs post",
     "close": "vs close",
-    "stale": "stale",
+    # WHI-821: disambiguate from row "no book" and PnL "quote aged".
+    "stale": "price stale",
 }
 
 

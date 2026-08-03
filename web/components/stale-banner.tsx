@@ -41,10 +41,11 @@ export function StaleBanner({ health, fetchError, pairsError }: Props) {
   if (health?.error) reasons.push(health.error);
   if (health && !health.db_exists) reasons.push("collector journal missing");
   if (health && !health.collector_alive) {
+    // WHI-821: "feed down" = process/liveness, not per-symbol quote age.
     reasons.push(
       health.age_ms != null
-        ? `collector data stale (age ${fmtAgeMs(health.age_ms)})`
-        : "collector not alive",
+        ? `feed down (age ${fmtAgeMs(health.age_ms)})`
+        : "feed down (collector not alive)",
     );
   }
   if (pairsError) {
