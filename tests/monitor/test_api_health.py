@@ -128,6 +128,34 @@ def test_build_health_alive(tmp_path: Path) -> None:
     assert health.ok is True
 
 
+def test_build_health_uses_last_tick_meta_without_scan(tmp_path: Path) -> None:
+    """WHI-825: O(1) collector_last_tick_write_ms beats multi-table MAX scan."""
+    from monitor.collector.watchdog import META_HEARTBEAT, META_LAST_TICK_WRITE
+
+    db = tmp_path / "m.db"
+    store = SqliteStore(db)
+    ts = now_ms()
+    store.set_meta("collector_started_ms", str(ts - 60_000))
+    store.set_meta(META_HEARTBEAT, str(ts - 500))
+    # Stale book row would look "down" if scanned; meta is the source of truth.
+    _seed_book(store, ts=ts - 3_600_000)
+    store.set_meta(META_LAST_TICK_WRITE, str(ts - 2_000))
+    store.close()
+
+    with JournalReader(db) as reader:
+        health = build_health(
+            reader,
+            now=ts,
+            stale_ms=30_000,
+            gap_window_ms=300_000,
+            quiet_ms=60_000,
+        )
+    assert health.collector_alive is True
+    assert health.freshest_recv_ts_ms == ts - 2_000
+    assert health.age_ms is not None and health.age_ms < 5_000
+    assert health.feed_state == "ok"
+
+
 def test_build_health_stale_collector(tmp_path: Path) -> None:
     db = tmp_path / "m.db"
     store = SqliteStore(db)

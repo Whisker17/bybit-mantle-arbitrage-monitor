@@ -32,7 +32,9 @@ from monitor.collector.config import (
 from monitor.collector.gaps import collector_down_gap
 from monitor.collector.latency import LatencyTracker, block_ingest_latency_ms
 from monitor.collector.watchdog import (
+    LAST_TICK_META_MIN_INTERVAL_MS,
     META_HEARTBEAT,
+    META_LAST_TICK_WRITE,
     WatchdogAction,
     evaluate_watchdog,
 )
@@ -139,6 +141,7 @@ class CollectorDaemon:
         self.exit_code = 0
         self._process_started_ms = now_ms()
         self._last_write_ms: int | None = None
+        self._last_tick_meta_ms: int = 0  # throttle META_LAST_TICK_WRITE
         self._pre_start_last_write_ms: int | None = None
         self._pre_start_snapshotted = False
         self._collector_down_gap_recorded = False
@@ -153,12 +156,23 @@ class CollectorDaemon:
 
         Meta heartbeats do **not** count — otherwise the watchdog could never
         fire. Heartbeat is liveness for /api/health only (WHI-825).
+
+        Also throttles ``collector_last_tick_write_ms`` so /api/health can
+        report data age without ``MAX(recv_ts_ms)`` over multi-million-row
+        tables (market-switch latency).
         """
         t = ts if ts is not None else now_ms()
         prev = self._last_write_ms
         self._last_write_ms = t if prev is None else max(prev, t)
         if not self._collector_down_gap_recorded:
             self._maybe_record_collector_down_gap(first_write_ms=t)
+        # Throttle meta stamp — every book tick would thrash SQLite meta.
+        if t - self._last_tick_meta_ms >= LAST_TICK_META_MIN_INTERVAL_MS:
+            self._last_tick_meta_ms = t
+            try:
+                self.store.set_meta(META_LAST_TICK_WRITE, str(self._last_write_ms))
+            except Exception:  # noqa: BLE001 - never fail the write path
+                logger.debug("last-tick meta stamp failed", exc_info=True)
 
     def _maybe_record_collector_down_gap(self, *, first_write_ms: int) -> None:
         """On first write after boot, book [prev last write, now] as collector_down."""
