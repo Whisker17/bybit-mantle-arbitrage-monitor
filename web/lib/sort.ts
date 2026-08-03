@@ -1,5 +1,11 @@
 import { cexPremiumBps, parseNum } from "./format";
-import type { PairOverviewRow, SortKey } from "./types";
+import type {
+  DexNonTradeableReason,
+  PairOverviewRow,
+  SortKey,
+} from "./types";
+
+export type { DexNonTradeableReason };
 
 function rawValue(
   row: PairOverviewRow,
@@ -126,33 +132,25 @@ export function hasSortValue(row: PairOverviewRow, key: SortKey): boolean {
 }
 
 /**
- * Why a row is denied a Top-N seat (wire/reason codes — UI maps to labels).
- * Every non-tradeable row gets a reason so Show-all can always explain gaps.
- */
-export type DexNonTradeableReason =
-  | "empty_pool"
-  | "invalid_mid"
-  | "no_pool"
-  | "low_liq"
-  | "no_quote";
-
-/**
  * DEX-tradeable seat eligibility for Top-N (WHI-796).
  *
  * A seat requires a live DEX leg — either:
  * - **AMM path:** quotable AMM mid (WHI-795: `amm_mid != null`) **and**
  *   `!low_liquidity` (TVL ≥ inventory `low_liquidity_threshold_usd`; dex:none
  *   always low), or
- * - **RFQ path:** two-sided RFQ quote (`rfq_buy` and `rfq_sell` present) —
- *   covers Fluxion RFQ-only inventory pairs (AMZNx/COINx/MCDx) where
- *   `amm is null` and the inventory low-liq bit would otherwise exclude them.
+ * - **RFQ path:** two-sided RFQ quote with positive prices — covers Fluxion
+ *   RFQ-only inventory pairs (AMZNx/COINx/MCDx) where `amm is null` and the
+ *   inventory low-liq bit would otherwise exclude them.
  *
  * Fewer than N seats is intentional when the chain only has a handful of
  * live pools; do not pad with no_pool / empty_pool / dust rows.
  */
 export function isDexTradeable(row: PairOverviewRow): boolean {
   const ammOk = row.amm_mid != null && !row.low_liquidity;
-  const rfqOk = row.rfq_buy != null && row.rfq_sell != null;
+  const rfqBuy = parseNum(row.rfq_buy);
+  const rfqSell = parseNum(row.rfq_sell);
+  const rfqOk =
+    rfqBuy != null && rfqBuy > 0 && rfqSell != null && rfqSell > 0;
   return ammOk || rfqOk;
 }
 

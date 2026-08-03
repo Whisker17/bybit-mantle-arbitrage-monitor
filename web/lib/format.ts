@@ -1,5 +1,9 @@
-import type { DexNonTradeableReason } from "./sort";
-import type { AmmQuoteReason, Direction, SessionKind } from "./types";
+import type {
+  AmmQuoteReason,
+  DexNonTradeableReason,
+  Direction,
+  SessionKind,
+} from "./types";
 
 const DASH = "—";
 

@@ -50,6 +50,21 @@ soon — anything touching key handling, RPC credentials defaults to at least Hi
   `UnderlyingPoller` still fetches them serially. Acceptable load now; if more
   Yahoo-only names land, add concurrency/throttle or raise poll intervals.
 
+- **WHI-796: client re-derives DEX seat status from wire fields** (Low, WHI-796).
+  `web/lib/sort.ts::isDexTradeable` / `dexNonTradeableReason` reassemble
+  eligibility from `amm_mid` + `low_liquidity` + `amm_quote_reason` + RFQ
+  quotes + `pnl_v2.status`, while the Python side already has
+  `quotable_amm_mid` and inventory `has_amm`. A new backend status must be
+  mirrored in the browser ladder. Fix: serve `dex_tradeable` + reason on
+  `/api/{market}/pairs` (single seam) and let the web only apply Top-N.
+
+- **WHI-796: `no_pool` badge can misfire on real dust pools without mid** (Low, WHI-796).
+  When `low_liquidity && amm_mid == null` and both `amm_quote_reason` and
+  `pnl_v2.status` are absent, the client labels `no_pool`. That is correct
+  for dex:none but also hits a real sub-threshold pool during a mid gap.
+  Needs a wire `has_amm` / inventory-pool bit to distinguish. Show-all still
+  lists the row.
+
 - **Optional-table name literals + sqlite_master probes duplicated** (Low, WHI-789).
   `monitor/storage/reader.py::JournalReader._table_names` (six call-site string
   guards) and a second `sqlite_master` shape in `monitor/storage/retention.py` —

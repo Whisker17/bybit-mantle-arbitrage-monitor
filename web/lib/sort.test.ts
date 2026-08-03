@@ -158,6 +158,19 @@ describe("isDexTradeable (WHI-796)", () => {
       ),
       false,
     );
+    // Non-positive / unparseable quotes do not seat.
+    assert.equal(
+      isDexTradeable(
+        row({
+          pair_id: "ZERO",
+          amm_mid: null,
+          low_liquidity: true,
+          rfq_buy: "0",
+          rfq_sell: "181",
+        }),
+      ),
+      false,
+    );
   });
 });
 

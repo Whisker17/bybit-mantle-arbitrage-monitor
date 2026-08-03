@@ -71,15 +71,15 @@ tradeable = quotable AMM mid (WHI-795) **and** `!low_liquidity` (TVL ≥
 `low_liquidity_threshold_usd`, default $50k). dex:none / empty-pool / dust
 rows never take seats even when CEX Vol ranks them first — the board may
 honestly show fewer than 10 rows. (Bybit⇄Fluxion also seats two-sided RFQ
-quotes; see DESIGN §2.x Top-N.) This is a **view** over the full inventory —
+quotes; see DESIGN §2.9.) This is a **view** over the full inventory —
 it does **not** mean the collector set was rebuilt to Binance CEX volume
 top-10.
 
 WHI-781 pair-id `TVL` / `Vol` badges were removed in WHI-791 (redundant once
 Volume/TVL are first-class sortable columns with a Top-N window). Expanded
-rows that are not tradeable show `no pool` / `empty pool` / `low liq` /
-`no quote` badges (WHI-796). The hide-low-liquidity filter still uses
-inventory `low_liquidity`.
+rows that are not tradeable show `no pool` / `empty pool` / `invalid mid` /
+`low liq` / `no quote` badges (WHI-796). The hide-low-liquidity filter still
+uses inventory `low_liquidity`.
 
 | # | id | Binance | BEP-20 | PCS pool | fee | Est liq USD | uiMultiplier | mid cross-check |
 |---|-----|---------|--------|----------|-----|-------------|--------------|-----------------|
