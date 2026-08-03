@@ -12,17 +12,13 @@ with ``has_depth=False`` (overview shows ``no_depth``).
 
 from __future__ import annotations
 
-from dataclasses import dataclass
+from dataclasses import dataclass, replace
 from decimal import Decimal
 from typing import Any, Literal
 
 from monitor.fluxion.abi import USDC_DECIMALS
 from monitor.metrics.amm_pool import AmmPoolState
-from monitor.metrics.amm_quote import (
-    annotate_pricing_anomaly,
-    is_tradable_amm_quote,
-    quotable_amm_mid,
-)
+from monitor.metrics.amm_quote import amm_quote_for_cex, is_tradable_amm_quote
 from monitor.metrics.bybit_slip import BPS
 from monitor.metrics.config import MetricsConfig
 from monitor.metrics.edge import Direction, mid_from_bid_ask
@@ -352,14 +348,12 @@ def build_pnl_pair_snapshot(
 
     # Same quotability reason as spreads (WHI-795 + WHI-822 magnitude guard).
     # Do not early-return tables={} — RFQ rows (bybit-fluxion) still compute;
-    # AMM buckets land unfillable under empty_pool; pricing_anomaly clears
-    # optimal candidates below. Overview status prefers quote_reason over
+    # AMM buckets land unfillable under empty_pool; pricing_anomaly strips
+    # optimal claims below. Overview status prefers quote_reason over
     # no_fillable when optimal is empty.
-    _quotable_mid, quote_reason = quotable_amm_mid(amm_tick)
     cex_mid = mid_from_bid_ask(bybit.bid_de_multiplied, bybit.ask_de_multiplied)
-    _quotable_mid, quote_reason = annotate_pricing_anomaly(
-        _quotable_mid,
-        quote_reason,
+    _, quote_reason = amm_quote_for_cex(
+        amm_tick,
         cex_mid=cex_mid,
         max_abs_spread_bps=config.max_abs_amm_spread_bps,
     )
@@ -414,10 +408,16 @@ def build_pnl_pair_snapshot(
         if table.optimal is not None and table.optimal.result.fillable:
             candidates.append(table.optimal)
 
-    # Residual slot0 geometry / extreme basis must not win overview optimal —
-    # same seam as spreads (WHI-795 empty_pool, WHI-822 pricing_anomaly).
+    # Residual slot0 geometry / extreme basis must not win overview or detail
+    # optimal — same seam as spreads (WHI-795 empty_pool, WHI-822 pricing_anomaly).
     if not is_tradable_amm_quote(quote_reason):
         candidates = []
+        # Strip per-direction optimal so detail Bucket PnL cannot re-surface a
+        # "Best optimal" / cost-at-Q* claim under a non-tradable reason.
+        tables = {
+            direction: replace(table, optimal=None)
+            for direction, table in tables.items()
+        }
 
     base_status: PnlStatus = "ok" if has_depth else "no_depth"
 
@@ -439,7 +439,7 @@ def build_pnl_pair_snapshot(
         # Prefer unquotable reason (empty_pool / invalid_mid / pricing_anomaly)
         # over no_fillable so overview agrees with vs CEX. Prefer no_depth over
         # bare no_fillable.
-        if quote_reason is not None:
+        if not is_tradable_amm_quote(quote_reason) and quote_reason is not None:
             # AmmQuoteReason ⊆ PnlStatus (empty_pool / invalid_mid / pricing_anomaly).
             unfillable_status: PnlStatus = quote_reason
         elif not has_depth:

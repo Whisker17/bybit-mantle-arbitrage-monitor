@@ -23,6 +23,7 @@ from monitor.metrics.amm_pool import (
 )
 from monitor.metrics.amm_quote import (
     AmmQuoteReason,
+    amm_quote_for_cex,
     annotate_pricing_anomaly,
     is_tradable_amm_quote,
     quotable_amm_mid,
@@ -113,6 +114,7 @@ __all__ = [
     "VenueKind",
     "amm_pool_from_pair_tick",
     "amm_pool_from_tick",
+    "amm_quote_for_cex",
     "annotate_pricing_anomaly",
     "best_net_edge",
     "build_edge_snapshot",

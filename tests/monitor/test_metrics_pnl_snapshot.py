@@ -372,8 +372,11 @@ def test_snapshot_pricing_anomaly_blocks_optimal() -> None:
     assert snap.best.status == "pricing_anomaly"
     assert snap.best.optimal_net_pnl_usd is None
     assert snap.best.direction is None
-    # Tables still materialize for detail inspection; optimal claim is blocked.
+    # Tables still materialize for detail inspection; optimal claim is blocked
+    # on both overview best *and* per-direction tables.
     assert snap.tables != {}
+    for table in snap.tables.values():
+        assert table.optimal is None
 
 
 def test_snapshot_no_depth_hides_overview_optimal() -> None:

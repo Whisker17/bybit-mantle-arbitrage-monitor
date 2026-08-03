@@ -318,6 +318,8 @@ function BucketPnlPanel({
             {thin && " · thin depth (large sizes unfillable)"}
             {(snap.quote_aged || best.quote_aged) &&
               " · quote aged (quiet book — still computed)"}
+            {best.status === "pricing_anomaly" &&
+              " · price anomaly (not a tradable claim)"}
           </p>
         </div>
         <div className="flex gap-1">
@@ -338,6 +340,16 @@ function BucketPnlPanel({
           ))}
         </div>
       </div>
+
+      {best.status === "pricing_anomaly" && (
+        <p
+          className="text-[11px] text-warning"
+          title="|AMM vs CEX| exceeds max_abs_amm_spread_bps — mid kept for investigation; PnL optimal suppressed (WHI-822)"
+        >
+          Price anomaly — extreme |AMM vs CEX|; not treated as a fillable
+          paper opportunity. Bucket rows below are diagnostic only.
+        </p>
+      )}
 
       {best.status === "ok" && best.optimal_net_pnl_usd != null && (
         <p className="text-xs">

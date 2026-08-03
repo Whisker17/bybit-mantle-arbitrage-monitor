@@ -281,6 +281,20 @@ def test_annotate_pricing_anomaly_disabled_when_threshold_none() -> None:
     assert reason is None
 
 
+def test_annotate_pricing_anomaly_fail_closed_on_nonpositive_cex() -> None:
+    """Cannot verify basis → prefer miss over a tradable claim (WHI-822)."""
+    from monitor.metrics.amm_quote import annotate_pricing_anomaly
+
+    mid, reason = annotate_pricing_anomaly(
+        Decimal("100"),
+        None,
+        cex_mid=Decimal(0),
+        max_abs_spread_bps=Decimal(500),
+    )
+    assert mid == Decimal("100")
+    assert reason == "pricing_anomaly"
+
+
 def test_spyb_shaped_spread_marks_pricing_anomaly_keeps_mid() -> None:
     """Live-shaped SPYB: L>0, huge basis — mid/spread visible, reason set, no edges."""
     cfg = load_metrics_config()

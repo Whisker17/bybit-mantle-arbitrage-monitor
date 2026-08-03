@@ -68,18 +68,37 @@ raw/on-chain space. Premium path divides uiMultiplier back for equity units.
 
 ## 5. Full collector-scope AMM pair audit (journal immutable snapshot)
 
-21 pairs with pool state. Flag `***` = `|bps| > 500` **or** empty residual:
+Source: `data/monitor-binance-pancake.db` (immutable read, latest tick per pair)
+on 2026-08-03. All **21** collector-scope AMM pairs:
 
-| pair | cex | amm | L | vs CEX bps | note |
-|------|-----|-----|---|------------|------|
-| SPYB | 751.4 | **1080.7** | >0 | **+4383** | **only live L>0 extreme** |
-| MRVLB | 187.8 | 208.2 | 0 | +1086 | empty_pool (WHI-795) |
-| KORUB | 15.6 | ~0 | 0 | −10000 | empty_pool |
-| MUUB | 23.0 | ~0 | 0 | −10000 | empty_pool |
-| AMZNB | 275.4 | 271.9 | >0 | −129 | under guard |
-| others | — | — | >0 | typically \|bps\| < 100 | normal |
+| pair | cex | amm | L>0 | vs CEX bps | note |
+|------|-----|-----|-----|------------|------|
+| SPYB | 751.4050 | 1080.7449 | yes | **+4383.0** | **live L>0 extreme** |
+| MRVLB | 187.8100 | 208.2044 | no | +1085.9 | empty_pool (WHI-795) |
+| KORUB | 15.5750 | ~0 | no | −10000 | empty_pool |
+| MUUB | 23.0100 | ~0 | no | −10000 | empty_pool |
+| AMZNB | 275.4150 | 271.8517 | yes | −129.4 | under guard |
+| CRCLB | 61.2800 | 61.8910 | yes | +99.7 | under guard |
+| NOKB | 9.1264 | 9.1914 | yes | +71.3 | under guard |
+| GOOGLB | 359.5500 | 357.9008 | yes | −45.9 | under guard |
+| MUB | 813.5275 | 811.3504 | yes | −26.8 | under guard |
+| SNDKB | 1214.6750 | 1211.8161 | yes | −23.5 | under guard |
+| AAPLB | 308.2450 | 308.9567 | yes | +23.1 | under guard |
+| METAB | 564.2650 | 565.5614 | yes | +23.0 | under guard |
+| INTCB | 90.1650 | 89.9587 | yes | −22.9 | under guard |
+| MSFTB | 469.6350 | 469.0359 | yes | −12.8 | under guard |
+| NVDAB | 200.3250 | 200.5751 | yes | +12.5 | under guard |
+| ORCLB | 132.1000 | 132.2587 | yes | +12.0 | under guard |
+| TSLAB | 315.0850 | 314.7358 | yes | −11.1 | under guard |
+| SOXLB | 114.1450 | 114.0787 | yes | −5.8 | under guard |
+| QQQB | 691.2800 | 691.4576 | yes | +2.6 | under guard |
+| SPCXB | 108.6650 | 108.6489 | yes | −1.5 | under guard |
+| SKHYB | 141.5550 | 141.5389 | yes | −1.1 | under guard |
 
-Healthy liquid names (QQQB, NVDAB, TSLAB, SPCXB, …) sit near 0–30 bps.
+**Guard applicability:** `max_abs_amm_spread_bps` lives in shared
+`config/metrics.yaml`, so it also gates `bybit-fluxion`. No Fluxion pair was
+observed at this magnitude in the same ops window; the guard is intentionally
+global (prefer miss). Empty-pool residuals remain WHI-795, not this code path.
 
 ## 6. Why PnL v2 looked fillable (and why we still guard)
 

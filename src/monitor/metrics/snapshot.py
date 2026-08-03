@@ -13,9 +13,8 @@ from decimal import Decimal
 from monitor.metrics.amm_pool import AmmPoolState
 from monitor.metrics.amm_quote import (
     AmmQuoteReason,
-    annotate_pricing_anomaly,
+    amm_quote_for_cex,
     is_tradable_amm_quote,
-    quotable_amm_mid,
 )
 from monitor.metrics.config import MetricsConfig
 from monitor.metrics.edge import (
@@ -103,10 +102,8 @@ def build_spread_snapshot(
     """
     ts = ts_ms if ts_ms is not None else bybit.recv_ts_ms
     bybit_mid = mid_from_bid_ask(bybit.bid_de_multiplied, bybit.ask_de_multiplied)
-    amm_mid, amm_reason = quotable_amm_mid(amm)
-    amm_mid, amm_reason = annotate_pricing_anomaly(
-        amm_mid,
-        amm_reason,
+    amm_mid, amm_reason = amm_quote_for_cex(
+        amm,
         cex_mid=bybit_mid,
         max_abs_spread_bps=config.max_abs_amm_spread_bps,
     )
