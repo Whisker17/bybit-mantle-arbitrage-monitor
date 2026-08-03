@@ -247,6 +247,11 @@ soon — anything touching key handling, RPC credentials defaults to at least Hi
 
 ## Resolved
 
+- **WHI-790: dust AMM pools can still rank under default net_edge sort** (Low, WHI-790 → WHI-796).
+  Closed by WHI-796: Top-N seats require DEX-tradeable (`!low_liquidity` +
+  quotable mid, or two-sided RFQ); dust/no-pool rows never pad the board under
+  any sort key including default `net_edge`.
+
 - **Mantle block ingest P95 / head_lag not re-measured** (Medium, WHI-743 → WHI-749).
   Measured with `monitor.collector.latency_probe`; default
   `mantle.head_lag_blocks: 1`; M2 SLO revised in DESIGN §5.2; note

@@ -5,8 +5,6 @@ import type {
   SortKey,
 } from "./types";
 
-export type { DexNonTradeableReason };
-
 function rawValue(
   row: PairOverviewRow,
   key: SortKey,

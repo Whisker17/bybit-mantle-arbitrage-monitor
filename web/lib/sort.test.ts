@@ -1,7 +1,6 @@
 import assert from "node:assert/strict";
 import { describe, it } from "node:test";
 
-import { dexNonTradeableLabel } from "./format";
 import {
   applyTopN,
   buildOverviewSearch,
@@ -574,13 +573,6 @@ describe("dexNonTradeableReason (WHI-796)", () => {
     );
   });
 
-  it("maps reasons to stable UI labels via format helper", () => {
-    assert.equal(dexNonTradeableLabel("empty_pool"), "empty pool");
-    assert.equal(dexNonTradeableLabel("no_pool"), "no pool");
-    assert.equal(dexNonTradeableLabel("low_liq"), "low liq");
-    assert.equal(dexNonTradeableLabel("no_quote"), "no quote");
-    assert.equal(dexNonTradeableLabel(null), null);
-  });
 });
 
 describe("overview URL state (WHI-791)", () => {

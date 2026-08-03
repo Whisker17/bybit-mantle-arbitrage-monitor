@@ -78,8 +78,9 @@ top-10.
 WHI-781 pair-id `TVL` / `Vol` badges were removed in WHI-791 (redundant once
 Volume/TVL are first-class sortable columns with a Top-N window). Expanded
 rows that are not tradeable show `no pool` / `empty pool` / `invalid mid` /
-`low liq` / `no quote` badges (WHI-796). The hide-low-liquidity filter still
-uses inventory `low_liquidity`.
+`low liq` / `no quote` badges (WHI-796). The hide-low-liquidity filter uses
+the overview `low_liquidity` flag (live TVL vs threshold when sampled;
+inventory bit as cold-start fallback — WHI-782).
 
 | # | id | Binance | BEP-20 | PCS pool | fee | Est liq USD | uiMultiplier | mid cross-check |
 |---|-----|---------|--------|----------|-----|-------------|--------------|-----------------|
