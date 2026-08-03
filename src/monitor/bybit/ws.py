@@ -126,6 +126,7 @@ class BybitWsCollector:
         self._disconnect_at_ms: int | None = None
         self._ever_connected = False
         self._book = self._new_tracker()
+        self._active_ws: Any = None
 
     def _new_tracker(self) -> DepthBookTracker:
         return DepthBookTracker(
@@ -136,6 +137,22 @@ class BybitWsCollector:
 
     def request_stop(self) -> None:
         self._stop.set()
+
+    def request_reconnect(self) -> None:
+        """Close the active WS so ``run()`` reconnects (WHI-825 watchdog)."""
+        ws = self._active_ws
+        if ws is None:
+            return
+        try:
+            loop = asyncio.get_running_loop()
+        except RuntimeError:
+            return
+
+        async def _close() -> None:
+            with contextlib.suppress(Exception):
+                await ws.close()
+
+        loop.create_task(_close())
 
     def _in_gap_window(self) -> bool:
         return now_ms() < self._gap_until_ms
@@ -189,6 +206,7 @@ class BybitWsCollector:
             connect = websockets.connect
 
         async with connect(self.ws_url) as ws:
+            self._active_ws = ws
             self._ever_connected = True
             # Fresh book after (re)connect — Bybit re-sends snapshots on subscribe.
             self._book = self._new_tracker()
@@ -214,6 +232,7 @@ class BybitWsCollector:
                         break
                     await self._handle_raw(raw)
             finally:
+                self._active_ws = None
                 ping_task.cancel()
                 with contextlib.suppress(asyncio.CancelledError):
                     await ping_task

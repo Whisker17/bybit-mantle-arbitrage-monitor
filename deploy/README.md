@@ -30,14 +30,17 @@ sudo -u xstocks -H bash -lc '
   uv sync --no-dev
 '
 
-# 3) systemd (API + default-market collector)
+# 3) systemd (API + per-market collectors — WHI-825)
+# Template unit Restart=always; enable every market you run so none sits
+# unsupervised (kill -9 / watchdog non-zero exit both revive the process).
 sudo cp /opt/xstocks/app/deploy/xstocks-api.service /etc/systemd/system/
 sudo cp /opt/xstocks/app/deploy/xstocks-collector@.service /etc/systemd/system/
 sudo systemctl daemon-reload
 sudo systemctl enable --now xstocks-collector@bybit-fluxion
+sudo systemctl enable --now xstocks-collector@binance-pancake
 sudo systemctl enable --now xstocks-api
-# Optional second market (after M7-3 collector lands):
-# sudo systemctl enable --now xstocks-collector@binance-pancake
+# Verify both are wanted + restarting:
+#   sudo systemctl --no-pager status 'xstocks-collector@*'
 
 # 4) nginx
 sudo cp /opt/xstocks/app/deploy/nginx-xstocks.conf /etc/nginx/sites-available/xstocks
@@ -105,9 +108,20 @@ done
 ```
 
 Local dogfood: restart each collector process after `git pull` / feature merge
-(`./scripts/dev-web.sh restart`, or kill + re-run
-`python -m monitor.collector --market …` for each market).
+(`./scripts/dev-web.sh restart` starts **both** markets by default — WHI-825;
+or kill + re-run `python -m monitor.collector --market …` per market).
 
+### Watchdog + downtime gaps (WHI-825)
+
+- In-process watchdog (`config/collector.yaml` `watchdog:`): if no **tick-table**
+  writes for `reconnect_idle_s` → force CEX WS reconnect; if still silent for
+  `exit_idle_s` → non-zero exit. Meta `collector_heartbeat_ms` still advances so
+  `/api/health` can show **feed quiet** (process alive) vs **feed down** (process
+  dead). Quiet closed-session bookTicker alone does **not** trip the watchdog.
+- On restart, `[last tick write, first new write]` is recorded as
+  `collector_gaps.source=collector_down` (skip &lt; `min_down_gap_ms`). EdgeStats
+  zero-weights that interval so cumulative P50/P95 are not polluted.
+- Panel: `feed_state` is `ok | feed_down | feed_quiet | gap` with `recovery_hint`.
 ## Redeploy (one command from a laptop)
 
 ```bash

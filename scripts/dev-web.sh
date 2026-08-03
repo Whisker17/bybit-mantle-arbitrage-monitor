@@ -3,36 +3,43 @@
 # read-only API + Web panel.
 #
 # Starts:
-#   - monitor.collector --market $DEV_MARKET  (default bybit-fluxion)
-#   - monitor.api --market $DEV_MARKET on http://127.0.0.1:8000
+#   - one monitor.collector per market in DEV_MARKETS (default: both markets)
+#   - monitor.api --market $DEV_API_MARKET on http://127.0.0.1:8000
 #   - Next.js dev  on http://localhost:3000  (NEXT_PUBLIC_API_BASE → API)
 #
-# The collector makes the panel *live*: it creates/updates the journal at
-# data/monitor-{market}.db. Skip it with --no-collector to browse a static
-# snapshot instead (then `pull` one from the VPS first).
+# Collectors make the panel *live*: each writes data/monitor-{market}.db.
+# Skip them with --no-collector to browse a static snapshot (then `pull` first).
+#
+# WHI-825: every market is supervised equally — per-market pid/log
+# (collector-{market}.pid/.log), auto-restart wrapper on non-zero exit, and
+# status red-flags any down market with a one-line restart command.
 #
 # Usage:
-#   ./scripts/dev-web.sh start                 # collector + API + Web (live)
+#   ./scripts/dev-web.sh start                 # collectors + API + Web (live)
 #   ./scripts/dev-web.sh start --no-collector  # API + Web over existing journal
 #   ./scripts/dev-web.sh start --pull          # implies --no-collector: snapshot
 #                                              # from VPS, then browse it
 #   ./scripts/dev-web.sh stop
 #   ./scripts/dev-web.sh restart [flags as start]
 #   ./scripts/dev-web.sh status
-#   ./scripts/dev-web.sh pull                  # only refresh the market journal
-#                                              # (refuses while collector runs)
-#   ./scripts/dev-web.sh logs [collector|api|web]  # tail (default: all)
+#   ./scripts/dev-web.sh pull                  # refresh default API market journal
+#                                              # (refuses while that collector runs)
+#   ./scripts/dev-web.sh logs [collector|api|web|market-id]  # tail (default: all)
 #   ./scripts/dev-web.sh clean                 # truncate .dev/*.log in place
 #                                              # (safe while running; run it
 #                                              # whenever `status` warns)
 #
 # Env (optional):
-#   DEV_MARKET=bybit-fluxion      # market id (M7-2); drives --market + journal path
+#   DEV_MARKETS=bybit-fluxion,binance-pancake
+#                                 # comma-separated; default BOTH markets (WHI-825)
+#   DEV_MARKET=bybit-fluxion      # legacy single-market alias; sets DEV_MARKETS
+#   DEV_API_MARKET=bybit-fluxion  # which market the API binds (default: first)
 #   DEV_API_HOST=127.0.0.1
 #   DEV_API_PORT=8000
 #   DEV_WEB_PORT=3000
 #   DEV_API_RELOAD=1              # set 0 to disable uvicorn --reload
 #   DEV_COLLECTOR=1               # set 0 for a permanent --no-collector
+#   DEV_COLLECTOR_RESTART=1       # auto-restart collectors on non-zero exit
 #   DEV_LOG_WARN_MB=200           # `status` warns above this per-log size
 #   DEV_VPS_HOST=whi715-vps       # ssh Host for pull
 #   DEV_REMOTE_DB=.../data/monitor-bybit-fluxion.db   # (legacy monitor.db ok)
@@ -59,21 +66,52 @@ DEV_DIR_REL="${DEV_DIR:-.dev}"
 DEV_DIR_ABS="$ROOT/$DEV_DIR_REL"
 PID_API="$DEV_DIR_ABS/api.pid"
 PID_WEB="$DEV_DIR_ABS/web.pid"
-PID_COL="$DEV_DIR_ABS/collector.pid"
 LOG_API="$DEV_DIR_ABS/api.log"
 LOG_WEB="$DEV_DIR_ABS/web.log"
-LOG_COL="$DEV_DIR_ABS/collector.log"
 
-MARKET="${DEV_MARKET:-bybit-fluxion}"
+# WHI-825: multi-market supervision. DEV_MARKETS wins; DEV_MARKET is a
+# single-market alias. Default is both configured markets (no single-market
+# privilege). Per-market pid/log: collector-{market}.pid / .log
+# (legacy .dev/collector.pid and collector-binance.log are no longer used).
+if [[ -n "${DEV_MARKETS:-}" ]]; then
+  IFS=',' read -r -a MARKETS <<< "${DEV_MARKETS}"
+elif [[ -n "${DEV_MARKET:-}" ]]; then
+  MARKETS=("${DEV_MARKET}")
+else
+  MARKETS=(bybit-fluxion binance-pancake)
+fi
+# Trim whitespace around market ids
+_MARKETS_TRIM=()
+for _m in "${MARKETS[@]}"; do
+  _m="$(echo "$_m" | tr -d '[:space:]')"
+  [[ -n "$_m" ]] && _MARKETS_TRIM+=("$_m")
+done
+MARKETS=("${_MARKETS_TRIM[@]}")
+if [[ ${#MARKETS[@]} -lt 1 ]]; then
+  echo "dev-web: DEV_MARKETS/DEV_MARKET resolved to empty list" >&2
+  exit 1
+fi
+
+API_MARKET="${DEV_API_MARKET:-${MARKETS[0]}}"
+MARKET="$API_MARKET"  # backward-compat alias used by pull/sqlite defaults
 API_HOST="${DEV_API_HOST:-127.0.0.1}"
 API_PORT="${DEV_API_PORT:-8000}"
 WEB_PORT="${DEV_WEB_PORT:-3000}"
 API_RELOAD="${DEV_API_RELOAD:-1}"
 COLLECTOR="${DEV_COLLECTOR:-1}"
+COLLECTOR_RESTART="${DEV_COLLECTOR_RESTART:-1}"
 LOG_WARN_MB="${DEV_LOG_WARN_MB:-200}"
 VPS_HOST="${DEV_VPS_HOST:-whi715-vps}"
 REMOTE_DB="${DEV_REMOTE_DB:-/root/dev/bybit-mantle-arbitrage-monitor/data/monitor-${MARKET}.db}"
 SQLITE_PATH="${DEV_SQLITE_PATH:-data/monitor-${MARKET}.db}"
+
+pid_col() { echo "$DEV_DIR_ABS/collector-$1.pid"; }
+log_col() { echo "$DEV_DIR_ABS/collector-$1.log"; }
+sqlite_for() { echo "data/monitor-$1.db"; }
+
+pid_col() { echo "$DEV_DIR_ABS/collector-$1.pid"; }
+log_col() { echo "$DEV_DIR_ABS/collector-$1.log"; }
+sqlite_for() { echo "data/monitor-$1.db"; }
 
 API_BASE="http://${API_HOST}:${API_PORT}"
 WEB_URL="http://localhost:${WEB_PORT}"
@@ -188,9 +226,9 @@ cmd_pull() {
   ensure_dev_dir
   # A pull clobbers the local journal; never do that under a live writer.
   local cpid
-  cpid="$(read_pid "$PID_COL" || true)"
+  cpid="$(read_pid "$(pid_col "$MARKET")" || true)"
   if pid_alive "$cpid"; then
-    die "local collector is running (pid $cpid) and owns ${SQLITE_PATH}; stop first"
+    die "local collector for ${MARKET} is running (pid $cpid) and owns ${SQLITE_PATH}; stop first"
   fi
   info "snapshotting journal on ${VPS_HOST}:${REMOTE_DB}"
   # shellcheck disable=SC2029
@@ -254,7 +292,7 @@ wait_journal() {
     [[ -f "$SQLITE_PATH" ]] && return 0
     sleep 0.5
   done
-  die "collector did not create ${SQLITE_PATH} within $((tries / 2))s. See ${DEV_DIR_REL}/collector.log"
+  die "collector did not create ${SQLITE_PATH} within $((tries / 2))s. See ${DEV_DIR_REL}/collector-*.log"
 }
 
 ensure_web_deps() {
@@ -276,6 +314,54 @@ wait_http() {
     sleep 0.25
   done
   die "${label} did not become ready (${url}). See logs under ${DEV_DIR_REL}/"
+}
+
+
+# Start one market collector under a restart wrapper (WHI-825).
+# Background job + disown so it survives the controlling shell (macOS has no
+# setsid). Non-zero exit (watchdog) restarts when DEV_COLLECTOR_RESTART=1.
+start_one_collector() {
+  local market="$1"
+  local sqlite log pidfile
+  sqlite="$(sqlite_for "$market")"
+  log="$(log_col "$market")"
+  pidfile="$(pid_col "$market")"
+  info "starting collector market=${market} (journal ${sqlite})"
+  : >"$log"
+  (
+    cd "$ROOT"
+    while true; do
+      uv run python -u -m monitor.collector --market "$market" --sqlite "$sqlite" \
+        >>"$log" 2>&1
+      code=$?
+      if [[ "${COLLECTOR_RESTART}" != "1" ]]; then
+        exit "$code"
+      fi
+      # Clean stop (SIGTERM → exit 0) ends the wrapper; non-zero → restart.
+      if [[ "$code" -eq 0 ]]; then
+        exit 0
+      fi
+      echo "dev-web: collector[${market}] exited code=${code}; restarting in 3s" >>"$log"
+      sleep 3
+    done
+  ) &
+  echo $! >"$pidfile"
+  disown $! 2>/dev/null || true
+}
+
+start_all_collectors() {
+  local m cpid log
+  for m in "${MARKETS[@]}"; do
+    start_one_collector "$m"
+  done
+  # Wait for the API market journal (API attaches a reader on that path).
+  SQLITE_PATH="$(sqlite_for "$API_MARKET")"
+  wait_journal
+  for m in "${MARKETS[@]}"; do
+    cpid="$(read_pid "$(pid_col "$m")")"
+    log="$(log_col "$m")"
+    pid_alive "$cpid" || die "collector[${m}] exited at startup. See ${log}"
+  done
 }
 
 cmd_start() {
@@ -307,21 +393,35 @@ cmd_start() {
   ensure_web_deps
 
   # Already running (everything we were asked for)?
-  local apid wpid cpid
+  local apid wpid cpid m all_cols=1
   apid="$(read_pid "$PID_API" || true)"
   wpid="$(read_pid "$PID_WEB" || true)"
-  cpid="$(read_pid "$PID_COL" || true)"
+  if [[ "$collector" -eq 1 ]]; then
+    for m in "${MARKETS[@]}"; do
+      cpid="$(read_pid "$(pid_col "$m")" || true)"
+      pid_alive "$cpid" || all_cols=0
+    done
+  fi
   if pid_alive "$apid" && pid_alive "$wpid" && port_listening "$API_PORT" && port_listening "$WEB_PORT" \
-    && { [[ "$collector" -eq 0 ]] || pid_alive "$cpid"; }; then
+    && { [[ "$collector" -eq 0 ]] || [[ "$all_cols" -eq 1 ]]; }; then
     info "already running"
     info "  Web  ${WEB_URL}"
-    info "  API  ${API_BASE}  (docs ${API_BASE}/docs)"
-    [[ "$collector" -eq 1 ]] && info "  collector  pid $cpid"
+    info "  API  ${API_BASE}  (docs ${API_BASE}/docs)  market=${API_MARKET}"
+    if [[ "$collector" -eq 1 ]]; then
+      for m in "${MARKETS[@]}"; do
+        cpid="$(read_pid "$(pid_col "$m")" || true)"
+        info "  collector[${m}]  pid $cpid"
+      done
+    fi
     exit 0
   fi
 
-  # Clean partial state
-  stop_pidfile "collector" "$PID_COL"
+  # Clean partial state (every market collector + api + web)
+  for m in "${MARKETS[@]}"; do
+    stop_pidfile "collector[$m]" "$(pid_col "$m")"
+  done
+  # Legacy single-market pid from pre-WHI-825 runs
+  stop_pidfile "collector[legacy]" "$DEV_DIR_ABS/collector.pid"
   stop_pidfile "api" "$PID_API"
   stop_pidfile "web" "$PID_WEB"
   free_port_if_ours "$API_PORT" "monitor.api"
@@ -333,28 +433,17 @@ cmd_start() {
   fi
 
   if [[ "$collector" -eq 1 ]]; then
-    info "starting collector market=${MARKET} (journal ${SQLITE_PATH})"
-    : >"$LOG_COL"
-    (
-      cd "$ROOT"
-      exec uv run python -u -m monitor.collector --market "$MARKET" --sqlite "$SQLITE_PATH"
-    ) >>"$LOG_COL" 2>&1 &
-    echo $! >"$PID_COL"
-    wait_journal
-    # A crash inside the first seconds (bad .env, port of WS blocked…) should
-    # fail loudly here, not as a dead panel later.
-    cpid="$(read_pid "$PID_COL")"
-    pid_alive "$cpid" || die "collector exited at startup. See ${DEV_DIR_REL}/collector.log"
+    start_all_collectors
   else
     info "collector disabled (--no-collector); panel reads a static journal"
   fi
 
-  info "starting API on ${API_BASE} (market=${MARKET})"
+  info "starting API on ${API_BASE} (market=${API_MARKET})"
   : >"$LOG_API"
   (
     cd "$ROOT"
     # shellcheck disable=SC2086
-    exec uv run python -m monitor.api --market "$MARKET" --host "$API_HOST" --port "$API_PORT" "${reload_flag[@]}"
+    exec uv run python -m monitor.api --market "$API_MARKET" --host "$API_HOST" --port "$API_PORT" "${reload_flag[@]}"
   ) >>"$LOG_API" 2>&1 &
   echo $! >"$PID_API"
 
@@ -375,9 +464,11 @@ cmd_start() {
 
   info "ready"
   info "  Web  ${WEB_URL}"
-  info "  API  ${API_BASE}  (docs ${API_BASE}/docs)"
+  info "  API  ${API_BASE}  (docs ${API_BASE}/docs)  market=${API_MARKET}"
   if [[ "$collector" -eq 1 ]]; then
-    info "  journal  ${SQLITE_PATH} (live — local collector writing)"
+    for m in "${MARKETS[@]}"; do
+      info "  journal[${m}]  $(sqlite_for "$m") (live)"
+    done
   else
     info "  journal  ${SQLITE_PATH} (static snapshot; panel will show stale)"
   fi
@@ -405,8 +496,12 @@ soft_free_port() {
 
 cmd_stop() {
   ensure_dev_dir
-  # Collector first: SIGTERM lets its daemon flush + close SQLite cleanly.
-  stop_pidfile "collector" "$PID_COL"
+  # Collectors first: SIGTERM lets each daemon flush + close SQLite cleanly.
+  local m
+  for m in "${MARKETS[@]}"; do
+    stop_pidfile "collector[$m]" "$(pid_col "$m")"
+  done
+  stop_pidfile "collector[legacy]" "$DEV_DIR_ABS/collector.pid"
   stop_pidfile "api" "$PID_API"
   stop_pidfile "web" "$PID_WEB"
   soft_free_port "$API_PORT" "monitor.api"
@@ -421,8 +516,12 @@ log_size_mb() {
 }
 
 warn_big_logs() {
-  local f mb
-  for f in "$LOG_COL" "$LOG_API" "$LOG_WEB"; do
+  local f mb m
+  local files=("$LOG_API" "$LOG_WEB")
+  for m in "${MARKETS[@]}"; do
+    files+=("$(log_col "$m")")
+  done
+  for f in "${files[@]}"; do
     [[ -f "$f" ]] || continue
     mb="$(log_size_mb "$f")"
     if (( mb >= LOG_WARN_MB )); then
@@ -433,16 +532,32 @@ warn_big_logs() {
 
 cmd_status() {
   ensure_dev_dir
-  local apid wpid cpid
+  local apid wpid cpid m any_down=0 db
+  local RED=$'\033[31m' GRN=$'\033[32m' RST=$'\033[0m'
   apid="$(read_pid "$PID_API" || true)"
   wpid="$(read_pid "$PID_WEB" || true)"
-  cpid="$(read_pid "$PID_COL" || true)"
 
-  if pid_alive "$cpid"; then
-    info "collector  running  pid=$cpid  → ${SQLITE_PATH}"
-  else
-    info "collector  stopped  (pidfile=${cpid:-none}; panel is static without it)"
+  info "markets  ${MARKETS[*]}  (api_market=${API_MARKET})"
+  for m in "${MARKETS[@]}"; do
+    cpid="$(read_pid "$(pid_col "$m")" || true)"
+    db="$(sqlite_for "$m")"
+    if pid_alive "$cpid"; then
+      info "collector[${m}]  ${GRN}RUNNING${RST}  pid=$cpid  → ${db}"
+    else
+      any_down=1
+      info "collector[${m}]  ${RED}STOPPED${RST}  (pidfile=${cpid:-none})"
+      info "  → restart: $0 start   # or: nohup uv run python -u -m monitor.collector --market ${m} >> $(log_col "$m") 2>&1 &"
+    fi
+    if [[ -f "$db" ]]; then
+      info "  journal[${m}]  $(ls -lh "$db" | awk '{print $5, $9}')"
+    else
+      info "  journal[${m}]  missing (${db})"
+    fi
+  done
+  if [[ "$any_down" -eq 1 ]]; then
+    info "${RED}⚠ one or more collectors are down — panel may show feed down / frozen numbers${RST}"
   fi
+
   if pid_alive "$apid"; then
     info "api  running  pid=$apid  ${API_BASE}"
   else
@@ -462,11 +577,6 @@ cmd_status() {
     else
       info "port :${API_PORT} listening but /api/health failed"
     fi
-  fi
-  if [[ -f "$SQLITE_PATH" ]]; then
-    info "journal  $(ls -lh "$SQLITE_PATH" | awk '{print $5, $9}')"
-  else
-    info "journal  missing (${SQLITE_PATH})"
   fi
   warn_big_logs
 }
@@ -494,11 +604,15 @@ cmd_clean() {
 
 cmd_logs() {
   ensure_dev_dir
-  local which="${1:-all}"
+  local which="${1:-all}" m
   case "$which" in
     collector)
-      [[ -f "$LOG_COL" ]] || die "no collector log yet"
-      exec tail -n 80 -f "$LOG_COL"
+      local files=()
+      for m in "${MARKETS[@]}"; do
+        [[ -f "$(log_col "$m")" ]] && files+=("$(log_col "$m")")
+      done
+      [[ ${#files[@]} -gt 0 ]] || die "no collector logs yet"
+      exec tail -n 80 -f "${files[@]}"
       ;;
     api)
       [[ -f "$LOG_API" ]] || die "no api log yet"
@@ -510,14 +624,19 @@ cmd_logs() {
       ;;
     all|both|"")
       local files=()
-      [[ -f "$LOG_COL" ]] && files+=("$LOG_COL")
+      for m in "${MARKETS[@]}"; do
+        [[ -f "$(log_col "$m")" ]] && files+=("$(log_col "$m")")
+      done
       [[ -f "$LOG_API" ]] && files+=("$LOG_API")
       [[ -f "$LOG_WEB" ]] && files+=("$LOG_WEB")
       [[ ${#files[@]} -gt 0 ]] || die "no logs yet (start first)"
       exec tail -n 40 -f "${files[@]}"
       ;;
     *)
-      die "logs target must be collector|api|web (got: $which)"
+      if [[ -f "$(log_col "$which")" ]]; then
+        exec tail -n 80 -f "$(log_col "$which")"
+      fi
+      die "logs target must be collector|api|web|<market-id> (got: $which)"
       ;;
   esac
 }

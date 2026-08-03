@@ -25,7 +25,9 @@ Environment=PATH=/opt/xstocks/app/.venv/bin:/usr/local/bin:/usr/bin
 Environment=PYTHONUNBUFFERED=1
 # Optional keyed Mantle / BSC RPC in /opt/xstocks/app/.env (loaded by the process).
 ExecStart=/opt/xstocks/app/.venv/bin/python -m monitor.collector --market %i
-Restart=on-failure
+# WHI-825: always restart (kill -9, OOM, watchdog non-zero exit, clean stop
+# from an operator still leaves the unit wanted — use stop/disable to halt).
+Restart=always
 RestartSec=3
 # Collector holds WS + RPC; leave headroom on the 1GB box for API + nginx.
 MemoryMax=400M

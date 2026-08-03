@@ -264,6 +264,37 @@ class LoggingConfig(BaseModel):
     level: Literal["DEBUG", "INFO", "WARNING", "ERROR"] = "INFO"
 
 
+class WatchdogConfig(BaseModel):
+    """Process-level write-activity watchdog (WHI-825).
+
+    Not per-symbol quote age — quiet closed-session bookTicker is normal.
+    Silence across *all* journal writes (ticks + heartbeat) triggers action.
+    """
+
+    model_config = ConfigDict(extra="forbid", frozen=True)
+
+    enabled: bool = True
+    # Force CEX WS reconnect after this many seconds without any journal write.
+    reconnect_idle_s: float = Field(default=90.0, gt=0)
+    # Exit non-zero after this many seconds still without writes (supervisor restarts).
+    exit_idle_s: float = Field(default=180.0, gt=0)
+    # Do not arm until the process has been up this long (cold start / RPC warmup).
+    startup_grace_s: float = Field(default=60.0, ge=0)
+    # How often the watchdog loop evaluates + writes collector_heartbeat_ms.
+    check_interval_s: float = Field(default=10.0, gt=0)
+    # Minimum downtime to record as collector_down on restart (skip bounce noise).
+    min_down_gap_ms: int = Field(default=30_000, ge=0)
+
+    @model_validator(mode="after")
+    def _exit_ge_reconnect(self) -> WatchdogConfig:
+        if self.exit_idle_s < self.reconnect_idle_s:
+            raise ValueError(
+                f"watchdog.exit_idle_s={self.exit_idle_s} must be >= "
+                f"reconnect_idle_s={self.reconnect_idle_s}"
+            )
+        return self
+
+
 class DiskGuardConfig(BaseModel):
     """Free-disk waterline for accelerated prune / write pause (WHI-751)."""
 
@@ -378,6 +409,8 @@ class CollectorConfig(BaseModel):
     attribution_refresh_interval_s: float = Field(default=3600.0, ge=0)
     # WHI-778: underlying equity poller (shared tickers; config/underlying.yaml).
     underlying_enabled: bool = True
+    # WHI-825: process write-activity watchdog (shared; not per-venue).
+    watchdog: WatchdogConfig = Field(default_factory=WatchdogConfig)
 
     @model_validator(mode="after")
     def _venue_shape(self) -> CollectorConfig:
@@ -521,6 +554,11 @@ def _merge_market_section(
     # Shared process-level knobs (not venue-specific).
     if "attribution_refresh_interval_s" in data:
         flat["attribution_refresh_interval_s"] = data["attribution_refresh_interval_s"]
+    # WHI-825: watchdog (shared; per-market override rare but allowed).
+    if "watchdog" in section:
+        flat["watchdog"] = section["watchdog"]
+    elif "watchdog" in data:
+        flat["watchdog"] = data["watchdog"]
     # WHI-778: enable/disable underlying poller (feed map lives in underlying.yaml).
     # Per-market section overrides the shared root block when both set ``enabled``.
     for block in (data.get("underlying"), section.get("underlying")):

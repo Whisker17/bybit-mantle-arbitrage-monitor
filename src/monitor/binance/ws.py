@@ -117,6 +117,7 @@ class BinanceWsCollector:
         self._book = self._new_tracker()
         # Symbols that have already emitted at least one L1 (bookTicker or depth seed).
         self._seeded_l1: set[str] = set()
+        self._active_ws: Any = None
 
     def _new_tracker(self) -> BinanceDepthTracker:
         return BinanceDepthTracker(
@@ -127,6 +128,22 @@ class BinanceWsCollector:
 
     def request_stop(self) -> None:
         self._stop.set()
+
+    def request_reconnect(self) -> None:
+        """Close the active WS so ``run()`` reconnects (WHI-825 watchdog)."""
+        ws = self._active_ws
+        if ws is None:
+            return
+        try:
+            loop = asyncio.get_running_loop()
+        except RuntimeError:
+            return
+
+        async def _close() -> None:
+            with contextlib.suppress(Exception):
+                await ws.close()
+
+        loop.create_task(_close())
 
     def _in_gap_window(self) -> bool:
         return now_ms() < self._gap_until_ms
@@ -189,6 +206,7 @@ class BinanceWsCollector:
 
         url = self.stream_url()
         async with connect(url) as ws:
+            self._active_ws = ws
             self._ever_connected = True
             self._book = self._new_tracker()
             self._seeded_l1 = set()
@@ -206,6 +224,7 @@ class BinanceWsCollector:
                         break
                     await self._handle_raw(raw)
             finally:
+                self._active_ws = None
                 ping_task.cancel()
                 with contextlib.suppress(asyncio.CancelledError):
                     await ping_task

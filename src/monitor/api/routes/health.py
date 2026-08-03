@@ -29,6 +29,7 @@ def health_dict_for_runtime(
                 db_path=str(runtime.db_path),
                 poll_interval_s=poll_interval_s,
                 error=f"collector journal not found: {runtime.db_path}",
+                market_id=runtime.market_id,
             )
         )
     with runtime.lock:
@@ -37,6 +38,7 @@ def health_dict_for_runtime(
             stale_ms=stale_ms,
             gap_window_ms=gap_window_ms,
             poll_interval_s=poll_interval_s,
+            market_id=runtime.market_id,
         )
     return to_json_dict(status)
 

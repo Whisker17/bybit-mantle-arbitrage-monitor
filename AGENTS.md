@@ -219,6 +219,14 @@ placeholders. Agents must not assume a module exists until its issue lands. -->
     Positive PnL highlighted, negative softened (`text-negative/60`); footer
     notes desc = least loss when all negative. TUI frozen (SortKey extended;
     builder leaves flat fields None).
+  - **Collector supervision + watchdog + downtime gaps (WHI-825) landed:**
+    multi-market `dev-web.sh` (per-market pid/log, restart wrapper, status
+    red-flag); systemd template `Restart=always` + both markets enable docs;
+    process-level write-activity watchdog (`config/collector.yaml` `watchdog:`)
+    → WS reconnect then non-zero exit; restart records
+    `collector_gaps.source=collector_down`; EdgeStats zero-weights that
+    interval; `/api/health` + panel `feed_state` =
+    `ok|feed_down|feed_quiet|gap` with `recovery_hint`.
 
 ## Build, test, run
 

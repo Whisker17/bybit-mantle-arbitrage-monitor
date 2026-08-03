@@ -3,8 +3,10 @@
 from __future__ import annotations
 
 from dataclasses import dataclass, field
-from typing import Any
+from typing import Any, Literal
 
+from monitor.collector.gaps import SOURCE_COLLECTOR_DOWN
+from monitor.collector.watchdog import META_HEARTBEAT
 from monitor.quotes import CollectorGap, now_ms
 from monitor.storage import JournalReader
 from monitor.underlying.coverage_probe import (
@@ -16,6 +18,12 @@ from monitor.underlying.coverage_probe import (
     mismatches_from_meta_json,
     unpublished_from_meta_json,
 )
+
+# WHI-825 three-state feed vocabulary (banner + status bar).
+FeedState = Literal["ok", "feed_down", "feed_quiet", "gap"]
+
+# Default: data older than this while the process is still heartbeating → quiet.
+DEFAULT_DATA_QUIET_MS = 60_000
 
 
 @dataclass(frozen=True, slots=True)
@@ -44,6 +52,14 @@ class HealthStatus:
     uncovered_coverage_probe_errors: list[dict[str, Any]] = field(default_factory=list)
     # WHI-794: Hermes feed_id pinned but latest never published (price/time 0).
     unpublished_pyth_feeds: list[dict[str, Any]] = field(default_factory=list)
+    # WHI-825: ok | feed_down | feed_quiet | gap
+    feed_state: FeedState = "feed_down"
+    # Actionable operator hint (which market, how long, how to recover).
+    recovery_hint: str | None = None
+    # Heartbeat age (process liveness); may differ from data age when quiet.
+    heartbeat_age_ms: int | None = None
+    # True when a recent gap has source=collector_down.
+    collector_down_gap_recent: bool = False
 
     @classmethod
     def unavailable(
@@ -53,9 +69,11 @@ class HealthStatus:
         now: int | None = None,
         poll_interval_s: float | None = None,
         error: str,
+        market_id: str | None = None,
     ) -> HealthStatus:
         """Health when the journal file is missing or unreadable."""
         ts = now if now is not None else now_ms()
+        hint = _recovery_hint_missing_db(db_path=db_path, market_id=market_id)
         return cls(
             ok=False,
             generated_ts_ms=ts,
@@ -76,6 +94,10 @@ class HealthStatus:
             uncovered_coverage_probe_ms=None,
             uncovered_coverage_probe_errors=[],
             unpublished_pyth_feeds=[],
+            feed_state="feed_down",
+            recovery_hint=hint,
+            heartbeat_age_ms=None,
+            collector_down_gap_recent=False,
         )
 
 
@@ -99,6 +121,91 @@ def _meta_float(reader: JournalReader, key: str) -> float | None:
         return None
 
 
+def classify_feed_state(
+    *,
+    collector_alive: bool,
+    data_age_ms: int | None,
+    quiet_ms: int,
+    gap_recent: bool,
+    collector_down_gap_recent: bool,
+) -> FeedState:
+    """Three-state (+ ok) feed vocabulary for the panel banner (WHI-825).
+
+    Priority: feed_down > gap > feed_quiet > ok.
+    """
+    if not collector_alive:
+        return "feed_down"
+    if collector_down_gap_recent or gap_recent:
+        # Known hole while process is back — surface as gap, not green ok.
+        if collector_down_gap_recent:
+            return "gap"
+        # Other gap sources (WS reconnect, block lag) still flag gap_recent
+        # without forcing the banner when data is fresh; only collector_down
+        # elevates feed_state to gap. Non-down gaps keep ok/quiet.
+    if data_age_ms is not None and data_age_ms > quiet_ms:
+        return "feed_quiet"
+    return "ok"
+
+
+def _recovery_hint_missing_db(*, db_path: str, market_id: str | None) -> str:
+    mid = market_id or "bybit-fluxion"
+    return (
+        f"journal missing at {db_path}. "
+        f"Start collector: ./scripts/dev-web.sh start "
+        f"(or python -m monitor.collector --market {mid}); "
+        f"VPS: sudo systemctl start xstocks-collector@{mid}"
+    )
+
+
+def recovery_hint_for_state(
+    *,
+    feed_state: FeedState,
+    market_id: str | None,
+    age_ms: int | None,
+    collector_down_gap_recent: bool,
+    recent_gaps: list[CollectorGap],
+) -> str | None:
+    """Actionable one-liner for operators (local + VPS)."""
+    mid = market_id or "bybit-fluxion"
+    age = ""
+    if age_ms is not None:
+        if age_ms >= 3_600_000:
+            age = f" age={age_ms / 3_600_000:.1f}h"
+        elif age_ms >= 60_000:
+            age = f" age={age_ms / 60_000:.1f}min"
+        else:
+            age = f" age={age_ms / 1000:.1f}s"
+
+    if feed_state == "feed_down":
+        return (
+            f"market={mid} feed down{age}. "
+            f"Check: ./scripts/dev-web.sh status  |  "
+            f"sudo systemctl status xstocks-collector@{mid}. "
+            f"Restart: ./scripts/dev-web.sh start  |  "
+            f"sudo systemctl restart xstocks-collector@{mid}"
+        )
+    if feed_state == "gap" or collector_down_gap_recent:
+        down = next(
+            (g for g in recent_gaps if g.source == SOURCE_COLLECTOR_DOWN),
+            None,
+        )
+        span = ""
+        if down is not None:
+            span_ms = max(0, down.gap_end_ms - down.gap_start_ms)
+            span = f" hole≈{span_ms / 60_000:.1f}min"
+        return (
+            f"market={mid} known collector downtime recorded{span}. "
+            "Cumulative stats exclude this interval; data in the hole is lost."
+        )
+    if feed_state == "feed_quiet":
+        return (
+            f"market={mid} collector alive but tick feeds quiet{age}. "
+            "Closed-session silence can be normal (WHI-821); "
+            "watchdog exits only after process-level write silence."
+        )
+    return None
+
+
 def build_health(
     reader: JournalReader,
     *,
@@ -106,11 +213,15 @@ def build_health(
     stale_ms: int,
     gap_window_ms: int,
     poll_interval_s: float | None = None,
+    quiet_ms: int = DEFAULT_DATA_QUIET_MS,
+    market_id: str | None = None,
 ) -> HealthStatus:
     """Derive health from meta keys + freshest journal recv timestamps.
 
-    ``collector_alive`` is true when the freshest recv is within ``stale_ms`` and
-    the process has not written ``collector_stopped_ms`` after the last start.
+    ``collector_alive`` prefers ``collector_heartbeat_ms`` (process liveness
+    independent of quiet bookTicker) and falls back to freshest tick recv for
+    journals written before WHI-825. ``feed_state`` distinguishes feed_down /
+    feed_quiet / gap / ok (WHI-825).
     """
     ts = now if now is not None else now_ms()
 
@@ -119,8 +230,14 @@ def build_health(
     last_block = _meta_int(reader, "last_block")
     latency = _meta_float(reader, "last_block_ingest_latency_ms")
     freshest = reader.freshest_recv_ts_ms()
-    age = None if freshest is None else max(0, ts - freshest)
-    alive = freshest is not None and age is not None and age <= stale_ms
+    heartbeat = _meta_int(reader, META_HEARTBEAT)
+
+    data_age = None if freshest is None else max(0, ts - freshest)
+    heartbeat_age = None if heartbeat is None else max(0, ts - heartbeat)
+
+    # Process liveness: heartbeat first, else tick freshest (legacy journals).
+    liveness_age = heartbeat_age if heartbeat is not None else data_age
+    alive = liveness_age is not None and liveness_age <= stale_ms
     # If collector wrote a stop timestamp after start, treat as down even if
     # residual rows still look fresh (edge case on clean shutdown).
     if started is not None and stopped is not None and stopped >= started:
@@ -128,15 +245,32 @@ def build_health(
 
     since = ts - gap_window_ms
     gaps = reader.recent_gaps(since_ms=since, limit=20)
+    down_recent = any(g.source == SOURCE_COLLECTOR_DOWN for g in gaps)
+    feed_state = classify_feed_state(
+        collector_alive=alive,
+        data_age_ms=data_age,
+        quiet_ms=quiet_ms,
+        gap_recent=bool(gaps),
+        collector_down_gap_recent=down_recent,
+    )
+    hint = recovery_hint_for_state(
+        feed_state=feed_state,
+        market_id=market_id,
+        age_ms=liveness_age if not alive else data_age,
+        collector_down_gap_recent=down_recent,
+        recent_gaps=gaps,
+    )
+
     mismatches = mismatches_from_meta_json(reader.get_meta(META_MISMATCHES))
     probe_ms = _meta_int(reader, META_PROBE_MS)
     probe_errors = errors_from_meta_json(reader.get_meta(META_PROBE_ERRORS))
     unpublished = unpublished_from_meta_json(reader.get_meta(META_UNPUBLISHED))
-    # ``ok`` is the UI banner aggregate (alive today). Wider criteria (e.g.
-    # !gap_recent) can fold in later without renaming the wire field.
-    # Uncovered / unpublished advisories do not flip ok.
+    # ``ok`` is the UI banner aggregate: process alive and not in a hard-down
+    # state. feed_quiet / advisory gap keep ok=True so the panel stays usable;
+    # feed_down and missing journal flip ok=False.
+    ok = alive and feed_state != "feed_down"
     return HealthStatus(
-        ok=alive,
+        ok=ok,
         generated_ts_ms=ts,
         db_path=str(reader.path),
         db_exists=True,
@@ -145,7 +279,7 @@ def build_health(
         last_block=last_block,
         last_block_ingest_latency_ms=latency,
         freshest_recv_ts_ms=freshest,
-        age_ms=age,
+        age_ms=data_age,
         collector_alive=alive,
         gap_recent=bool(gaps),
         recent_gaps=gaps,
@@ -154,4 +288,8 @@ def build_health(
         uncovered_coverage_probe_ms=probe_ms,
         uncovered_coverage_probe_errors=probe_errors,
         unpublished_pyth_feeds=unpublished,
+        feed_state=feed_state,
+        recovery_hint=hint,
+        heartbeat_age_ms=heartbeat_age,
+        collector_down_gap_recent=down_recent,
     )

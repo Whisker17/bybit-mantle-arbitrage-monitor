@@ -15,6 +15,7 @@ from dataclasses import dataclass, field
 from decimal import Decimal
 from typing import TYPE_CHECKING
 
+from monitor.collector.gaps import inter_sample_weight_ms
 from monitor.metrics.config import MetricsConfig
 from monitor.metrics.edge import EdgeResult
 from monitor.metrics.session import SessionKind
@@ -119,19 +120,28 @@ class EdgeStats:
     """Running cumulative stats for one series, optionally split by session.
 
     Construct via ``EdgeStats.from_config(cfg)`` so gap/size come from YAML.
+    Optional ``exclude_intervals`` (WHI-825 ``collector_down`` windows) zero
+    the inter-sample weight when a sample pair straddles known downtime.
     """
 
     max_gap_ms: int
     breach_size_usd: Decimal
+    exclude_intervals: tuple[tuple[int, int], ...] = ()
     _all: _SeriesState = field(default_factory=_SeriesState)
     _open: _SeriesState = field(default_factory=_SeriesState)
     _closed: _SeriesState = field(default_factory=_SeriesState)
 
     @classmethod
-    def from_config(cls, config: MetricsConfig) -> EdgeStats:
+    def from_config(
+        cls,
+        config: MetricsConfig,
+        *,
+        exclude_intervals: tuple[tuple[int, int], ...] = (),
+    ) -> EdgeStats:
         return cls(
             max_gap_ms=config.max_breach_gap_ms,
             breach_size_usd=config.breach_size_usd,
+            exclude_intervals=exclude_intervals,
         )
 
     def observe(
@@ -186,15 +196,20 @@ class EdgeStats:
                 # Do not rewind last_ts_ms.
                 return
             raw = ts_ms - state.last_ts_ms
-            # Cap: overnight / reconnect must not inflate duration or weights.
-            gap_capped = raw > self.max_gap_ms
-            gap_ms = raw if 0 < raw <= self.max_gap_ms else 0
+            # Cap + known downtime (WHI-825 collector_down): zero weight.
+            gap_ms = inter_sample_weight_ms(
+                state.last_ts_ms,
+                ts_ms,
+                max_gap_ms=self.max_gap_ms,
+                exclude_intervals=self.exclude_intervals,
+            )
+            gap_capped = gap_ms == 0 and raw > 0
             if state.last_breaching and gap_ms > 0:
                 state.total_duration_ms += gap_ms
             if state.samples:
                 prev_val, _ = state.samples[-1]
                 state.samples[-1] = (prev_val, Decimal(gap_ms))
-            # A capped gap ends the prior breach episode (overnight / restart).
+            # A capped / excluded gap ends the prior breach episode.
             if gap_capped:
                 state.last_breaching = False
 
@@ -263,17 +278,26 @@ class OptimalPnlStats:
 
     Same time-weight / gap-cap rules as ``EdgeStats`` (DESIGN §2.4). One instance
     is one series (pair × direction). Unfillable / missing optimal samples are
-    skipped (not recorded as zero).
+    skipped (not recorded as zero). Optional ``exclude_intervals`` (WHI-825).
     """
 
     max_gap_ms: int
+    exclude_intervals: tuple[tuple[int, int], ...] = ()
     _all: _SeriesState = field(default_factory=_SeriesState)
     _open: _SeriesState = field(default_factory=_SeriesState)
     _closed: _SeriesState = field(default_factory=_SeriesState)
 
     @classmethod
-    def from_config(cls, config: MetricsConfig) -> OptimalPnlStats:
-        return cls(max_gap_ms=config.max_breach_gap_ms)
+    def from_config(
+        cls,
+        config: MetricsConfig,
+        *,
+        exclude_intervals: tuple[tuple[int, int], ...] = (),
+    ) -> OptimalPnlStats:
+        return cls(
+            max_gap_ms=config.max_breach_gap_ms,
+            exclude_intervals=exclude_intervals,
+        )
 
     def observe(
         self,
@@ -311,8 +335,12 @@ class OptimalPnlStats:
             if ts_ms < state.last_ts_ms:
                 state.samples.append((value, Decimal(0)))
                 return
-            raw = ts_ms - state.last_ts_ms
-            gap_ms = raw if 0 < raw <= self.max_gap_ms else 0
+            gap_ms = inter_sample_weight_ms(
+                state.last_ts_ms,
+                ts_ms,
+                max_gap_ms=self.max_gap_ms,
+                exclude_intervals=self.exclude_intervals,
+            )
             if state.samples:
                 prev_val, _ = state.samples[-1]
                 state.samples[-1] = (prev_val, Decimal(gap_ms))

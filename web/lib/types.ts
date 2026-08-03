@@ -517,6 +517,9 @@ export type CollectorGap = {
   [key: string]: unknown;
 };
 
+/** WHI-825 three-state feed vocabulary (+ ok). */
+export type FeedState = "ok" | "feed_down" | "feed_quiet" | "gap";
+
 export type HealthResponse = {
   ok: boolean;
   generated_ts_ms: number;
@@ -538,6 +541,12 @@ export type HealthResponse = {
   display_name?: string;
   has_rfq?: boolean;
   data_status?: MarketDataStatus;
+  /** WHI-825: ok | feed_down | feed_quiet | gap */
+  feed_state?: FeedState;
+  /** Actionable recovery one-liner (which market, how long, how to restart). */
+  recovery_hint?: string | null;
+  heartbeat_age_ms?: number | null;
+  collector_down_gap_recent?: boolean;
 };
 
 /** One market card from GET /api/markets (WHI-774). */

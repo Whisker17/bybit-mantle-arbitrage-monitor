@@ -14,10 +14,43 @@ type Props = {
   pairsError?: string | null;
 };
 
+function feedReasons(health: HealthResponse): string[] {
+  const reasons: string[] = [];
+  if (health.error) reasons.push(health.error);
+  if (!health.db_exists) reasons.push("collector journal missing");
+
+  const state = health.feed_state;
+  if (state === "feed_down" || (!state && !health.collector_alive)) {
+    // WHI-821 / WHI-825: feed down = process/liveness, not per-symbol quote age.
+    reasons.push(
+      health.age_ms != null
+        ? `feed down (age ${fmtAgeMs(health.age_ms)})`
+        : "feed down (collector not alive)",
+    );
+  } else if (state === "feed_quiet") {
+    reasons.push(
+      health.age_ms != null
+        ? `feed quiet (data age ${fmtAgeMs(health.age_ms)}; process alive)`
+        : "feed quiet (process alive, tick feeds silent)",
+    );
+  } else if (state === "gap" || health.collector_down_gap_recent) {
+    reasons.push("known collector downtime gap recorded");
+  } else if (health.gap_recent) {
+    reasons.push("recent collector gap recorded");
+  }
+
+  if (health.recovery_hint) {
+    reasons.push(health.recovery_hint);
+  }
+  return reasons;
+}
+
 /**
- * Explicit yellow/red bar when the feed is dead, journal is unreachable, or
- * the overview payload cannot refresh. Must never look like a healthy panel
- * with quietly stale numbers.
+ * Explicit yellow/red bar when the feed is dead, quiet, gapped, journal is
+ * unreachable, or the overview payload cannot refresh. Must never look like a
+ * healthy panel with quietly stale numbers.
+ *
+ * WHI-825 three-state vocabulary: feed_down / feed_quiet / gap (+ ok).
  */
 export function StaleBanner({ health, fetchError, pairsError }: Props) {
   if (fetchError) {
@@ -38,23 +71,31 @@ export function StaleBanner({ health, fetchError, pairsError }: Props) {
   }
 
   const reasons: string[] = [];
-  if (health?.error) reasons.push(health.error);
-  if (health && !health.db_exists) reasons.push("collector journal missing");
-  if (health && !health.collector_alive) {
-    // WHI-821: "feed down" = process/liveness, not per-symbol quote age.
-    reasons.push(
-      health.age_ms != null
-        ? `feed down (age ${fmtAgeMs(health.age_ms)})`
-        : "feed down (collector not alive)",
-    );
+  if (health) {
+    reasons.push(...feedReasons(health));
   }
   if (pairsError) {
     reasons.push(`overview refresh failed: ${pairsError}`);
   }
 
-  const healthBad = health != null && !health.ok;
-  if (!healthBad && !pairsError && reasons.length === 0) return null;
+  const feedBad =
+    health != null &&
+    (health.feed_state === "feed_down" ||
+      health.feed_state === "feed_quiet" ||
+      health.feed_state === "gap" ||
+      !health.ok ||
+      Boolean(health.collector_down_gap_recent));
+  if (!feedBad && !pairsError && reasons.length === 0) return null;
   if (health == null && !pairsError) return null;
+
+  const title =
+    health?.feed_state === "feed_down"
+      ? "Feed down — collector not writing"
+      : health?.feed_state === "gap"
+        ? "Collector downtime gap — numbers skip this hole"
+        : health?.feed_state === "feed_quiet"
+          ? "Feed quiet — process alive, tick data aged"
+          : "Data feed warning — numbers may be frozen";
 
   return (
     <div
@@ -64,13 +105,10 @@ export function StaleBanner({ health, fetchError, pairsError }: Props) {
       <AlertTriangle className="mt-0.5 h-4 w-4 shrink-0" />
       <div>
         <div className="font-semibold tracking-wide uppercase text-[11px] text-warning">
-          Data feed warning — numbers may be frozen
+          {title}
         </div>
         <div className="text-warning/90">
-          {reasons.length > 0
-            ? reasons.join(" · ")
-            : "collector health degraded"}
-          {health?.gap_recent ? " · recent collector gap recorded" : ""}
+          {reasons.length > 0 ? reasons.join(" · ") : "collector health degraded"}
         </div>
       </div>
     </div>

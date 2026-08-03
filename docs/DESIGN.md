@@ -192,6 +192,16 @@ not a proven continuous global max.
 | PnL v2 `quote_aged` (or legacy `status=stale`) | Quote leg(s) older than `quote_max_age_ms` | **quote aged** (numbers still shown) |
 | Health banner when `!collector_alive` | Collector process / journal feed dead | **feed down** |
 
+**Collector liveness & downtime (WHI-825):** process supervision is per-market
+(`xstocks-collector@{market}.service` with `Restart=always`; local
+`dev-web.sh` multi-market pid/log + restart wrapper). In-process watchdog uses
+**any tick-table write** (not per-symbol quote age) — reconnect after N s
+silence, non-zero exit after M s so the supervisor restarts. Meta
+`collector_heartbeat_ms` separates process liveness from quiet books.
+Restart books `[last write, first write]` as `collector_gaps.source=collector_down`;
+cumulative EdgeStats exclude that interval. Health `feed_state`:
+`ok | feed_down | feed_quiet | gap` + `recovery_hint`.
+
 #### 2.6.6 Engine ownership
 
 | Piece | Issue |
