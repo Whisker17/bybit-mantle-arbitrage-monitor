@@ -306,11 +306,14 @@ function BpsCell({
   value,
   emptyLabel,
   emptyTitle,
+  title,
 }: {
   value: string | null;
   /** When value is null, show this instead of em-dash (e.g. empty pool). */
   emptyLabel?: string | null;
   emptyTitle?: string | null;
+  /** Hover when a value is present (e.g. pricing_anomaly keeps the bps). */
+  title?: string | null;
 }) {
   if (value == null && emptyLabel) {
     return (
@@ -331,27 +334,29 @@ function BpsCell({
         tone === "neg" && "text-negative",
         tone === "empty" && "text-muted-foreground",
       )}
+      title={title ?? undefined}
     >
       {fmtSignedBps(value)}
     </span>
   );
 }
 
-/** AMM mid / price cell with empty-pool reason (WHI-795). */
+/** AMM mid / price cell with empty-pool / anomaly annotation (WHI-795 / WHI-822). */
 function AmmMidCell({ row }: { row: PairOverviewRow }) {
   const reason = ammQuoteReasonLabel(row.amm_quote_reason);
+  const title = ammQuoteReasonTitle(row.amm_quote_reason);
   if (row.amm_mid == null && reason) {
     return (
-      <span
-        className="text-muted-foreground"
-        title={ammQuoteReasonTitle(row.amm_quote_reason)}
-      >
+      <span className="text-muted-foreground" title={title}>
         {reason}
       </span>
     );
   }
+  // Keep mid when present (incl. pricing_anomaly); hover still marks non-tradable.
   return (
-    <span className="tabular-nums">{fmtPrice(row.amm_mid)}</span>
+    <span className="tabular-nums" title={title}>
+      {fmtPrice(row.amm_mid)}
+    </span>
   );
 }
 
@@ -580,6 +585,8 @@ function DexVsUndCell({
           ? `RFQ mid vs underlying: ${fmtSignedBps(row.rfq_premium_bps)} bps`
           : null,
         row.premium_type_label ? `Underlying: ${row.premium_type_label}` : null,
+        // WHI-822: mid kept under pricing_anomaly — still flag non-tradable.
+        ammQuoteReasonTitle(row.amm_quote_reason),
       ]}
     />
   );
@@ -810,6 +817,7 @@ export function PairsTable({
                       value={row.amm_spread_bps}
                       emptyLabel={ammQuoteReasonLabel(row.amm_quote_reason)}
                       emptyTitle={ammQuoteReasonTitle(row.amm_quote_reason)}
+                      title={ammQuoteReasonTitle(row.amm_quote_reason)}
                     />
                   </td>
                   {hasRfq && (

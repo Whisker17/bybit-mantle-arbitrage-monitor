@@ -140,6 +140,18 @@ describe("isDexTradeable (WHI-796)", () => {
       ),
       false,
     );
+    // WHI-822: no CEX book (stale) — cannot verify basis; deny AMM seat.
+    assert.equal(
+      isDexTradeable(
+        row({
+          pair_id: "STALE",
+          amm_mid: "100",
+          low_liquidity: false,
+          stale: true,
+        }),
+      ),
+      false,
+    );
   });
 
   it("RFQ path: two-sided RFQ seats even when AMM is null / low_liq", () => {

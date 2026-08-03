@@ -147,9 +147,11 @@ export function hasSortValue(row: PairOverviewRow, key: SortKey): boolean {
 export function isDexTradeable(row: PairOverviewRow): boolean {
   // amm_quote_reason is authoritative; pnl_v2.status is belt-and-braces when
   // only the PnL payload is present (same guard populates both on API rows).
+  // stale = no live CEX book → cannot verify |vs CEX| (WHI-822); deny AMM seat.
   const ammOk =
     row.amm_mid != null &&
     !row.low_liquidity &&
+    !row.stale &&
     row.amm_quote_reason == null &&
     row.pnl_v2?.status !== "pricing_anomaly";
   const rfqBuy = parseNum(row.rfq_buy);
