@@ -237,13 +237,12 @@ const COLS: Col[] = [
   },
   {
     id: "bucket_pnl",
-    // Default sort unit is USD (visible column value). bps via sort menu / URL.
+    // Default sort unit is USD (visible column value). bps via cycle / menu / URL.
+    // Tooltip is always bucketPnlSortTitle(sortKey) — not COLS.title.
     key: "pnl_optimal_usd",
     label: "Bucket PnL",
     group: "result",
     align: "right",
-    title:
-      "Optimal size net PnL in USD (click to sort). Sort menu for bps efficiency. Hover cells for direction & notional.",
   },
   {
     id: "mm",

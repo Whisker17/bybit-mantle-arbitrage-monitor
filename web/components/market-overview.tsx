@@ -284,6 +284,8 @@ export function MarketOverview({ marketId }: Props) {
       markSortReady();
       // WHI-824: Bucket PnL header cycles USD↓ → USD↑ → bps↓ → bps↑.
       // Column always emits pnl_optimal_usd; stay on the family and advance.
+      // Keep expand state (same family, not a brand-new metric board) — unlike
+      // jumping from e.g. CEX Vol to TVL, which collapses back to Top-N.
       if (key === "pnl_optimal_usd" && isPnlSortKey(sortKey)) {
         const next = nextPnlSortState(sortKey, sortDesc);
         setSortKey(next.key);

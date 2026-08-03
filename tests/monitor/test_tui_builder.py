@@ -355,7 +355,11 @@ def _pnl_row(
 
 
 def test_sort_rows_pnl_optimal_usd_desc_nulls_last() -> None:
-    """WHI-824: USD optimal PnL desc; non-numeric (None) always trail."""
+    """WHI-824: USD optimal PnL desc; non-numeric (None) always trail.
+
+    Pins the shared sort_rows contract used by Web keys / API wire fields.
+    TUI builder never fills these fields (frozen); tests set them explicitly.
+    """
     rows = [
         _pnl_row("neg_big", usd=Decimal("-5"), bps=Decimal("-50")),
         _pnl_row("pos", usd=Decimal("2"), bps=Decimal("5")),
