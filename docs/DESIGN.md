@@ -178,7 +178,7 @@ not a proven continuous global max.
 
 | Guard | Rule |
 |-------|------|
-| Freshness (WHI-821) | **Two separate thresholds.** (1) `collector_stale_ms` (default 30s) on `/api/health` only — process liveness (`collector_alive`). (2) `quote_max_age_ms` (default 300s, `config/api.yaml`) on PnL snapshot — **annotate** quiet legs via `quote_aged` + per-leg `cex_quote_age_ms` / `amm_quote_age_ms` / `depth_quote_age_ms`. **Never wipe** bucket tables because an event-driven CEX bookTicker is quiet (price flat ⇒ no push). True empty states remain `no_book` / `no_pool` only. Align / RFQ-age / pool-block lag still deferred (see `docs/DEFERRED_ISSUES.md`). |
+| Freshness (WHI-821) | **Two separate thresholds.** (1) `collector_stale_ms` (default 30s) on `/api/health` only — process liveness (`collector_alive` / UI **feed down**). (2) `quote_max_age_ms` — **annotate** quiet legs via `quote_aged` + per-leg ages; **never wipe** tables because event-driven bookTicker is quiet. Default in `config/api.yaml` (300s); optional **per-market override** on `config/markets/{id}.yaml` `quote_max_age_ms` (e.g. binance-pancake 600s for closed-session bStocks). Quiet (pair ages) ≠ offline (process health). True empty states remain `no_book` / `no_pool` only. Align / RFQ-age / pool-block lag still deferred (see `docs/DEFERRED_ISSUES.md`). |
 | Align | Dual-leg snapshot skew ≤ `align_skew_ms` |
 | Min profit | Config threshold for **highlight / breach only** — raw PnL always emitted |
 | Thin book | Partial depth fill ⇒ unfillable (no silent partial) |

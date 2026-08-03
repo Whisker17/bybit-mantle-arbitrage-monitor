@@ -13,6 +13,7 @@ import type {
   PnlStatus,
 } from "./types";
 import {
+  fmtAgeMs,
   fmtDirection,
   fmtNotional,
   fmtUsd,
@@ -46,25 +47,32 @@ const STATUS_LABEL: Record<PnlStatus, string> = {
   stale: "quote aged",
 };
 
-/** Format recv age for UI tooltips (ms → "45s" / "2m"). */
-export function fmtQuoteAgeMs(ms: number | null | undefined): string | null {
+function agePart(
+  label: string,
+  ms: number | null | undefined,
+): string | null {
   if (ms == null || !Number.isFinite(ms) || ms < 0) return null;
-  if (ms < 1000) return `${Math.round(ms)}ms`;
-  const s = ms / 1000;
-  if (s < 60) return `${s < 10 ? s.toFixed(1) : Math.round(s)}s`;
-  const m = s / 60;
-  if (m < 60) return `${m < 10 ? m.toFixed(1) : Math.round(m)}m`;
-  return `${(m / 60).toFixed(1)}h`;
+  return `${label} ${fmtAgeMs(ms)} ago`;
 }
 
 function quoteAgeTitle(pnl: PnlOptimalSummary): string {
-  const parts: string[] = [];
-  const cex = fmtQuoteAgeMs(pnl.cex_quote_age_ms);
-  const amm = fmtQuoteAgeMs(pnl.amm_quote_age_ms);
-  if (cex != null) parts.push(`CEX ${cex} ago`);
-  if (amm != null) parts.push(`AMM ${amm} ago`);
+  const parts = [
+    agePart("CEX", pnl.cex_quote_age_ms),
+    agePart("AMM", pnl.amm_quote_age_ms),
+    agePart("depth", pnl.depth_quote_age_ms),
+  ].filter((p): p is string => p != null);
   if (parts.length === 0) return "quote aged (quiet book)";
   return `quote aged · ${parts.join(" · ")}`;
+}
+
+/** Visible age chip for the dominant (CEX) leg — "aged 45s". */
+export function quoteAgedHint(pnl: PnlOptimalSummary): string | undefined {
+  if (!pnl.quote_aged) return undefined;
+  const cex = pnl.cex_quote_age_ms;
+  if (cex != null && Number.isFinite(cex) && cex >= 0) {
+    return `aged ${fmtAgeMs(cex)}`;
+  }
+  return "aged";
 }
 
 export function overviewPnlCell(
@@ -121,7 +129,7 @@ export function overviewPnlCell(
     direction: dir,
     title,
     quoteAged: aged,
-    ageHint: aged ? "aged" : undefined,
+    ageHint: quoteAgedHint(pnl),
   };
 }
 

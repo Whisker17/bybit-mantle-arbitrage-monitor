@@ -95,7 +95,7 @@ export function OverviewControls({
           checked={hideStale}
           onChange={(e) => onHideStale(e.target.checked)}
         />
-        Hide stale
+        Hide no book
       </label>
 
       <Button type="button" variant="ghost" onClick={onRefresh} className="ml-auto">

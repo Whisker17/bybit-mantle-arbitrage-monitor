@@ -24,6 +24,9 @@ costs:
   cex_taker_fee_bps: 10
   gas_usd_per_swap: 0.01
   quote_basis_bps: 0
+# WHI-821: per-market override of api.yaml quote_max_age_ms (5m default).
+# Bybit L1 is denser than bStocks; 5m still fine for quiet closed-session ticks.
+quote_max_age_ms: 300000
 inventory:
   version: 1
   inventory_as_of: '2026-07-31'

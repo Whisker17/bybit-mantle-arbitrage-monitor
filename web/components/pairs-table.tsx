@@ -378,9 +378,9 @@ function BucketPnlCell({
         title={cell.title}
       >
         {fmtUsd(cell.pnlUsd)}
-        {cell.quoteAged && (
+        {cell.quoteAged && cell.ageHint && (
           <span className="ml-1 text-[10px] font-normal text-muted-foreground">
-            aged
+            {cell.ageHint}
           </span>
         )}
       </span>

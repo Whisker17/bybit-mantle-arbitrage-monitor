@@ -306,9 +306,13 @@ export function PairDetail({ marketId, pairId }: Props) {
                       o.underlying_as_of_ms,
                     )
                   ? `${fmtPrice(o.underlying_price)}${
-                      o.underlying_price_type
-                        ? ` (${o.underlying_price_type})`
-                        : ""
+                      o.premium_type_label
+                        ? ` (${o.premium_type_label})`
+                        : o.underlying_price_type === "stale"
+                          ? " (price stale)"
+                          : o.underlying_price_type
+                            ? ` (${o.underlying_price_type})`
+                            : ""
                     }`
                   : "—"
             }

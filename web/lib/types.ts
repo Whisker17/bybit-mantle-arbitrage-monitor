@@ -52,6 +52,7 @@ export type PnlOptimalSummary = {
   quote_aged?: boolean;
   cex_quote_age_ms?: number | null;
   amm_quote_age_ms?: number | null;
+  depth_quote_age_ms?: number | null;
 };
 
 export type PnlCostBreakdownUsd = {

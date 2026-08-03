@@ -132,7 +132,7 @@ describe("overviewPnlCell", () => {
     if (cell.kind === "ok") {
       assert.equal(cell.pnlUsd, "2.5");
       assert.equal(cell.quoteAged, true);
-      assert.equal(cell.ageHint, "aged");
+      assert.equal(cell.ageHint, "aged 45s");
       assert.match(cell.title, /quote aged/);
       assert.match(cell.title, /CEX/);
     }

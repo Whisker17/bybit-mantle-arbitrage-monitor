@@ -57,6 +57,28 @@ _DIRECTIONS: tuple[Direction, Direction] = (
 
 
 @dataclass(frozen=True, slots=True)
+class QuoteAges:
+    """Per-leg recv ages for a PnL snapshot (WHI-821).
+
+    Annotation only — never blanks tables. ``quote_aged`` is true when any
+    computed age exceeds the caller's ``quote_max_age_ms``.
+    """
+
+    cex_ms: int | None = None
+    amm_ms: int | None = None
+    depth_ms: int | None = None
+    quote_aged: bool = False
+
+    def to_dict(self) -> dict[str, Any]:
+        return {
+            "cex_quote_age_ms": self.cex_ms,
+            "amm_quote_age_ms": self.amm_ms,
+            "depth_quote_age_ms": self.depth_ms,
+            "quote_aged": self.quote_aged,
+        }
+
+
+@dataclass(frozen=True, slots=True)
 class PnlOptimalSummary:
     """Compact optimal-size card for the overview table."""
 
@@ -71,6 +93,7 @@ class PnlOptimalSummary:
     quote_aged: bool = False
     cex_quote_age_ms: int | None = None
     amm_quote_age_ms: int | None = None
+    depth_quote_age_ms: int | None = None
 
     def to_dict(self) -> dict[str, Any]:
         # Match serialize.to_jsonable / PnlResult.to_dict: fixed-point strings,
@@ -89,6 +112,7 @@ class PnlOptimalSummary:
             "quote_aged": self.quote_aged,
             "cex_quote_age_ms": self.cex_quote_age_ms,
             "amm_quote_age_ms": self.amm_quote_age_ms,
+            "depth_quote_age_ms": self.depth_quote_age_ms,
         }
 
 
@@ -204,16 +228,16 @@ def _empty_summary(
     *,
     status: PnlStatus,
     has_depth: bool,
-    quote_aged: bool = False,
-    cex_quote_age_ms: int | None = None,
-    amm_quote_age_ms: int | None = None,
+    ages: QuoteAges | None = None,
 ) -> PnlOptimalSummary:
+    a = ages or QuoteAges()
     return PnlOptimalSummary(
         status=status,
         has_depth=has_depth,
-        quote_aged=quote_aged,
-        cex_quote_age_ms=cex_quote_age_ms,
-        amm_quote_age_ms=amm_quote_age_ms,
+        quote_aged=a.quote_aged,
+        cex_quote_age_ms=a.cex_ms,
+        amm_quote_age_ms=a.amm_ms,
+        depth_quote_age_ms=a.depth_ms,
     )
 
 
@@ -222,9 +246,7 @@ def _summary_from_optimal(
     *,
     status: PnlStatus,
     has_depth: bool,
-    quote_aged: bool = False,
-    cex_quote_age_ms: int | None = None,
-    amm_quote_age_ms: int | None = None,
+    ages: QuoteAges,
 ) -> PnlOptimalSummary:
     pnl_bps: Decimal | None = None
     if opt.q_star_usd > 0:
@@ -237,9 +259,10 @@ def _summary_from_optimal(
         optimal_net_pnl_usd=opt.pnl_usd,
         optimal_net_pnl_bps=pnl_bps,
         bybit_depth_source=opt.result.bybit_depth_source,
-        quote_aged=quote_aged,
-        cex_quote_age_ms=cex_quote_age_ms,
-        amm_quote_age_ms=amm_quote_age_ms,
+        quote_aged=ages.quote_aged,
+        cex_quote_age_ms=ages.cex_ms,
+        amm_quote_age_ms=ages.amm_ms,
+        depth_quote_age_ms=ages.depth_ms,
     )
 
 
@@ -250,8 +273,8 @@ def _quote_ages(
     depth: BybitDepthTick | None,
     now_ms: int | None,
     quote_max_age_ms: int | None,
-) -> tuple[int | None, int | None, int | None, bool]:
-    """Return (cex_age, amm_age, depth_age, quote_aged).
+) -> QuoteAges:
+    """Per-leg ages + aged flag.
 
     Ages are ``now − recv_ts`` when ``now_ms`` is set. ``quote_aged`` is true
     only when a computed age exceeds ``quote_max_age_ms`` — this annotates quiet
@@ -259,16 +282,21 @@ def _quote_ages(
     liveness uses a separate ``collector_stale_ms`` on /api/health.
     """
     if now_ms is None:
-        return None, None, None, False
+        return QuoteAges()
     cex_age = now_ms - bybit.recv_ts_ms
     amm_age = now_ms - amm.recv_ts_ms
     depth_age = None if depth is None else now_ms - depth.recv_ts_ms
     if quote_max_age_ms is None or quote_max_age_ms <= 0:
-        return cex_age, amm_age, depth_age, False
+        return QuoteAges(cex_ms=cex_age, amm_ms=amm_age, depth_ms=depth_age)
     aged = cex_age > quote_max_age_ms or amm_age > quote_max_age_ms
     if depth_age is not None and depth_age > quote_max_age_ms:
         aged = True
-    return cex_age, amm_age, depth_age, aged
+    return QuoteAges(
+        cex_ms=cex_age,
+        amm_ms=amm_age,
+        depth_ms=depth_age,
+        quote_aged=aged,
+    )
 
 
 def build_pnl_pair_snapshot(
@@ -329,7 +357,7 @@ def build_pnl_pair_snapshot(
     # Overview status prefers quote_reason over no_fillable when optimal is empty.
     _quotable_mid, quote_reason = quotable_amm_mid(amm_tick)
 
-    cex_age, amm_age, depth_age, quote_aged = _quote_ages(
+    ages = _quote_ages(
         bybit=bybit,
         amm=amm_tick,
         depth=depth,
@@ -385,6 +413,21 @@ def build_pnl_pair_snapshot(
         candidates = []
 
     base_status: PnlStatus = "ok" if has_depth else "no_depth"
+
+    def _snap(
+        status: PnlStatus, best: PnlOptimalSummary
+    ) -> PnlPairSnapshot:
+        return PnlPairSnapshot(
+            status=status,
+            has_depth=has_depth,
+            best=best,
+            tables=tables,
+            cex_quote_age_ms=ages.cex_ms,
+            amm_quote_age_ms=ages.amm_ms,
+            depth_quote_age_ms=ages.depth_ms,
+            quote_aged=ages.quote_aged,
+        )
+
     if not candidates:
         # Prefer unquotable reason (empty_pool / invalid_mid) over no_fillable so
         # overview agrees with vs CEX. Prefer no_depth over bare no_fillable.
@@ -395,42 +438,15 @@ def build_pnl_pair_snapshot(
         else:
             unfillable_status = "no_fillable"
         best = _empty_summary(
-            status=unfillable_status,
-            has_depth=has_depth,
-            quote_aged=quote_aged,
-            cex_quote_age_ms=cex_age,
-            amm_quote_age_ms=amm_age,
+            status=unfillable_status, has_depth=has_depth, ages=ages
         )
-        return PnlPairSnapshot(
-            status=unfillable_status,
-            has_depth=has_depth,
-            best=best,
-            tables=tables,
-            cex_quote_age_ms=cex_age,
-            amm_quote_age_ms=amm_age,
-            depth_quote_age_ms=depth_age,
-            quote_aged=quote_aged,
-        )
+        return _snap(unfillable_status, best)
 
     winner = max(candidates, key=lambda o: (o.pnl_usd, -o.q_star_usd))
     best = _summary_from_optimal(
-        winner,
-        status=base_status,
-        has_depth=has_depth,
-        quote_aged=quote_aged,
-        cex_quote_age_ms=cex_age,
-        amm_quote_age_ms=amm_age,
+        winner, status=base_status, has_depth=has_depth, ages=ages
     )
-    return PnlPairSnapshot(
-        status=base_status,
-        has_depth=has_depth,
-        best=best,
-        tables=tables,
-        cex_quote_age_ms=cex_age,
-        amm_quote_age_ms=amm_age,
-        depth_quote_age_ms=depth_age,
-        quote_aged=quote_aged,
-    )
+    return _snap(base_status, best)
 
 
 def overview_pnl_summary(snapshot: PnlPairSnapshot) -> PnlOptimalSummary:
@@ -444,9 +460,12 @@ def overview_pnl_summary(snapshot: PnlPairSnapshot) -> PnlOptimalSummary:
         return _empty_summary(
             status="no_depth",
             has_depth=False,
-            quote_aged=snapshot.quote_aged,
-            cex_quote_age_ms=snapshot.cex_quote_age_ms,
-            amm_quote_age_ms=snapshot.amm_quote_age_ms,
+            ages=QuoteAges(
+                cex_ms=snapshot.cex_quote_age_ms,
+                amm_ms=snapshot.amm_quote_age_ms,
+                depth_ms=snapshot.depth_quote_age_ms,
+                quote_aged=snapshot.quote_aged,
+            ),
         )
     return snapshot.best
 
@@ -455,6 +474,7 @@ __all__ = [
     "PnlOptimalSummary",
     "PnlPairSnapshot",
     "PnlStatus",
+    "QuoteAges",
     "build_pnl_pair_snapshot",
     "levels_from_depth_curve",
     "overview_pnl_summary",
