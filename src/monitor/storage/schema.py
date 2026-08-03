@@ -7,7 +7,7 @@ window so downstream metrics can exclude or weight them.
 
 from __future__ import annotations
 
-SCHEMA_VERSION = 7
+SCHEMA_VERSION = 8
 
 DDL: tuple[str, ...] = (
     """
@@ -38,6 +38,12 @@ DDL: tuple[str, ...] = (
     """
     CREATE INDEX IF NOT EXISTS idx_bybit_book_ts
         ON bybit_book (exchange_ts_ms)
+    """,
+    # WHI-825 market-switch: MAX(recv_ts_ms) / freshest_recv fallback path.
+    # exchange_ts_ms index does NOT cover recv_ts_ms (full scan on large books).
+    """
+    CREATE INDEX IF NOT EXISTS idx_bybit_book_recv
+        ON bybit_book (recv_ts_ms)
     """,
     """
     CREATE TABLE IF NOT EXISTS bybit_book_1m (
@@ -108,6 +114,10 @@ DDL: tuple[str, ...] = (
     """
     CREATE INDEX IF NOT EXISTS idx_bybit_trades_ts
         ON bybit_trades (exchange_ts_ms)
+    """,
+    """
+    CREATE INDEX IF NOT EXISTS idx_bybit_trades_recv
+        ON bybit_trades (recv_ts_ms)
     """,
     """
     CREATE TABLE IF NOT EXISTS fluxion_pool_state (

@@ -6,7 +6,7 @@ from dataclasses import dataclass, field
 from typing import Any, Literal
 
 from monitor.collector.gaps import SOURCE_COLLECTOR_DOWN
-from monitor.collector.watchdog import META_HEARTBEAT
+from monitor.collector.watchdog import META_HEARTBEAT, META_LAST_TICK_WRITE
 from monitor.markets.ids import DEFAULT_MARKET_ID
 from monitor.quotes import CollectorGap, now_ms
 from monitor.storage import JournalReader
@@ -215,12 +215,13 @@ def build_health(
     quiet_ms: int = DEFAULT_DATA_QUIET_MS,
     market_id: str | None = None,
 ) -> HealthStatus:
-    """Derive health from meta keys + freshest journal recv timestamps.
+    """Derive health from meta keys + (fallback) freshest journal recv.
 
     ``collector_alive`` prefers ``collector_heartbeat_ms`` (process liveness
-    independent of quiet bookTicker) and falls back to freshest tick recv for
-    journals written before WHI-825. ``feed_state`` distinguishes feed_down /
-    feed_quiet / gap / ok (WHI-825).
+    independent of quiet bookTicker). Data age prefers the collector-stamped
+    ``collector_last_tick_write_ms`` meta (O(1)) and only falls back to
+    ``freshest_recv_ts_ms()`` on pre-WHI-825 journals — that scan is multi-
+    hundred-ms on large binance books and blocked market switches.
     """
     ts = now if now is not None else now_ms()
 
@@ -228,8 +229,14 @@ def build_health(
     stopped = _meta_int(reader, "collector_stopped_ms")
     last_block = _meta_int(reader, "last_block")
     latency = _meta_float(reader, "last_block_ingest_latency_ms")
-    freshest = reader.freshest_recv_ts_ms()
     heartbeat = _meta_int(reader, META_HEARTBEAT)
+    last_tick = _meta_int(reader, META_LAST_TICK_WRITE)
+    # Prefer O(1) meta stamps. Scan only when meta is missing (legacy journal
+    # written by a collector binary without WHI-825 last-tick stamp).
+    if last_tick is not None:
+        freshest = last_tick
+    else:
+        freshest = reader.freshest_recv_ts_ms()
 
     data_age = None if freshest is None else max(0, ts - freshest)
     heartbeat_age = None if heartbeat is None else max(0, ts - heartbeat)

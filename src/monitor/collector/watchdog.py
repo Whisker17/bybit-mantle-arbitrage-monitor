@@ -18,6 +18,11 @@ from enum import StrEnum
 
 # Meta key written by the collector watchdog loop (process liveness for /api/health).
 META_HEARTBEAT = "collector_heartbeat_ms"
+# Throttled stamp of last tick-table write (book/pool/swap/…). Health uses this
+# instead of MAX(recv_ts_ms) over multi-million-row tables (WHI-825 switch lag).
+META_LAST_TICK_WRITE = "collector_last_tick_write_ms"
+# How often to refresh META_LAST_TICK_WRITE (ms). 1s is fine for health age.
+LAST_TICK_META_MIN_INTERVAL_MS = 1000
 
 
 class WatchdogAction(StrEnum):
