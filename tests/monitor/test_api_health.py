@@ -406,3 +406,25 @@ def test_build_health_prefers_heartbeat_over_quiet_ticks(tmp_path: Path) -> None
     assert health.collector_alive is True
     assert health.feed_state == "feed_quiet"
     assert health.age_ms is not None and health.age_ms >= 100_000
+
+
+def test_build_health_ignores_stale_stop_when_heartbeat_advances(tmp_path: Path) -> None:
+    """Restart race: stop stamp after start but heartbeat is newer → still alive."""
+    from monitor.collector.watchdog import META_HEARTBEAT, META_LAST_TICK_WRITE
+
+    db = tmp_path / "m.db"
+    store = SqliteStore(db)
+    ts = now_ms()
+    store.set_meta("collector_started_ms", str(ts - 60_000))
+    store.set_meta("collector_stopped_ms", str(ts - 50_000))  # after start
+    store.set_meta(META_HEARTBEAT, str(ts - 1_000))  # newer than stop
+    store.set_meta(META_LAST_TICK_WRITE, str(ts - 1_000))
+    _seed_book(store, ts=ts - 1_000)
+    store.close()
+
+    with JournalReader(db) as reader:
+        health = build_health(
+            reader, now=ts, stale_ms=30_000, gap_window_ms=300_000
+        )
+    assert health.collector_alive is True
+    assert health.ok is True
