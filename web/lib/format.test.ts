@@ -25,6 +25,7 @@ import {
   fmtUsd,
   fmtUtcHm,
   fmtVolumeRatio,
+  fmtUnderlyingPriceType,
   isRealUnderlyingPrint,
   shortAddr,
   totalWearBps,
@@ -33,6 +34,15 @@ import {
   venueLabel,
   venuesFromMarketId,
 } from "./format";
+
+describe("fmtUnderlyingPriceType (WHI-821)", () => {
+  it("prefers type_label and maps raw stale to price stale", () => {
+    assert.equal(fmtUnderlyingPriceType("stale", "price stale"), "price stale");
+    assert.equal(fmtUnderlyingPriceType("stale", null), "price stale");
+    assert.equal(fmtUnderlyingPriceType("live", null), "live");
+    assert.equal(fmtUnderlyingPriceType(null, null), null);
+  });
+});
 
 describe("ammQuoteReasonLabel", () => {
   it("maps wire reasons to human labels", () => {

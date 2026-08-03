@@ -5,7 +5,6 @@ import { useEffect, useMemo, useState } from "react";
 import {
   bpsTone,
   directionToggleLabel,
-  fmtAgeMs,
   fmtBps,
   fmtDirection,
   fmtDirectionTitle,
@@ -22,6 +21,8 @@ import {
   isOptimalBucket,
   isThinDepth,
   pickBucketTable,
+  quoteAgeTitle,
+  quoteAgedHint,
   totalCostUsd,
   usdCostRows,
 } from "@/lib/pnl";
@@ -361,24 +362,9 @@ function BucketPnlPanel({
           {(snap.quote_aged || best.quote_aged) && (
             <span
               className="ml-2 text-[10px] text-warning"
-              title={[
-                snap.cex_quote_age_ms != null
-                  ? `CEX ${fmtAgeMs(snap.cex_quote_age_ms)} ago`
-                  : null,
-                snap.amm_quote_age_ms != null
-                  ? `AMM ${fmtAgeMs(snap.amm_quote_age_ms)} ago`
-                  : null,
-                snap.depth_quote_age_ms != null
-                  ? `depth ${fmtAgeMs(snap.depth_quote_age_ms)} ago`
-                  : null,
-              ]
-                .filter(Boolean)
-                .join(" · ")}
+              title={quoteAgeTitle(snap)}
             >
-              quote aged
-              {snap.cex_quote_age_ms != null
-                ? ` ${fmtAgeMs(snap.cex_quote_age_ms)}`
-                : ""}
+              {quoteAgedHint(snap) ?? "quote aged"}
             </span>
           )}
         </p>

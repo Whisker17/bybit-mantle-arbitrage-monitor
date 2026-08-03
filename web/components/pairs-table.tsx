@@ -19,6 +19,7 @@ import {
   fmtPrice,
   fmtSession,
   fmtSignedBps,
+  fmtUnderlyingPriceType,
   fmtUsd,
   fmtUtcHm,
   fmtVolumeRatio,
@@ -452,12 +453,10 @@ function UnderlyingCell({ row }: { row: PairOverviewRow }) {
     );
   }
   const undAsOf = row.underlying_as_of_ms ?? null;
-  // Prefer type_label (WHI-821: "price stale" not raw "stale") over enum wire.
-  const badge =
-    row.premium_type_label ??
-    (row.underlying_price_type === "stale"
-      ? "price stale"
-      : row.underlying_price_type);
+  const badge = fmtUnderlyingPriceType(
+    row.underlying_price_type,
+    row.premium_type_label,
+  );
   return (
     <span
       className="inline-flex items-center justify-end gap-1"

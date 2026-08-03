@@ -9,6 +9,8 @@ import {
   isThinDepth,
   overviewPnlCell,
   pickBucketTable,
+  quoteAgeTitle,
+  quoteAgedHint,
 } from "./pnl";
 import type {
   PnlBucketTable,
@@ -136,6 +138,18 @@ describe("overviewPnlCell", () => {
       assert.match(cell.title, /quote aged/);
       assert.match(cell.title, /CEX/);
     }
+  });
+
+  it("shares quoteAgeTitle / quoteAgedHint for overview and detail", () => {
+    const ages = {
+      quote_aged: true,
+      cex_quote_age_ms: 45_000,
+      amm_quote_age_ms: 800,
+      depth_quote_age_ms: 800,
+    };
+    assert.equal(quoteAgedHint(ages), "aged 45s");
+    assert.match(quoteAgeTitle(ages), /CEX 45s ago/);
+    assert.match(quoteAgeTitle(ages), /AMM/);
   });
 
   it("labels empty_pool / invalid_mid distinctly from no_pool", () => {

@@ -61,21 +61,14 @@ class QuoteAges:
     """Per-leg recv ages for a PnL snapshot (WHI-821).
 
     Annotation only — never blanks tables. ``quote_aged`` is true when any
-    computed age exceeds the caller's ``quote_max_age_ms``.
+    computed age exceeds the caller's ``quote_max_age_ms``. Flattened onto
+    the public JSON dataclasses so wire keys stay stable (``cex_quote_age_ms``).
     """
 
     cex_ms: int | None = None
     amm_ms: int | None = None
     depth_ms: int | None = None
     quote_aged: bool = False
-
-    def to_dict(self) -> dict[str, Any]:
-        return {
-            "cex_quote_age_ms": self.cex_ms,
-            "amm_quote_age_ms": self.amm_ms,
-            "depth_quote_age_ms": self.depth_ms,
-            "quote_aged": self.quote_aged,
-        }
 
 
 @dataclass(frozen=True, slots=True)

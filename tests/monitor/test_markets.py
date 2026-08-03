@@ -58,6 +58,9 @@ def test_list_and_load_checked_in_markets() -> None:
     assert bp.dex.has_rfq is False
     assert bp.dex.chain_id == 56
     assert len(bp.inventory["pairs"]) == 55  # WHI-790 full bStocks universe
+    # WHI-821: bybit inherits api.yaml; binance-pancake overrides for quiet books.
+    assert bf.quote_max_age_ms is None
+    assert bp.quote_max_age_ms == 600_000
 
 
 def test_load_pairs_from_default_market() -> None:

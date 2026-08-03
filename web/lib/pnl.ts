@@ -47,6 +47,13 @@ const STATUS_LABEL: Record<PnlStatus, string> = {
   stale: "quote aged",
 };
 
+export type QuoteAgeFields = {
+  quote_aged?: boolean;
+  cex_quote_age_ms?: number | null;
+  amm_quote_age_ms?: number | null;
+  depth_quote_age_ms?: number | null;
+};
+
 function agePart(
   label: string,
   ms: number | null | undefined,
@@ -55,20 +62,21 @@ function agePart(
   return `${label} ${fmtAgeMs(ms)} ago`;
 }
 
-function quoteAgeTitle(pnl: PnlOptimalSummary): string {
+/** Tooltip / title: "quote aged · CEX 45s ago · AMM 800ms ago". */
+export function quoteAgeTitle(ages: QuoteAgeFields): string {
   const parts = [
-    agePart("CEX", pnl.cex_quote_age_ms),
-    agePart("AMM", pnl.amm_quote_age_ms),
-    agePart("depth", pnl.depth_quote_age_ms),
+    agePart("CEX", ages.cex_quote_age_ms),
+    agePart("AMM", ages.amm_quote_age_ms),
+    agePart("depth", ages.depth_quote_age_ms),
   ].filter((p): p is string => p != null);
   if (parts.length === 0) return "quote aged (quiet book)";
   return `quote aged · ${parts.join(" · ")}`;
 }
 
 /** Visible age chip for the dominant (CEX) leg — "aged 45s". */
-export function quoteAgedHint(pnl: PnlOptimalSummary): string | undefined {
-  if (!pnl.quote_aged) return undefined;
-  const cex = pnl.cex_quote_age_ms;
+export function quoteAgedHint(ages: QuoteAgeFields): string | undefined {
+  if (!ages.quote_aged) return undefined;
+  const cex = ages.cex_quote_age_ms;
   if (cex != null && Number.isFinite(cex) && cex >= 0) {
     return `aged ${fmtAgeMs(cex)}`;
   }
@@ -87,26 +95,34 @@ export function overviewPnlCell(
       title: "PnL v2 not present in API response",
     };
   }
+  const agedHint = quoteAgedHint(pnl);
+  const agedTitle = pnl.quote_aged ? quoteAgeTitle(pnl) : null;
   // Status first — no_book / no_pool / legacy stale must not collapse into "no depth".
   if (pnl.status !== "ok" && pnl.status !== "no_depth") {
     return {
       kind: "status",
       label: STATUS_LABEL[pnl.status],
-      title: `PnL v2 status: ${pnl.status}`,
+      title: agedTitle
+        ? `PnL v2 status: ${pnl.status} · ${agedTitle}`
+        : `PnL v2 status: ${pnl.status}`,
     };
   }
   if (pnl.status === "no_depth" || !pnl.has_depth) {
     return {
       kind: "status",
-      label: "no depth",
-      title: "No Bybit depth curve in journal — bucket VWAP not available",
+      label: agedHint ? `no depth · ${agedHint}` : "no depth",
+      title: agedTitle
+        ? `No Bybit depth curve in journal — bucket VWAP not available · ${agedTitle}`
+        : "No Bybit depth curve in journal — bucket VWAP not available",
     };
   }
   if (pnl.optimal_net_pnl_usd == null) {
     return {
       kind: "status",
       label: STATUS_LABEL.no_fillable,
-      title: "PnL v2 status: no_fillable",
+      title: agedTitle
+        ? `PnL v2 status: no_fillable · ${agedTitle}`
+        : "PnL v2 status: no_fillable",
     };
   }
   const dir = pnl.direction;
@@ -119,8 +135,8 @@ export function overviewPnlCell(
           : "")
       : `Optimal PnL ${fmtUsd(pnl.optimal_net_pnl_usd)}`;
   const aged = Boolean(pnl.quote_aged);
-  if (aged) {
-    title = `${title} · ${quoteAgeTitle(pnl)}`;
+  if (aged && agedTitle) {
+    title = `${title} · ${agedTitle}`;
   }
   return {
     kind: "ok",
@@ -129,7 +145,7 @@ export function overviewPnlCell(
     direction: dir,
     title,
     quoteAged: aged,
-    ageHint: quoteAgedHint(pnl),
+    ageHint: agedHint,
   };
 }
 
