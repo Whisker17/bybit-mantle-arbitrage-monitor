@@ -70,6 +70,40 @@ def test_reader_recent_gaps(tmp_path: Path) -> None:
         assert gaps[0].detail == "reconnect"
 
 
+def test_reader_recent_gaps_source_filter_before_limit(tmp_path: Path) -> None:
+    """WHI-825: source filter must apply before LIMIT so spam cannot crowd out."""
+    db = tmp_path / "m.db"
+    store = SqliteStore(db)
+    # Many recent non-down gaps + one older collector_down.
+    for i in range(20):
+        store.insert_gap(
+            CollectorGap(
+                source="mantle_blocks",
+                gap_start_ms=10_000 + i,
+                gap_end_ms=20_000 + i,
+                detail="lag spam",
+            )
+        )
+    store.insert_gap(
+        CollectorGap(
+            source="collector_down",
+            gap_start_ms=1_000,
+            gap_end_ms=5_000,
+            detail="downtime",
+        )
+    )
+    store.close()
+
+    with JournalReader(db) as reader:
+        # Without source filter, limit=5 would miss collector_down.
+        spam = reader.recent_gaps(since_ms=0, limit=5)
+        assert all(g.source == "mantle_blocks" for g in spam)
+        downs = reader.recent_gaps(since_ms=0, limit=5, source="collector_down")
+        assert len(downs) == 1
+        assert downs[0].source == "collector_down"
+        assert downs[0].detail == "downtime"
+
+
 def test_build_health_alive(tmp_path: Path) -> None:
     db = tmp_path / "m.db"
     store = SqliteStore(db)
@@ -219,3 +253,128 @@ def test_build_health_exposes_unpublished_pyth_feeds(tmp_path: Path) -> None:
     assert len(health.unpublished_pyth_feeds) == 1
     assert health.unpublished_pyth_feeds[0]["ticker"] == "SOXL"
     assert health.unpublished_pyth_feeds[0]["publish_time"] == 0
+
+
+def test_build_health_feed_state_down(tmp_path: Path) -> None:
+    """WHI-825: stale data without heartbeat → feed_down."""
+    db = tmp_path / "m.db"
+    store = SqliteStore(db)
+    store.set_meta("collector_started_ms", "1")
+    _seed_book(store, ts=1_000)
+    store.close()
+
+    with JournalReader(db) as reader:
+        health = build_health(
+            reader,
+            now=1_000_000,
+            stale_ms=30_000,
+            gap_window_ms=300_000,
+            market_id="binance-pancake",
+        )
+    assert health.collector_alive is False
+    assert health.feed_state == "feed_down"
+    assert health.recovery_hint is not None
+    assert "binance-pancake" in health.recovery_hint
+    assert "systemctl" in health.recovery_hint
+
+
+def test_build_health_feed_state_gap(tmp_path: Path) -> None:
+    """WHI-825: alive process + recent collector_down → feed_state gap."""
+    from monitor.collector.watchdog import META_HEARTBEAT
+
+    db = tmp_path / "m.db"
+    store = SqliteStore(db)
+    ts = now_ms()
+    store.set_meta("collector_started_ms", str(ts - 60_000))
+    store.set_meta(META_HEARTBEAT, str(ts - 1_000))
+    _seed_book(store, ts=ts - 1_000)
+    store.insert_gap(
+        CollectorGap(
+            source="collector_down",
+            gap_start_ms=ts - 3_600_000,
+            gap_end_ms=ts - 60_000,
+            detail="market=binance-pancake collector process down duration_ms=3540000",
+        )
+    )
+    store.close()
+
+    with JournalReader(db) as reader:
+        health = build_health(
+            reader,
+            now=ts,
+            stale_ms=30_000,
+            gap_window_ms=24 * 3_600_000,
+            market_id="binance-pancake",
+        )
+    assert health.collector_alive is True
+    assert health.collector_down_gap_recent is True
+    assert health.feed_state == "gap"
+    assert health.recovery_hint is not None
+    assert "downtime" in health.recovery_hint.lower() or "hole" in health.recovery_hint
+
+
+def test_build_health_gap_survives_block_lag_spam(tmp_path: Path) -> None:
+    """collector_down must not be crowded out of feed_state by other gap sources."""
+    from monitor.collector.watchdog import META_HEARTBEAT
+
+    db = tmp_path / "m.db"
+    store = SqliteStore(db)
+    ts = now_ms()
+    store.set_meta("collector_started_ms", str(ts - 60_000))
+    store.set_meta(META_HEARTBEAT, str(ts - 1_000))
+    _seed_book(store, ts=ts - 1_000)
+    for i in range(30):
+        store.insert_gap(
+            CollectorGap(
+                source="mantle_blocks",
+                gap_start_ms=ts - 10_000 + i,
+                gap_end_ms=ts - 9_000 + i,
+                detail="lag spam",
+            )
+        )
+    store.insert_gap(
+        CollectorGap(
+            source="collector_down",
+            gap_start_ms=ts - 3_600_000,
+            gap_end_ms=ts - 120_000,
+            detail="market=binance-pancake collector process down duration_ms=3480000",
+        )
+    )
+    store.close()
+
+    with JournalReader(db) as reader:
+        health = build_health(
+            reader,
+            now=ts,
+            stale_ms=30_000,
+            gap_window_ms=24 * 3_600_000,
+            market_id="binance-pancake",
+        )
+    assert health.collector_down_gap_recent is True
+    assert health.feed_state == "gap"
+
+
+def test_build_health_prefers_heartbeat_over_quiet_ticks(tmp_path: Path) -> None:
+    """Heartbeat keeps collector_alive when tick tables are quiet (closed session)."""
+    from monitor.collector.watchdog import META_HEARTBEAT
+
+    db = tmp_path / "m.db"
+    store = SqliteStore(db)
+    ts = now_ms()
+    store.set_meta("collector_started_ms", str(ts - 600_000))
+    store.set_meta(META_HEARTBEAT, str(ts - 5_000))
+    # Tick data 2 minutes old — quiet market, process still heartbeating.
+    _seed_book(store, ts=ts - 120_000)
+    store.close()
+
+    with JournalReader(db) as reader:
+        health = build_health(
+            reader,
+            now=ts,
+            stale_ms=30_000,
+            gap_window_ms=300_000,
+            quiet_ms=60_000,
+        )
+    assert health.collector_alive is True
+    assert health.feed_state == "feed_quiet"
+    assert health.age_ms is not None and health.age_ms >= 100_000

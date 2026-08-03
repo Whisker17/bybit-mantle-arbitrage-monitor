@@ -31,6 +31,7 @@ from monitor.attribution.events import (
     amm_trade_from_swap,
     swap_notional_usd,
 )
+from monitor.collector.gaps import SOURCE_COLLECTOR_DOWN
 from monitor.fluxion.tvl import is_low_liquidity
 from monitor.metrics import (
     EdgeStats,
@@ -87,6 +88,37 @@ from monitor.underlying.tickers import (
 )
 
 _T = TypeVar("_T")
+
+# How far back to load collector_down windows for EdgeStats exclusion (WHI-825).
+_EXCLUDE_GAPS_LOOKBACK_MS = 30 * 24 * 60 * 60 * 1000  # 30d — matches retention
+
+
+def sync_exclude_intervals(
+    edge_state: RunningEdgeState,
+    reader: JournalReader,
+    *,
+    now: int | None = None,
+) -> None:
+    """Load ``collector_down`` gaps into ``edge_state.exclude_intervals``.
+
+    When the set of windows changes, drop cached stats so cold-start rebuild
+    re-weights with the new exclusions.
+    """
+    ts = now if now is not None else now_ms()
+    since = max(0, ts - _EXCLUDE_GAPS_LOOKBACK_MS)
+    # Filter by source in SQL before LIMIT — block-lag spam must not crowd out
+    # collector_down rows (WHI-825 review).
+    gaps = reader.recent_gaps(
+        since_ms=since, limit=200, source=SOURCE_COLLECTOR_DOWN
+    )
+    intervals = tuple((g.gap_start_ms, g.gap_end_ms) for g in gaps)
+    if intervals == edge_state.exclude_intervals:
+        return
+    edge_state.exclude_intervals = intervals
+    # Interval set changed (new outage recorded) — force rebuild.
+    edge_state.stats.clear()
+    edge_state.last_sample_ts.clear()
+    edge_state.history_rebuilt.clear()
 
 
 def _session_at(ts_ms: int, metrics: MetricsConfig) -> SessionKind:
@@ -551,6 +583,8 @@ def build_overview(
     Accepts Bybit/Fluxion or Binance/Pancake inventory roots.
     """
     ts = now if now is not None else now_ms()
+    if edge_state is not None:
+        sync_exclude_intervals(edge_state, reader, now=ts)
     key = sort_key if sort_key is not None else tui.default_sort
     desc = tui.default_sort_desc if sort_desc is None else sort_desc
     since = ts - tui.volume_window_ms
@@ -666,7 +700,9 @@ def _ensure_stats(
     key = (pair_id, venue, direction)
     st = state.stats.get(key)
     if st is None:
-        st = EdgeStats.from_config(metrics)
+        st = EdgeStats.from_config(
+            metrics, exclude_intervals=state.exclude_intervals
+        )
         state.stats[key] = st
     return st
 
@@ -1049,6 +1085,7 @@ def build_pair_detail(
     low_liquidity_threshold_usd: Decimal,
 ) -> PairDetailModel:
     ts = now if now is not None else now_ms()
+    sync_exclude_intervals(edge_state, reader, now=ts)
     since_vol = ts - tui.volume_window_ms
     bybit = reader.latest_bybit_book(pair.id)
     amm = reader.latest_pool_state(pair.id)

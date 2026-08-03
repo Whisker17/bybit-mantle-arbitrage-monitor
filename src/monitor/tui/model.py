@@ -193,3 +193,6 @@ class RunningEdgeState:
     # Overview live ticks may populate ``stats`` without this flag; detail
     # cold-start must still rebuild so cumulative percentiles cover the DB.
     history_rebuilt: set[str] = field(default_factory=set)
+    # WHI-825: known downtime windows (collector_down gap_start/end) zero
+    # inter-sample weights in EdgeStats so cumulative P50/P95 skip outages.
+    exclude_intervals: tuple[tuple[int, int], ...] = ()

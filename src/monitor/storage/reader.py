@@ -538,18 +538,41 @@ class JournalReader:
             return None
         return int(row["ts"])
 
-    def recent_gaps(self, *, since_ms: int, limit: int = 20) -> list[CollectorGap]:
-        """Gaps whose end falls on or after ``since_ms``, newest first."""
-        rows = self._conn.execute(
-            """
-            SELECT source, gap_start_ms, gap_end_ms, detail
-            FROM collector_gaps
-            WHERE gap_end_ms >= ?
-            ORDER BY gap_end_ms DESC, id DESC
-            LIMIT ?
-            """,
-            (since_ms, limit),
-        ).fetchall()
+    def recent_gaps(
+        self,
+        *,
+        since_ms: int,
+        limit: int = 20,
+        source: str | None = None,
+    ) -> list[CollectorGap]:
+        """Gaps whose end falls on or after ``since_ms``, newest first.
+
+        Optional ``source`` filters before ``LIMIT`` so high-frequency gap
+        sources (block lag spam) cannot crowd out ``collector_down`` rows
+        (WHI-825).
+        """
+        if source is None:
+            rows = self._conn.execute(
+                """
+                SELECT source, gap_start_ms, gap_end_ms, detail
+                FROM collector_gaps
+                WHERE gap_end_ms >= ?
+                ORDER BY gap_end_ms DESC, id DESC
+                LIMIT ?
+                """,
+                (since_ms, limit),
+            ).fetchall()
+        else:
+            rows = self._conn.execute(
+                """
+                SELECT source, gap_start_ms, gap_end_ms, detail
+                FROM collector_gaps
+                WHERE gap_end_ms >= ? AND source = ?
+                ORDER BY gap_end_ms DESC, id DESC
+                LIMIT ?
+                """,
+                (since_ms, source, limit),
+            ).fetchall()
         return [
             CollectorGap(
                 source=str(r["source"]),

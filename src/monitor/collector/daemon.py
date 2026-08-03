@@ -29,7 +29,13 @@ from monitor.collector.config import (
     resolve_mantle_rpc_url,
     rpc_url_kind,
 )
+from monitor.collector.gaps import collector_down_gap
 from monitor.collector.latency import LatencyTracker, block_ingest_latency_ms
+from monitor.collector.watchdog import (
+    META_HEARTBEAT,
+    WatchdogAction,
+    evaluate_watchdog,
+)
 from monitor.fluxion.chain import ChainPoller
 from monitor.fluxion.pools import PoolMeta
 from monitor.fluxion.rfq import RfqPoller
@@ -129,9 +135,64 @@ class CollectorDaemon:
         # Last written L1 row fingerprint — skip duplicate rows under hot books.
         self._last_book_l1: dict[str, tuple[Decimal, Decimal, bool]] = {}
         self._cex_volume_poller: CexVolumePoller | None = None
+        # WHI-825: write-activity watchdog + downtime gap accounting.
+        self.exit_code = 0
+        self._process_started_ms = now_ms()
+        self._last_write_ms: int | None = None
+        self._pre_start_last_write_ms: int | None = None
+        self._pre_start_snapshotted = False
+        self._collector_down_gap_recorded = False
+        self._cex_ws: BybitWsCollector | BinanceWsCollector | None = None
+        self._watchdog_reconnect_armed = False
 
     def request_stop(self) -> None:
         self._stop.set()
+
+    def _note_data_write(self, ts: int | None = None) -> None:
+        """Record a tick-table journal write for the process-level watchdog.
+
+        Meta heartbeats do **not** count — otherwise the watchdog could never
+        fire. Heartbeat is liveness for /api/health only (WHI-825).
+        """
+        t = ts if ts is not None else now_ms()
+        prev = self._last_write_ms
+        self._last_write_ms = t if prev is None else max(prev, t)
+        if not self._collector_down_gap_recorded:
+            self._maybe_record_collector_down_gap(first_write_ms=t)
+
+    def _maybe_record_collector_down_gap(self, *, first_write_ms: int) -> None:
+        """On first write after boot, book [prev last write, now] as collector_down."""
+        if self._collector_down_gap_recorded:
+            return
+        prev = self._pre_start_last_write_ms
+        # Do not latch when prev is unknown (empty journal / first ever boot) —
+        # a later write after pre-start is snapshotted still records correctly.
+        if prev is None:
+            return
+        self._collector_down_gap_recorded = True
+        gap = collector_down_gap(
+            last_write_ms=prev,
+            first_write_ms=first_write_ms,
+            min_gap_ms=self.cfg.watchdog.min_down_gap_ms,
+            market_id=self.market_id,
+        )
+        if gap is None:
+            return
+        self.store.insert_gap(gap)
+        logger.warning(
+            "recorded collector_down gap market=%s start_ms=%s end_ms=%s detail=%s",
+            self.market_id,
+            gap.gap_start_ms,
+            gap.gap_end_ms,
+            gap.detail,
+        )
+
+    def _snapshot_pre_start_last_write(self) -> None:
+        """Capture prior-process freshest tick before any feed tasks start."""
+        if self._pre_start_snapshotted:
+            return
+        self._pre_start_last_write_ms = self.store.freshest_recv_ts_ms()
+        self._pre_start_snapshotted = True
 
     def _stamp_collector_meta(self) -> None:
         """Wall-clock start + write-once first-ever start (WHI-777 truncation).
@@ -139,13 +200,21 @@ class CollectorDaemon:
         ``collector_started_ms`` is this process (rewritten every boot).
         ``collector_first_started_ms`` is permanent so volume windows still
         look like a full 24h after a routine restart when swaps are retained.
+        Pre-start freshest must already be snapshotted via
+        ``_snapshot_pre_start_last_write`` before feed tasks start (WHI-825).
         """
+        self._snapshot_pre_start_last_write()
         ts = now_ms()
+        self._process_started_ms = ts
         self.store.set_meta("collector_started_ms", str(ts))
         self.store.set_meta("market_id", self.market_id)
         self.store.set_meta("rpc_url_kind", rpc_url_kind(self.rpc_url))
+        # Clear stopped marker so health does not treat a warm journal as down.
+        self.store.set_meta("collector_stopped_ms", "")
         if self.store.get_meta("collector_first_started_ms") is None:
             self.store.set_meta("collector_first_started_ms", str(ts))
+        # Heartbeat immediately so /api/health sees process liveness.
+        self.store.set_meta(META_HEARTBEAT, str(ts))
 
     async def run(self) -> None:
         if self.cfg.is_binance_pancake:
@@ -183,6 +252,9 @@ class CollectorDaemon:
             depth_emit_interval_ms=depth_cfg.emit_interval_ms,
             depth_mid_change_bps=depth_cfg.mid_change_bps,
         )
+        self._cex_ws = bybit
+        # Snapshot downtime baseline *before* any feed task can write.
+        self._snapshot_pre_start_last_write()
 
         tasks = [
             asyncio.create_task(bybit.run(), name="bybit_ws"),
@@ -193,6 +265,7 @@ class CollectorDaemon:
                 self._attribution_refresh_loop(), name="attribution_refresh"
             ),
             asyncio.create_task(self._underlying_loop(), name="underlying"),
+            asyncio.create_task(self._watchdog_loop(), name="watchdog"),
         ]
         vol_task = self._maybe_cex_volume_task(pair_id_by_symbol)
         if vol_task is not None:
@@ -200,7 +273,7 @@ class CollectorDaemon:
         self._stamp_collector_meta()
         logger.info(
             "collector started market=%s pairs=%d amm_pools=%d sqlite=%s rpc_kind=%s "
-            "retention=%s bybit_book=%s depth=%s cex_volume=%s",
+            "retention=%s bybit_book=%s depth=%s cex_volume=%s watchdog=%s",
             self.market_id,
             len(self.pairs.pairs),
             len(self.pairs.pairs_with_amm()),
@@ -210,6 +283,7 @@ class CollectorDaemon:
             self.cfg.bybit.book_topic_prefix,
             depth_cfg.enabled,
             self.cfg.cex_volume is not None and self.cfg.cex_volume.enabled,
+            self.cfg.watchdog.enabled,
         )
         try:
             await self._stop.wait()
@@ -253,12 +327,15 @@ class CollectorDaemon:
             depth_emit_interval_ms=depth_cfg.emit_interval_ms,
             depth_mid_change_bps=depth_cfg.mid_change_bps,
         )
+        self._cex_ws = binance
+        self._snapshot_pre_start_last_write()
 
         tasks = [
             asyncio.create_task(binance.run(), name="binance_ws"),
             asyncio.create_task(self._chain_loop_bsc(), name="bsc_chain"),
             asyncio.create_task(self._retention_loop(), name="retention"),
             asyncio.create_task(self._underlying_loop(), name="underlying"),
+            asyncio.create_task(self._watchdog_loop(), name="watchdog"),
             # No RFQ / MM attribution refresh for AMM-only pancake market.
         ]
         vol_task = self._maybe_cex_volume_task(pair_id_by_symbol)
@@ -267,7 +344,8 @@ class CollectorDaemon:
         self._stamp_collector_meta()
         logger.info(
             "collector started market=%s pairs=%d amm_pools=%d sqlite=%s rpc_kind=%s "
-            "retention=%s binance_ws=%s depth=%s pool_stride=%d cex_volume=%s",
+            "retention=%s binance_ws=%s depth=%s pool_stride=%d cex_volume=%s "
+            "watchdog=%s",
             self.market_id,
             len(self.bstocks.pairs),
             len(self.bstocks.pairs_with_amm()),
@@ -278,6 +356,7 @@ class CollectorDaemon:
             depth_cfg.enabled,
             self.cfg.bsc.pool_state_every_n_blocks,
             self.cfg.cex_volume is not None and self.cfg.cex_volume.enabled,
+            self.cfg.watchdog.enabled,
         )
         try:
             await self._stop.wait()
@@ -321,6 +400,7 @@ class CollectorDaemon:
             return
         self._last_book_l1[tick.pair_id] = key
         await asyncio.to_thread(self.store.insert_bybit_book, [tick])
+        self._note_data_write(tick.recv_ts_ms)
 
     async def _on_depth(self, tick: BybitDepthTick) -> None:
         """Persist a precomputed VWAP curve (already throttled in the WS collector)."""
@@ -331,9 +411,11 @@ class CollectorDaemon:
         ):
             tick = replace(tick, gap=True)
         await asyncio.to_thread(self.store.insert_bybit_depth, [tick])
+        self._note_data_write(tick.recv_ts_ms)
 
     async def _on_trade(self, tick: BybitTradeTick) -> None:
         await asyncio.to_thread(self.store.insert_bybit_trades, [tick])
+        self._note_data_write(tick.recv_ts_ms)
 
     def _maybe_cex_volume_task(
         self, pair_id_by_symbol: dict[str, str]
@@ -355,15 +437,72 @@ class CollectorDaemon:
 
     async def _on_cex_volume(self, ticks: list[CexVolumeTick]) -> None:
         await asyncio.to_thread(self.store.insert_cex_volume, ticks)
+        # REST 24h volume is not part of freshest_recv / watchdog progress —
+        # a successful volume poll while WS+chain are dead must not disarm it.
 
     async def _on_gap(self, gap: CollectorGap) -> None:
         await asyncio.to_thread(self.store.insert_gap, gap)
+        # Gap rows are ops accounting, not feed progress — do not arm watchdog.
         logger.warning(
             "gap source=%s detail=%s duration_ms=%s",
             gap.source,
             gap.detail,
             gap.gap_end_ms - gap.gap_start_ms,
         )
+
+    async def _watchdog_loop(self) -> None:
+        """Heartbeat + data-write silence reconnect/exit (WHI-825).
+
+        Heartbeat (meta) proves process liveness for /api/health even when
+        bookTicker is quiet. Watchdog progress uses tick-table writes only
+        (book/trade/pool/swap/rfq/volume/underlying) so a silent feed still fails.
+        """
+        wd = self.cfg.watchdog
+        interval = max(1.0, wd.check_interval_s)
+        while not self._stop.is_set():
+            try:
+                await asyncio.wait_for(self._stop.wait(), timeout=interval)
+                return
+            except TimeoutError:
+                pass
+            ts = now_ms()
+            try:
+                await asyncio.to_thread(self.store.set_meta, META_HEARTBEAT, str(ts))
+            except Exception as exc:  # noqa: BLE001
+                logger.error("watchdog heartbeat write failed: %s", exc)
+
+            action = evaluate_watchdog(
+                now_ms=ts,
+                last_write_ms=self._last_write_ms,
+                process_started_ms=self._process_started_ms,
+                reconnect_idle_ms=int(wd.reconnect_idle_s * 1000),
+                exit_idle_ms=int(wd.exit_idle_s * 1000),
+                startup_grace_ms=int(wd.startup_grace_s * 1000),
+                writes_paused=self._book_writes_paused,
+                enabled=wd.enabled,
+            )
+            if action is WatchdogAction.OK:
+                self._watchdog_reconnect_armed = False
+                continue
+            if action is WatchdogAction.RECONNECT:
+                if not self._watchdog_reconnect_armed:
+                    self._watchdog_reconnect_armed = True
+                    logger.error(
+                        "watchdog: no tick-table writes for >=%.0fs — forcing CEX WS reconnect",
+                        wd.reconnect_idle_s,
+                    )
+                    if self._cex_ws is not None:
+                        self._cex_ws.request_reconnect()
+                continue
+            # EXIT
+            logger.error(
+                "watchdog: no tick-table writes for >=%.0fs — exiting non-zero "
+                "for supervisor restart",
+                wd.exit_idle_s,
+            )
+            self.exit_code = 1
+            self.request_stop()
+            return
 
     async def _chain_loop_mantle(self) -> None:
         if self.pairs is None or self.cfg.mantle is None:
@@ -478,18 +617,28 @@ class CollectorDaemon:
 
     def _on_pool_state(self, ticks: list[FluxionPoolStateTick]) -> None:
         self.store.insert_pool_state(ticks)
+        if ticks:
+            self._note_data_write(max(t.recv_ts_ms for t in ticks))
 
     def _on_pool_tvl(self, ticks: list[DexPoolTvlTick]) -> None:
         self.store.insert_pool_tvl(ticks)
+        if ticks:
+            self._note_data_write(max(t.recv_ts_ms for t in ticks))
 
     def _on_swaps(self, ticks: list[FluxionSwapTick]) -> None:
         self.store.insert_swaps(ticks)
+        if ticks:
+            self._note_data_write(max(t.recv_ts_ms for t in ticks))
 
     def _on_rfq_fills(self, ticks: list[FluxionRfqFillTick]) -> None:
         self.store.insert_rfq_fills(ticks)
+        if ticks:
+            self._note_data_write(max(t.recv_ts_ms for t in ticks))
 
     def _on_transfers(self, ticks: list[Erc20TransferTick]) -> None:
         self.store.insert_erc20_transfers(ticks)
+        if ticks:
+            self._note_data_write(max(t.recv_ts_ms for t in ticks))
 
     def _on_chain_gap(self, gap: CollectorGap) -> None:
         self.store.insert_gap(gap)
@@ -515,6 +664,8 @@ class CollectorDaemon:
                 "block_ingest_latency_p99_ms", str(int(report.p99 or 0))
             )
             self.store.set_meta("block_ingest_latency_n", str(report.count))
+            # Meta-only progress does not arm the watchdog: tick-table inserts
+            # (pool/swap/book/…) are the "any 入库" signal (WHI-825).
 
         return on_block_done
 
@@ -567,6 +718,7 @@ class CollectorDaemon:
                     tick = await asyncio.to_thread(poller.poll_next, gap=self._rfq_gap)
                     self._rfq_gap = False
                     await asyncio.to_thread(self.store.insert_rfq_quotes, [tick])
+                    self._note_data_write(tick.poll_ts_ms)
                 except Exception as exc:  # noqa: BLE001
                     logger.exception("rfq poll error: %s", exc)
                     self._rfq_gap = True
@@ -728,6 +880,8 @@ class CollectorDaemon:
                         await asyncio.to_thread(
                             self.store.insert_underlying_prices, ticks
                         )
+                        # Underlying REST is not freshest_recv / watchdog progress
+                        # (same rule as cex_volume — WHI-825 round-3).
                     # Always stamp poll meta (empty list ≠ not running).
                     self._stamp_underlying_poll(len(ticks))
                 except Exception as exc:  # noqa: BLE001
@@ -921,6 +1075,8 @@ def run_forever(
     finally:
         store.close()
         loop.close()
+    if daemon.exit_code:
+        raise SystemExit(daemon.exit_code)
 
 
 def main(argv: list[str] | None = None) -> None:

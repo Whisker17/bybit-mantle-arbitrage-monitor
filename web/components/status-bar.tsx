@@ -22,6 +22,16 @@ export function StatusBar({
   displayName,
 }: Props) {
   const alive = health?.collector_alive ?? false;
+  const feedState = health?.feed_state;
+  const collectorLabel =
+    feedState === "feed_quiet"
+      ? "quiet"
+      : feedState === "gap"
+        ? "gap"
+        : alive
+          ? "alive"
+          : "down";
+  const collectorVariant = collectorLabel === "alive" ? "open" : "warning";
   const session = overview?.session_now ?? null;
   // Prefer API display_name (human) over raw market id fallbacks.
   const fromApi = overview?.display_name ?? health?.display_name;
@@ -48,13 +58,18 @@ export function StatusBar({
           <span
             className={cn(
               "inline-block h-1.5 w-1.5 shrink-0 rounded-full",
-              alive ? "bg-positive" : "bg-warning animate-pulse",
+              collectorLabel === "alive"
+                ? "bg-positive"
+                : "bg-warning animate-pulse",
             )}
             aria-hidden
           />
           collector{" "}
-          <Badge variant={alive ? "open" : "warning"}>
-            {alive ? "alive" : "down"}
+          <Badge
+            variant={collectorVariant}
+            title={health?.recovery_hint ?? undefined}
+          >
+            {collectorLabel}
           </Badge>
         </span>
 

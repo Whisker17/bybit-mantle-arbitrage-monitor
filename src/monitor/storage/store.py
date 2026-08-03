@@ -629,6 +629,32 @@ class SqliteStore:
             ).fetchone()
         return None if row is None else str(row["value"])
 
+    def freshest_recv_ts_ms(self) -> int | None:
+        """Max wall-clock recv across live tick tables (WHI-825 downtime gap).
+
+        Same sources as ``JournalReader.freshest_recv_ts_ms`` so restart gap
+        accounting matches the health liveness proxy.
+        """
+        with self._lock:
+            row = self._conn.execute(
+                """
+                SELECT MAX(ts) AS ts FROM (
+                    SELECT MAX(recv_ts_ms) AS ts FROM bybit_book
+                    UNION ALL
+                    SELECT MAX(recv_ts_ms) AS ts FROM bybit_trades
+                    UNION ALL
+                    SELECT MAX(recv_ts_ms) AS ts FROM fluxion_pool_state
+                    UNION ALL
+                    SELECT MAX(recv_ts_ms) AS ts FROM fluxion_swaps
+                    UNION ALL
+                    SELECT MAX(recv_ts_ms) AS ts FROM fluxion_rfq_quotes
+                )
+                """
+            ).fetchone()
+        if row is None or row["ts"] is None:
+            return None
+        return int(row["ts"])
+
     def count(self, table: str) -> int:
         if table not in {
             "bybit_book",
