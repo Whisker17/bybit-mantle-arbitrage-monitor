@@ -126,38 +126,57 @@ export function hasSortValue(row: PairOverviewRow, key: SortKey): boolean {
 }
 
 /**
+ * Why a row is denied a Top-N seat (wire/reason codes — UI maps to labels).
+ * Every non-tradeable row gets a reason so Show-all can always explain gaps.
+ */
+export type DexNonTradeableReason =
+  | "empty_pool"
+  | "invalid_mid"
+  | "no_pool"
+  | "low_liq"
+  | "no_quote";
+
+/**
  * DEX-tradeable seat eligibility for Top-N (WHI-796).
  *
- * Reuses two existing signals so columns cannot disagree with fillability:
- * - **Quotable AMM mid** (WHI-795): `amm_mid != null` — empty_pool / invalid_mid
- *   already suppress residual slot0 mids on the API wire.
- * - **TVL floor**: `!low_liquidity` — live TVL vs inventory
- *   `low_liquidity_threshold_usd` (default $50k), with dex:none always low.
+ * A seat requires a live DEX leg — either:
+ * - **AMM path:** quotable AMM mid (WHI-795: `amm_mid != null`) **and**
+ *   `!low_liquidity` (TVL ≥ inventory `low_liquidity_threshold_usd`; dex:none
+ *   always low), or
+ * - **RFQ path:** two-sided RFQ quote (`rfq_buy` and `rfq_sell` present) —
+ *   covers Fluxion RFQ-only inventory pairs (AMZNx/COINx/MCDx) where
+ *   `amm is null` and the inventory low-liq bit would otherwise exclude them.
  *
  * Fewer than N seats is intentional when the chain only has a handful of
  * live pools; do not pad with no_pool / empty_pool / dust rows.
  */
 export function isDexTradeable(row: PairOverviewRow): boolean {
-  return row.amm_mid != null && !row.low_liquidity;
+  const ammOk = row.amm_mid != null && !row.low_liquidity;
+  const rfqOk = row.rfq_buy != null && row.rfq_sell != null;
+  return ammOk || rfqOk;
 }
 
 /**
- * Status label for non-tradeable rows in the expanded ("Show all") table.
- * Null when the row is tradeable (no badge).
+ * Structured reason for a non-tradeable row (Show-all badge).
+ * Null only when {@link isDexTradeable} is true.
  */
-export function dexNonTradeableLabel(row: PairOverviewRow): string | null {
+export function dexNonTradeableReason(
+  row: PairOverviewRow,
+): DexNonTradeableReason | null {
   if (isDexTradeable(row)) return null;
-  if (row.amm_quote_reason === "empty_pool") return "empty pool";
-  if (row.amm_quote_reason === "invalid_mid") return "invalid mid";
-  if (row.pnl_v2?.status === "no_pool") return "no pool";
-  if (row.pnl_v2?.status === "empty_pool") return "empty pool";
-  if (row.pnl_v2?.status === "invalid_mid") return "invalid mid";
-  // Sub-threshold TVL with a quotable mid (or residual mid not yet suppressed).
-  if (row.amm_mid != null && row.low_liquidity) return "low liq";
-  // dex:none / no AMM inventory: low_liq + no mid + no quote reason.
-  if (row.low_liquidity && row.amm_mid == null) return "no pool";
-  // Cold-start: pool expected but first tick not yet — no badge noise.
-  return null;
+  // Prefer explicit AMM suppression codes (WHI-795) over coarser signals.
+  if (row.amm_quote_reason === "empty_pool") return "empty_pool";
+  if (row.amm_quote_reason === "invalid_mid") return "invalid_mid";
+  // Quotable mid but under the TVL floor.
+  if (row.amm_mid != null && row.low_liquidity) return "low_liq";
+  // PnL snapshot codes when present (more precise than inventory heuristics).
+  if (row.pnl_v2?.status === "empty_pool") return "empty_pool";
+  if (row.pnl_v2?.status === "invalid_mid") return "invalid_mid";
+  if (row.pnl_v2?.status === "no_pool") return "no_pool";
+  // dex:none inventory is always low_liquidity with no mid.
+  if (row.low_liquidity && row.amm_mid == null) return "no_pool";
+  // Real pool expected (not low-liq) but mid not yet / temporarily missing.
+  return "no_quote";
 }
 
 export type TopNView = {
@@ -203,9 +222,7 @@ export function applyTopN(
   const tradeable = sortedRows.filter((r) => isDexTradeable(r));
   const tradeableCount = tradeable.length;
   // Eligible seats: tradeable ∩ has sort value (preserves sort order).
-  const eligible = sortedRows.filter(
-    (r) => isDexTradeable(r) && hasSortValue(r, key),
-  );
+  const eligible = tradeable.filter((r) => hasSortValue(r, key));
   const presentCount = eligible.length;
 
   if (opts.showAll) {

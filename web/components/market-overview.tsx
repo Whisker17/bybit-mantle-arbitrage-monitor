@@ -263,13 +263,10 @@ export function MarketOverview({ marketId }: Props) {
   );
 
   const emptyMessage = useMemo(() => {
-    if (topView.totalCount === 0) {
-      return "No pairs match the current filter.";
-    }
-    if (topView.tradeableCount === 0) {
+    if (topView.tradeableCount === 0 && topView.totalCount > 0) {
       return `No DEX-tradeable pairs yet (${topView.totalCount} listed). Expand to see no-pool / empty-pool / low-liq rows.`;
     }
-    if (topView.presentCount === 0) {
+    if (topView.presentCount === 0 && topView.totalCount > 0) {
       const label = sortKeyLabel(sortKey);
       return `No tradeable pairs with ${label} data yet — expand to see all ${topView.totalCount}.`;
     }

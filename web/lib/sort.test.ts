@@ -1,10 +1,11 @@
 import assert from "node:assert/strict";
 import { describe, it } from "node:test";
 
+import { dexNonTradeableLabel } from "./format";
 import {
   applyTopN,
   buildOverviewSearch,
-  dexNonTradeableLabel,
+  dexNonTradeableReason,
   filterRows,
   isDexTradeable,
   parseOverviewSearch,
@@ -96,7 +97,7 @@ describe("filterRows", () => {
 });
 
 describe("isDexTradeable (WHI-796)", () => {
-  it("requires quotable AMM mid and not low_liquidity", () => {
+  it("AMM path: requires quotable mid and not low_liquidity", () => {
     assert.equal(
       isDexTradeable(row({ pair_id: "OK", amm_mid: "100", low_liquidity: false })),
       true,
@@ -126,6 +127,35 @@ describe("isDexTradeable (WHI-796)", () => {
     // Cold-start: inventory not low but mid not yet — no seat until quotable.
     assert.equal(
       isDexTradeable(row({ pair_id: "WAIT", amm_mid: null, low_liquidity: false })),
+      false,
+    );
+  });
+
+  it("RFQ path: two-sided RFQ seats even when AMM is null / low_liq", () => {
+    // Fluxion RFQ-only inventory (AMZNx-class): amm null, inventory low_liq.
+    assert.equal(
+      isDexTradeable(
+        row({
+          pair_id: "AMZNx",
+          amm_mid: null,
+          low_liquidity: true,
+          rfq_buy: "180",
+          rfq_sell: "181",
+        }),
+      ),
+      true,
+    );
+    // One-sided RFQ is not enough.
+    assert.equal(
+      isDexTradeable(
+        row({
+          pair_id: "HALF",
+          amm_mid: null,
+          low_liquidity: true,
+          rfq_buy: "180",
+          rfq_sell: null,
+        }),
+      ),
       false,
     );
   });
@@ -452,19 +482,31 @@ describe("topNSummary / sortKeyLabel (WHI-791 + WHI-796)", () => {
   });
 });
 
-describe("dexNonTradeableLabel (WHI-796)", () => {
+describe("dexNonTradeableReason (WHI-796)", () => {
   it("returns null for tradeable rows", () => {
     assert.equal(
-      dexNonTradeableLabel(
+      dexNonTradeableReason(
         row({ pair_id: "OK", amm_mid: "1", low_liquidity: false }),
+      ),
+      null,
+    );
+    assert.equal(
+      dexNonTradeableReason(
+        row({
+          pair_id: "RFQ",
+          amm_mid: null,
+          low_liquidity: true,
+          rfq_buy: "1",
+          rfq_sell: "2",
+        }),
       ),
       null,
     );
   });
 
-  it("labels empty pool / invalid mid / no pool / low liq", () => {
+  it("returns structured reasons for empty / invalid / no pool / low liq / no quote", () => {
     assert.equal(
-      dexNonTradeableLabel(
+      dexNonTradeableReason(
         row({
           pair_id: "E",
           amm_mid: null,
@@ -472,10 +514,10 @@ describe("dexNonTradeableLabel (WHI-796)", () => {
           low_liquidity: true,
         }),
       ),
-      "empty pool",
+      "empty_pool",
     );
     assert.equal(
-      dexNonTradeableLabel(
+      dexNonTradeableReason(
         row({
           pair_id: "I",
           amm_mid: null,
@@ -483,10 +525,10 @@ describe("dexNonTradeableLabel (WHI-796)", () => {
           low_liquidity: true,
         }),
       ),
-      "invalid mid",
+      "invalid_mid",
     );
     assert.equal(
-      dexNonTradeableLabel(
+      dexNonTradeableReason(
         row({
           pair_id: "N",
           amm_mid: null,
@@ -502,14 +544,29 @@ describe("dexNonTradeableLabel (WHI-796)", () => {
           },
         }),
       ),
-      "no pool",
+      "no_pool",
     );
     assert.equal(
-      dexNonTradeableLabel(
+      dexNonTradeableReason(
         row({ pair_id: "D", amm_mid: "1", low_liquidity: true }),
       ),
-      "low liq",
+      "low_liq",
     );
+    // Cold-start: expected pool, not low-liq, mid missing → no_quote (always badge).
+    assert.equal(
+      dexNonTradeableReason(
+        row({ pair_id: "WAIT", amm_mid: null, low_liquidity: false }),
+      ),
+      "no_quote",
+    );
+  });
+
+  it("maps reasons to stable UI labels via format helper", () => {
+    assert.equal(dexNonTradeableLabel("empty_pool"), "empty pool");
+    assert.equal(dexNonTradeableLabel("no_pool"), "no pool");
+    assert.equal(dexNonTradeableLabel("low_liq"), "low liq");
+    assert.equal(dexNonTradeableLabel("no_quote"), "no quote");
+    assert.equal(dexNonTradeableLabel(null), null);
   });
 });
 

@@ -11,6 +11,8 @@ import {
   ammQuoteReasonTitle,
   bpsTone,
   cexPremiumBps,
+  dexNonTradeableLabel,
+  dexNonTradeableTitle,
   fmtDirection,
   fmtDirectionTitle,
   fmtNotional,
@@ -30,7 +32,7 @@ import {
 import { marketPairPath } from "@/lib/markets";
 import { mmActiveLabel, mmActiveTitle } from "@/lib/mm";
 import { overviewPnlCell } from "@/lib/pnl";
-import { dexNonTradeableLabel } from "@/lib/sort";
+import { dexNonTradeableReason } from "@/lib/sort";
 import type { MmActiveStatus, PairOverviewRow, SortKey } from "@/lib/types";
 
 function dexVolumeTitle(row: PairOverviewRow): string {
@@ -403,20 +405,15 @@ function MmActiveCell({ status }: { status: MmActiveStatus | null | undefined })
 
 /** Pair-id badge for non-tradeable DEX legs (WHI-796 Show-all). */
 function DexStatusBadge({ row }: { row: PairOverviewRow }) {
-  const label = dexNonTradeableLabel(row);
+  const reason = dexNonTradeableReason(row);
+  const label = dexNonTradeableLabel(reason);
   if (!label) return null;
-  const title =
-    label === "empty pool"
-      ? ammQuoteReasonTitle("empty_pool")
-      : label === "invalid mid"
-        ? ammQuoteReasonTitle("invalid_mid")
-        : label === "no pool"
-          ? "No AMM pool in inventory (dex:none) — CEX-only; excluded from Top-N"
-          : label === "low liq"
-            ? "Below low_liquidity_threshold_usd — excluded from Top-N seats"
-            : undefined;
   return (
-    <Badge variant="muted" className="normal-case" title={title}>
+    <Badge
+      variant="muted"
+      className="normal-case"
+      title={dexNonTradeableTitle(reason)}
+    >
       {label}
     </Badge>
   );

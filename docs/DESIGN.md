@@ -278,22 +278,27 @@ without an AMM pool remain low-liquidity regardless of TVL.
 
 **Web Top-N seats = DEX-tradeable (WHI-791 + WHI-796):** the overview collapsed
 view is **not** “top N by sort key over the full inventory”. A row earns a
-Top-N seat only when it is **DEX-tradeable**:
+Top-N seat only when it is **DEX-tradeable** via either path:
 
-1. **Quotable AMM mid** (WHI-795 `quotable_amm_mid` → wire `amm_mid != null`) —
-   empty pools with residual slot0 mids and non-positive mids are excluded.
-2. **TVL floor** — `!low_liquidity`, i.e. live (or inventory fallback) TVL ≥
-   `low_liquidity_threshold_usd` (default **$50k**, same config as dimming /
-   inventory). dex:none is always non-tradeable.
+1. **AMM path:** quotable AMM mid (WHI-795 `quotable_amm_mid` → wire
+   `amm_mid != null`) **and** `!low_liquidity` (live or inventory TVL ≥
+   `low_liquidity_threshold_usd`, default **$50k**). Empty pools with residual
+   slot0 mids and non-positive mids are excluded.
+2. **RFQ path:** two-sided RFQ quote (`rfq_buy` and `rfq_sell` both present).
+   Covers Fluxion inventory with `amm: null` (AMZNx / COINx / MCDx) where the
+   inventory low-liq bit would otherwise permanently exclude them — RFQ *is*
+   their DEX leg.
 
-Reason for the $50k floor: it is the existing inventory convention (M1 /
-bStocks) that separates “display dust” from capital large enough to matter for
-paper arb; reusing it avoids a second threshold that would drift. **Fewer than
-N rows is correct** when the chain only has a handful of live pools (bStocks
-2026-08-03: ~8 pairs above $50k TVL out of 55) — padding with no_pool /
-empty_pool / dust CEX-vol leaders is worse than an honest short list. Footer
-copy is `Top K of M by <sort> (T tradeable on DEX)`. “Show all” still lists
-every filtered pair with `no pool` / `empty pool` / `low liq` badges.
+dex:none without RFQ (binance-pancake CEX-only) is always non-tradeable.
+Reason for the $50k AMM floor: existing inventory convention (M1 / bStocks)
+separating display dust from capital large enough for paper arb; reusing it
+avoids a second threshold that would drift. **Fewer than N rows is correct**
+when the chain only has a handful of live pools (bStocks 2026-08-03: ~8 pairs
+above $50k TVL out of 55) — padding with no_pool / empty_pool / dust CEX-vol
+leaders is worse than an honest short list. Footer copy is
+`Top K of M by <sort> (T tradeable on DEX)`. “Show all” still lists every
+filtered pair with structured status badges (`no pool` / `empty pool` /
+`low liq` / `no quote`).
 
 **API / Web:** overview rows expose `tvl_usd` + `tvl_as_of_ms` (detail overview
 mirrors the same). History remains queryable via `JournalReader.pool_tvl_series`
