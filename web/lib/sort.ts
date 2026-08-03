@@ -130,21 +130,30 @@ export function hasSortValue(row: PairOverviewRow, key: SortKey): boolean {
 }
 
 /**
- * DEX-tradeable seat eligibility for Top-N (WHI-796).
+ * DEX-tradeable seat eligibility for Top-N (WHI-796 + WHI-822).
  *
  * A seat requires a live DEX leg — either:
  * - **AMM path:** quotable AMM mid (WHI-795: `amm_mid != null`) **and**
  *   `!low_liquidity` (TVL ≥ inventory `low_liquidity_threshold_usd`; dex:none
- *   always low), or
+ *   always low) **and** no `pricing_anomaly` reason (WHI-822: extreme
+ *   |vs CEX| mid is visible but not a tradable claim), or
  * - **RFQ path:** two-sided RFQ quote with positive prices — covers Fluxion
  *   RFQ-only inventory pairs (AMZNx/COINx/MCDx) where `amm is null` and the
  *   inventory low-liq bit would otherwise exclude them.
  *
  * Fewer than N seats is intentional when the chain only has a handful of
- * live pools; do not pad with no_pool / empty_pool / dust rows.
+ * live pools; do not pad with no_pool / empty_pool / dust / anomaly rows.
  */
 export function isDexTradeable(row: PairOverviewRow): boolean {
-  const ammOk = row.amm_mid != null && !row.low_liquidity;
+  // amm_quote_reason is authoritative; pnl_v2.status is belt-and-braces when
+  // only the PnL payload is present (same guard populates both on API rows).
+  // stale = no live CEX book → cannot verify |vs CEX| (WHI-822); deny AMM seat.
+  const ammOk =
+    row.amm_mid != null &&
+    !row.low_liquidity &&
+    !row.stale &&
+    row.amm_quote_reason == null &&
+    row.pnl_v2?.status !== "pricing_anomaly";
   const rfqBuy = parseNum(row.rfq_buy);
   const rfqSell = parseNum(row.rfq_sell);
   const rfqOk =
@@ -160,14 +169,16 @@ export function dexNonTradeableReason(
   row: PairOverviewRow,
 ): DexNonTradeableReason | null {
   if (isDexTradeable(row)) return null;
-  // Prefer explicit AMM suppression codes (WHI-795) over coarser signals.
+  // Prefer explicit AMM suppression codes (WHI-795 / WHI-822) over coarser signals.
   if (row.amm_quote_reason === "empty_pool") return "empty_pool";
   if (row.amm_quote_reason === "invalid_mid") return "invalid_mid";
+  if (row.amm_quote_reason === "pricing_anomaly") return "pricing_anomaly";
   // Quotable mid but under the TVL floor.
   if (row.amm_mid != null && row.low_liquidity) return "low_liq";
   // PnL snapshot codes when present (more precise than inventory heuristics).
   if (row.pnl_v2?.status === "empty_pool") return "empty_pool";
   if (row.pnl_v2?.status === "invalid_mid") return "invalid_mid";
+  if (row.pnl_v2?.status === "pricing_anomaly") return "pricing_anomaly";
   if (row.pnl_v2?.status === "no_pool") return "no_pool";
   // dex:none inventory is always low_liquidity with no mid.
   if (row.low_liquidity && row.amm_mid == null) return "no_pool";

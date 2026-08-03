@@ -23,6 +23,9 @@ from monitor.metrics.amm_pool import (
 )
 from monitor.metrics.amm_quote import (
     AmmQuoteReason,
+    amm_quote_for_cex,
+    annotate_pricing_anomaly,
+    is_tradable_amm_quote,
     quotable_amm_mid,
 )
 from monitor.metrics.config import (
@@ -111,6 +114,8 @@ __all__ = [
     "VenueKind",
     "amm_pool_from_pair_tick",
     "amm_pool_from_tick",
+    "amm_quote_for_cex",
+    "annotate_pricing_anomaly",
     "best_net_edge",
     "build_edge_snapshot",
     "build_pnl_pair_snapshot",
@@ -121,6 +126,7 @@ __all__ = [
     "compute_pnl_usd",
     "default_metrics_path",
     "equity_equivalent_mid",
+    "is_tradable_amm_quote",
     "is_us_rth_open",
     "levels_from_depth_curve",
     "load_metrics_config",

@@ -41,6 +41,7 @@ const STATUS_LABEL: Record<PnlStatus, string> = {
   no_pool: "no pool",
   empty_pool: "empty pool",
   invalid_mid: "invalid mid",
+  pricing_anomaly: "price anomaly",
   no_depth: "no depth",
   no_fillable: "unfillable",
   // Legacy wire status (pre-WHI-821 wipe path). Prefer quote_aged annotation.

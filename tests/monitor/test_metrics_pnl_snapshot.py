@@ -337,6 +337,48 @@ def test_snapshot_invalid_mid_status_matches_quote_reason() -> None:
     assert snap.tables != {}
 
 
+def test_snapshot_pricing_anomaly_blocks_optimal() -> None:
+    """WHI-822: liquid pool with |vs CEX| > threshold → pricing_anomaly, no optimal."""
+    pair = _load_aapl_pair()
+    # CEX ~100, AMM ~112.8 → +1280 bps (> 500).
+    pool_tick = _pool_tick(mid=Decimal("112.80"))
+    pool_tick = FluxionPoolStateTick(
+        pair_id=pool_tick.pair_id,
+        pool=pool_tick.pool,
+        block_number=pool_tick.block_number,
+        block_ts=pool_tick.block_ts,
+        recv_ts_ms=pool_tick.recv_ts_ms,
+        sqrt_price_x96=pool_tick.sqrt_price_x96,
+        tick=pool_tick.tick,
+        liquidity=10**20,
+        token0=pool_tick.token0,
+        token1=pool_tick.token1,
+        mid_usdc_per_wrapper=Decimal("112.80"),
+        mid_usdc_per_native=Decimal("112.80"),
+        wrapper_assets_per_share=Decimal(1),
+    )
+    amm = amm_pool_from_tick(pair, pool_tick)
+    assert amm is not None
+    snap = build_pnl_pair_snapshot(
+        pair_id=pair.id,
+        bybit=_book(bid=Decimal("100"), ask=Decimal("100")),
+        amm=amm,
+        amm_tick=pool_tick,
+        config=_cfg(),
+        depth=_depth(),
+        native_decimals=pair.fluxion.native_decimals,
+    )
+    assert snap.status == "pricing_anomaly"
+    assert snap.best.status == "pricing_anomaly"
+    assert snap.best.optimal_net_pnl_usd is None
+    assert snap.best.direction is None
+    # Tables still materialize for detail inspection; optimal claim is blocked
+    # on both overview best *and* per-direction tables.
+    assert snap.tables != {}
+    for table in snap.tables.values():
+        assert table.optimal is None
+
+
 def test_snapshot_no_depth_hides_overview_optimal() -> None:
     """Overview must show no_depth; detail tables still compute on L1."""
     pair = _load_aapl_pair()

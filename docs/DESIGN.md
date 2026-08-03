@@ -292,7 +292,7 @@ shows TVL (`$K`/`$M` via the same notional formatter as volume). Until the first
 sample, the cell uses the project-wide empty glyph (`—`); tooltip states
 “waiting for first sample”.
 
-### 2.9 Web Top-N seats = DEX-tradeable (WHI-791 + WHI-796)
+### 2.9 Web Top-N seats = DEX-tradeable (WHI-791 + WHI-796 + WHI-822)
 
 The overview collapsed view is **not** “top N by sort key over the full
 inventory”. A row earns a Top-N seat only when it is **DEX-tradeable** via
@@ -300,8 +300,13 @@ either path:
 
 1. **AMM path:** quotable AMM mid (WHI-795 `quotable_amm_mid` → wire
    `amm_mid != null`) **and** `!low_liquidity` (live or inventory TVL ≥
-   `low_liquidity_threshold_usd`, default **$50k**). Empty pools with residual
-   slot0 mids and non-positive mids are excluded.
+   `low_liquidity_threshold_usd`, default **$50k**) **and** no
+   `pricing_anomaly` reason (WHI-822). Empty pools with residual slot0 mids
+   and non-positive mids are excluded. Extreme `|AMM − CEX|` (default
+   `max_abs_amm_spread_bps: 500` in `config/metrics.yaml`) keeps mid/spread
+   visible for investigation but denies seats, paper edge, and PnL v2 optimal
+   — prefer a false negative over a fake fillable claim
+   (`docs/references/whi-822-spyb-pricing-anomaly.md`).
 2. **RFQ path:** two-sided RFQ quote with **positive** prices (`rfq_buy` and
    `rfq_sell` both present and &gt; 0). Covers Fluxion inventory with
    `amm: null` (AMZNx / COINx / MCDx) where the inventory low-liq bit would
@@ -316,7 +321,7 @@ above $50k TVL out of 55) — padding with no_pool / empty_pool / dust CEX-vol
 leaders is worse than an honest short list. Footer copy is
 `Top K of M by <sort> (T tradeable on DEX)`. “Show all” still lists every
 filtered pair with structured status badges (`no pool` / `empty pool` /
-`invalid mid` / `low liq` / `no quote`).
+`invalid mid` / `price anomaly` / `low liq` / `no quote`).
 
 ## 3. Cross-cutting Policies
 

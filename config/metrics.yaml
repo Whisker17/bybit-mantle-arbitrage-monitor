@@ -40,6 +40,12 @@ breach_size_usd: 1000
 # overnight / reconnect / gap=1 windows must not inflate open-session totals.
 max_breach_gap_ms: 300000
 
+# WHI-822: |AMM mid − CEX mid| / CEX mid in bps. Beyond this the pair is marked
+# pricing_anomaly — mid/spread stay visible for investigation, but PnL v2 must
+# not claim a fillable optimal and Top-N seats are denied. Prefer false
+# negative over a fake tradable opportunity. null = disable.
+max_abs_amm_spread_bps: 500
+
 # PnL v2 cash-flow engine (WHI-756 / DESIGN §2.6). Separate from M3 TUI ladder.
 pnl_v2:
   # Fixed AMM bucket table (USD notional at de-multiplied Bybit mid).

@@ -204,6 +204,12 @@ placeholders. Agents must not assume a module exists until its issue lands. -->
     event-driven CEX book age &gt; 30s; `collector_stale_ms` = process liveness
     only; `quote_max_age_ms` annotates `quote_aged` + per-leg ages; UI labels
     disambiguated (no book / price stale / quote aged / feed down). DESIGN §2.6.5.
+  - **SPYB pricing-anomaly guard (WHI-822) landed:** investigation note
+    `docs/references/whi-822-spyb-pricing-anomaly.md` — SPYB pool/token/decimals/
+    uiMultiplier verified on-chain (not 张冠李戴); CEX tracks SPY, AMM is the
+    deviant leg. Guard `max_abs_amm_spread_bps` (default 500) → reason/status
+    `pricing_anomaly` (mid/spread kept); blocks paper edge, PnL v2 optimal, and
+    Top-N seats. Seam `annotate_pricing_anomaly` after `quotable_amm_mid`.
 
 ## Build, test, run
 

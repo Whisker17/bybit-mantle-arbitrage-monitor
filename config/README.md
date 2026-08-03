@@ -25,7 +25,7 @@ A **market** is `{ id, cex, dex, costs, inventory }` plus a dedicated SQLite jou
 | `markets/bybit-fluxion.yaml` | `monitor.markets.load_market_file` / `monitor.symbols.load_pairs_config` | Default market: Bybit ⇄ Fluxion xStocks inventory + RFQ mode + costs (M1 body under `inventory:`). |
 | `markets/binance-pancake.yaml` | `monitor.markets.load_market_file` / `monitor.symbols.load_bstocks_pairs_config` | Binance ⇄ Pancake bStocks **full 55** (WHI-790; M7-1 was top-10). `pancake.amm: null` = dex:none. Multiplier **multiply**. Collector: M7-3. |
 | `collector.yaml` | `monitor.collector.load_collector_config(..., market_id=)` | **v2** shared `logging` / `retention` + `markets.{id}` venue blocks (RPC, poll, sqlite_path). |
-| `metrics.yaml` | `monitor.metrics.load_metrics_config` | Size ladder, session hours, PnL v2 search knobs. Venue fee/gas **overridden** at assembly from the market file `costs:`. |
+| `metrics.yaml` | `monitor.metrics.load_metrics_config` | Size ladder, session hours, PnL v2 search knobs, **`max_abs_amm_spread_bps`** (WHI-822 pricing-anomaly guard; default 500; `null` disables). Venue fee/gas **overridden** at assembly from the market file `costs:`. |
 | `attribution.yaml` | `monitor.attribution.load_attribution_config` | Taker-label thresholds (M4). |
 | `tui.yaml` | `monitor.tui.load_tui_config` | Panel refresh, default `market`, sqlite path, reference edge size (also used by API builders). |
 | `api.yaml` | `monitor.api.load_api_config` | FastAPI bind, default `market`, sqlite path, `collector_stale_ms` (process liveness) + `quote_max_age_ms` (PnL age annotate, WHI-821), PnL cache TTL, CORS. |

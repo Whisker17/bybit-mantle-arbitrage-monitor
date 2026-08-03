@@ -128,6 +128,30 @@ describe("isDexTradeable (WHI-796)", () => {
       isDexTradeable(row({ pair_id: "WAIT", amm_mid: null, low_liquidity: false })),
       false,
     );
+    // WHI-822: mid present but |vs CEX| anomaly — not a tradable seat.
+    assert.equal(
+      isDexTradeable(
+        row({
+          pair_id: "SPYB",
+          amm_mid: "836.50",
+          low_liquidity: false,
+          amm_quote_reason: "pricing_anomaly",
+        }),
+      ),
+      false,
+    );
+    // WHI-822: no CEX book (stale) — cannot verify basis; deny AMM seat.
+    assert.equal(
+      isDexTradeable(
+        row({
+          pair_id: "STALE",
+          amm_mid: "100",
+          low_liquidity: false,
+          stale: true,
+        }),
+      ),
+      false,
+    );
   });
 
   it("RFQ path: two-sided RFQ seats even when AMM is null / low_liq", () => {
@@ -244,6 +268,44 @@ describe("applyTopN (WHI-791 + WHI-796)", () => {
     assert.equal(view.tradeableCount, 0);
     assert.equal(view.totalCount, 2);
     assert.equal(view.isTruncated, true);
+  });
+
+  it("collapsed: pricing_anomaly mid never takes Top-N seat (WHI-822)", () => {
+    // SPYB-shaped: liquid mid + high TVL + huge |vs CEX| reason must not seat.
+    const sorted = [
+      row({
+        pair_id: "SPYB",
+        cex_volume_24h: "9000",
+        amm_mid: "836.50",
+        amm_spread_bps: "1127.9",
+        amm_quote_reason: "pricing_anomaly",
+        low_liquidity: false,
+        tvl_usd: "227681",
+        pnl_v2: {
+          status: "pricing_anomaly",
+          has_depth: true,
+          direction: null,
+          optimal_notional_usd: null,
+          optimal_net_pnl_usd: null,
+          optimal_net_pnl_bps: null,
+          bybit_depth_source: null,
+        },
+      }),
+      row({
+        pair_id: "QQQB",
+        cex_volume_24h: "100",
+        amm_mid: "692.51",
+        low_liquidity: false,
+        tvl_usd: "2000000",
+      }),
+    ];
+    const view = applyTopN(sorted, "cex_volume_24h", { n: 10, showAll: false });
+    assert.deepEqual(
+      view.rows.map((r) => r.pair_id),
+      ["QQQB"],
+    );
+    assert.equal(view.tradeableCount, 1);
+    assert.equal(dexNonTradeableReason(sorted[0]!), "pricing_anomaly");
   });
 
   it("collapsed: no_pool / empty_pool never take Top-N seats even with CEX Vol (WHI-796)", () => {
