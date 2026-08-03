@@ -263,9 +263,15 @@ export function MarketOverview({ marketId }: Props) {
   );
 
   const emptyMessage = useMemo(() => {
-    if (topView.presentCount === 0 && topView.totalCount > 0) {
+    if (topView.totalCount === 0) {
+      return "No pairs match the current filter.";
+    }
+    if (topView.tradeableCount === 0) {
+      return `No DEX-tradeable pairs yet (${topView.totalCount} listed). Expand to see no-pool / empty-pool / low-liq rows.`;
+    }
+    if (topView.presentCount === 0) {
       const label = sortKeyLabel(sortKey);
-      return `No pairs with ${label} data yet — n/a rows trail. Expand to see all ${topView.totalCount}.`;
+      return `No tradeable pairs with ${label} data yet — expand to see all ${topView.totalCount}.`;
     }
     return "No pairs match the current filter.";
   }, [topView, sortKey]);
@@ -392,12 +398,14 @@ export function MarketOverview({ marketId }: Props) {
           ? "Prices are de-multiplied CEX L1 vs DEX AMM/RFQ. Net edge is AMM-only at the reference notional (see status bar). "
           : "Prices are CEX L1 vs AMM (this market has no RFQ). Net edge is AMM-only at the reference notional. "}
         Overview defaults to Top {TOP_N_DEFAULT} by the active sort column
-        (header click cycles sort; n/a values sort last and never fill Top-N).
-        Bucket PnL is PnL v2 optimal cash-flow (hover for direction &amp; size;
-        &quot;no depth&quot; when the journal has no depth curve). Row opens pair
-        detail. Market selection is the URL path{" "}
-        <code className="text-foreground">/m/{"{market}"}/</code>; sort state is
-        in the query string for sharing.
+        among <strong>DEX-tradeable</strong> pairs only (quotable AMM mid +
+        above inventory TVL floor; n/a and no-pool/empty-pool/dust never fill
+        seats — fewer than {TOP_N_DEFAULT} rows is honest). Expand shows the
+        full list with status badges. Bucket PnL is PnL v2 optimal cash-flow
+        (hover for direction &amp; size; &quot;no depth&quot; when the journal
+        has no depth curve). Row opens pair detail. Market selection is the URL
+        path <code className="text-foreground">/m/{"{market}"}/</code>; sort
+        state is in the query string for sharing.
       </p>
     </main>
   );

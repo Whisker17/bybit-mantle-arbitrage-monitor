@@ -114,7 +114,7 @@ export function defaultSortDesc(key: SortKey): boolean {
 }
 
 // ---------------------------------------------------------------------------
-// Top-N overview view (WHI-791)
+// Top-N overview view (WHI-791 + WHI-796 DEX-tradeable seats)
 // ---------------------------------------------------------------------------
 
 /** Default collapsed row budget for the overview table. */
@@ -125,18 +125,58 @@ export function hasSortValue(row: PairOverviewRow, key: SortKey): boolean {
   return rawValue(row, key) !== null;
 }
 
+/**
+ * DEX-tradeable seat eligibility for Top-N (WHI-796).
+ *
+ * Reuses two existing signals so columns cannot disagree with fillability:
+ * - **Quotable AMM mid** (WHI-795): `amm_mid != null` — empty_pool / invalid_mid
+ *   already suppress residual slot0 mids on the API wire.
+ * - **TVL floor**: `!low_liquidity` — live TVL vs inventory
+ *   `low_liquidity_threshold_usd` (default $50k), with dex:none always low.
+ *
+ * Fewer than N seats is intentional when the chain only has a handful of
+ * live pools; do not pad with no_pool / empty_pool / dust rows.
+ */
+export function isDexTradeable(row: PairOverviewRow): boolean {
+  return row.amm_mid != null && !row.low_liquidity;
+}
+
+/**
+ * Status label for non-tradeable rows in the expanded ("Show all") table.
+ * Null when the row is tradeable (no badge).
+ */
+export function dexNonTradeableLabel(row: PairOverviewRow): string | null {
+  if (isDexTradeable(row)) return null;
+  if (row.amm_quote_reason === "empty_pool") return "empty pool";
+  if (row.amm_quote_reason === "invalid_mid") return "invalid mid";
+  if (row.pnl_v2?.status === "no_pool") return "no pool";
+  if (row.pnl_v2?.status === "empty_pool") return "empty pool";
+  if (row.pnl_v2?.status === "invalid_mid") return "invalid mid";
+  // Sub-threshold TVL with a quotable mid (or residual mid not yet suppressed).
+  if (row.amm_mid != null && row.low_liquidity) return "low liq";
+  // dex:none / no AMM inventory: low_liq + no mid + no quote reason.
+  if (row.low_liquidity && row.amm_mid == null) return "no pool";
+  // Cold-start: pool expected but first tick not yet — no badge noise.
+  return null;
+}
+
 export type TopNView = {
   rows: PairOverviewRow[];
-  /** Rows with a non-null sort value (after filter + sort). */
+  /**
+   * Rows that are DEX-tradeable **and** have a non-null sort value
+   * (eligible for a collapsed Top-N seat).
+   */
   presentCount: number;
-  /** Full filtered list length (including n/a for the sort key). */
+  /** Rows that pass {@link isDexTradeable} (after filter + sort). */
+  tradeableCount: number;
+  /** Full filtered list length (including non-tradeable + n/a). */
   totalCount: number;
   /** How many rows are currently rendered. */
   shownCount: number;
   showAll: boolean;
   /**
-   * True when the collapsed view omits rows (present > N and/or trailing n/a
-   * exist). Drives the "Show all" footer affordance.
+   * True when the collapsed view omits rows (eligible > N and/or
+   * non-tradeable / trailing n/a exist). Drives the "Show all" footer.
    */
   isTruncated: boolean;
 };
@@ -144,11 +184,14 @@ export type TopNView = {
 /**
  * Apply the Top-N window to an already-sorted row list.
  *
- * Contract (WHI-791):
- * - Collapsed: only rows with a present sort value, first `n` of them.
- *   Null / n/a rows sort last (via {@link sortRows}) and **never** fill Top-N
- *   slots (e.g. dex:none pairs with no TVL do not appear in "Top 10 by TVL").
- * - Expanded (`showAll`): full sorted list, trailing n/a included.
+ * Contract (WHI-791 + WHI-796):
+ * - Collapsed: only **DEX-tradeable** rows with a present sort value, first
+ *   `n` of them. Null / n/a sort values trail (via {@link sortRows}) and never
+ *   fill slots; no_pool / empty_pool / low-liq dust never take seats even when
+ *   the sort column (e.g. CEX Vol) is populated.
+ * - Expanded (`showAll`): full sorted list, including non-tradeable rows
+ *   (status badges are a render concern).
+ * - When the tradeable set is smaller than `n`, show fewer rows — never pad.
  */
 export function applyTopN(
   sortedRows: ReadonlyArray<PairOverviewRow>,
@@ -157,13 +200,19 @@ export function applyTopN(
 ): TopNView {
   const n = opts.n ?? TOP_N_DEFAULT;
   const totalCount = sortedRows.length;
-  const present = sortedRows.filter((r) => hasSortValue(r, key));
-  const presentCount = present.length;
+  const tradeable = sortedRows.filter((r) => isDexTradeable(r));
+  const tradeableCount = tradeable.length;
+  // Eligible seats: tradeable ∩ has sort value (preserves sort order).
+  const eligible = sortedRows.filter(
+    (r) => isDexTradeable(r) && hasSortValue(r, key),
+  );
+  const presentCount = eligible.length;
 
   if (opts.showAll) {
     return {
       rows: [...sortedRows],
       presentCount,
+      tradeableCount,
       totalCount,
       shownCount: totalCount,
       showAll: true,
@@ -171,10 +220,11 @@ export function applyTopN(
     };
   }
 
-  const rows = present.slice(0, n);
+  const rows = eligible.slice(0, n);
   return {
     rows,
     presentCount,
+    tradeableCount,
     totalCount,
     shownCount: rows.length,
     showAll: false,
@@ -189,16 +239,22 @@ export function sortKeyLabel(key: SortKey): string {
 }
 
 /**
- * Footer count copy — must reflect the full filtered universe so a Top-10
- * window is never mistaken for a 10-pair inventory.
+ * Footer count copy — full filtered universe + honest tradeable size so a
+ * Top-N window is never mistaken for a 10-pair inventory (WHI-791/796).
  */
 export function topNSummary(view: TopNView, key: SortKey): string {
   const label = sortKeyLabel(key);
   if (view.showAll) {
-    return `Showing all ${view.totalCount} pairs · sorted by ${label}`;
+    return (
+      `Showing all ${view.totalCount} pairs · sorted by ${label}` +
+      ` (${view.tradeableCount} tradeable on DEX)`
+    );
   }
-  let msg = `Top ${view.shownCount} of ${view.totalCount} by ${label}`;
-  if (view.presentCount < view.totalCount) {
+  let msg =
+    `Top ${view.shownCount} of ${view.totalCount} by ${label}` +
+    ` (${view.tradeableCount} tradeable on DEX)`;
+  // When some tradeable rows lack the active sort key, note data coverage.
+  if (view.presentCount < view.tradeableCount) {
     msg += ` · ${view.presentCount} with data`;
   }
   return msg;

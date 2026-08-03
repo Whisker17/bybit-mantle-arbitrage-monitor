@@ -50,13 +50,6 @@ soon — anything touching key handling, RPC credentials defaults to at least Hi
   `UnderlyingPoller` still fetches them serially. Acceptable load now; if more
   Yahoo-only names land, add concurrency/throttle or raise poll intervals.
 
-- **WHI-790: dust AMM pools can still rank under default net_edge sort** (Low, WHI-790 / residual after WHI-791).
-  Factory-verified V3 USDT pools include sub-$50 TVL names (KORUB/CRCLB/…);
-  they are `low_liquidity: true` but overview defaults `hideLowLiquidity=false`.
-  WHI-791 Top-N caps the table at 10 and makes TVL/Vol first-class sorts, but
-  default sort remains net_edge — extreme dust mids can still appear in Top 10.
-  Fix: market-aware default filter, min-TVL gate, or default sort by TVL/Vol.
-
 - **Optional-table name literals + sqlite_master probes duplicated** (Low, WHI-789).
   `monitor/storage/reader.py::JournalReader._table_names` (six call-site string
   guards) and a second `sqlite_master` shape in `monitor/storage/retention.py` —

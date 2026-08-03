@@ -276,6 +276,25 @@ inventory threshold (`low_liquidity_threshold_usd`, still config) when a sample
 exists; falls back to the inventory-time flag until the first poll. Pairs
 without an AMM pool remain low-liquidity regardless of TVL.
 
+**Web Top-N seats = DEX-tradeable (WHI-791 + WHI-796):** the overview collapsed
+view is **not** “top N by sort key over the full inventory”. A row earns a
+Top-N seat only when it is **DEX-tradeable**:
+
+1. **Quotable AMM mid** (WHI-795 `quotable_amm_mid` → wire `amm_mid != null`) —
+   empty pools with residual slot0 mids and non-positive mids are excluded.
+2. **TVL floor** — `!low_liquidity`, i.e. live (or inventory fallback) TVL ≥
+   `low_liquidity_threshold_usd` (default **$50k**, same config as dimming /
+   inventory). dex:none is always non-tradeable.
+
+Reason for the $50k floor: it is the existing inventory convention (M1 /
+bStocks) that separates “display dust” from capital large enough to matter for
+paper arb; reusing it avoids a second threshold that would drift. **Fewer than
+N rows is correct** when the chain only has a handful of live pools (bStocks
+2026-08-03: ~8 pairs above $50k TVL out of 55) — padding with no_pool /
+empty_pool / dust CEX-vol leaders is worse than an honest short list. Footer
+copy is `Top K of M by <sort> (T tradeable on DEX)`. “Show all” still lists
+every filtered pair with `no pool` / `empty pool` / `low liq` badges.
+
 **API / Web:** overview rows expose `tvl_usd` + `tvl_as_of_ms` (detail overview
 mirrors the same). History remains queryable via `JournalReader.pool_tvl_series`
 for a future chart — not embedded on the 2s detail poll. Web DEX column group
@@ -557,7 +576,8 @@ Probe: `python -m monitor.collector.latency_probe`.
 (not top-10). AMM membership is PCS **V3 factory `getPool` + on-chain `token0/1`**
 (USDT only, 21 pools at 2026-08-02); other bases are **dex:none** (CEX legs only).
 Enum script + snapshot: `scripts/enumerate_bstocks_pools.py`,
-`docs/references/m7-bstocks-enum-snapshot.json`. Dynamic Top-N display is WHI-791.
+`docs/references/m7-bstocks-enum-snapshot.json`. Dynamic Top-N display is
+WHI-791; DEX-tradeable seat eligibility is WHI-796.
 
 **Capacity (research host 2026-08-02; rows marked measured vs derived):**
 

@@ -175,6 +175,11 @@ placeholders. Agents must not assume a module exists until its issue lands. -->
     footer “Show all N / Collapse”; n/a sort values trail and never fill Top-N
     slots; shareable `?sort=&desc=&all=`; pair-id TVL/Vol badges +
     `web/lib/pair-badges.ts` removed.
+  - **Top-N DEX-tradeable seats (WHI-796) landed:** collapsed Top-N only seats
+    pairs with quotable AMM mid (WHI-795) **and** `!low_liquidity` (TVL ≥
+    inventory `low_liquidity_threshold_usd`); no_pool / empty_pool / dust never
+    pad the board; footer `Top K of M by <sort> (T tradeable on DEX)`; Show all
+    keeps full list with status badges. Helpers in `web/lib/sort.ts`.
   - **Empty-pool AMM quote gate (WHI-795) landed:** residual V3 `slot0` mid
     when `liquidity == 0` is no longer treated as a tradable AMM quote.
     Single seam `monitor.metrics.amm_quote.quotable_amm_mid` suppresses mid /
