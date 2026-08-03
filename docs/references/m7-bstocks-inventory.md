@@ -62,16 +62,25 @@ Snapshot date: **2026-08-02** (factory enum re-run same day for WHI-790).
 Ranked by DexScreener liquidity USD on the **on-chain-verified** best USDT pool.
 `low_liquidity` uses the same $50k gate as M1 `pairs.yaml` (inventory convention only).
 
-### Web overview Top-N (WHI-791) — not a volume top-10 inventory
+### Web overview Top-N (WHI-791 + WHI-796) — not a volume top-10 inventory
 
-The Web overview **defaults to Top 10 by the active sort column** (click
-**CEX Vol** / **DEX Vol** / **TVL** headers; footer expands to the full
-filtered list). This is a **view** over the full inventory — it does **not**
-mean the collector set was rebuilt to Binance CEX volume top-10.
+The Web overview **defaults to Top 10 by the active sort column** among
+**DEX-tradeable** pairs only (click **CEX Vol** / **DEX Vol** / **TVL**
+headers; footer expands to the full filtered list). On this market (no RFQ)
+tradeable = quotable AMM mid (WHI-795) **and** `!low_liquidity` (TVL ≥
+`low_liquidity_threshold_usd`, default $50k). dex:none / empty-pool / dust
+rows never take seats even when CEX Vol ranks them first — the board may
+honestly show fewer than 10 rows. (Bybit⇄Fluxion also seats two-sided RFQ
+quotes; see DESIGN §2.9.) This is a **view** over the full inventory —
+it does **not** mean the collector set was rebuilt to Binance CEX volume
+top-10.
 
 WHI-781 pair-id `TVL` / `Vol` badges were removed in WHI-791 (redundant once
-Volume/TVL are first-class sortable columns with a Top-N window). The
-hide-low-liquidity filter still uses inventory `low_liquidity`.
+Volume/TVL are first-class sortable columns with a Top-N window). Expanded
+rows that are not tradeable show `no pool` / `empty pool` / `invalid mid` /
+`low liq` / `no quote` badges (WHI-796). The hide-low-liquidity filter uses
+the overview `low_liquidity` flag (live TVL vs threshold when sampled;
+inventory bit as cold-start fallback — WHI-782).
 
 | # | id | Binance | BEP-20 | PCS pool | fee | Est liq USD | uiMultiplier | mid cross-check |
 |---|-----|---------|--------|----------|-----|-------------|--------------|-----------------|

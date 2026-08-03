@@ -1,4 +1,9 @@
-import type { AmmQuoteReason, Direction, SessionKind } from "./types";
+import type {
+  AmmQuoteReason,
+  DexNonTradeableReason,
+  Direction,
+  SessionKind,
+} from "./types";
 
 const DASH = "—";
 
@@ -7,6 +12,40 @@ const AMM_QUOTE_REASON_LABEL: Record<AmmQuoteReason, string> = {
   empty_pool: "empty pool",
   invalid_mid: "invalid mid",
 };
+
+/** Pair-id badge labels for non-tradeable DEX legs (WHI-796). */
+const DEX_NON_TRADEABLE_LABEL: Record<DexNonTradeableReason, string> = {
+  empty_pool: AMM_QUOTE_REASON_LABEL.empty_pool,
+  invalid_mid: AMM_QUOTE_REASON_LABEL.invalid_mid,
+  no_pool: "no pool",
+  low_liq: "low liq",
+  no_quote: "no quote",
+};
+
+const DEX_NON_TRADEABLE_TITLE: Record<DexNonTradeableReason, string> = {
+  empty_pool: "Pool has zero in-range liquidity — residual slot0 mid suppressed",
+  invalid_mid: "AMM mid non-positive — suppressed",
+  no_pool:
+    "No AMM pool in inventory (dex:none) — CEX-only; excluded from Top-N unless RFQ is two-sided",
+  low_liq: "Below low_liquidity_threshold_usd — excluded from Top-N seats",
+  no_quote: "Waiting for a quotable AMM mid or two-sided RFQ — no Top-N seat yet",
+};
+
+/** Badge text for a {@link DexNonTradeableReason}. */
+export function dexNonTradeableLabel(
+  reason: DexNonTradeableReason | null | undefined,
+): string | null {
+  if (reason == null) return null;
+  return DEX_NON_TRADEABLE_LABEL[reason];
+}
+
+/** Hover copy for a non-tradeable reason badge. */
+export function dexNonTradeableTitle(
+  reason: DexNonTradeableReason | null | undefined,
+): string | undefined {
+  if (reason == null) return undefined;
+  return DEX_NON_TRADEABLE_TITLE[reason];
+}
 
 /**
  * Label for AMM mid / vs CEX / AMM vs Und when the mid is suppressed.

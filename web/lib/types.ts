@@ -26,6 +26,17 @@ export type PnlStatus =
 /** Why AMM mid is n/a when a pool tick existed (WHI-795). */
 export type AmmQuoteReason = "empty_pool" | "invalid_mid";
 
+/**
+ * Why a row is denied a Top-N seat (WHI-796). UI maps via format helpers;
+ * eligibility lives in web/lib/sort.ts.
+ */
+export type DexNonTradeableReason =
+  | "empty_pool"
+  | "invalid_mid"
+  | "no_pool"
+  | "low_liq"
+  | "no_quote";
+
 export type PnlDepthSource = "l1" | "book";
 
 /** Compact optimal-size card on each overview row (WHI-766). */

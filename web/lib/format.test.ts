@@ -10,6 +10,8 @@ import {
   ammQuoteReasonLabel,
   bpsTone,
   cexPremiumBps,
+  dexNonTradeableLabel,
+  dexNonTradeableTitle,
   directionToggleLabel,
   explorerTxUrl,
   fmtDirection,
@@ -38,6 +40,24 @@ describe("ammQuoteReasonLabel", () => {
     assert.equal(ammQuoteReasonLabel("invalid_mid"), "invalid mid");
     assert.equal(ammQuoteReasonLabel(null), null);
     assert.equal(ammQuoteReasonLabel(undefined), null);
+  });
+});
+
+describe("dexNonTradeableLabel / title (WHI-796)", () => {
+  it("maps structured reasons to stable UI labels", () => {
+    assert.equal(dexNonTradeableLabel("empty_pool"), "empty pool");
+    assert.equal(dexNonTradeableLabel("invalid_mid"), "invalid mid");
+    assert.equal(dexNonTradeableLabel("no_pool"), "no pool");
+    assert.equal(dexNonTradeableLabel("low_liq"), "low liq");
+    assert.equal(dexNonTradeableLabel("no_quote"), "no quote");
+    assert.equal(dexNonTradeableLabel(null), null);
+  });
+
+  it("provides hover titles for every reason", () => {
+    assert.ok(dexNonTradeableTitle("empty_pool")?.includes("liquidity"));
+    assert.ok(dexNonTradeableTitle("no_pool")?.includes("Top-N"));
+    assert.ok(dexNonTradeableTitle("no_quote")?.includes("Waiting"));
+    assert.equal(dexNonTradeableTitle(null), undefined);
   });
 });
 

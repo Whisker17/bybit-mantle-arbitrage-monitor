@@ -283,6 +283,32 @@ shows TVL (`$K`/`$M` via the same notional formatter as volume). Until the first
 sample, the cell uses the project-wide empty glyph (`—`); tooltip states
 “waiting for first sample”.
 
+### 2.9 Web Top-N seats = DEX-tradeable (WHI-791 + WHI-796)
+
+The overview collapsed view is **not** “top N by sort key over the full
+inventory”. A row earns a Top-N seat only when it is **DEX-tradeable** via
+either path:
+
+1. **AMM path:** quotable AMM mid (WHI-795 `quotable_amm_mid` → wire
+   `amm_mid != null`) **and** `!low_liquidity` (live or inventory TVL ≥
+   `low_liquidity_threshold_usd`, default **$50k**). Empty pools with residual
+   slot0 mids and non-positive mids are excluded.
+2. **RFQ path:** two-sided RFQ quote with **positive** prices (`rfq_buy` and
+   `rfq_sell` both present and &gt; 0). Covers Fluxion inventory with
+   `amm: null` (AMZNx / COINx / MCDx) where the inventory low-liq bit would
+   otherwise permanently exclude them — RFQ *is* their DEX leg.
+
+dex:none without RFQ (binance-pancake CEX-only) is always non-tradeable.
+Reason for the $50k AMM floor: existing inventory convention (M1 / bStocks)
+separating display dust from capital large enough for paper arb; reusing it
+avoids a second threshold that would drift. **Fewer than N rows is correct**
+when the chain only has a handful of live pools (bStocks 2026-08-03: ~8 pairs
+above $50k TVL out of 55) — padding with no_pool / empty_pool / dust CEX-vol
+leaders is worse than an honest short list. Footer copy is
+`Top K of M by <sort> (T tradeable on DEX)`. “Show all” still lists every
+filtered pair with structured status badges (`no pool` / `empty pool` /
+`invalid mid` / `low liq` / `no quote`).
+
 ## 3. Cross-cutting Policies
 
 - **No secrets in git.** RPC keys and Linear API keys only in `.env`.
@@ -557,7 +583,8 @@ Probe: `python -m monitor.collector.latency_probe`.
 (not top-10). AMM membership is PCS **V3 factory `getPool` + on-chain `token0/1`**
 (USDT only, 21 pools at 2026-08-02); other bases are **dex:none** (CEX legs only).
 Enum script + snapshot: `scripts/enumerate_bstocks_pools.py`,
-`docs/references/m7-bstocks-enum-snapshot.json`. Dynamic Top-N display is WHI-791.
+`docs/references/m7-bstocks-enum-snapshot.json`. Dynamic Top-N display is
+WHI-791; DEX-tradeable seat eligibility is WHI-796.
 
 **Capacity (research host 2026-08-02; rows marked measured vs derived):**
 
