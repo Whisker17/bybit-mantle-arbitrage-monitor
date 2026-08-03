@@ -72,9 +72,10 @@ class PairOverviewRow:
     # WHI-782: live pool TVL from balanceOf + AMM mid (capital size, not depth).
     tvl_usd: Decimal | None = None
     tvl_as_of_ms: int | None = None
-    # WHI-824: flat optimal PnL for sort keys (filled from pnl_v2 when status==ok).
-    # Nested pnl_v2 stays the display source; these are None for non-numeric states
-    # so sort_rows parks them last (and Top-N skips them).
+    # WHI-824: flat optimal PnL for SortKey / sort_rows (and API asdict schema).
+    # TUI builder leaves these None (TUI frozen — no PnL compute on overview).
+    # API fills the same wire keys from pnl_v2 via PnlOptimalSummary.flat_sort_wire
+    # when status==ok; non-ok → null so clients park last / skip Top-N.
     pnl_optimal_net_usd: Decimal | None = None
     pnl_optimal_net_bps: Decimal | None = None
 

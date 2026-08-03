@@ -4,12 +4,14 @@ import { describe, it } from "node:test";
 import {
   applyTopN,
   buildOverviewSearch,
+  bucketPnlHeaderLabel,
   bucketPnlSortTitle,
   dexNonTradeableReason,
   filterRows,
   isDexTradeable,
   isPnlSortKey,
   isSortKey,
+  nextPnlSortState,
   parseOverviewSearch,
   sortKeyLabel,
   sortRows,
@@ -740,8 +742,15 @@ describe("topNSummary / sortKeyLabel (WHI-791 + WHI-796)", () => {
     assert.equal(view.presentCount, 2);
     assert.equal(view.tradeableCount, 3); // WIN, LOSS, NO_DEPTH
     assert.match(
-      topNSummary(view, "pnl_optimal_usd"),
+      topNSummary(view, "pnl_optimal_usd", { sortDesc: true }),
       /Top 2 of 4 by Bucket PnL \(\$\) \(3 tradeable on DEX\) · 2 with data · desc = least loss/,
+    );
+    // Ascending omits the least-loss note.
+    assert.equal(
+      topNSummary(view, "pnl_optimal_usd", { sortDesc: false }).includes(
+        "least loss",
+      ),
+      false,
     );
   });
 });
@@ -768,8 +777,22 @@ describe("PnL sort keys meta (WHI-824)", () => {
   it("labels and tooltip name the active unit", () => {
     assert.equal(sortKeyLabel("pnl_optimal_usd"), "Bucket PnL ($)");
     assert.equal(sortKeyLabel("pnl_optimal_bps"), "Bucket PnL (bps)");
+    assert.equal(bucketPnlHeaderLabel("pnl_optimal_usd"), "Bucket PnL $");
+    assert.equal(bucketPnlHeaderLabel("pnl_optimal_bps"), "Bucket PnL bps");
+    assert.equal(bucketPnlHeaderLabel("net_edge"), "Bucket PnL");
     assert.match(bucketPnlSortTitle("pnl_optimal_usd"), /USD/);
     assert.match(bucketPnlSortTitle("pnl_optimal_bps"), /bps/);
+  });
+
+  it("header click cycles usd↓ → usd↑ → bps↓ → bps↑ → usd↓", () => {
+    let s = nextPnlSortState("pnl_optimal_usd", true);
+    assert.deepEqual(s, { key: "pnl_optimal_usd", desc: false });
+    s = nextPnlSortState(s.key, s.desc);
+    assert.deepEqual(s, { key: "pnl_optimal_bps", desc: true });
+    s = nextPnlSortState(s.key, s.desc);
+    assert.deepEqual(s, { key: "pnl_optimal_bps", desc: false });
+    s = nextPnlSortState(s.key, s.desc);
+    assert.deepEqual(s, { key: "pnl_optimal_usd", desc: true });
   });
 });
 

@@ -34,6 +34,7 @@ import { marketPairPath } from "@/lib/markets";
 import { mmActiveLabel, mmActiveTitle } from "@/lib/mm";
 import { overviewPnlCell } from "@/lib/pnl";
 import {
+  bucketPnlHeaderLabel,
   bucketPnlSortTitle,
   dexNonTradeableReason,
   isPnlSortKey,
@@ -378,16 +379,17 @@ function BucketPnlCell({
   const cell = overviewPnlCell(row.pnl_v2, venues, marketId);
   if (cell.kind === "ok") {
     const tone = usdTone(cell.pnlUsd);
-    // WHI-824: positive = highlight opportunity; negative = muted least-loss
-    // (desc board is often "least red", not free money).
+    // WHI-824: positive = highlight opportunity; negative = weakened red
+    // (still distinct from status/empty muted labels; desc board is often
+    // "least loss", not free money).
     return (
       <span
         className={cn(
           "tabular-nums",
           tone === "pos" && "font-medium text-positive",
-          tone === "neg" && "text-muted-foreground",
-          tone === "flat" && "text-muted-foreground",
-          tone === "empty" && "text-muted-foreground",
+          // Soften loss vs detail panel's full text-negative — still red-tinted.
+          tone === "neg" && "text-negative/60",
+          (tone === "flat" || tone === "empty") && "text-muted-foreground",
           cell.quoteAged && "opacity-80",
         )}
         title={cell.title}
@@ -671,16 +673,12 @@ export function PairsTable({
                 (col.id === "bucket_pnl" && isPnlSortKey(sortKey));
               const arrow = active ? (sortDesc ? " ↓" : " ↑") : "";
               const isGroupStart = groupFirstId.get(col.group) === col.id;
-              // Dynamic unit suffix when sorting by PnL (usd default vs bps menu).
-              let label = col.label;
-              if (col.id === "bucket_pnl" && active) {
-                label =
-                  sortKey === "pnl_optimal_bps"
-                    ? "Bucket PnL bps"
-                    : "Bucket PnL $";
-              }
+              const label =
+                col.id === "bucket_pnl"
+                  ? bucketPnlHeaderLabel(sortKey)
+                  : col.label;
               const title =
-                col.id === "bucket_pnl" && active
+                col.id === "bucket_pnl"
                   ? bucketPnlSortTitle(sortKey)
                   : col.title;
               return (

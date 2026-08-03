@@ -28,7 +28,9 @@ import {
   buildOverviewSearch,
   defaultSortDesc,
   filterRows,
+  isPnlSortKey,
   isSortKey,
+  nextPnlSortState,
   parseOverviewSearch,
   sortKeyLabel,
   sortRows,
@@ -280,6 +282,14 @@ export function MarketOverview({ marketId }: Props) {
   const handleSort = useCallback(
     (key: SortKey) => {
       markSortReady();
+      // WHI-824: Bucket PnL header cycles USD↓ → USD↑ → bps↓ → bps↑.
+      // Column always emits pnl_optimal_usd; stay on the family and advance.
+      if (key === "pnl_optimal_usd" && isPnlSortKey(sortKey)) {
+        const next = nextPnlSortState(sortKey, sortDesc);
+        setSortKey(next.key);
+        setSortDesc(next.desc);
+        return;
+      }
       if (key === sortKey) {
         // Direction flip keeps expand state.
         setSortDesc((d) => !d);
@@ -291,7 +301,7 @@ export function MarketOverview({ marketId }: Props) {
         setShowAll(false);
       }
     },
-    [sortKey, markSortReady],
+    [sortKey, sortDesc, markSortReady],
   );
 
   const setSortKeyTouched = useCallback(
@@ -372,7 +382,7 @@ export function MarketOverview({ marketId }: Props) {
             topView.totalCount > 0 && (
               <div className="mt-2 flex flex-wrap items-center justify-between gap-2 rounded-md border border-border bg-card px-3 py-2 text-[11px] text-muted-foreground">
                 <span className="tabular-nums text-foreground/90">
-                  {topNSummary(topView, sortKey)}
+                  {topNSummary(topView, sortKey, { sortDesc })}
                 </span>
                 <Button
                   type="button"

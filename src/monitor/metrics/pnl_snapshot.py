@@ -121,6 +121,18 @@ class PnlOptimalSummary:
             return None, None
         return self.optimal_net_pnl_usd, self.optimal_net_pnl_bps
 
+    def flat_sort_wire(self) -> dict[str, str | None]:
+        """JSON-ready flat sort keys (fixed-point strings or null)."""
+
+        def _dec(v: Decimal | None) -> str | None:
+            return None if v is None else format(v, "f")
+
+        usd, bps = self.flat_sort_fields()
+        return {
+            "pnl_optimal_net_usd": _dec(usd),
+            "pnl_optimal_net_bps": _dec(bps),
+        }
+
 
 @dataclass(frozen=True, slots=True)
 class PnlPairSnapshot:

@@ -304,24 +304,16 @@ def _list_pairs_body(state: AppState, runtime: MarketRuntime) -> dict[str, Any]:
                 enriched = dict(row)
                 empty = PnlOptimalSummary(status="no_pool", has_depth=False)
                 enriched["pnl_v2"] = empty.to_dict()
-                # WHI-824: flat sort keys stay None for non-ok statuses.
-                enriched["pnl_optimal_net_usd"] = None
-                enriched["pnl_optimal_net_bps"] = None
+                enriched.update(empty.flat_sort_wire())
                 enriched["mm_active"] = "unknown"
                 rows_out.append(enriched)
                 continue
             snap = _pnl_snapshot_for_pair(runtime, state, pair=pair, reader=reader)
             summary = overview_pnl_summary(snap)
-            flat_usd, flat_bps = summary.flat_sort_fields()
             enriched = dict(row)
             enriched["pnl_v2"] = summary.to_dict()
-            # WHI-824: mirror numeric optimal onto flat keys for SortKey / sort_rows.
-            enriched["pnl_optimal_net_usd"] = (
-                None if flat_usd is None else format(flat_usd, "f")
-            )
-            enriched["pnl_optimal_net_bps"] = (
-                None if flat_bps is None else format(flat_bps, "f")
-            )
+            # WHI-824: mirror numeric optimal onto flat keys (status==ok only).
+            enriched.update(summary.flat_sort_wire())
             enriched["mm_active"] = _mm_active_for(
                 state,
                 pair_id=pair_id,
@@ -356,14 +348,8 @@ def _get_pair_body(
         if "overview" in body and isinstance(body["overview"], dict):
             body["overview"] = dict(body["overview"])
             ov_summary = overview_pnl_summary(pnl)
-            flat_usd, flat_bps = ov_summary.flat_sort_fields()
             body["overview"]["pnl_v2"] = ov_summary.to_dict()
-            body["overview"]["pnl_optimal_net_usd"] = (
-                None if flat_usd is None else format(flat_usd, "f")
-            )
-            body["overview"]["pnl_optimal_net_bps"] = (
-                None if flat_bps is None else format(flat_bps, "f")
-            )
+            body["overview"].update(ov_summary.flat_sort_wire())
             body["overview"]["mm_active"] = _mm_active_for(
                 state,
                 pair_id=pair_id,

@@ -212,11 +212,13 @@ placeholders. Agents must not assume a module exists until its issue lands. -->
     Top-N seats. Seam `annotate_pricing_anomaly` after `quotable_amm_mid`.
   - **Bucket PnL sort (WHI-824) landed:** overview Result-group column is a
     first-class sort key — `pnl_optimal_usd` (default, visible column unit) and
-    `pnl_optimal_bps` (size-normalized; sort menu / `?sort=`). Flat fields
-    `pnl_optimal_net_usd` / `pnl_optimal_net_bps` on overview rows when
+    `pnl_optimal_bps` (size-normalized). Header click cycles
+    USD↓→USD↑→bps↓→bps↑; sort menu / `?sort=` jump either unit. Flat wire
+    fields `pnl_optimal_net_usd` / `pnl_optimal_net_bps` when
     `pnl_v2.status == ok` (incl. quote_aged); non-ok nulls last and skip Top-N.
-    Positive PnL highlighted, negative muted; footer notes desc = least loss
-    when all negative. TUI frozen (SortKey extended only).
+    Positive PnL highlighted, negative softened (`text-negative/60`); footer
+    notes desc = least loss when all negative. TUI frozen (SortKey extended;
+    builder leaves flat fields None).
 
 ## Build, test, run
 

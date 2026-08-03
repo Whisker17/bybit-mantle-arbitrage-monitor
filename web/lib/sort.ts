@@ -290,41 +290,86 @@ export function sortKeyLabel(key: SortKey): string {
   return SORT_KEYS.find((s) => s.key === key)?.label ?? key;
 }
 
-/**
- * Footer count copy — full filtered universe + honest tradeable size so a
- * Top-N window is never mistaken for a 10-pair inventory (WHI-791/796).
- */
 /** True when the active sort key is a PnL optimal column (WHI-824). */
 export function isPnlSortKey(key: SortKey): boolean {
   return key === "pnl_optimal_usd" || key === "pnl_optimal_bps";
 }
 
 /**
+ * Compact header label while a PnL sort is active (keeps column width stable
+ * enough; full labels live in SORT_KEYS for the sort menu / footer).
+ */
+export function bucketPnlHeaderLabel(sortKey: SortKey): string {
+  if (sortKey === "pnl_optimal_bps") return "Bucket PnL bps";
+  if (sortKey === "pnl_optimal_usd") return "Bucket PnL $";
+  return "Bucket PnL";
+}
+
+/**
  * Header tooltip for Bucket PnL — names the active unit so USD vs bps
  * cannot be confused (optimal notional diverges widely across pairs).
+ * Column click cycles: USD↓ → USD↑ → bps↓ → bps↑ → USD↓.
  */
 export function bucketPnlSortTitle(sortKey: SortKey): string {
   if (sortKey === "pnl_optimal_bps") {
     return (
       "Sorting by optimal net PnL in bps (size-normalized efficiency). " +
-      "Not the same as max extractable USD — pair notionals differ. " +
+      "Not max extractable USD — pair notionals differ. " +
+      "Click again to flip direction, then return to USD. " +
       "Most pairs are negative after costs; desc = highest efficiency, not free money."
     );
   }
+  if (sortKey === "pnl_optimal_usd") {
+    return (
+      "Sorting by optimal net PnL in USD (max extractable $ at Q*). " +
+      "Click again: flip direction, then switch to bps efficiency. " +
+      "Most pairs are negative after costs; desc = least loss, not a free opportunity."
+    );
+  }
   return (
-    "Sorting by optimal net PnL in USD (max extractable $ at Q*). " +
-    "Click again to flip direction; use sort menu for bps efficiency. " +
-    "Most pairs are negative after costs; desc = least loss, not a free opportunity."
+    "Click to sort by optimal size net PnL in USD. " +
+    "Further clicks cycle USD direction, then bps. Sort menu jumps to either unit."
   );
 }
 
-export function topNSummary(view: TopNView, key: SortKey): string {
+/**
+ * Advance Bucket PnL header-click cycle (WHI-824):
+ * usd↓ → usd↑ → bps↓ → bps↑ → usd↓.
+ * Call only when the column is already on a PnL key.
+ */
+export function nextPnlSortState(
+  sortKey: SortKey,
+  sortDesc: boolean,
+): { key: SortKey; desc: boolean } {
+  if (sortKey === "pnl_optimal_usd" && sortDesc) {
+    return { key: "pnl_optimal_usd", desc: false };
+  }
+  if (sortKey === "pnl_optimal_usd" && !sortDesc) {
+    return { key: "pnl_optimal_bps", desc: true };
+  }
+  if (sortKey === "pnl_optimal_bps" && sortDesc) {
+    return { key: "pnl_optimal_bps", desc: false };
+  }
+  return { key: "pnl_optimal_usd", desc: true };
+}
+
+/**
+ * Footer count copy — full filtered universe + honest tradeable size so a
+ * Top-N window is never mistaken for a 10-pair inventory (WHI-791/796).
+ * When sorting PnL descending, note that the board is often "least loss".
+ */
+export function topNSummary(
+  view: TopNView,
+  key: SortKey,
+  opts?: { sortDesc?: boolean },
+): string {
   const label = sortKeyLabel(key);
+  const desc = opts?.sortDesc ?? true;
   if (view.showAll) {
     let all =
       `Showing all ${view.totalCount} pairs · sorted by ${label}` +
       ` (${view.tradeableCount} tradeable on DEX)`;
-    if (isPnlSortKey(key)) {
+    if (isPnlSortKey(key) && desc) {
       all += " · desc = least loss when all negative";
     }
     return all;
@@ -336,7 +381,7 @@ export function topNSummary(view: TopNView, key: SortKey): string {
   if (view.presentCount < view.tradeableCount) {
     msg += ` · ${view.presentCount} with data`;
   }
-  if (isPnlSortKey(key)) {
+  if (isPnlSortKey(key) && desc) {
     msg += " · desc = least loss when all negative";
   }
   return msg;
