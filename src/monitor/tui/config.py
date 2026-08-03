@@ -15,7 +15,8 @@ from monitor.metrics.config import MetricsConfig
 _REPO_ROOT = Path(__file__).resolve().parents[3]
 _DEFAULT_TUI_PATH = _REPO_ROOT / "config" / "tui.yaml"
 
-# Web/API may sort on cex/dex volume keys; TUI only renders legacy volume_24h.
+# Web/API may sort on cex/dex volume / PnL keys; TUI only renders legacy volume_24h.
+# PnL keys (WHI-824) are Web-primary; TUI default_sort stays net_edge.
 SortKey = Literal[
     "pair_id",
     "net_edge",
@@ -30,6 +31,8 @@ SortKey = Literal[
     "premium_bps",
     "underlying_price",
     "tvl_usd",
+    "pnl_optimal_usd",
+    "pnl_optimal_bps",
 ]
 
 

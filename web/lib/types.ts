@@ -193,6 +193,13 @@ export type PairOverviewRow = {
   tvl_usd?: string | null;
   /** WHI-782: recv_ts_ms of the TVL sample used for tvl_usd. */
   tvl_as_of_ms?: number | null;
+  /**
+   * WHI-824: flat optimal PnL for sort keys. Set only when pnl_v2.status is
+   * ``ok`` (including quote_aged); null for non-numeric statuses so sort parks
+   * them last and Top-N skips them. Prefer these over digging into pnl_v2.
+   */
+  pnl_optimal_net_usd?: string | null;
+  pnl_optimal_net_bps?: string | null;
 };
 
 /** Session bucket for volume compare (WHI-777). */
@@ -552,7 +559,7 @@ export type MarketsResponse = {
   markets: MarketSummary[];
 };
 
-/** Client-side sort keys (subset of TUI SortKey + pair name). */
+/** Client-side sort keys (subset of TUI SortKey + pair name + PnL WHI-824). */
 export type SortKey =
   | "pair_id"
   | "net_edge"
@@ -567,4 +574,8 @@ export type SortKey =
   | "premium_bps"
   | "amm_premium"
   | "underlying_price"
-  | "tvl_usd";
+  | "tvl_usd"
+  /** Optimal size net PnL in USD (column default; “where the money is”). */
+  | "pnl_optimal_usd"
+  /** Optimal size net PnL in bps (size-normalized efficiency). */
+  | "pnl_optimal_bps";

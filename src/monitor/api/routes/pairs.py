@@ -302,15 +302,26 @@ def _list_pairs_body(state: AppState, runtime: MarketRuntime) -> dict[str, Any]:
             except KeyError:
                 # Builder rows should always be configured pairs; never 404 the list.
                 enriched = dict(row)
-                enriched["pnl_v2"] = PnlOptimalSummary(
-                    status="no_pool", has_depth=False
-                ).to_dict()
+                empty = PnlOptimalSummary(status="no_pool", has_depth=False)
+                enriched["pnl_v2"] = empty.to_dict()
+                # WHI-824: flat sort keys stay None for non-ok statuses.
+                enriched["pnl_optimal_net_usd"] = None
+                enriched["pnl_optimal_net_bps"] = None
                 enriched["mm_active"] = "unknown"
                 rows_out.append(enriched)
                 continue
             snap = _pnl_snapshot_for_pair(runtime, state, pair=pair, reader=reader)
+            summary = overview_pnl_summary(snap)
+            flat_usd, flat_bps = summary.flat_sort_fields()
             enriched = dict(row)
-            enriched["pnl_v2"] = overview_pnl_summary(snap).to_dict()
+            enriched["pnl_v2"] = summary.to_dict()
+            # WHI-824: mirror numeric optimal onto flat keys for SortKey / sort_rows.
+            enriched["pnl_optimal_net_usd"] = (
+                None if flat_usd is None else format(flat_usd, "f")
+            )
+            enriched["pnl_optimal_net_bps"] = (
+                None if flat_bps is None else format(flat_bps, "f")
+            )
             enriched["mm_active"] = _mm_active_for(
                 state,
                 pair_id=pair_id,
@@ -344,7 +355,15 @@ def _get_pair_body(
         )
         if "overview" in body and isinstance(body["overview"], dict):
             body["overview"] = dict(body["overview"])
-            body["overview"]["pnl_v2"] = overview_pnl_summary(pnl).to_dict()
+            ov_summary = overview_pnl_summary(pnl)
+            flat_usd, flat_bps = ov_summary.flat_sort_fields()
+            body["overview"]["pnl_v2"] = ov_summary.to_dict()
+            body["overview"]["pnl_optimal_net_usd"] = (
+                None if flat_usd is None else format(flat_usd, "f")
+            )
+            body["overview"]["pnl_optimal_net_bps"] = (
+                None if flat_bps is None else format(flat_bps, "f")
+            )
             body["overview"]["mm_active"] = _mm_active_for(
                 state,
                 pair_id=pair_id,

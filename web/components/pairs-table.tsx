@@ -33,7 +33,11 @@ import {
 import { marketPairPath } from "@/lib/markets";
 import { mmActiveLabel, mmActiveTitle } from "@/lib/mm";
 import { overviewPnlCell } from "@/lib/pnl";
-import { dexNonTradeableReason } from "@/lib/sort";
+import {
+  bucketPnlSortTitle,
+  dexNonTradeableReason,
+  isPnlSortKey,
+} from "@/lib/sort";
 import type { MmActiveStatus, PairOverviewRow, SortKey } from "@/lib/types";
 
 function dexVolumeTitle(row: PairOverviewRow): string {
@@ -232,11 +236,13 @@ const COLS: Col[] = [
   },
   {
     id: "bucket_pnl",
-    key: null,
+    // Default sort unit is USD (visible column value). bps via sort menu / URL.
+    key: "pnl_optimal_usd",
     label: "Bucket PnL",
     group: "result",
     align: "right",
-    title: "Optimal size net PnL (PnL v2) — hover for direction & notional",
+    title:
+      "Optimal size net PnL in USD (click to sort). Sort menu for bps efficiency. Hover cells for direction & notional.",
   },
   {
     id: "mm",
@@ -372,12 +378,15 @@ function BucketPnlCell({
   const cell = overviewPnlCell(row.pnl_v2, venues, marketId);
   if (cell.kind === "ok") {
     const tone = usdTone(cell.pnlUsd);
+    // WHI-824: positive = highlight opportunity; negative = muted least-loss
+    // (desc board is often "least red", not free money).
     return (
       <span
         className={cn(
-          "tabular-nums font-medium",
-          tone === "pos" && "text-positive",
-          tone === "neg" && "text-negative",
+          "tabular-nums",
+          tone === "pos" && "font-medium text-positive",
+          tone === "neg" && "text-muted-foreground",
+          tone === "flat" && "text-muted-foreground",
           tone === "empty" && "text-muted-foreground",
           cell.quoteAged && "opacity-80",
         )}
@@ -656,13 +665,28 @@ export function PairsTable({
           <tr className="border-b border-border bg-muted/40 text-muted-foreground">
             {cols.map((col) => {
               const sortable = col.key != null;
-              const active = col.key === sortKey;
+              // WHI-824: Bucket PnL column stays active for both USD and bps keys.
+              const active =
+                col.key === sortKey ||
+                (col.id === "bucket_pnl" && isPnlSortKey(sortKey));
               const arrow = active ? (sortDesc ? " ↓" : " ↑") : "";
               const isGroupStart = groupFirstId.get(col.group) === col.id;
+              // Dynamic unit suffix when sorting by PnL (usd default vs bps menu).
+              let label = col.label;
+              if (col.id === "bucket_pnl" && active) {
+                label =
+                  sortKey === "pnl_optimal_bps"
+                    ? "Bucket PnL bps"
+                    : "Bucket PnL $";
+              }
+              const title =
+                col.id === "bucket_pnl" && active
+                  ? bucketPnlSortTitle(sortKey)
+                  : col.title;
               return (
                 <th
                   key={col.id}
-                  title={col.title}
+                  title={title}
                   className={cn(
                     "whitespace-nowrap px-2 py-2 font-medium",
                     col.align === "right" ? "text-right" : "text-left",
@@ -678,7 +702,7 @@ export function PairsTable({
                     active ? (sortDesc ? "descending" : "ascending") : undefined
                   }
                 >
-                  {col.label}
+                  {label}
                   {arrow}
                 </th>
               );

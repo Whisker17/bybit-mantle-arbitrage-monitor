@@ -109,6 +109,18 @@ class PnlOptimalSummary:
             "depth_quote_age_ms": self.depth_quote_age_ms,
         }
 
+    def flat_sort_fields(self) -> tuple[Decimal | None, Decimal | None]:
+        """USD / bps for overview sort keys (WHI-824).
+
+        Only ``status == "ok"`` (including ``quote_aged`` ok) participates in
+        numeric sort. Other statuses return ``(None, None)`` so callers park
+        the row last and Top-N skips it. Does not special-case ``stale`` —
+        when a row recovers to ok with numbers it sorts normally.
+        """
+        if self.status != "ok":
+            return None, None
+        return self.optimal_net_pnl_usd, self.optimal_net_pnl_bps
+
 
 @dataclass(frozen=True, slots=True)
 class PnlPairSnapshot:

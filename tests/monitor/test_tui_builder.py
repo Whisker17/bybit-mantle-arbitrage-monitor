@@ -324,6 +324,78 @@ def test_sort_rows_net_edge_desc() -> None:
     assert [r.pair_id for r in sorted_rows] == ["b", "a", "c"]
 
 
+def _pnl_row(
+    pid: str,
+    *,
+    usd: Decimal | None = None,
+    bps: Decimal | None = None,
+) -> PairOverviewRow:
+    return PairOverviewRow(
+        pair_id=pid,
+        name=pid,
+        low_liquidity=False,
+        session=SessionKind.OPEN,
+        bybit_bid=None,
+        bybit_ask=None,
+        bybit_mid=None,
+        amm_mid=None,
+        rfq_buy=None,
+        rfq_sell=None,
+        amm_spread_bps=None,
+        rfq_spread_bps=None,
+        net_edge_bps=None,
+        net_edge_venue=None,
+        net_edge_direction=None,
+        reference_size_usd=Decimal(1000),
+        volume_24h=Decimal(0),
+        trades_24h=0,
+        pnl_optimal_net_usd=usd,
+        pnl_optimal_net_bps=bps,
+    )
+
+
+def test_sort_rows_pnl_optimal_usd_desc_nulls_last() -> None:
+    """WHI-824: USD optimal PnL desc; non-numeric (None) always trail."""
+    rows = [
+        _pnl_row("neg_big", usd=Decimal("-5"), bps=Decimal("-50")),
+        _pnl_row("pos", usd=Decimal("2"), bps=Decimal("5")),
+        _pnl_row("no_data"),  # status ≠ ok → flat fields None
+        _pnl_row("neg_small", usd=Decimal("-0.5"), bps=Decimal("-100")),
+    ]
+    sorted_rows = sort_rows(rows, key="pnl_optimal_usd", desc=True)
+    assert [r.pair_id for r in sorted_rows] == [
+        "pos",
+        "neg_small",
+        "neg_big",
+        "no_data",
+    ]
+
+
+def test_sort_rows_pnl_optimal_bps_desc_independent_of_usd() -> None:
+    """WHI-824: bps rank differs from USD when optimal notionals diverge."""
+    # High USD profit at large size can lose on efficiency to a small-size winner.
+    rows = [
+        _pnl_row("big_usd", usd=Decimal("10"), bps=Decimal("5")),
+        _pnl_row("high_bps", usd=Decimal("1"), bps=Decimal("50")),
+        _pnl_row("missing"),
+    ]
+    by_usd = sort_rows(rows, key="pnl_optimal_usd", desc=True)
+    by_bps = sort_rows(rows, key="pnl_optimal_bps", desc=True)
+    assert [r.pair_id for r in by_usd] == ["big_usd", "high_bps", "missing"]
+    assert [r.pair_id for r in by_bps] == ["high_bps", "big_usd", "missing"]
+
+
+def test_sort_rows_pnl_negative_desc_is_least_loss_first() -> None:
+    """WHI-824: when all optimal PnL is negative, desc = least loss, not profit."""
+    rows = [
+        _pnl_row("worst", usd=Decimal("-20")),
+        _pnl_row("least", usd=Decimal("-1")),
+        _pnl_row("mid", usd=Decimal("-8")),
+    ]
+    sorted_rows = sort_rows(rows, key="pnl_optimal_usd", desc=True)
+    assert [r.pair_id for r in sorted_rows] == ["least", "mid", "worst"]
+
+
 def test_overview_and_detail_from_sqlite(tmp_path: Path) -> None:
     pairs = load_pairs_config()
     metrics = load_metrics_config()

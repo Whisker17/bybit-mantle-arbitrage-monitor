@@ -210,6 +210,13 @@ placeholders. Agents must not assume a module exists until its issue lands. -->
     deviant leg. Guard `max_abs_amm_spread_bps` (default 500) → reason/status
     `pricing_anomaly` (mid/spread kept); blocks paper edge, PnL v2 optimal, and
     Top-N seats. Seam `annotate_pricing_anomaly` after `quotable_amm_mid`.
+  - **Bucket PnL sort (WHI-824) landed:** overview Result-group column is a
+    first-class sort key — `pnl_optimal_usd` (default, visible column unit) and
+    `pnl_optimal_bps` (size-normalized; sort menu / `?sort=`). Flat fields
+    `pnl_optimal_net_usd` / `pnl_optimal_net_bps` on overview rows when
+    `pnl_v2.status == ok` (incl. quote_aged); non-ok nulls last and skip Top-N.
+    Positive PnL highlighted, negative muted; footer notes desc = least loss
+    when all negative. TUI frozen (SortKey extended only).
 
 ## Build, test, run
 
