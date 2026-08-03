@@ -19,20 +19,26 @@ export type PnlStatus =
   | "no_pool"
   | "empty_pool"
   | "invalid_mid"
+  | "pricing_anomaly"
   | "no_depth"
   | "no_fillable"
   | "stale";
 
-/** Why AMM mid is n/a when a pool tick existed (WHI-795). */
-export type AmmQuoteReason = "empty_pool" | "invalid_mid";
+/**
+ * AMM quote annotation (WHI-795 / WHI-822).
+ * - empty_pool / invalid_mid: mid is null
+ * - pricing_anomaly: mid may still be set (extreme |vs CEX|; not tradable)
+ */
+export type AmmQuoteReason = "empty_pool" | "invalid_mid" | "pricing_anomaly";
 
 /**
- * Why a row is denied a Top-N seat (WHI-796). UI maps via format helpers;
- * eligibility lives in web/lib/sort.ts.
+ * Why a row is denied a Top-N seat (WHI-796 + WHI-822). UI maps via format
+ * helpers; eligibility lives in web/lib/sort.ts.
  */
 export type DexNonTradeableReason =
   | "empty_pool"
   | "invalid_mid"
+  | "pricing_anomaly"
   | "no_pool"
   | "low_liq"
   | "no_quote";

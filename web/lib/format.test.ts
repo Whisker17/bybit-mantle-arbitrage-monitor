@@ -52,15 +52,17 @@ describe("ammQuoteReasonLabel", () => {
   it("maps wire reasons to human labels", () => {
     assert.equal(ammQuoteReasonLabel("empty_pool"), "empty pool");
     assert.equal(ammQuoteReasonLabel("invalid_mid"), "invalid mid");
+    assert.equal(ammQuoteReasonLabel("pricing_anomaly"), "price anomaly");
     assert.equal(ammQuoteReasonLabel(null), null);
     assert.equal(ammQuoteReasonLabel(undefined), null);
   });
 });
 
-describe("dexNonTradeableLabel / title (WHI-796)", () => {
+describe("dexNonTradeableLabel / title (WHI-796 / WHI-822)", () => {
   it("maps structured reasons to stable UI labels", () => {
     assert.equal(dexNonTradeableLabel("empty_pool"), "empty pool");
     assert.equal(dexNonTradeableLabel("invalid_mid"), "invalid mid");
+    assert.equal(dexNonTradeableLabel("pricing_anomaly"), "price anomaly");
     assert.equal(dexNonTradeableLabel("no_pool"), "no pool");
     assert.equal(dexNonTradeableLabel("low_liq"), "low liq");
     assert.equal(dexNonTradeableLabel("no_quote"), "no quote");
@@ -69,6 +71,7 @@ describe("dexNonTradeableLabel / title (WHI-796)", () => {
 
   it("provides hover titles for every reason", () => {
     assert.ok(dexNonTradeableTitle("empty_pool")?.includes("liquidity"));
+    assert.ok(dexNonTradeableTitle("pricing_anomaly")?.includes("tradable"));
     assert.ok(dexNonTradeableTitle("no_pool")?.includes("Top-N"));
     assert.ok(dexNonTradeableTitle("no_quote")?.includes("Waiting"));
     assert.equal(dexNonTradeableTitle(null), undefined);

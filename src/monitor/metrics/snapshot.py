@@ -11,7 +11,12 @@ from datetime import UTC, datetime
 from decimal import Decimal
 
 from monitor.metrics.amm_pool import AmmPoolState
-from monitor.metrics.amm_quote import AmmQuoteReason, quotable_amm_mid
+from monitor.metrics.amm_quote import (
+    AmmQuoteReason,
+    annotate_pricing_anomaly,
+    is_tradable_amm_quote,
+    quotable_amm_mid,
+)
 from monitor.metrics.config import MetricsConfig
 from monitor.metrics.edge import (
     Direction,
@@ -91,11 +96,20 @@ def build_spread_snapshot(
     """Build dual spread series: Bybit mid vs AMM, vs RFQ buy, vs RFQ sell.
 
     AMM mid is suppressed when the pool is not quotable (empty liquidity /
-    non-positive residual slot0 mid — WHI-795). RFQ is independent.
+    non-positive residual slot0 mid — WHI-795). Liquid pools with |vs CEX|
+    above ``config.max_abs_amm_spread_bps`` keep mid/spread but set reason
+    ``pricing_anomaly`` (WHI-822) so tradable consumers refuse the claim.
+    RFQ is independent.
     """
     ts = ts_ms if ts_ms is not None else bybit.recv_ts_ms
     bybit_mid = mid_from_bid_ask(bybit.bid_de_multiplied, bybit.ask_de_multiplied)
     amm_mid, amm_reason = quotable_amm_mid(amm)
+    amm_mid, amm_reason = annotate_pricing_anomaly(
+        amm_mid,
+        amm_reason,
+        cex_mid=bybit_mid,
+        max_abs_spread_bps=config.max_abs_amm_spread_bps,
+    )
     buy_mid = rfq_price(rfq_buy)
     sell_mid = rfq_price(rfq_sell)
     dt = datetime.fromtimestamp(ts / 1000, tz=UTC)
@@ -138,8 +152,14 @@ def build_edge_snapshot(
         ts_ms=ts_ms,
     )
     amm_edges: list[EdgeResult] = []
-    # Same quotability gate as spreads — empty pool must not produce net edge.
-    if amm_pool is not None and spreads.amm_mid is not None:
+    # Same quotability gate as spreads — empty pool / pricing anomaly must not
+    # produce net edge (WHI-795 / WHI-822). Mid may still be present under
+    # pricing_anomaly for investigation; tradable claim requires reason is None.
+    if (
+        amm_pool is not None
+        and spreads.amm_mid is not None
+        and is_tradable_amm_quote(spreads.amm_quote_reason)
+    ):
         amm_edges = compute_edge_ladder(
             pair_id=bybit.pair_id,
             bybit_bid=bybit.bid_de_multiplied,

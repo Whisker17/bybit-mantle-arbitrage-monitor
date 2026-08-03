@@ -7,16 +7,18 @@ import type {
 
 const DASH = "—";
 
-/** Human label for AMM quote suppression (WHI-795). */
+/** Human label for AMM quote suppression / anomaly (WHI-795 / WHI-822). */
 const AMM_QUOTE_REASON_LABEL: Record<AmmQuoteReason, string> = {
   empty_pool: "empty pool",
   invalid_mid: "invalid mid",
+  pricing_anomaly: "price anomaly",
 };
 
-/** Pair-id badge labels for non-tradeable DEX legs (WHI-796). */
+/** Pair-id badge labels for non-tradeable DEX legs (WHI-796 / WHI-822). */
 const DEX_NON_TRADEABLE_LABEL: Record<DexNonTradeableReason, string> = {
   empty_pool: AMM_QUOTE_REASON_LABEL.empty_pool,
   invalid_mid: AMM_QUOTE_REASON_LABEL.invalid_mid,
+  pricing_anomaly: AMM_QUOTE_REASON_LABEL.pricing_anomaly,
   no_pool: "no pool",
   low_liq: "low liq",
   no_quote: "no quote",
@@ -25,6 +27,8 @@ const DEX_NON_TRADEABLE_LABEL: Record<DexNonTradeableReason, string> = {
 const DEX_NON_TRADEABLE_TITLE: Record<DexNonTradeableReason, string> = {
   empty_pool: "Pool has zero in-range liquidity — residual slot0 mid suppressed",
   invalid_mid: "AMM mid non-positive — suppressed",
+  pricing_anomaly:
+    "|AMM vs CEX| exceeds max_abs_amm_spread_bps — mid shown for investigation, not a tradable claim (WHI-822)",
   no_pool:
     "No AMM pool in inventory (dex:none) — CEX-only; excluded from Top-N unless RFQ is two-sided",
   low_liq: "Below low_liquidity_threshold_usd — excluded from Top-N seats",
@@ -68,7 +72,7 @@ export function fmtOrAmmReason(
   return ammQuoteReasonLabel(reason) ?? formatted;
 }
 
-/** Shared hover copy when AMM mid is suppressed (WHI-795). */
+/** Shared hover copy when AMM mid is suppressed or anomalous (WHI-795 / WHI-822). */
 export function ammQuoteReasonTitle(
   reason: AmmQuoteReason | null | undefined,
 ): string | undefined {
@@ -77,6 +81,9 @@ export function ammQuoteReasonTitle(
   }
   if (reason === "invalid_mid") {
     return "AMM mid non-positive — suppressed";
+  }
+  if (reason === "pricing_anomaly") {
+    return DEX_NON_TRADEABLE_TITLE.pricing_anomaly;
   }
   return undefined;
 }

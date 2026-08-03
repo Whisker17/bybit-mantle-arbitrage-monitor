@@ -221,3 +221,106 @@ def test_assert_sane_bps_rejects_phantom_magnitude() -> None:
     assert_sane_bps(Decimal("120.5"))
     assert_sane_bps(Decimal("1016"))  # real-ish magnitude; empty-pool gate is the fix
     assert_sane_bps(MAX_SANE_ABS_BPS)
+
+
+# ---------------------------------------------------------------------------
+# WHI-822: |vs CEX| magnitude guard — liquid pool, not empty-pool residual
+# ---------------------------------------------------------------------------
+
+
+def test_annotate_pricing_anomaly_spyb_shaped() -> None:
+    """SPYB-shaped: liquid AMM ~11% rich vs CEX → pricing_anomaly (mid kept)."""
+    from monitor.metrics.amm_quote import annotate_pricing_anomaly
+
+    mid, reason = annotate_pricing_anomaly(
+        Decimal("836.50"),
+        None,
+        cex_mid=Decimal("751.71"),
+        max_abs_spread_bps=Decimal(500),
+    )
+    assert mid == Decimal("836.50")
+    assert reason == "pricing_anomaly"
+
+
+def test_annotate_pricing_anomaly_under_threshold_ok() -> None:
+    from monitor.metrics.amm_quote import annotate_pricing_anomaly
+
+    mid, reason = annotate_pricing_anomaly(
+        Decimal("692.51"),
+        None,
+        cex_mid=Decimal("692.31"),
+        max_abs_spread_bps=Decimal(500),
+    )
+    assert mid == Decimal("692.51")
+    assert reason is None
+
+
+def test_annotate_pricing_anomaly_preserves_empty_pool() -> None:
+    from monitor.metrics.amm_quote import annotate_pricing_anomaly
+
+    mid, reason = annotate_pricing_anomaly(
+        None,
+        "empty_pool",
+        cex_mid=Decimal("100"),
+        max_abs_spread_bps=Decimal(500),
+    )
+    assert mid is None
+    assert reason == "empty_pool"
+
+
+def test_annotate_pricing_anomaly_disabled_when_threshold_none() -> None:
+    from monitor.metrics.amm_quote import annotate_pricing_anomaly
+
+    mid, reason = annotate_pricing_anomaly(
+        Decimal("836.50"),
+        None,
+        cex_mid=Decimal("751.71"),
+        max_abs_spread_bps=None,
+    )
+    assert mid == Decimal("836.50")
+    assert reason is None
+
+
+def test_spyb_shaped_spread_marks_pricing_anomaly_keeps_mid() -> None:
+    """Live-shaped SPYB: L>0, huge basis — mid/spread visible, reason set, no edges."""
+    cfg = load_metrics_config()
+    assert cfg.max_abs_amm_spread_bps == Decimal(500)
+    ts = _open_ts_ms()
+    # Issue sample: CEX 751.71, AMM 836.50 → +1127.9 bps
+    bybit = BybitBookTick(
+        pair_id="SPYB",
+        symbol="SPYBUSDT",
+        exchange_ts_ms=ts,
+        recv_ts_ms=ts,
+        bid=Decimal("751.66"),
+        ask=Decimal("751.76"),
+        bid_de_multiplied=Decimal("751.66"),
+        ask_de_multiplied=Decimal("751.76"),
+        multiplier=Decimal(1),
+    )
+    amm = _pool(
+        pair_id="SPYB",
+        mid=Decimal("836.50"),
+        liquidity=10**18,
+        ts_ms=ts,
+    )
+    from monitor.metrics.amm_pool import AmmPoolState
+
+    pool = AmmPoolState(
+        pool_fee=100,
+        sqrt_price_x96=amm.sqrt_price_x96,
+        liquidity=amm.liquidity,
+        token0_is_quote=True,
+        token0_decimals=18,
+        token1_decimals=18,
+    )
+    edge = build_edge_snapshot(
+        bybit=bybit, amm=amm, amm_pool=pool, config=cfg, ts_ms=ts
+    )
+    snap = edge.spreads
+    assert snap.amm_mid == Decimal("836.50")
+    assert snap.amm_quote_reason == "pricing_anomaly"
+    assert snap.amm_spread_bps is not None
+    assert snap.amm_spread_bps > Decimal(500)
+    # Tradable paper edge must not claim a fillable opportunity.
+    assert edge.amm_edges == []

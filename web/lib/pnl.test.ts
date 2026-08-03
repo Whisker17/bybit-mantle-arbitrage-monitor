@@ -98,6 +98,7 @@ describe("overviewPnlCell", () => {
       "no_pool",
       "empty_pool",
       "invalid_mid",
+      "pricing_anomaly",
       "stale",
     ] as const) {
       const cell = overviewPnlCell({
@@ -112,7 +113,7 @@ describe("overviewPnlCell", () => {
       assert.equal(cell.kind, "status");
       if (cell.kind === "status") {
         assert.notEqual(cell.label, "no depth");
-        assert.match(cell.label, /book|pool|aged|mid/);
+        assert.match(cell.label, /book|pool|aged|mid|anomaly/);
       }
     }
   });
@@ -152,7 +153,7 @@ describe("overviewPnlCell", () => {
     assert.match(quoteAgeTitle(ages), /AMM/);
   });
 
-  it("labels empty_pool / invalid_mid distinctly from no_pool", () => {
+  it("labels empty_pool / invalid_mid / pricing_anomaly distinctly from no_pool", () => {
     const empty = overviewPnlCell({
       status: "empty_pool",
       has_depth: false,
@@ -171,6 +172,19 @@ describe("overviewPnlCell", () => {
       optimal_net_pnl_bps: null,
       bybit_depth_source: null,
     });
+    const anomaly = overviewPnlCell({
+      status: "pricing_anomaly",
+      has_depth: true,
+      direction: null,
+      optimal_notional_usd: null,
+      optimal_net_pnl_usd: null,
+      optimal_net_pnl_bps: null,
+      bybit_depth_source: "book",
+    });
+    assert.equal(anomaly.kind, "status");
+    if (anomaly.kind === "status") {
+      assert.equal(anomaly.label, "price anomaly");
+    }
     const none = overviewPnlCell({
       status: "no_pool",
       has_depth: false,
