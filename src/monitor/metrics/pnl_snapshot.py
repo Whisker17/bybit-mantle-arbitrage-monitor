@@ -56,6 +56,7 @@ def _dec_str(v: Decimal | None) -> str | None:
     """Fixed-point Decimal → JSON string (never scientific notation)."""
     return None if v is None else format(v, "f")
 
+
 _DIRECTIONS: tuple[Direction, Direction] = (
     "buy_fluxion_sell_bybit",
     "buy_bybit_sell_fluxion",

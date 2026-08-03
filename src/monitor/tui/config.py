@@ -64,6 +64,20 @@ class TuiConfig(BaseModel):
             return Decimal(str(value))
         return value
 
+    @field_validator("default_sort")
+    @classmethod
+    def _no_web_only_pnl_default(cls, value: SortKey) -> SortKey:
+        # WHI-824: SortKey includes Web-only PnL keys so type-check stays shared,
+        # but TUI never fills pnl_optimal_net_* — defaulting to them would sort
+        # every row as missing (silent no-op). Reject at config load.
+        if value in ("pnl_optimal_usd", "pnl_optimal_bps"):
+            raise ValueError(
+                f"tui.default_sort={value!r} is Web-only (WHI-824); "
+                "TUI overview does not populate PnL flat fields. "
+                "Use net_edge / amm_spread / … for the Textual panel."
+            )
+        return value
+
     def resolved_sqlite_path(self, *, cwd: Path | None = None) -> Path:
         path = Path(self.sqlite_path)
         if path.is_absolute():
