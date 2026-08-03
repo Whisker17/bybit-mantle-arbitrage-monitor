@@ -27,7 +27,12 @@ class ApiConfig(BaseModel):
     # Default market id (M7-2). CLI --market overrides at process start.
     market: str = Field(default=DEFAULT_MARKET_ID, min_length=1)
     sqlite_path: str = Field(min_length=1)
+    # Process liveness only (/api/health collector_alive). Do not reuse as a
+    # per-symbol quote wipe gate — quiet event-driven CEX books are normal.
     collector_stale_ms: int = Field(ge=1_000)
+    # PnL v2 / quote annotation: legs older than this are marked quote_aged
+    # but bucket tables still compute (WHI-821). Separate from collector_stale_ms.
+    quote_max_age_ms: int = Field(default=300_000, ge=1_000)
     recent_gap_window_ms: int = Field(ge=1_000)
     poll_interval_s: float = Field(gt=0, le=60)
     # PnL v2 snapshot TTL (seconds). 0 disables cache (recompute every request).

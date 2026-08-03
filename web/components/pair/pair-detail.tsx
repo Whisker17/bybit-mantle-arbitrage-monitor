@@ -29,6 +29,7 @@ import {
   fmtPrice,
   fmtSession,
   fmtSignedBps,
+  fmtUnderlyingPriceType,
   isRealUnderlyingPrint,
   resolveVenues,
   type DirectionVenues,
@@ -195,7 +196,14 @@ export function PairDetail({ marketId, pairId }: Props) {
           <Badge variant={session === "open" ? "open" : "closed"}>
             {fmtSession(session)}
           </Badge>
-          {o.stale && <Badge variant="warning">stale</Badge>}
+          {o.stale && (
+            <Badge
+              variant="warning"
+              title="No CEX book tick in journal (distinct from quote aged / price stale)"
+            >
+              no book
+            </Badge>
+          )}
           {o.mm_active === "active" && (
             <Badge variant="mm" title={mmActiveTitle(o.mm_active)}>
               {mmActiveLabel(o.mm_active)}
@@ -299,9 +307,13 @@ export function PairDetail({ marketId, pairId }: Props) {
                       o.underlying_as_of_ms,
                     )
                   ? `${fmtPrice(o.underlying_price)}${
-                      o.underlying_price_type
-                        ? ` (${o.underlying_price_type})`
-                        : ""
+                      (() => {
+                        const lab = fmtUnderlyingPriceType(
+                          o.underlying_price_type,
+                          o.premium_type_label,
+                        );
+                        return lab ? ` (${lab})` : "";
+                      })()
                     }`
                   : "—"
             }

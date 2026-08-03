@@ -24,6 +24,9 @@ costs:
   cex_taker_fee_bps: 10
   gas_usd_per_swap: 0.01
   quote_basis_bps: 0
+# WHI-821: omit quote_max_age_ms → inherit config/api.yaml default (300s).
+# Override only when a market needs a different quiet-book window (see
+# binance-pancake.yaml for closed-session bStocks).
 inventory:
   version: 1
   inventory_as_of: '2026-07-31'

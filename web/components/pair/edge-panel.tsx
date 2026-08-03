@@ -21,6 +21,8 @@ import {
   isOptimalBucket,
   isThinDepth,
   pickBucketTable,
+  quoteAgeTitle,
+  quoteAgedHint,
   totalCostUsd,
   usdCostRows,
 } from "@/lib/pnl";
@@ -314,6 +316,8 @@ function BucketPnlPanel({
             Cash-flow paper arb · $10–$10K AMM buckets
             {!snap.has_depth && " · L1 (no depth curve)"}
             {thin && " · thin depth (large sizes unfillable)"}
+            {(snap.quote_aged || best.quote_aged) &&
+              " · quote aged (quiet book — still computed)"}
           </p>
         </div>
         <div className="flex gap-1">
@@ -355,6 +359,14 @@ function BucketPnlPanel({
             @ ${fmtNotional(best.optimal_notional_usd)}{" "}
             {fmtDirection(best.direction, venues, marketId)}
           </span>
+          {(snap.quote_aged || best.quote_aged) && (
+            <span
+              className="ml-2 text-[10px] text-warning"
+              title={quoteAgeTitle(snap)}
+            >
+              {quoteAgedHint(snap) ?? "quote aged"}
+            </span>
+          )}
         </p>
       )}
 

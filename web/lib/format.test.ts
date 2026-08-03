@@ -25,6 +25,7 @@ import {
   fmtUsd,
   fmtUtcHm,
   fmtVolumeRatio,
+  fmtUnderlyingPriceType,
   isRealUnderlyingPrint,
   shortAddr,
   totalWearBps,
@@ -33,6 +34,19 @@ import {
   venueLabel,
   venuesFromMarketId,
 } from "./format";
+
+describe("fmtUnderlyingPriceType (WHI-821)", () => {
+  it("maps stale; keeps raw type over premium-relative labels", () => {
+    assert.equal(fmtUnderlyingPriceType("stale", "price stale"), "price stale");
+    assert.equal(fmtUnderlyingPriceType("stale", null), "price stale");
+    // WHI-783: Underlying is reference-only — do not show "vs close".
+    assert.equal(fmtUnderlyingPriceType("close", "vs close"), "close");
+    assert.equal(fmtUnderlyingPriceType("pre", "vs pre"), "pre");
+    assert.equal(fmtUnderlyingPriceType("live", null), "live");
+    assert.equal(fmtUnderlyingPriceType(null, "vs close"), "vs close");
+    assert.equal(fmtUnderlyingPriceType(null, null), null);
+  });
+});
 
 describe("ammQuoteReasonLabel", () => {
   it("maps wire reasons to human labels", () => {

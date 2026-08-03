@@ -17,6 +17,8 @@ def test_load_default_api_config() -> None:
     assert cfg.market == "bybit-fluxion"
     assert cfg.sqlite_path == "data/monitor-bybit-fluxion.db"
     assert cfg.collector_stale_ms == 30_000
+    # WHI-821: quote annotation threshold, separate from process liveness.
+    assert cfg.quote_max_age_ms == 300_000
     assert cfg.poll_interval_s == 2.0
     assert cfg.pnl_cache_ttl_s == 2.5
     # Local Next dogfood origins (config/api.yaml); empty on VPS via deploy overlay.

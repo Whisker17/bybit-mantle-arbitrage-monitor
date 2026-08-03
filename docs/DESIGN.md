@@ -178,10 +178,19 @@ not a proven continuous global max.
 
 | Guard | Rule |
 |-------|------|
-| Freshness | Bybit / pool / RFQ age caps; stale → unfillable + reason |
+| Freshness (WHI-821) | **Two separate thresholds.** (1) `collector_stale_ms` (default 30s) on `/api/health` only — process liveness (`collector_alive` / UI **feed down**). (2) `quote_max_age_ms` — **annotate** quiet legs via `quote_aged` + per-leg ages; **never wipe** tables because event-driven bookTicker is quiet. Default in `config/api.yaml` (300s); optional **per-market override** on `config/markets/{id}.yaml` `quote_max_age_ms` (e.g. binance-pancake 600s for closed-session bStocks). Quiet (pair ages) ≠ offline (process health). True empty states remain `no_book` / `no_pool` only. Align / RFQ-age / pool-block lag still deferred (see `docs/DEFERRED_ISSUES.md`). |
 | Align | Dual-leg snapshot skew ≤ `align_skew_ms` |
 | Min profit | Config threshold for **highlight / breach only** — raw PnL always emitted |
 | Thin book | Partial depth fill ⇒ unfillable (no silent partial) |
+
+**UI stale disambiguation (WHI-821):** three formerly-identical "stale" strings:
+
+| Surface | Meaning | Label |
+|---------|---------|-------|
+| Overview / detail row badge (`row.stale`) | No CEX book tick in journal | **no book** |
+| Underlying `price_type=stale` / type label | Equity reference print too old | **price stale** |
+| PnL v2 `quote_aged` (or legacy `status=stale`) | Quote leg(s) older than `quote_max_age_ms` | **quote aged** (numbers still shown) |
+| Health banner when `!collector_alive` | Collector process / journal feed dead | **feed down** |
 
 #### 2.6.6 Engine ownership
 

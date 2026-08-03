@@ -99,6 +99,10 @@ class MarketFile(BaseModel):
     cex: CexSide
     dex: DexSide
     costs: MarketCosts
+    # WHI-821: optional per-market PnL quote age annotate threshold (ms).
+    # When set, overrides api.yaml ``quote_max_age_ms`` for this market only.
+    # Quiet CEX books (event-driven) need looser values on closed-session markets.
+    quote_max_age_ms: int | None = Field(default=None, ge=1_000)
     # Opaque inventory mapping — validated by market-specific loaders.
     inventory: dict[str, Any] = Field(min_length=1)
 

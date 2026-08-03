@@ -19,8 +19,15 @@ market: bybit-fluxion
 sqlite_path: data/monitor-bybit-fluxion.db
 
 # Health: freshest recv_ts older than this → collector_alive=false.
+# Process liveness only — NOT a per-symbol quote wipe gate (WHI-821).
 # 30s covers Bybit L1 (~1s) and RFQ poll stalls; chain can be quieter.
 collector_stale_ms: 30000
+
+# PnL v2 quote annotation (WHI-821): CEX book / pool / depth recv age above
+# this → quote_aged=true + ages exposed on the snapshot. Tables still compute.
+# Quiet event-driven bookTicker (price flat, no push) is normal closed-session
+# behavior — 5m is intentionally looser than collector_stale_ms.
+quote_max_age_ms: 300000
 
 # Health: list gaps whose gap_end_ms falls inside this trailing window.
 recent_gap_window_ms: 300000

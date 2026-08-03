@@ -184,7 +184,12 @@ def _pnl_snapshot_for_pair(
         # Same config switch as attribution (market dex.has_rfq via assembly).
         rfq_enabled=runtime.attribution.has_rfq,
         now_ms=now_ms(),
-        stale_ms=state.api.collector_stale_ms,
+        # Per-market override (config/markets/*.yaml) else api.yaml default.
+        quote_max_age_ms=(
+            runtime.quote_max_age_ms
+            if runtime.quote_max_age_ms is not None
+            else state.api.quote_max_age_ms
+        ),
     )
     if cache is not None:
         cache.put(pair.id, snap)

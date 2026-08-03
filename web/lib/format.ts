@@ -106,6 +106,23 @@ export function priceTypeBadgeVariant(
 }
 
 /**
+ * Display label for underlying price_type (WHI-821 disambiguation).
+ * Raw price type is authoritative for the Underlying *reference* column
+ * (WHI-783: not a premium phrase). Only remap ``stale`` → "price stale"
+ * so it never collides with row "no book" or PnL "quote aged". Prefer
+ * ``typeLabel`` only when priceType is absent (API partial).
+ */
+export function fmtUnderlyingPriceType(
+  priceType: string | null | undefined,
+  typeLabel?: string | null,
+): string | null {
+  if (priceType === "stale") return "price stale";
+  if (priceType != null && priceType !== "") return priceType;
+  if (typeLabel) return typeLabel;
+  return null;
+}
+
+/**
  * True when an underlying print is usable for display / vs-Und (WHI-794).
  * Rejects null, non-finite, ≤0, and epoch-zero as_of.
  */

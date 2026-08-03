@@ -70,6 +70,8 @@ class MarketRuntime:
     bstocks: BStocksPairsConfig | None = None
     # From market dex.quote_decimals (USDC=6 / USDT=18) — never hardcode at call sites.
     quote_decimals: int = 6
+    # WHI-821: optional market-file override of api.yaml quote_max_age_ms.
+    quote_max_age_ms: int | None = None
     edge_state: RunningEdgeState = field(default_factory=RunningEdgeState)
     lock: threading.Lock = field(default_factory=threading.Lock)
     pnl_cache: PnlSnapshotCache | None = None

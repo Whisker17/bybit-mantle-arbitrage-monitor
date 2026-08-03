@@ -73,6 +73,7 @@ def _build_market_runtime(
         db_path=db_path,
         reader=reader,
         quote_decimals=ctx.dex.quote_decimals,
+        quote_max_age_ms=ctx.market_file.quote_max_age_ms,
         pnl_cache=PnlSnapshotCache(ttl_s=api.pnl_cache_ttl_s),
         inventory_cache=InventoryEventsCache(ttl_s=api.mm_inventory_cache_ttl_s),
     )

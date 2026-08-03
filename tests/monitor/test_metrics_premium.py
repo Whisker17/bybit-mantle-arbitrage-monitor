@@ -47,7 +47,7 @@ def test_premium_type_label_closed_session() -> None:
     assert premium_type_label("close") == "vs close"
     assert premium_type_label("pre") == "vs pre"
     assert premium_type_label("post") == "vs post"
-    assert premium_type_label("stale") == "stale"
+    assert premium_type_label("stale") == "price stale"
     assert premium_type_label(None) is None
 
 

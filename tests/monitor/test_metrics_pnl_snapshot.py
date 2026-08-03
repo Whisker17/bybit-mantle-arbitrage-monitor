@@ -410,24 +410,91 @@ def test_snapshot_with_depth_matches_engine_bucket_pnl() -> None:
         assert a.costs.gas_usd == b.costs.gas_usd
 
 
-def test_snapshot_stale_when_recv_old() -> None:
+def test_quiet_cex_book_still_builds_tables_with_quote_ages() -> None:
+    """WHI-821: quiet CEX (event-driven bookTicker) must not wipe bucket tables.
+
+    Regression: book tick age 45s with fresh pool + depth used to early-return
+    status=stale + tables={} when stale_ms reused collector_stale_ms (30s).
+    Quiet ≠ dead: keep computing and expose per-leg ages + quote_aged.
+    """
     pair = _load_aapl_pair()
-    old = 1_700_000_000_000
-    pool_tick = _pool_tick(ts=old)
+    now = 1_700_000_045_000
+    book_ts = now - 45_000  # 45s quiet CEX
+    pool_ts = now - 800  # ~0.8s fresh pool
+    depth_ts = now - 800
+    pool_tick = _pool_tick(ts=pool_ts)
     amm = amm_pool_from_tick(pair, pool_tick)
+    # quote_max_age_ms at 30s → CEX leg is aged; still must not blank tables.
     snap = build_pnl_pair_snapshot(
         pair_id=pair.id,
-        bybit=_book(ts=old),
+        bybit=_book(ts=book_ts),
         amm=amm,
         amm_tick=pool_tick,
         config=_cfg(),
-        depth=_depth(ts=old),
+        depth=_depth(ts=depth_ts),
         native_decimals=pair.fluxion.native_decimals,
-        now_ms=old + 60_000,
-        stale_ms=30_000,
+        now_ms=now,
+        quote_max_age_ms=30_000,
     )
-    assert snap.status == "stale"
-    assert snap.tables == {}
+    assert snap.status != "stale"
+    assert snap.tables, "aged CEX quote must not clear bucket tables"
+    assert "buy_fluxion_sell_bybit" in snap.tables
+    assert "buy_bybit_sell_fluxion" in snap.tables
+    assert len(snap.tables["buy_fluxion_sell_bybit"].amm_buckets) >= 1
+    assert snap.has_depth is True
+    assert snap.cex_quote_age_ms == 45_000
+    assert snap.amm_quote_age_ms == 800
+    assert snap.depth_quote_age_ms == 800
+    assert snap.quote_aged is True
+    assert snap.best.quote_aged is True
+    assert snap.best.cex_quote_age_ms == 45_000
+
+
+def test_fresh_quotes_not_aged() -> None:
+    """Both legs within quote_max_age_ms → quote_aged false, ages still exposed."""
+    pair = _load_aapl_pair()
+    now = 1_700_000_010_000
+    book_ts = now - 5_000
+    pool_ts = now - 1_000
+    pool_tick = _pool_tick(ts=pool_ts)
+    amm = amm_pool_from_tick(pair, pool_tick)
+    snap = build_pnl_pair_snapshot(
+        pair_id=pair.id,
+        bybit=_book(ts=book_ts),
+        amm=amm,
+        amm_tick=pool_tick,
+        config=_cfg(),
+        depth=_depth(ts=pool_ts),
+        native_decimals=pair.fluxion.native_decimals,
+        now_ms=now,
+        quote_max_age_ms=30_000,
+    )
+    assert snap.status in ("ok", "no_depth", "no_fillable")
+    assert snap.quote_aged is False
+    assert snap.cex_quote_age_ms == 5_000
+    assert snap.amm_quote_age_ms == 1_000
+    assert snap.tables
+
+
+def test_missing_now_skips_age_annotation() -> None:
+    """Without now_ms, ages stay None and quote_aged is false (offline/CLI)."""
+    pair = _load_aapl_pair()
+    pool_tick = _pool_tick()
+    amm = amm_pool_from_tick(pair, pool_tick)
+    snap = build_pnl_pair_snapshot(
+        pair_id=pair.id,
+        bybit=_book(),
+        amm=amm,
+        amm_tick=pool_tick,
+        config=_cfg(),
+        depth=_depth(),
+        native_decimals=pair.fluxion.native_decimals,
+        quote_max_age_ms=30_000,
+    )
+    assert snap.cex_quote_age_ms is None
+    assert snap.amm_quote_age_ms is None
+    assert snap.quote_aged is False
+    assert snap.tables
 
 
 def test_empty_reconstructed_depth_is_no_depth() -> None:

@@ -26,6 +26,9 @@ costs:
   cex_taker_fee_bps: 10
   gas_usd_per_swap: 0.05
   quote_basis_bps: 0
+# WHI-821: closed-session bStocks bookTicker is quiet (price flat → no push).
+# Annotate quote_aged after 10m; never wipe bucket tables (see DESIGN §2.6.5).
+quote_max_age_ms: 600000
 inventory:
   version: 2
   inventory_as_of: '2026-08-02'
