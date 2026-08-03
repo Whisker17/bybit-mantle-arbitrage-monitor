@@ -243,8 +243,24 @@ def build_health(
         alive = False
 
     since = ts - gap_window_ms
-    gaps = reader.recent_gaps(since_ms=since, limit=20)
-    down_recent = any(g.source == SOURCE_COLLECTOR_DOWN for g in gaps)
+    # Source-filter collector_down before LIMIT so block-lag spam cannot hide
+    # downtime (WHI-825). Merge into recent_gaps for the wire payload.
+    down_gaps = reader.recent_gaps(
+        since_ms=since, limit=20, source=SOURCE_COLLECTOR_DOWN
+    )
+    other_gaps = reader.recent_gaps(since_ms=since, limit=20)
+    # Prefer downtime rows first, then other sources, de-dupe by identity.
+    seen: set[tuple[str, int, int]] = set()
+    gaps: list[CollectorGap] = []
+    for g in list(down_gaps) + list(other_gaps):
+        key = (g.source, g.gap_start_ms, g.gap_end_ms)
+        if key in seen:
+            continue
+        seen.add(key)
+        gaps.append(g)
+        if len(gaps) >= 20:
+            break
+    down_recent = bool(down_gaps)
     feed_state = classify_feed_state(
         collector_alive=alive,
         data_age_ms=data_age,

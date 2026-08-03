@@ -437,8 +437,8 @@ class CollectorDaemon:
 
     async def _on_cex_volume(self, ticks: list[CexVolumeTick]) -> None:
         await asyncio.to_thread(self.store.insert_cex_volume, ticks)
-        if ticks:
-            self._note_data_write(max(t.recv_ts_ms for t in ticks))
+        # REST 24h volume is not part of freshest_recv / watchdog progress —
+        # a successful volume poll while WS+chain are dead must not disarm it.
 
     async def _on_gap(self, gap: CollectorGap) -> None:
         await asyncio.to_thread(self.store.insert_gap, gap)
@@ -880,7 +880,8 @@ class CollectorDaemon:
                         await asyncio.to_thread(
                             self.store.insert_underlying_prices, ticks
                         )
-                        self._note_data_write(max(t.recv_ts_ms for t in ticks))
+                        # Underlying REST is not freshest_recv / watchdog progress
+                        # (same rule as cex_volume — WHI-825 round-3).
                     # Always stamp poll meta (empty list ≠ not running).
                     self._stamp_underlying_poll(len(ticks))
                 except Exception as exc:  # noqa: BLE001

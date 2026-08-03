@@ -313,6 +313,47 @@ def test_build_health_feed_state_gap(tmp_path: Path) -> None:
     assert "downtime" in health.recovery_hint.lower() or "hole" in health.recovery_hint
 
 
+def test_build_health_gap_survives_block_lag_spam(tmp_path: Path) -> None:
+    """collector_down must not be crowded out of feed_state by other gap sources."""
+    from monitor.collector.watchdog import META_HEARTBEAT
+
+    db = tmp_path / "m.db"
+    store = SqliteStore(db)
+    ts = now_ms()
+    store.set_meta("collector_started_ms", str(ts - 60_000))
+    store.set_meta(META_HEARTBEAT, str(ts - 1_000))
+    _seed_book(store, ts=ts - 1_000)
+    for i in range(30):
+        store.insert_gap(
+            CollectorGap(
+                source="mantle_blocks",
+                gap_start_ms=ts - 10_000 + i,
+                gap_end_ms=ts - 9_000 + i,
+                detail="lag spam",
+            )
+        )
+    store.insert_gap(
+        CollectorGap(
+            source="collector_down",
+            gap_start_ms=ts - 3_600_000,
+            gap_end_ms=ts - 120_000,
+            detail="market=binance-pancake collector process down duration_ms=3480000",
+        )
+    )
+    store.close()
+
+    with JournalReader(db) as reader:
+        health = build_health(
+            reader,
+            now=ts,
+            stale_ms=30_000,
+            gap_window_ms=24 * 3_600_000,
+            market_id="binance-pancake",
+        )
+    assert health.collector_down_gap_recent is True
+    assert health.feed_state == "gap"
+
+
 def test_build_health_prefers_heartbeat_over_quiet_ticks(tmp_path: Path) -> None:
     """Heartbeat keeps collector_alive when tick tables are quiet (closed session)."""
     from monitor.collector.watchdog import META_HEARTBEAT

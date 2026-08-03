@@ -203,14 +203,15 @@ class EdgeStats:
                 max_gap_ms=self.max_gap_ms,
                 exclude_intervals=self.exclude_intervals,
             )
-            gap_capped = gap_ms == 0 and raw > 0
+            # Zero weight: over max_gap OR overlapped collector_down (WHI-825).
+            weight_zeroed = gap_ms == 0 and raw > 0
             if state.last_breaching and gap_ms > 0:
                 state.total_duration_ms += gap_ms
             if state.samples:
                 prev_val, _ = state.samples[-1]
                 state.samples[-1] = (prev_val, Decimal(gap_ms))
-            # A capped / excluded gap ends the prior breach episode.
-            if gap_capped:
+            # A zeroed gap ends the prior breach episode (overnight / downtime).
+            if weight_zeroed:
                 state.last_breaching = False
 
         state.samples.append((net_edge_bps, Decimal(0)))  # weight filled later
