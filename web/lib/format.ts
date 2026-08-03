@@ -107,17 +107,19 @@ export function priceTypeBadgeVariant(
 
 /**
  * Display label for underlying price_type (WHI-821 disambiguation).
- * Prefer server ``premium_type_label`` when present; map raw ``stale`` →
- * "price stale" so it never collides with row "no book" or PnL "quote aged".
+ * Raw price type is authoritative for the Underlying *reference* column
+ * (WHI-783: not a premium phrase). Only remap ``stale`` → "price stale"
+ * so it never collides with row "no book" or PnL "quote aged". Prefer
+ * ``typeLabel`` only when priceType is absent (API partial).
  */
 export function fmtUnderlyingPriceType(
   priceType: string | null | undefined,
   typeLabel?: string | null,
 ): string | null {
-  if (typeLabel) return typeLabel;
   if (priceType === "stale") return "price stale";
-  if (priceType == null || priceType === "") return null;
-  return priceType;
+  if (priceType != null && priceType !== "") return priceType;
+  if (typeLabel) return typeLabel;
+  return null;
 }
 
 /**
