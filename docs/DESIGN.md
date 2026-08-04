@@ -192,15 +192,27 @@ not a proven continuous global max.
 | PnL v2 `quote_aged` (or legacy `status=stale`) | Quote leg(s) older than `quote_max_age_ms` | **quote aged** (numbers still shown) |
 | Health banner when `!collector_alive` | Collector process / journal feed dead | **feed down** |
 
-**Collector liveness & downtime (WHI-825):** process supervision is per-market
-(`xstocks-collector@{market}.service` with `Restart=always`; local
+**Collector liveness & downtime (WHI-825 / WHI-835):** process supervision is
+per-market (`xstocks-collector@{market}.service` with `Restart=always`; local
 `dev-web.sh` multi-market pid/log + restart wrapper). In-process watchdog uses
 **any tick-table write** (not per-symbol quote age) — reconnect after N s
 silence, non-zero exit after M s so the supervisor restarts. Meta
 `collector_heartbeat_ms` separates process liveness from quiet books.
 Restart books `[last write, first write]` as `collector_gaps.source=collector_down`;
 cumulative EdgeStats exclude that interval. Health `feed_state`:
-`ok | feed_down | feed_quiet | gap` + `recovery_hint`.
+`ok | feed_down | feed_quiet | gap` + `recovery_hint` (platform-aware: no
+systemd hints on macOS).
+
+**Exit must complete (WHI-835):** graceful cancel alone is not enough —
+`asyncio.to_thread` workers on non-daemon `ThreadPoolExecutor` threads can
+outlive `SystemExit` (closed httpx client + multi-attempt backoff stretched a
+zombie to hours). Collector owns the default executor and
+`shutdown(wait=False, cancel_futures=True)` on stop; Rpc skips retries when
+the client is closed; after `watchdog.shutdown_grace_s` (default 15s) a
+daemon timer calls `os._exit(exit_code)`. The local wrapper also polls
+`collector_heartbeat_ms` and `kill -9`s a stalled child so restart cannot
+wait forever. Last subsystem error is stamped
+`collector_last_feed_error{,_ms,_source}`.
 
 #### 2.6.6 Engine ownership
 

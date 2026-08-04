@@ -265,10 +265,14 @@ class LoggingConfig(BaseModel):
 
 
 class WatchdogConfig(BaseModel):
-    """Process-level write-activity watchdog (WHI-825).
+    """Process-level write-activity watchdog (WHI-825 / WHI-835).
 
     Not per-symbol quote age — quiet closed-session bookTicker is normal.
     Silence across *all* journal writes (ticks + heartbeat) triggers action.
+
+    ``shutdown_grace_s`` is the hard ceiling after stop is requested: if
+    non-daemon ``to_thread`` workers still block interpreter exit, the
+    process ``os._exit``s so the supervisor can restart (WHI-835).
     """
 
     model_config = ConfigDict(extra="forbid", frozen=True)
@@ -284,6 +288,8 @@ class WatchdogConfig(BaseModel):
     check_interval_s: float = Field(default=10.0, gt=0)
     # Minimum downtime to record as collector_down on restart (skip bounce noise).
     min_down_gap_ms: int = Field(default=30_000, ge=0)
+    # WHI-835: after request_stop for a non-zero exit, force os._exit by this.
+    shutdown_grace_s: float = Field(default=15.0, gt=0)
 
     @model_validator(mode="after")
     def _exit_ge_reconnect(self) -> WatchdogConfig:

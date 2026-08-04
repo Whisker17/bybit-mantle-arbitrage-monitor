@@ -303,7 +303,36 @@ def test_build_health_feed_state_down(tmp_path: Path) -> None:
     assert health.feed_state == "feed_down"
     assert health.recovery_hint is not None
     assert "binance-pancake" in health.recovery_hint
-    assert "systemctl" in health.recovery_hint
+    assert "dev-web.sh" in health.recovery_hint
+
+
+def test_recovery_hint_platform_aware() -> None:
+    """WHI-835: macOS must not recommend systemctl; Linux/VPS may."""
+    from monitor.api.health import recovery_hint_for_state
+
+    linux = recovery_hint_for_state(
+        feed_state="feed_down",
+        market_id="bybit-fluxion",
+        age_ms=3_600_000,
+        collector_down_gap_recent=False,
+        recent_gaps=[],
+        platform="linux",
+    )
+    assert linux is not None
+    assert "systemctl" in linux
+    assert "bybit-fluxion" in linux
+
+    mac = recovery_hint_for_state(
+        feed_state="feed_down",
+        market_id="bybit-fluxion",
+        age_ms=3_600_000,
+        collector_down_gap_recent=False,
+        recent_gaps=[],
+        platform="darwin",
+    )
+    assert mac is not None
+    assert "systemctl" not in mac
+    assert "dev-web.sh" in mac
 
 
 def test_build_health_feed_state_gap(tmp_path: Path) -> None:

@@ -11,10 +11,12 @@ version: 2
 logging:
   level: INFO
 
-# WHI-825: process-level write-activity watchdog (not per-symbol quote age).
-# Quiet closed-session bookTicker is normal; exit only when *no* journal writes
-# (ticks + heartbeat) land for exit_idle_s. Supervisor (systemd Restart=always /
-# dev-web.sh wrapper) then restarts the process.
+# WHI-825 / WHI-835: process-level write-activity watchdog (not per-symbol
+# quote age). Quiet closed-session bookTicker is normal; exit only when *no*
+# journal writes (ticks + heartbeat) land for exit_idle_s. Supervisor
+# (systemd Restart=always / dev-web.sh wrapper) then restarts the process.
+# shutdown_grace_s: hard os._exit if graceful stop is blocked by hung
+# to_thread workers (closed-client retries used to stall for hours).
 watchdog:
   enabled: true
   reconnect_idle_s: 90.0    # force CEX WS reconnect after this silence
@@ -22,6 +24,7 @@ watchdog:
   startup_grace_s: 60.0     # arm only after cold start / RPC warmup
   check_interval_s: 10.0    # evaluate + write collector_heartbeat_ms
   min_down_gap_ms: 30000    # skip bounce noise when recording collector_down
+  shutdown_grace_s: 15.0    # WHI-835: force exit if stop hangs past this
 
 # WHI-768: recompute address_labels + rebalance_events from the journal.
 # 0 disables the in-collector loop (CLI still works: python -m monitor.attribution.refresh).

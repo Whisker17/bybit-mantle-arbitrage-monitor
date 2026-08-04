@@ -11,6 +11,8 @@ from eth_abi import decode as abi_decode  # type: ignore[attr-defined]
 from eth_abi import encode as abi_encode  # type: ignore[attr-defined]
 from eth_utils import to_checksum_address  # type: ignore[attr-defined]
 
+from monitor.fluxion.http_errors import is_non_retryable_client_error
+
 RATE_LIMIT_CODES = {-32016, -32005, 429}
 AGGREGATE3_SELECTOR = "0x82ad56cb"
 _ids = itertools.count(1)
@@ -77,6 +79,10 @@ class Rpc:
         self._last = time.monotonic()
 
     def _post(self, payload: Any) -> Any:
+        # Closed client never recovers — do not enter the retry loop
+        # (WHI-835: zombie shutdown spun hours on "client has been closed").
+        if self._client.is_closed:
+            raise RpcError("httpx client has been closed; refusing to post")
         last_exc: Exception | None = None
         for attempt in range(self.retries):
             self._throttle()
@@ -92,6 +98,8 @@ class Rpc:
                 return body
             except Exception as exc:  # noqa: BLE001 - retry transient faults
                 last_exc = exc
+                if is_non_retryable_client_error(exc):
+                    break
                 time.sleep(min(2**attempt * 0.5, 15.0))
         raise RpcError(f"giving up after {self.retries} attempts: {last_exc}")
 

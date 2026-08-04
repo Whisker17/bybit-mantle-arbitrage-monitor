@@ -40,6 +40,9 @@
 #   DEV_API_RELOAD=1              # set 0 to disable uvicorn --reload
 #   DEV_COLLECTOR=1               # set 0 for a permanent --no-collector
 #   DEV_COLLECTOR_RESTART=1       # auto-restart collectors on non-zero exit
+#   DEV_COLLECTOR_HB_STALE_S=90   # WHI-835: kill -9 if journal heartbeat older
+#   DEV_COLLECTOR_HB_CHECK_S=10   # how often the wrapper polls heartbeat
+#   DEV_COLLECTOR_HB_GRACE_S=90   # wait this long after spawn before enforcing
 #   DEV_LOG_WARN_MB=200           # `status` warns above this per-log size
 #   DEV_VPS_HOST=whi715-vps       # ssh Host for pull
 #   DEV_REMOTE_DB=.../data/monitor-bybit-fluxion.db   # (legacy monitor.db ok)
@@ -100,6 +103,11 @@ WEB_PORT="${DEV_WEB_PORT:-3000}"
 API_RELOAD="${DEV_API_RELOAD:-1}"
 COLLECTOR="${DEV_COLLECTOR:-1}"
 COLLECTOR_RESTART="${DEV_COLLECTOR_RESTART:-1}"
+# WHI-835: external heartbeat stall monitor (backup when in-process exit hangs).
+# Must exceed watchdog check_interval + a little; 90s is well under exit_idle.
+COLLECTOR_HB_STALE_S="${DEV_COLLECTOR_HB_STALE_S:-90}"
+COLLECTOR_HB_CHECK_S="${DEV_COLLECTOR_HB_CHECK_S:-10}"
+COLLECTOR_HB_GRACE_S="${DEV_COLLECTOR_HB_GRACE_S:-90}"
 LOG_WARN_MB="${DEV_LOG_WARN_MB:-200}"
 VPS_HOST="${DEV_VPS_HOST:-whi715-vps}"
 REMOTE_DB="${DEV_REMOTE_DB:-/root/dev/bybit-mantle-arbitrage-monitor/data/monitor-${MARKET}.db}"
@@ -108,6 +116,69 @@ SQLITE_PATH="${DEV_SQLITE_PATH:-data/monitor-${MARKET}.db}"
 pid_col() { echo "$DEV_DIR_ABS/collector-$1.pid"; }
 log_col() { echo "$DEV_DIR_ABS/collector-$1.log"; }
 sqlite_for() { echo "data/monitor-$1.db"; }
+
+# Read collector_heartbeat_ms from a journal.
+# Prints a single token line: OK <age_s> | STALE <age_s> | MISSING | ERROR
+# Never kill on ERROR (probe failure ≠ stalled collector) — WHI-835 review.
+_run_heartbeat_probe() {
+  local py_bin="$1"
+  local db="$2"
+  local stale_s="$3"
+  "$py_bin" - "$db" "$stale_s" <<'PY' 2>/dev/null
+import sqlite3, sys, time
+db, stale_s = sys.argv[1], int(sys.argv[2])
+try:
+    con = sqlite3.connect(f"file:{db}?mode=ro", uri=True)
+    row = con.execute(
+        "SELECT value FROM meta WHERE key = 'collector_heartbeat_ms'"
+    ).fetchone()
+    con.close()
+except Exception:
+    print("ERROR")
+    raise SystemExit(0)
+if not row or row[0] in (None, ""):
+    print("MISSING")
+    raise SystemExit(0)
+try:
+    hb = int(row[0])
+except ValueError:
+    print("ERROR")
+    raise SystemExit(0)
+age_s = max(0, int(time.time() * 1000 - hb) // 1000)
+if age_s <= stale_s:
+    print(f"OK {age_s}")
+else:
+    print(f"STALE {age_s}")
+raise SystemExit(0)
+PY
+}
+
+# Args: db_path stale_s
+heartbeat_age_status() {
+  local db="$1"
+  local stale_s="$2"
+  local out py
+  # Prefer project venv interpreter — avoids mis-classifying `uv run`
+  # lock/resync failures as a stalled heartbeat.
+  if [[ -x "$ROOT/.venv/bin/python" ]]; then
+    py="$ROOT/.venv/bin/python"
+  else
+    py="$(command -v python3 || true)"
+  fi
+  if [[ -z "$py" ]]; then
+    echo "ERROR"
+    return 0
+  fi
+  out="$(_run_heartbeat_probe "$py" "$db" "$stale_s")" || {
+    echo "ERROR"
+    return 0
+  }
+  # Only accept known tokens; anything else is ERROR (do not kill).
+  case "${out%% *}" in
+    OK|STALE|MISSING|ERROR) printf '%s\n' "$out" ;;
+    *) echo "ERROR" ;;
+  esac
+}
 
 API_BASE="http://${API_HOST}:${API_PORT}"
 WEB_URL="http://localhost:${WEB_PORT}"
@@ -313,9 +384,15 @@ wait_http() {
 }
 
 
-# Start one market collector under a restart wrapper (WHI-825).
+# Start one market collector under a restart wrapper (WHI-825 / WHI-835).
 # Background job + disown so it survives the controlling shell (macOS has no
 # setsid). Non-zero exit (watchdog) restarts when DEV_COLLECTOR_RESTART=1.
+#
+# WHI-835: the child is run in the background so we can also poll
+# collector_heartbeat_ms. If the in-process watchdog stops writing but the
+# process refuses to exit (hung to_thread / closed-client retries), the
+# wrapper kill -9s it so restart can proceed. Dual layer with in-process
+# hard os._exit after shutdown_grace_s.
 start_one_collector() {
   local market="$1"
   local sqlite log pidfile
@@ -330,12 +407,43 @@ start_one_collector() {
     cd "$ROOT"
     while true; do
       uv run python -u -m monitor.collector --market "$market" --sqlite "$sqlite" \
-        >>"$log" 2>&1
+        >>"$log" 2>&1 &
+      child=$!
+      started_s="$(date +%s)"
+      # Supervise until the child exits: poll heartbeat as a stall detector.
+      while kill -0 "$child" 2>/dev/null; do
+        sleep "${COLLECTOR_HB_CHECK_S}"
+        now_s="$(date +%s)"
+        # Startup grace: heartbeat loop arms after cold start; don't kill early.
+        if (( now_s - started_s < COLLECTOR_HB_GRACE_S )); then
+          continue
+        fi
+        # Sentinel protocol (WHI-835 review): only STALE/MISSING trigger kill;
+        # OK/ERROR/unknown → leave the child alone.
+        hb_line="$(heartbeat_age_status "$ROOT/$sqlite" "$COLLECTOR_HB_STALE_S" || true)"
+        hb_tok="${hb_line%% *}"
+        hb_age="${hb_line#* }"
+        if [[ "$hb_tok" == "STALE" ]]; then
+          echo "dev-web: collector[${market}] heartbeat stale age=${hb_age}s (threshold=${COLLECTOR_HB_STALE_S}s); kill_tree KILL pid=${child}" >>"$log"
+          # kill_tree: uv run is the direct child; SIGKILL is not forwarded to
+          # the python grandchild — reaping the whole tree avoids orphans.
+          kill_tree "$child" KILL
+          break
+        fi
+        if [[ "$hb_tok" == "MISSING" ]]; then
+          # No heartbeat after grace: process is up but not journaling.
+          echo "dev-web: collector[${market}] no heartbeat after grace ${COLLECTOR_HB_GRACE_S}s; kill_tree KILL pid=${child}" >>"$log"
+          kill_tree "$child" KILL
+          break
+        fi
+      done
+      wait "$child" 2>/dev/null
       code=$?
       if [[ "${COLLECTOR_RESTART}" != "1" ]]; then
         exit "$code"
       fi
       # Clean stop (SIGTERM → exit 0) ends the wrapper; non-zero → restart.
+      # kill -9 yields 137 / 137+signal — also restart.
       if [[ "$code" -eq 0 ]]; then
         exit 0
       fi

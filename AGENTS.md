@@ -227,6 +227,14 @@ placeholders. Agents must not assume a module exists until its issue lands. -->
     `collector_gaps.source=collector_down`; EdgeStats zero-weights that
     interval; `/api/health` + panel `feed_state` =
     `ok|feed_down|feed_quiet|gap` with `recovery_hint`.
+  - **Watchdog exit unblock (WHI-835) landed:** hung `asyncio.to_thread`
+    workers could pin the process after stop (closed-client retries for
+    hours) so the restart wrapper never saw an exit. Fix: owned
+    `ThreadPoolExecutor` + `shutdown(wait=False, cancel_futures=True)`,
+    hard `os._exit` after `watchdog.shutdown_grace_s` (default 15s), Rpc
+    fail-fast on closed clients, `dev-web.sh` external heartbeat stall →
+    `kill -9`, platform-aware `recovery_hint` (no systemctl on macOS),
+    meta `collector_last_feed_error*`.
 
 ## Build, test, run
 
