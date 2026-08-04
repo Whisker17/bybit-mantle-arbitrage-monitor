@@ -117,14 +117,14 @@ pid_col() { echo "$DEV_DIR_ABS/collector-$1.pid"; }
 log_col() { echo "$DEV_DIR_ABS/collector-$1.log"; }
 sqlite_for() { echo "data/monitor-$1.db"; }
 
-# Read collector_heartbeat_ms from a journal. Prints age seconds on stdout
-# when present; exit 0=fresh, 1=stale, 2=missing/unreadable.
-# Args: db_path stale_s
-heartbeat_age_status() {
-  local db="$1"
-  local stale_s="$2"
-  # Prefer python (always available via uv env) for portable ms math.
-  uv run python - "$db" "$stale_s" <<'PY' 2>/dev/null
+# Read collector_heartbeat_ms from a journal.
+# Prints a single token line: OK <age_s> | STALE <age_s> | MISSING | ERROR
+# Never kill on ERROR (probe failure ≠ stalled collector) — WHI-835 review.
+_run_heartbeat_probe() {
+  local py_bin="$1"
+  local db="$2"
+  local stale_s="$3"
+  "$py_bin" - "$db" "$stale_s" <<'PY' 2>/dev/null
 import sqlite3, sys, time
 db, stale_s = sys.argv[1], int(sys.argv[2])
 try:
@@ -134,17 +134,50 @@ try:
     ).fetchone()
     con.close()
 except Exception:
-    sys.exit(2)
+    print("ERROR")
+    raise SystemExit(0)
 if not row or row[0] in (None, ""):
-    sys.exit(2)
+    print("MISSING")
+    raise SystemExit(0)
 try:
     hb = int(row[0])
 except ValueError:
-    sys.exit(2)
+    print("ERROR")
+    raise SystemExit(0)
 age_s = max(0, int(time.time() * 1000 - hb) // 1000)
-print(age_s)
-sys.exit(0 if age_s <= stale_s else 1)
+if age_s <= stale_s:
+    print(f"OK {age_s}")
+else:
+    print(f"STALE {age_s}")
+raise SystemExit(0)
 PY
+}
+
+# Args: db_path stale_s
+heartbeat_age_status() {
+  local db="$1"
+  local stale_s="$2"
+  local out py
+  # Prefer project venv interpreter — avoids mis-classifying `uv run`
+  # lock/resync failures as a stalled heartbeat.
+  if [[ -x "$ROOT/.venv/bin/python" ]]; then
+    py="$ROOT/.venv/bin/python"
+  else
+    py="$(command -v python3 || true)"
+  fi
+  if [[ -z "$py" ]]; then
+    echo "ERROR"
+    return 0
+  fi
+  out="$(_run_heartbeat_probe "$py" "$db" "$stale_s")" || {
+    echo "ERROR"
+    return 0
+  }
+  # Only accept known tokens; anything else is ERROR (do not kill).
+  case "${out%% *}" in
+    OK|STALE|MISSING|ERROR) printf '%s\n' "$out" ;;
+    *) echo "ERROR" ;;
+  esac
 }
 
 API_BASE="http://${API_HOST}:${API_PORT}"
@@ -385,15 +418,18 @@ start_one_collector() {
         if (( now_s - started_s < COLLECTOR_HB_GRACE_S )); then
           continue
         fi
-        age_s="$(heartbeat_age_status "$ROOT/$sqlite" "$COLLECTOR_HB_STALE_S")"
-        hb_rc=$?
-        if [[ "$hb_rc" -eq 1 ]]; then
-          echo "dev-web: collector[${market}] heartbeat stale age=${age_s}s (threshold=${COLLECTOR_HB_STALE_S}s); kill -9 pid=${child}" >>"$log"
+        # Sentinel protocol (WHI-835 review): only STALE/MISSING trigger kill;
+        # OK/ERROR/unknown → leave the child alone.
+        hb_line="$(heartbeat_age_status "$ROOT/$sqlite" "$COLLECTOR_HB_STALE_S" || true)"
+        hb_tok="${hb_line%% *}"
+        hb_age="${hb_line#* }"
+        if [[ "$hb_tok" == "STALE" ]]; then
+          echo "dev-web: collector[${market}] heartbeat stale age=${hb_age}s (threshold=${COLLECTOR_HB_STALE_S}s); kill -9 pid=${child}" >>"$log"
           kill -9 "$child" 2>/dev/null || true
           break
         fi
-        if [[ "$hb_rc" -eq 2 ]]; then
-          # Missing heartbeat after grace: process is up but not journaling.
+        if [[ "$hb_tok" == "MISSING" ]]; then
+          # No heartbeat after grace: process is up but not journaling.
           echo "dev-web: collector[${market}] no heartbeat after grace ${COLLECTOR_HB_GRACE_S}s; kill -9 pid=${child}" >>"$log"
           kill -9 "$child" 2>/dev/null || true
           break

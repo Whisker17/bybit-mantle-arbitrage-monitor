@@ -162,29 +162,42 @@ class CollectorDaemon:
 
     def request_stop(self) -> None:
         self._stop.set()
-        # Arm hard exit as soon as stop is requested on a non-zero path so a
-        # hung ThreadPoolExecutor cannot outlive the supervisor's patience.
-        if self.exit_code != 0:
-            arm_hard_exit(
-                code=self.exit_code,
-                timeout_s=self.cfg.watchdog.shutdown_grace_s,
-                reason="watchdog/non-zero stop",
-            )
+        # Always arm hard exit on stop (WHI-835 review): SIGTERM and watchdog
+        # share the same hung-to_thread risk; exit_code 0 still needs reaping.
+        arm_hard_exit(
+            code=self.exit_code if self.exit_code else 0,
+            timeout_s=self.cfg.watchdog.shutdown_grace_s,
+            reason="collector stop",
+        )
 
     def _install_io_executor(self) -> None:
         """Route asyncio.to_thread onto our owned executor (WHI-835)."""
         loop = asyncio.get_running_loop()
         loop.set_default_executor(self._io_executor)
 
-    def _shutdown_io_executor(self) -> None:
+    def shutdown_io_executor(self) -> None:
+        """Drop pending/running to_thread work without waiting (WHI-835)."""
         try:
             self._io_executor.shutdown(wait=False, cancel_futures=True)
         except Exception:  # noqa: BLE001 - never block stop on executor teardown
             logger.debug("io executor shutdown failed", exc_info=True)
 
-    def _note_feed_error(self, source: str, detail: str) -> None:
-        """Stamp last subsystem failure for post-mortem (WHI-835)."""
-        msg = f"{source}: {detail}"[:500]
+    # Fraction of shutdown_grace_s to wait on cancelled feed tasks before
+    # abandoning them to executor shutdown + hard exit.
+    _TASK_AWAIT_GRACE_FRACTION = 0.5
+    _FEED_ERROR_MAX = 500
+
+    def _note_feed_error(self, source: str, exc: BaseException | str) -> None:
+        """Stamp last subsystem failure for post-mortem (WHI-835).
+
+        Records exception *class* + message so opaque empty strings still name
+        the failure mode.
+        """
+        if isinstance(exc, BaseException):
+            detail = f"{type(exc).__name__}: {exc}"
+        else:
+            detail = str(exc)
+        msg = f"{source}: {detail}"[: self._FEED_ERROR_MAX]
         self._last_feed_error = msg
         ts = now_ms()
         try:
@@ -434,7 +447,10 @@ class CollectorDaemon:
         In-flight ``to_thread`` work is not cancelled by task cancel alone —
         executor shutdown + hard exit handle the rest (WHI-835).
         """
-        grace = max(1.0, self.cfg.watchdog.shutdown_grace_s * 0.5)
+        grace = max(
+            1.0,
+            self.cfg.watchdog.shutdown_grace_s * self._TASK_AWAIT_GRACE_FRACTION,
+        )
         try:
             await asyncio.wait_for(
                 asyncio.gather(*tasks, return_exceptions=True),
@@ -461,7 +477,7 @@ class CollectorDaemon:
                 )
             )
         # Stop accepting new to_thread work before clients close in task finally.
-        self._shutdown_io_executor()
+        self.shutdown_io_executor()
         try:
             self.store.set_meta("collector_stopped_ms", str(now_ms()))
         except Exception:  # noqa: BLE001 - store may already be unhappy
@@ -528,6 +544,9 @@ class CollectorDaemon:
     async def _on_gap(self, gap: CollectorGap) -> None:
         await asyncio.to_thread(self.store.insert_gap, gap)
         # Gap rows are ops accounting, not feed progress — do not arm watchdog.
+        # Still stamp last-feed-error so write-stall post-mortems see CEX WS
+        # disconnects (WHI-835 review: WS was the missing subsystem).
+        self._note_feed_error(gap.source, gap.detail)
         logger.warning(
             "gap source=%s detail=%s duration_ms=%s",
             gap.source,
@@ -770,7 +789,7 @@ class CollectorDaemon:
                     await asyncio.to_thread(poller.poll_once)
                 except Exception as exc:  # noqa: BLE001
                     logger.exception("chain poll error: %s", exc)
-                    self._note_feed_error(gap_source, str(exc))
+                    self._note_feed_error(gap_source, exc)
                     await asyncio.to_thread(
                         self.store.insert_gap,
                         CollectorGap(
@@ -809,7 +828,7 @@ class CollectorDaemon:
                     self._note_data_write(tick.poll_ts_ms)
                 except Exception as exc:  # noqa: BLE001
                     logger.exception("rfq poll error: %s", exc)
-                    self._note_feed_error("rfq_poll", str(exc))
+                    self._note_feed_error("rfq_poll", exc)
                     self._rfq_gap = True
                     await asyncio.to_thread(
                         self.store.insert_gap,
@@ -975,7 +994,7 @@ class CollectorDaemon:
                     self._stamp_underlying_poll(len(ticks))
                 except Exception as exc:  # noqa: BLE001
                     logger.exception("underlying poll error: %s", exc)
-                    self._note_feed_error("underlying", str(exc))
+                    self._note_feed_error("underlying", exc)
                     self._stamp_underlying_poll(0, error=f"poll error: {exc}")
                     await asyncio.to_thread(
                         self.store.insert_gap,
@@ -1166,13 +1185,13 @@ def run_forever(
         # Belt-and-suspenders: even if run() returned, non-daemon to_thread
         # workers can still pin the process (WHI-835). Re-arm hard exit and
         # drop the executor before SystemExit.
-        daemon._shutdown_io_executor()
-        if daemon.exit_code:
-            arm_hard_exit(
-                code=daemon.exit_code,
-                timeout_s=daemon.cfg.watchdog.shutdown_grace_s,
-                reason="main non-zero exit",
-            )
+        daemon.shutdown_io_executor()
+        # Re-arm in case request_stop never ran (abnormal run() return).
+        arm_hard_exit(
+            code=daemon.exit_code if daemon.exit_code else 0,
+            timeout_s=daemon.cfg.watchdog.shutdown_grace_s,
+            reason="main shutdown",
+        )
         try:
             store.close()
         except Exception:  # noqa: BLE001

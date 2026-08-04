@@ -147,6 +147,27 @@ def classify_feed_state(
     return "ok"
 
 
+def _resolve_platform(platform: str | None) -> str:
+    return platform if platform is not None else sys.platform
+
+
+def _ops_restart_hints(*, market_id: str, platform: str | None = None) -> str:
+    """Platform-aware check/restart one-liner (WHI-835: no systemctl on macOS)."""
+    plat = _resolve_platform(platform)
+    mid = market_id
+    if plat == "darwin":
+        return (
+            "Check: ./scripts/dev-web.sh status. "
+            "Restart: ./scripts/dev-web.sh restart"
+        )
+    return (
+        f"Check: ./scripts/dev-web.sh status  |  "
+        f"sudo systemctl status xstocks-collector@{mid}. "
+        f"Restart: ./scripts/dev-web.sh restart  |  "
+        f"sudo systemctl restart xstocks-collector@{mid}"
+    )
+
+
 def _recovery_hint_missing_db(
     *,
     db_path: str,
@@ -154,20 +175,15 @@ def _recovery_hint_missing_db(
     platform: str | None = None,
 ) -> str:
     mid = market_id or DEFAULT_MARKET_ID
-    plat = platform if platform is not None else sys.platform
-    # WHI-835: macOS/dev has no systemd — don't mislead with systemctl.
-    if plat == "darwin":
-        return (
-            f"journal missing at {db_path}. "
-            f"Start collector: ./scripts/dev-web.sh start "
-            f"(or python -m monitor.collector --market {mid})"
-        )
-    return (
+    plat = _resolve_platform(platform)
+    base = (
         f"journal missing at {db_path}. "
         f"Start collector: ./scripts/dev-web.sh start "
-        f"(or python -m monitor.collector --market {mid}); "
-        f"VPS: sudo systemctl start xstocks-collector@{mid}"
+        f"(or python -m monitor.collector --market {mid})"
     )
+    if plat == "darwin":
+        return base
+    return f"{base}; VPS: sudo systemctl start xstocks-collector@{mid}"
 
 
 def recovery_hint_for_state(
@@ -186,7 +202,6 @@ def recovery_hint_for_state(
     (WHI-835).
     """
     mid = market_id or DEFAULT_MARKET_ID
-    plat = platform if platform is not None else sys.platform
     age = ""
     if age_ms is not None:
         if age_ms >= 3_600_000:
@@ -197,18 +212,9 @@ def recovery_hint_for_state(
             age = f" age={age_ms / 1000:.1f}s"
 
     if feed_state == "feed_down":
-        if plat == "darwin":
-            return (
-                f"market={mid} feed down{age}. "
-                f"Check: ./scripts/dev-web.sh status. "
-                f"Restart: ./scripts/dev-web.sh restart"
-            )
         return (
             f"market={mid} feed down{age}. "
-            f"Check: ./scripts/dev-web.sh status  |  "
-            f"sudo systemctl status xstocks-collector@{mid}. "
-            f"Restart: ./scripts/dev-web.sh restart  |  "
-            f"sudo systemctl restart xstocks-collector@{mid}"
+            f"{_ops_restart_hints(market_id=mid, platform=platform)}"
         )
     if feed_state == "gap" or collector_down_gap_recent:
         down = next(
