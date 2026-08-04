@@ -4,7 +4,7 @@ from __future__ import annotations
 
 import httpx
 
-from monitor.http_errors import is_non_retryable_client_error
+from monitor.fluxion.http_errors import is_non_retryable_client_error
 
 
 def test_closed_httpx_client_is_non_retryable() -> None:

@@ -165,7 +165,7 @@ class CollectorDaemon:
         # Always arm hard exit on stop (WHI-835 review): SIGTERM and watchdog
         # share the same hung-to_thread risk; exit_code 0 still needs reaping.
         arm_hard_exit(
-            code=self.exit_code if self.exit_code else 0,
+            code=self.exit_code,
             timeout_s=self.cfg.watchdog.shutdown_grace_s,
             reason="collector stop",
         )
@@ -1188,7 +1188,7 @@ def run_forever(
         daemon.shutdown_io_executor()
         # Re-arm in case request_stop never ran (abnormal run() return).
         arm_hard_exit(
-            code=daemon.exit_code if daemon.exit_code else 0,
+            code=daemon.exit_code,
             timeout_s=daemon.cfg.watchdog.shutdown_grace_s,
             reason="main shutdown",
         )

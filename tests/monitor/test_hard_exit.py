@@ -10,11 +10,52 @@ from pathlib import Path
 from monitor.collector.hard_exit import arm_hard_exit, reset_hard_exit_for_tests
 
 
-def test_arm_hard_exit_idempotent() -> None:
+def test_arm_hard_exit_idempotent_timer() -> None:
     reset_hard_exit_for_tests()
     assert arm_hard_exit(code=1, timeout_s=60.0, reason="first") is True
+    # Second arm does not start another timer.
     assert arm_hard_exit(code=2, timeout_s=60.0, reason="second") is False
     reset_hard_exit_for_tests()
+
+
+def test_nonzero_upgrades_prior_zero() -> None:
+    """SIGTERM-first must not freeze os._exit(0) after watchdog sets exit 1."""
+    reset_hard_exit_for_tests()
+    assert arm_hard_exit(code=0, timeout_s=60.0, reason="sigterm") is True
+    # Upgrade path: second call returns False (timer already running) but
+    # must still stamp non-zero so the eventual fire uses 1.
+    assert arm_hard_exit(code=1, timeout_s=60.0, reason="watchdog") is False
+    # Probe internal code via a short subprocess would be heavy; exercise
+    # the module cell by re-reading after reset is the only pure seam —
+    # verify via fire-time subprocess below instead.
+    reset_hard_exit_for_tests()
+
+
+def test_subprocess_upgrades_zero_to_nonzero() -> None:
+    script = textwrap.dedent(
+        """
+        import time
+        from monitor.collector.hard_exit import arm_hard_exit, reset_hard_exit_for_tests
+
+        reset_hard_exit_for_tests()
+        arm_hard_exit(code=0, timeout_s=0.8, reason="sigterm-first")
+        arm_hard_exit(code=7, timeout_s=0.8, reason="watchdog-upgrade")
+        time.sleep(5)
+        """
+    )
+    repo = Path(__file__).resolve().parents[2]
+    proc = subprocess.run(
+        [sys.executable, "-c", script],
+        cwd=repo,
+        capture_output=True,
+        text=True,
+        timeout=10,
+        check=False,
+    )
+    assert proc.returncode == 7, (
+        f"expected upgraded hard exit 7, got {proc.returncode}\n"
+        f"stdout={proc.stdout!r}\nstderr={proc.stderr!r}"
+    )
 
 
 def test_subprocess_exits_despite_hung_to_thread() -> None:

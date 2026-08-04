@@ -99,10 +99,6 @@ class Rpc:
                 return body
             except Exception as exc:  # noqa: BLE001 - retry everything transient
                 last_exc = exc
-                # WHI-835: closed/unavailable clients never recover via retry.
-                msg = str(exc).lower()
-                if "client has been closed" in msg or "pool is closed" in msg:
-                    break
                 time.sleep(min(2 ** attempt * 0.75, 20.0))
         raise RpcError(f"giving up after {self.retries} attempts: {last_exc}")
 
