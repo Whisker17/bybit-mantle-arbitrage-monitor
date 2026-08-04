@@ -10,13 +10,15 @@ from __future__ import annotations
 
 import argparse
 import asyncio
+import concurrent.futures
 import logging
 import signal
 import sys
-from collections.abc import Callable
+from collections.abc import Callable, Sequence
 from dataclasses import replace
 from decimal import Decimal
 from pathlib import Path
+from typing import Any
 
 from monitor.binance.ws import BinanceWsCollector
 from monitor.bybit.ws import BybitWsCollector
@@ -30,10 +32,14 @@ from monitor.collector.config import (
     rpc_url_kind,
 )
 from monitor.collector.gaps import collector_down_gap
+from monitor.collector.hard_exit import arm_hard_exit
 from monitor.collector.latency import LatencyTracker, block_ingest_latency_ms
 from monitor.collector.watchdog import (
     LAST_TICK_META_MIN_INTERVAL_MS,
     META_HEARTBEAT,
+    META_LAST_FEED_ERROR,
+    META_LAST_FEED_ERROR_MS,
+    META_LAST_FEED_ERROR_SOURCE,
     META_LAST_TICK_WRITE,
     WatchdogAction,
     evaluate_watchdog,
@@ -147,9 +153,46 @@ class CollectorDaemon:
         self._collector_down_gap_recorded = False
         self._cex_ws: BybitWsCollector | BinanceWsCollector | None = None
         self._watchdog_reconnect_armed = False
+        # WHI-835: own the default executor so we can shut it down without
+        # waiting forever for hung to_thread workers; hard-exit is the backstop.
+        self._io_executor = concurrent.futures.ThreadPoolExecutor(
+            thread_name_prefix="collector-io",
+        )
+        self._last_feed_error: str | None = None
 
     def request_stop(self) -> None:
         self._stop.set()
+        # Arm hard exit as soon as stop is requested on a non-zero path so a
+        # hung ThreadPoolExecutor cannot outlive the supervisor's patience.
+        if self.exit_code != 0:
+            arm_hard_exit(
+                code=self.exit_code,
+                timeout_s=self.cfg.watchdog.shutdown_grace_s,
+                reason="watchdog/non-zero stop",
+            )
+
+    def _install_io_executor(self) -> None:
+        """Route asyncio.to_thread onto our owned executor (WHI-835)."""
+        loop = asyncio.get_running_loop()
+        loop.set_default_executor(self._io_executor)
+
+    def _shutdown_io_executor(self) -> None:
+        try:
+            self._io_executor.shutdown(wait=False, cancel_futures=True)
+        except Exception:  # noqa: BLE001 - never block stop on executor teardown
+            logger.debug("io executor shutdown failed", exc_info=True)
+
+    def _note_feed_error(self, source: str, detail: str) -> None:
+        """Stamp last subsystem failure for post-mortem (WHI-835)."""
+        msg = f"{source}: {detail}"[:500]
+        self._last_feed_error = msg
+        ts = now_ms()
+        try:
+            self.store.set_meta(META_LAST_FEED_ERROR, msg)
+            self.store.set_meta(META_LAST_FEED_ERROR_MS, str(ts))
+            self.store.set_meta(META_LAST_FEED_ERROR_SOURCE, source)
+        except Exception:  # noqa: BLE001 - never fail the error path
+            logger.debug("last-feed-error meta stamp failed", exc_info=True)
 
     def _note_data_write(self, ts: int | None = None) -> None:
         """Record a tick-table journal write for the process-level watchdog.
@@ -269,6 +312,7 @@ class CollectorDaemon:
         self._cex_ws = bybit
         # Snapshot downtime baseline *before* any feed task can write.
         self._snapshot_pre_start_last_write()
+        self._install_io_executor()
 
         tasks = [
             asyncio.create_task(bybit.run(), name="bybit_ws"),
@@ -305,7 +349,7 @@ class CollectorDaemon:
             bybit.request_stop()
             for t in tasks:
                 t.cancel()
-            await asyncio.gather(*tasks, return_exceptions=True)
+            await self._await_tasks_or_timeout(tasks)
             self._finalize_stop("bybit_book")
 
     async def _run_binance_pancake(self) -> None:
@@ -343,6 +387,7 @@ class CollectorDaemon:
         )
         self._cex_ws = binance
         self._snapshot_pre_start_last_write()
+        self._install_io_executor()
 
         tasks = [
             asyncio.create_task(binance.run(), name="binance_ws"),
@@ -378,8 +423,29 @@ class CollectorDaemon:
             binance.request_stop()
             for t in tasks:
                 t.cancel()
-            await asyncio.gather(*tasks, return_exceptions=True)
+            await self._await_tasks_or_timeout(tasks)
             self._finalize_stop("cex_book")
+
+    async def _await_tasks_or_timeout(
+        self, tasks: Sequence[asyncio.Task[Any]]
+    ) -> None:
+        """Cancel-await feed tasks; do not block past a fraction of shutdown grace.
+
+        In-flight ``to_thread`` work is not cancelled by task cancel alone —
+        executor shutdown + hard exit handle the rest (WHI-835).
+        """
+        grace = max(1.0, self.cfg.watchdog.shutdown_grace_s * 0.5)
+        try:
+            await asyncio.wait_for(
+                asyncio.gather(*tasks, return_exceptions=True),
+                timeout=grace,
+            )
+        except TimeoutError:
+            logger.error(
+                "shutdown: feed tasks still running after %.1fs — "
+                "executor shutdown + hard exit will finish",
+                grace,
+            )
 
     def _finalize_stop(self, book_label: str) -> None:
         if self._cex_volume_poller is not None:
@@ -394,7 +460,12 @@ class CollectorDaemon:
                     detail=f"collector stopped while {book_label} writes paused",
                 )
             )
-        self.store.set_meta("collector_stopped_ms", str(now_ms()))
+        # Stop accepting new to_thread work before clients close in task finally.
+        self._shutdown_io_executor()
+        try:
+            self.store.set_meta("collector_stopped_ms", str(now_ms()))
+        except Exception:  # noqa: BLE001 - store may already be unhappy
+            logger.debug("collector_stopped_ms stamp failed", exc_info=True)
         logger.info("collector stopped market=%s", self.market_id)
 
     async def _on_book(self, tick: BybitBookTick) -> None:
@@ -509,13 +580,15 @@ class CollectorDaemon:
                         self._cex_ws.request_reconnect()
                 continue
             # EXIT
+            last = self._last_feed_error or "(no recent feed error stamped)"
             logger.error(
                 "watchdog: no tick-table writes for >=%.0fs — exiting non-zero "
-                "for supervisor restart",
+                "for supervisor restart; last_feed_error=%s",
                 wd.exit_idle_s,
+                last,
             )
             self.exit_code = 1
-            self.request_stop()
+            self.request_stop()  # arms hard exit (WHI-835)
             return
 
     async def _chain_loop_mantle(self) -> None:
@@ -697,6 +770,7 @@ class CollectorDaemon:
                     await asyncio.to_thread(poller.poll_once)
                 except Exception as exc:  # noqa: BLE001
                     logger.exception("chain poll error: %s", exc)
+                    self._note_feed_error(gap_source, str(exc))
                     await asyncio.to_thread(
                         self.store.insert_gap,
                         CollectorGap(
@@ -735,6 +809,7 @@ class CollectorDaemon:
                     self._note_data_write(tick.poll_ts_ms)
                 except Exception as exc:  # noqa: BLE001
                     logger.exception("rfq poll error: %s", exc)
+                    self._note_feed_error("rfq_poll", str(exc))
                     self._rfq_gap = True
                     await asyncio.to_thread(
                         self.store.insert_gap,
@@ -900,6 +975,7 @@ class CollectorDaemon:
                     self._stamp_underlying_poll(len(ticks))
                 except Exception as exc:  # noqa: BLE001
                     logger.exception("underlying poll error: %s", exc)
+                    self._note_feed_error("underlying", str(exc))
                     self._stamp_underlying_poll(0, error=f"poll error: {exc}")
                     await asyncio.to_thread(
                         self.store.insert_gap,
@@ -1087,8 +1163,24 @@ def run_forever(
     try:
         loop.run_until_complete(daemon.run())
     finally:
-        store.close()
-        loop.close()
+        # Belt-and-suspenders: even if run() returned, non-daemon to_thread
+        # workers can still pin the process (WHI-835). Re-arm hard exit and
+        # drop the executor before SystemExit.
+        daemon._shutdown_io_executor()
+        if daemon.exit_code:
+            arm_hard_exit(
+                code=daemon.exit_code,
+                timeout_s=daemon.cfg.watchdog.shutdown_grace_s,
+                reason="main non-zero exit",
+            )
+        try:
+            store.close()
+        except Exception:  # noqa: BLE001
+            logger.debug("store.close failed during shutdown", exc_info=True)
+        try:
+            loop.close()
+        except Exception:  # noqa: BLE001
+            logger.debug("loop.close failed during shutdown", exc_info=True)
     if daemon.exit_code:
         raise SystemExit(daemon.exit_code)
 

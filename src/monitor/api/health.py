@@ -2,6 +2,7 @@
 
 from __future__ import annotations
 
+import sys
 from dataclasses import dataclass, field
 from typing import Any, Literal
 
@@ -146,8 +147,21 @@ def classify_feed_state(
     return "ok"
 
 
-def _recovery_hint_missing_db(*, db_path: str, market_id: str | None) -> str:
+def _recovery_hint_missing_db(
+    *,
+    db_path: str,
+    market_id: str | None,
+    platform: str | None = None,
+) -> str:
     mid = market_id or DEFAULT_MARKET_ID
+    plat = platform if platform is not None else sys.platform
+    # WHI-835: macOS/dev has no systemd — don't mislead with systemctl.
+    if plat == "darwin":
+        return (
+            f"journal missing at {db_path}. "
+            f"Start collector: ./scripts/dev-web.sh start "
+            f"(or python -m monitor.collector --market {mid})"
+        )
     return (
         f"journal missing at {db_path}. "
         f"Start collector: ./scripts/dev-web.sh start "
@@ -163,9 +177,16 @@ def recovery_hint_for_state(
     age_ms: int | None,
     collector_down_gap_recent: bool,
     recent_gaps: list[CollectorGap],
+    platform: str | None = None,
 ) -> str | None:
-    """Actionable one-liner for operators (local + VPS)."""
+    """Actionable one-liner for operators (local + VPS).
+
+    ``platform`` defaults to ``sys.platform``; pass explicitly in tests.
+    Darwin (macOS) omits systemd hints — there is no unit on the laptop
+    (WHI-835).
+    """
     mid = market_id or DEFAULT_MARKET_ID
+    plat = platform if platform is not None else sys.platform
     age = ""
     if age_ms is not None:
         if age_ms >= 3_600_000:
@@ -176,11 +197,17 @@ def recovery_hint_for_state(
             age = f" age={age_ms / 1000:.1f}s"
 
     if feed_state == "feed_down":
+        if plat == "darwin":
+            return (
+                f"market={mid} feed down{age}. "
+                f"Check: ./scripts/dev-web.sh status. "
+                f"Restart: ./scripts/dev-web.sh restart"
+            )
         return (
             f"market={mid} feed down{age}. "
             f"Check: ./scripts/dev-web.sh status  |  "
             f"sudo systemctl status xstocks-collector@{mid}. "
-            f"Restart: ./scripts/dev-web.sh start  |  "
+            f"Restart: ./scripts/dev-web.sh restart  |  "
             f"sudo systemctl restart xstocks-collector@{mid}"
         )
     if feed_state == "gap" or collector_down_gap_recent:

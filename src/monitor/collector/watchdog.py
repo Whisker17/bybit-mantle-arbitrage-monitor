@@ -23,6 +23,10 @@ META_HEARTBEAT = "collector_heartbeat_ms"
 META_LAST_TICK_WRITE = "collector_last_tick_write_ms"
 # How often to refresh META_LAST_TICK_WRITE (ms). 1s is fine for health age.
 LAST_TICK_META_MIN_INTERVAL_MS = 1000
+# WHI-835: last subsystem error so "why did writes stop?" is answerable.
+META_LAST_FEED_ERROR = "collector_last_feed_error"
+META_LAST_FEED_ERROR_MS = "collector_last_feed_error_ms"
+META_LAST_FEED_ERROR_SOURCE = "collector_last_feed_error_source"
 
 
 class WatchdogAction(StrEnum):
