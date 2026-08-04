@@ -18,8 +18,8 @@ def is_non_retryable_client_error(exc: BaseException) -> bool:
         return True
     if "cannot send a request" in msg and "closed" in msg:
         return True
-    # httpx / httpcore variants
-    if "connection pool is closed" in msg or "pool is closed" in msg:
+    # httpx / httpcore variants ("connection pool is closed" ⊆ "pool is closed")
+    if "pool is closed" in msg:
         return True
     if isinstance(exc, RuntimeError) and "closed" in msg and "client" in msg:
         return True

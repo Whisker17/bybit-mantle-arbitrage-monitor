@@ -424,14 +424,16 @@ start_one_collector() {
         hb_tok="${hb_line%% *}"
         hb_age="${hb_line#* }"
         if [[ "$hb_tok" == "STALE" ]]; then
-          echo "dev-web: collector[${market}] heartbeat stale age=${hb_age}s (threshold=${COLLECTOR_HB_STALE_S}s); kill -9 pid=${child}" >>"$log"
-          kill -9 "$child" 2>/dev/null || true
+          echo "dev-web: collector[${market}] heartbeat stale age=${hb_age}s (threshold=${COLLECTOR_HB_STALE_S}s); kill_tree KILL pid=${child}" >>"$log"
+          # kill_tree: uv run is the direct child; SIGKILL is not forwarded to
+          # the python grandchild — reaping the whole tree avoids orphans.
+          kill_tree "$child" KILL
           break
         fi
         if [[ "$hb_tok" == "MISSING" ]]; then
           # No heartbeat after grace: process is up but not journaling.
-          echo "dev-web: collector[${market}] no heartbeat after grace ${COLLECTOR_HB_GRACE_S}s; kill -9 pid=${child}" >>"$log"
-          kill -9 "$child" 2>/dev/null || true
+          echo "dev-web: collector[${market}] no heartbeat after grace ${COLLECTOR_HB_GRACE_S}s; kill_tree KILL pid=${child}" >>"$log"
+          kill_tree "$child" KILL
           break
         fi
       done

@@ -44,15 +44,15 @@ def arm_hard_exit(
 
     First call starts the daemon timer. Subsequent calls may **upgrade**
     the exit code to non-zero (watchdog wins over SIGTERM). Returns True
-    when a new timer was started, False when only the code/reason updated
-    (or no-op when already armed with a non-zero and new code is 0).
+    when a new timer was started, False when only the code was updated
+    (or no-op).
     """
     global _armed, _exit_code
     delay = max(0.1, float(timeout_s))
     desired = int(code)
 
     with _lock:
-        # Non-zero always wins; zero only sticks if nothing armed yet / still 0.
+        # Non-zero always wins; zero only sticks if nothing armed yet.
         if desired != 0:
             _exit_code = desired
         elif not _armed:
@@ -61,9 +61,6 @@ def arm_hard_exit(
         if _armed:
             return False
         _armed = True
-        start_timer = True
-        captured_reason = reason
-    # Release lock before starting the timer (Timer is itself thread-safe enough).
 
     def _fire() -> None:
         with _lock:
@@ -71,7 +68,7 @@ def arm_hard_exit(
         try:
             logger.error(
                 "hard exit: %s after %.1fs — os._exit(%s)",
-                captured_reason,
+                reason,
                 delay,
                 final,
             )
@@ -79,16 +76,14 @@ def arm_hard_exit(
             pass
         os._exit(final)
 
-    if start_timer:
-        timer = threading.Timer(delay, _fire)
-        timer.daemon = True
-        timer.name = "collector-hard-exit"
-        timer.start()
-        logger.warning(
-            "hard exit armed: code=%s timeout_s=%.1f reason=%s",
-            desired,
-            delay,
-            reason,
-        )
-        return True
-    return False
+    timer = threading.Timer(delay, _fire)
+    timer.daemon = True
+    timer.name = "collector-hard-exit"
+    timer.start()
+    logger.warning(
+        "hard exit armed: code=%s timeout_s=%.1f reason=%s",
+        desired,
+        delay,
+        reason,
+    )
+    return True

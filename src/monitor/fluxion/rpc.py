@@ -79,14 +79,12 @@ class Rpc:
         self._last = time.monotonic()
 
     def _post(self, payload: Any) -> Any:
+        # Closed client never recovers — do not enter the retry loop
+        # (WHI-835: zombie shutdown spun hours on "client has been closed").
+        if self._client.is_closed:
+            raise RpcError("httpx client has been closed; refusing to post")
         last_exc: Exception | None = None
         for attempt in range(self.retries):
-            # Closed client never recovers — do not burn retries / backoff
-            # (WHI-835: zombie shutdown spun hours on "client has been closed").
-            if self._client.is_closed:
-                raise RpcError(
-                    "httpx client has been closed; refusing to post"
-                )
             self._throttle()
             try:
                 r = self._client.post(self.url, json=payload)
