@@ -31,6 +31,19 @@ soon — anything touching key handling, RPC credentials defaults to at least Hi
 
 ## Open
 
+- **WHI-866: research script imports private JournalReader row mappers** (Low, WHI-866).
+  `scripts/xstocks_edge_quant.py` reaches `_row_to_bybit_book` / depth / pool /
+  RFQ helpers. First cross-package private use; justified for offline analysis
+  but no public bulk-load API. Fix: promote typed bulk loaders on
+  `JournalReader` (or a `monitor.storage.rows` module) and switch the script.
+
+- **WHI-866: threshold_sweep profit not strictly monotone in theory** (Low, WHI-866).
+  Filtering base windows by `peak_edge_bps` is monotone for series-level
+  single-flight when windows are independent; portfolio reordering can still
+  free a slot for a richer later window. Fit scans without early break so the
+  knee remains defined. Fix: document or assert monotone only for series-level
+  capturable profit.
+
 - **WHI-790: no 30-minute dual-market collector soak in the PR** (Medium, WHI-790 → ops).
   Acceptance asked for a stable 30m run with full 55-pair inventory. Unit tests +
   capacity math (DESIGN §WHI-790) cover structure; live soak needs
