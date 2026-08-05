@@ -208,10 +208,10 @@ def capturable_profit_single_flight(
                 trade = trade * (max_trade_usd / w.size_usd)
             if trade > 0:
                 profit += trade
-            next_free_ms = entry + trade_duration_ms
-            entry = next_free_ms + max(0, reentry_cooldown_ms)
-            if reentry_cooldown_ms < 0:
-                break
+            # Guard zero/negative durations so the loop always advances.
+            step = max(1, trade_duration_ms + max(0, reentry_cooldown_ms))
+            next_free_ms = entry + max(1, trade_duration_ms)
+            entry = entry + step
             if entry > w.end_ms:
                 break
     return profit
