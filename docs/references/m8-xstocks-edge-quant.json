@@ -1,0 +1,5976 @@
+{
+  "schema_version": 1,
+  "generated_utc": "2026-08-05 13:48:36 UTC",
+  "repro_command": "uv run python scripts/xstocks_edge_quant.py --db data/monitor-bybit-fluxion.db --sample-ms 15000",
+  "elapsed_s": 42.9,
+  "method": {
+    "market": "bybit-fluxion",
+    "engine": "monitor.metrics.pnl_v2.compute_pnl_usd",
+    "analysis": "monitor.analysis.edge_quant",
+    "notionals_usd": "500, 1000",
+    "sample_ms": 15000,
+    "align_ms": 15000,
+    "reentry_cooldown_ms": 86400000,
+    "trade_duration_ms": 5000,
+    "max_gap_ms": 120000,
+    "threshold_sweep_bps": "0..60 step 2",
+    "capture_fraction": "0.70",
+    "inventory_usd": "5000",
+    "max_trade_usd": "1000",
+    "pricing_anomaly_gate": "500"
+  },
+  "tables": [
+    {
+      "table": "bybit_book",
+      "n_rows": 976690,
+      "min": "2026-08-03 14:51:38 UTC",
+      "max": "2026-08-05 13:47:53 UTC",
+      "role": "CEX L1 (primary timeline; ~2d raw retention)"
+    },
+    {
+      "table": "bybit_depth",
+      "n_rows": 679760,
+      "min": "2026-08-03 14:51:38 UTC",
+      "max": "2026-08-05 13:47:53 UTC",
+      "role": "CEX VWAP curve for $500/$1k slip (~2d retention)"
+    },
+    {
+      "table": "fluxion_pool_state",
+      "n_rows": 635768,
+      "min": "2026-08-02 03:18:24 UTC",
+      "max": "2026-08-05 13:47:53 UTC",
+      "role": "AMM geometry (as-of join; ~7d retention)"
+    },
+    {
+      "table": "fluxion_rfq_quotes",
+      "n_rows": 58216,
+      "min": "2026-08-02 13:19:15 UTC",
+      "max": "2026-08-05 13:47:53 UTC",
+      "role": "RFQ polls (separate column; ~3d retention)"
+    },
+    {
+      "table": "bybit_book_1m",
+      "n_rows": 14634,
+      "min": "2026-08-02 03:18:00 UTC",
+      "max": "2026-08-03 12:10:00 UTC",
+      "role": "Survives longer (~14d) but **not used** (no depth)"
+    },
+    {
+      "table": "collector_gaps",
+      "n_rows": 2334,
+      "min": "2026-08-02 03:18:32 UTC",
+      "max": "2026-08-05 13:47:03 UTC",
+      "role": "Downtime exclusion (`source=collector_down`)"
+    }
+  ],
+  "study": {
+    "start": "2026-08-03 14:51:38 UTC",
+    "end": "2026-08-05 13:47:53 UTC",
+    "span_hours": 46.937445555555556,
+    "rth_hours": 11.937445555555554,
+    "closed_hours": 35.0,
+    "rth_hours_excl_gap": 5.287445555555555,
+    "closed_hours_excl_gap": 21.75,
+    "gap_count": 19,
+    "gap_hours": 22.766275833333335,
+    "gap_rth_hours": 6.649999999999999
+  },
+  "pairs_span": [
+    {
+      "pair_id": "AAPLx",
+      "n": 85676,
+      "min": "2026-08-03 14:51:38 UTC",
+      "max": "2026-08-05 13:47:53 UTC",
+      "has_amm": true,
+      "notes": "\u2014"
+    },
+    {
+      "pair_id": "AMZNx",
+      "n": 55356,
+      "min": "2026-08-03 14:51:39 UTC",
+      "max": "2026-08-05 13:47:54 UTC",
+      "has_amm": false,
+      "notes": "CEX-only (no Fluxion pool)"
+    },
+    {
+      "pair_id": "COINx",
+      "n": 64310,
+      "min": "2026-08-03 14:51:39 UTC",
+      "max": "2026-08-05 13:47:54 UTC",
+      "has_amm": false,
+      "notes": "CEX-only (no Fluxion pool)"
+    },
+    {
+      "pair_id": "CRCLx",
+      "n": 77998,
+      "min": "2026-08-03 14:51:38 UTC",
+      "max": "2026-08-05 13:47:54 UTC",
+      "has_amm": true,
+      "notes": "\u2014"
+    },
+    {
+      "pair_id": "GOOGLx",
+      "n": 59343,
+      "min": "2026-08-03 14:51:38 UTC",
+      "max": "2026-08-05 13:47:53 UTC",
+      "has_amm": true,
+      "notes": "\u2014"
+    },
+    {
+      "pair_id": "HOODx",
+      "n": 38753,
+      "min": "2026-08-03 14:51:39 UTC",
+      "max": "2026-08-05 13:47:54 UTC",
+      "has_amm": true,
+      "notes": "\u2014"
+    },
+    {
+      "pair_id": "MCDx",
+      "n": 72351,
+      "min": "2026-08-03 14:51:39 UTC",
+      "max": "2026-08-05 13:47:54 UTC",
+      "has_amm": false,
+      "notes": "CEX-only (no Fluxion pool)"
+    },
+    {
+      "pair_id": "METAx",
+      "n": 54361,
+      "min": "2026-08-03 14:51:39 UTC",
+      "max": "2026-08-05 13:47:54 UTC",
+      "has_amm": true,
+      "notes": "\u2014"
+    },
+    {
+      "pair_id": "NVDAx",
+      "n": 111096,
+      "min": "2026-08-03 14:51:39 UTC",
+      "max": "2026-08-05 13:47:54 UTC",
+      "has_amm": true,
+      "notes": "\u2014"
+    },
+    {
+      "pair_id": "SPCXx",
+      "n": 165041,
+      "min": "2026-08-03 14:51:39 UTC",
+      "max": "2026-08-05 13:47:54 UTC",
+      "has_amm": true,
+      "notes": "frequent pricing_anomaly / thin pool \u2014 often excluded by gate"
+    },
+    {
+      "pair_id": "TSLAx",
+      "n": 192454,
+      "min": "2026-08-03 14:51:39 UTC",
+      "max": "2026-08-05 13:47:54 UTC",
+      "has_amm": true,
+      "notes": "\u2014"
+    }
+  ],
+  "hygiene": [
+    "No corporate-action calendar was applied: observation window is 2026-08-03 14:51:38 UTC \u2192 2026-08-05 13:47:53 UTC and no xStock dividend/split/rebase was announced in-span for the tracked names (manual check; automate later per bot DESIGN \u00a78).",
+    "No bStocks-style share rebase applies to Fluxion xStocks wrapper mechanics in this window; no segment break was introduced.",
+    "Samples with `gap=1` on book/pool/depth rows are dropped at load.",
+    "Pairs failing `amm_quote_for_cex` (empty_pool / invalid_mid / pricing_anomaly, default |spread| > 500 bps) are excluded from AMM samples for that timestamp (SPCXx frequently hits this).",
+    "CEX-only inventory pairs (no Fluxion AMM) are out of scope for the bot v1 AMM path and appear only in the coverage table."
+  ],
+  "headline": {
+    "calendar_days": 1.9557268981481482,
+    "profit_total_usd": "122.1397",
+    "profit_per_day_usd": "62.4524",
+    "n_stable_symbols": 5,
+    "go_list": [
+      "CRCLx",
+      "GOOGLx",
+      "HOODx",
+      "NVDAx",
+      "TSLAx"
+    ],
+    "verdict": "GO",
+    "verdict_detail": "Portfolio average **62.45 USDT/day** meets the \u226515 gate with **5** symbols showing positive fitted open-session windows (CRCLx, GOOGLx, HOODx, NVDAx, TSLAx)."
+  },
+  "fits_amm_1000": [
+    {
+      "pair_id": "AAPLx",
+      "session": "open",
+      "direction": "buy_bybit_sell_fluxion",
+      "min_edge_bps": "0",
+      "windows_per_day": 0.0,
+      "profit_per_day": "0",
+      "fitted": false,
+      "n_samples": 1191,
+      "profit_at_zero": "0"
+    },
+    {
+      "pair_id": "AAPLx",
+      "session": "closed",
+      "direction": "buy_bybit_sell_fluxion",
+      "min_edge_bps": "0",
+      "windows_per_day": 0.0,
+      "profit_per_day": "0",
+      "fitted": false,
+      "n_samples": 4188,
+      "profit_at_zero": "0"
+    },
+    {
+      "pair_id": "CRCLx",
+      "session": "open",
+      "direction": "buy_fluxion_sell_bybit",
+      "min_edge_bps": "60",
+      "windows_per_day": 1.023,
+      "profit_per_day": "9.3161",
+      "fitted": true,
+      "n_samples": 1235,
+      "profit_at_zero": "22.4933744902120790372728741"
+    },
+    {
+      "pair_id": "CRCLx",
+      "session": "closed",
+      "direction": "buy_fluxion_sell_bybit",
+      "min_edge_bps": "60",
+      "windows_per_day": 1.534,
+      "profit_per_day": "13.8804",
+      "fitted": true,
+      "n_samples": 3830,
+      "profit_at_zero": "14.5111423864964263075691540"
+    },
+    {
+      "pair_id": "GOOGLx",
+      "session": "open",
+      "direction": "buy_fluxion_sell_bybit",
+      "min_edge_bps": "12",
+      "windows_per_day": 0.511,
+      "profit_per_day": "0.6472",
+      "fitted": true,
+      "n_samples": 1241,
+      "profit_at_zero": "1.6329203974495295973350260"
+    },
+    {
+      "pair_id": "GOOGLx",
+      "session": "closed",
+      "direction": "buy_fluxion_sell_bybit",
+      "min_edge_bps": "32",
+      "windows_per_day": 1.023,
+      "profit_per_day": "4.1562",
+      "fitted": true,
+      "n_samples": 3513,
+      "profit_at_zero": "9.2541751124684064845469308"
+    },
+    {
+      "pair_id": "HOODx",
+      "session": "open",
+      "direction": "buy_fluxion_sell_bybit",
+      "min_edge_bps": "60",
+      "windows_per_day": 2.557,
+      "profit_per_day": "40.2510",
+      "fitted": true,
+      "n_samples": 1183,
+      "profit_at_zero": "67.3168249280106877819444349"
+    },
+    {
+      "pair_id": "HOODx",
+      "session": "closed",
+      "direction": "buy_fluxion_sell_bybit",
+      "min_edge_bps": "54",
+      "windows_per_day": 0.511,
+      "profit_per_day": "2.8153",
+      "fitted": true,
+      "n_samples": 3274,
+      "profit_at_zero": "5.0854644282529909951371645"
+    },
+    {
+      "pair_id": "METAx",
+      "session": "open",
+      "direction": "buy_bybit_sell_fluxion",
+      "min_edge_bps": "0",
+      "windows_per_day": 0.0,
+      "profit_per_day": "0",
+      "fitted": false,
+      "n_samples": 1219,
+      "profit_at_zero": "0"
+    },
+    {
+      "pair_id": "METAx",
+      "session": "closed",
+      "direction": "buy_bybit_sell_fluxion",
+      "min_edge_bps": "0",
+      "windows_per_day": 0.0,
+      "profit_per_day": "0",
+      "fitted": false,
+      "n_samples": 3128,
+      "profit_at_zero": "0"
+    },
+    {
+      "pair_id": "NVDAx",
+      "session": "open",
+      "direction": "buy_fluxion_sell_bybit",
+      "min_edge_bps": "60",
+      "windows_per_day": 2.045,
+      "profit_per_day": "13.8624",
+      "fitted": true,
+      "n_samples": 1242,
+      "profit_at_zero": "4.3349182025144033388029918"
+    },
+    {
+      "pair_id": "NVDAx",
+      "session": "closed",
+      "direction": "buy_fluxion_sell_bybit",
+      "min_edge_bps": "28",
+      "windows_per_day": 0.511,
+      "profit_per_day": "1.4744",
+      "fitted": true,
+      "n_samples": 4439,
+      "profit_at_zero": "0.6909150064242853827874584"
+    },
+    {
+      "pair_id": "TSLAx",
+      "session": "open",
+      "direction": "buy_fluxion_sell_bybit",
+      "min_edge_bps": "28",
+      "windows_per_day": 0.511,
+      "profit_per_day": "1.4545",
+      "fitted": true,
+      "n_samples": 1243,
+      "profit_at_zero": "0.1954325140471015522729483"
+    },
+    {
+      "pair_id": "TSLAx",
+      "session": "closed",
+      "direction": "buy_bybit_sell_fluxion",
+      "min_edge_bps": "0",
+      "windows_per_day": 0.0,
+      "profit_per_day": "0",
+      "fitted": false,
+      "n_samples": 4691,
+      "profit_at_zero": "0"
+    }
+  ],
+  "amm_open_1000_table": [
+    {
+      "pair_id": "AAPLx",
+      "direction": "buy_bybit_sell_fluxion",
+      "t0_wd": 0.0,
+      "t0_pd": "0",
+      "t10_wd": 0.0,
+      "t10_pd": "0",
+      "t20_wd": 0.0,
+      "t20_pd": "0",
+      "t40_wd": 0.0,
+      "t40_pd": "0"
+    },
+    {
+      "pair_id": "AAPLx",
+      "direction": "buy_fluxion_sell_bybit",
+      "t0_wd": 0.0,
+      "t0_pd": "0",
+      "t10_wd": 0.0,
+      "t10_pd": "0",
+      "t20_wd": 0.0,
+      "t20_pd": "0",
+      "t40_wd": 0.0,
+      "t40_pd": "0"
+    },
+    {
+      "pair_id": "CRCLx",
+      "direction": "buy_bybit_sell_fluxion",
+      "t0_wd": 1.023,
+      "t0_pd": "1.4648",
+      "t10_wd": 1.023,
+      "t10_pd": "1.4648",
+      "t20_wd": 0.511,
+      "t20_pd": "1.1873",
+      "t40_wd": 0.0,
+      "t40_pd": "0"
+    },
+    {
+      "pair_id": "CRCLx",
+      "direction": "buy_fluxion_sell_bybit",
+      "t0_wd": 5.113,
+      "t0_pd": "11.5013",
+      "t10_wd": 4.602,
+      "t10_pd": "15.5509",
+      "t20_wd": 2.557,
+      "t20_pd": "13.2224",
+      "t40_wd": 1.023,
+      "t40_pd": "9.3161"
+    },
+    {
+      "pair_id": "GOOGLx",
+      "direction": "buy_bybit_sell_fluxion",
+      "t0_wd": 0.0,
+      "t0_pd": "0",
+      "t10_wd": 0.0,
+      "t10_pd": "0",
+      "t20_wd": 0.0,
+      "t20_pd": "0",
+      "t40_wd": 0.0,
+      "t40_pd": "0"
+    },
+    {
+      "pair_id": "GOOGLx",
+      "direction": "buy_fluxion_sell_bybit",
+      "t0_wd": 1.023,
+      "t0_pd": "0.8349",
+      "t10_wd": 0.511,
+      "t10_pd": "0.6472",
+      "t20_wd": 0.0,
+      "t20_pd": "0",
+      "t40_wd": 0.0,
+      "t40_pd": "0"
+    },
+    {
+      "pair_id": "HOODx",
+      "direction": "buy_bybit_sell_fluxion",
+      "t0_wd": 0.0,
+      "t0_pd": "0",
+      "t10_wd": 0.0,
+      "t10_pd": "0",
+      "t20_wd": 0.0,
+      "t20_pd": "0",
+      "t40_wd": 0.0,
+      "t40_pd": "0"
+    },
+    {
+      "pair_id": "HOODx",
+      "direction": "buy_fluxion_sell_bybit",
+      "t0_wd": 5.113,
+      "t0_pd": "34.4204",
+      "t10_wd": 6.136,
+      "t10_pd": "39.2884",
+      "t20_wd": 5.625,
+      "t20_pd": "43.6510",
+      "t40_wd": 4.602,
+      "t40_pd": "47.8528"
+    },
+    {
+      "pair_id": "METAx",
+      "direction": "buy_bybit_sell_fluxion",
+      "t0_wd": 0.0,
+      "t0_pd": "0",
+      "t10_wd": 0.0,
+      "t10_pd": "0",
+      "t20_wd": 0.0,
+      "t20_pd": "0",
+      "t40_wd": 0.0,
+      "t40_pd": "0"
+    },
+    {
+      "pair_id": "METAx",
+      "direction": "buy_fluxion_sell_bybit",
+      "t0_wd": 0.0,
+      "t0_pd": "0",
+      "t10_wd": 0.0,
+      "t10_pd": "0",
+      "t20_wd": 0.0,
+      "t20_pd": "0",
+      "t40_wd": 0.0,
+      "t40_pd": "0"
+    },
+    {
+      "pair_id": "NVDAx",
+      "direction": "buy_bybit_sell_fluxion",
+      "t0_wd": 0.0,
+      "t0_pd": "0",
+      "t10_wd": 0.0,
+      "t10_pd": "0",
+      "t20_wd": 0.0,
+      "t20_pd": "0",
+      "t40_wd": 0.0,
+      "t40_pd": "0"
+    },
+    {
+      "pair_id": "NVDAx",
+      "direction": "buy_fluxion_sell_bybit",
+      "t0_wd": 1.023,
+      "t0_pd": "2.2165",
+      "t10_wd": 1.023,
+      "t10_pd": "2.2165",
+      "t20_wd": 1.534,
+      "t20_pd": "3.8347",
+      "t40_wd": 2.557,
+      "t40_pd": "11.0878"
+    },
+    {
+      "pair_id": "TSLAx",
+      "direction": "buy_bybit_sell_fluxion",
+      "t0_wd": 0.0,
+      "t0_pd": "0",
+      "t10_wd": 0.0,
+      "t10_pd": "0",
+      "t20_wd": 0.0,
+      "t20_pd": "0",
+      "t40_wd": 0.0,
+      "t40_pd": "0"
+    },
+    {
+      "pair_id": "TSLAx",
+      "direction": "buy_fluxion_sell_bybit",
+      "t0_wd": 0.511,
+      "t0_pd": "0.0999",
+      "t10_wd": 0.511,
+      "t10_pd": "0.6277",
+      "t20_wd": 1.534,
+      "t20_pd": "3.6083",
+      "t40_wd": 0.0,
+      "t40_pd": "0"
+    }
+  ],
+  "amm_open_500_summary": [
+    {
+      "pair_id": "AAPLx",
+      "direction": "buy_bybit_sell_fluxion",
+      "windows_per_day": 4.091,
+      "profit_per_day": "0.8445",
+      "n_samples": 1191
+    },
+    {
+      "pair_id": "AAPLx",
+      "direction": "buy_fluxion_sell_bybit",
+      "windows_per_day": 0.0,
+      "profit_per_day": "0",
+      "n_samples": 1191
+    },
+    {
+      "pair_id": "CRCLx",
+      "direction": "buy_bybit_sell_fluxion",
+      "windows_per_day": 3.068,
+      "profit_per_day": "8.5853",
+      "n_samples": 1235
+    },
+    {
+      "pair_id": "CRCLx",
+      "direction": "buy_fluxion_sell_bybit",
+      "windows_per_day": 5.625,
+      "profit_per_day": "11.4991",
+      "n_samples": 1235
+    },
+    {
+      "pair_id": "GOOGLx",
+      "direction": "buy_bybit_sell_fluxion",
+      "windows_per_day": 0.0,
+      "profit_per_day": "0",
+      "n_samples": 1241
+    },
+    {
+      "pair_id": "GOOGLx",
+      "direction": "buy_fluxion_sell_bybit",
+      "windows_per_day": 10.226,
+      "profit_per_day": "5.4484",
+      "n_samples": 1241
+    },
+    {
+      "pair_id": "HOODx",
+      "direction": "buy_bybit_sell_fluxion",
+      "windows_per_day": 0.0,
+      "profit_per_day": "0",
+      "n_samples": 1183
+    },
+    {
+      "pair_id": "HOODx",
+      "direction": "buy_fluxion_sell_bybit",
+      "windows_per_day": 14.828,
+      "profit_per_day": "25.2691",
+      "n_samples": 1183
+    },
+    {
+      "pair_id": "METAx",
+      "direction": "buy_bybit_sell_fluxion",
+      "windows_per_day": 0.0,
+      "profit_per_day": "0",
+      "n_samples": 1219
+    },
+    {
+      "pair_id": "METAx",
+      "direction": "buy_fluxion_sell_bybit",
+      "windows_per_day": 6.136,
+      "profit_per_day": "0.9615",
+      "n_samples": 1219
+    },
+    {
+      "pair_id": "NVDAx",
+      "direction": "buy_bybit_sell_fluxion",
+      "windows_per_day": 0.0,
+      "profit_per_day": "0",
+      "n_samples": 1242
+    },
+    {
+      "pair_id": "NVDAx",
+      "direction": "buy_fluxion_sell_bybit",
+      "windows_per_day": 15.34,
+      "profit_per_day": "5.7115",
+      "n_samples": 1242
+    },
+    {
+      "pair_id": "TSLAx",
+      "direction": "buy_bybit_sell_fluxion",
+      "windows_per_day": 0.0,
+      "profit_per_day": "0",
+      "n_samples": 1243
+    },
+    {
+      "pair_id": "TSLAx",
+      "direction": "buy_fluxion_sell_bybit",
+      "windows_per_day": 2.045,
+      "profit_per_day": "2.3432",
+      "n_samples": 1243
+    }
+  ],
+  "rfq_open_table": [
+    {
+      "pair_id": "AAPLx",
+      "direction": "buy_bybit_sell_fluxion",
+      "t0_wd": 0.0,
+      "t0_pd": "0",
+      "t10_wd": 0.0,
+      "t10_pd": "0",
+      "fit_bps": "0",
+      "fitted": false
+    },
+    {
+      "pair_id": "AAPLx",
+      "direction": "buy_fluxion_sell_bybit",
+      "t0_wd": 0.0,
+      "t0_pd": "0",
+      "t10_wd": 0.0,
+      "t10_pd": "0",
+      "fit_bps": "0",
+      "fitted": false
+    },
+    {
+      "pair_id": "CRCLx",
+      "direction": "buy_fluxion_sell_bybit",
+      "t0_wd": 0.0,
+      "t0_pd": "0",
+      "t10_wd": 0.0,
+      "t10_pd": "0",
+      "fit_bps": "0",
+      "fitted": false
+    },
+    {
+      "pair_id": "GOOGLx",
+      "direction": "buy_bybit_sell_fluxion",
+      "t0_wd": 0.0,
+      "t0_pd": "0",
+      "t10_wd": 0.0,
+      "t10_pd": "0",
+      "fit_bps": "0",
+      "fitted": false
+    },
+    {
+      "pair_id": "GOOGLx",
+      "direction": "buy_fluxion_sell_bybit",
+      "t0_wd": 0.0,
+      "t0_pd": "0",
+      "t10_wd": 0.0,
+      "t10_pd": "0",
+      "fit_bps": "0",
+      "fitted": false
+    },
+    {
+      "pair_id": "HOODx",
+      "direction": "buy_fluxion_sell_bybit",
+      "t0_wd": 0.0,
+      "t0_pd": "0",
+      "t10_wd": 0.0,
+      "t10_pd": "0",
+      "fit_bps": "0",
+      "fitted": false
+    },
+    {
+      "pair_id": "METAx",
+      "direction": "buy_bybit_sell_fluxion",
+      "t0_wd": 0.0,
+      "t0_pd": "0",
+      "t10_wd": 0.0,
+      "t10_pd": "0",
+      "fit_bps": "0",
+      "fitted": false
+    },
+    {
+      "pair_id": "METAx",
+      "direction": "buy_fluxion_sell_bybit",
+      "t0_wd": 0.0,
+      "t0_pd": "0",
+      "t10_wd": 0.0,
+      "t10_pd": "0",
+      "fit_bps": "0",
+      "fitted": false
+    },
+    {
+      "pair_id": "NVDAx",
+      "direction": "buy_bybit_sell_fluxion",
+      "t0_wd": 0.0,
+      "t0_pd": "0",
+      "t10_wd": 0.0,
+      "t10_pd": "0",
+      "fit_bps": "0",
+      "fitted": false
+    },
+    {
+      "pair_id": "NVDAx",
+      "direction": "buy_fluxion_sell_bybit",
+      "t0_wd": 0.0,
+      "t0_pd": "0",
+      "t10_wd": 0.0,
+      "t10_pd": "0",
+      "fit_bps": "0",
+      "fitted": false
+    },
+    {
+      "pair_id": "SPCXx",
+      "direction": "buy_bybit_sell_fluxion",
+      "t0_wd": 0.0,
+      "t0_pd": "0",
+      "t10_wd": 0.0,
+      "t10_pd": "0",
+      "fit_bps": "0",
+      "fitted": false
+    },
+    {
+      "pair_id": "SPCXx",
+      "direction": "buy_fluxion_sell_bybit",
+      "t0_wd": 0.0,
+      "t0_pd": "0",
+      "t10_wd": 0.0,
+      "t10_pd": "0",
+      "fit_bps": "0",
+      "fitted": false
+    },
+    {
+      "pair_id": "TSLAx",
+      "direction": "buy_bybit_sell_fluxion",
+      "t0_wd": 0.0,
+      "t0_pd": "0",
+      "t10_wd": 0.0,
+      "t10_pd": "0",
+      "fit_bps": "0",
+      "fitted": false
+    },
+    {
+      "pair_id": "TSLAx",
+      "direction": "buy_fluxion_sell_bybit",
+      "t0_wd": 0.0,
+      "t0_pd": "0",
+      "t10_wd": 0.0,
+      "t10_pd": "0",
+      "fit_bps": "0",
+      "fitted": false
+    }
+  ],
+  "closed_note": "AMM $1000 closed-session capturable profit (sum of per-series single-flight, **not** portfolio-deconflicted): 35.52 USDT over the span (18.16/day). Closed-session RFQ remains two-sided on liquid pairs (see `docs/references/m4-closed-session-rfq.md`); session \u2260 mechanism.",
+  "rfq_vs_amm_note": "RFQ open-session sum of per-series capturable profit at T=0: 0.00 USDT (0.00/day). This is **not** portfolio-deconflicted against AMM and uses poll quotes that are vendor-asserted but not fill-verified \u2014 RFQ stays v2 until a fill-firmness test lands. Headline go/no-go ignores RFQ.",
+  "next_steps": [
+    "Re-run after \u22655 consecutive clean RTH sessions with `collector_down` RTH loss < 1 h/day \u2014 current fit quality is limited by downtime inside the 2-day raw retention window.",
+    "Wire the fit table into the bot repo M4 threshold config (WHI-876); start with CRCLx / HOODx / NVDAx (material open-session profit/day) and treat GOOGLx / TSLAx as optional add-ons.",
+    "Manually review large HOODx dislocations (gross basis near the 500 bps pricing_anomaly gate) on a fill before sizing up \u2014 paper fillable \u2260 firm when AMM mid is slow to update.",
+    "RFQ fill-firmness remains a separate gate before any RFQ leg."
+  ],
+  "series": {
+    "AAPLx|buy_bybit_sell_fluxion|closed|amm|1000": {
+      "n_samples": 4188,
+      "windows_at_zero": 0,
+      "profit_at_zero": "0",
+      "profit_per_day_at_zero": "0E+27",
+      "fit": {
+        "min_edge_bps": "0",
+        "capture_fraction": "0.70",
+        "profit_at_fit": "0",
+        "profit_at_zero": "0",
+        "windows_per_day": 0.0,
+        "profit_per_day": "0",
+        "fitted": false
+      },
+      "sweep_selected": [
+        {
+          "min_edge_bps": "0",
+          "n_windows": 0,
+          "windows_per_day": 0.0,
+          "duration_median_ms": 0,
+          "duration_p90_ms": 0,
+          "capturable_profit_usd": "0",
+          "capturable_profit_per_day": "0"
+        },
+        {
+          "min_edge_bps": "10",
+          "n_windows": 0,
+          "windows_per_day": 0.0,
+          "duration_median_ms": 0,
+          "duration_p90_ms": 0,
+          "capturable_profit_usd": "0",
+          "capturable_profit_per_day": "0"
+        },
+        {
+          "min_edge_bps": "20",
+          "n_windows": 0,
+          "windows_per_day": 0.0,
+          "duration_median_ms": 0,
+          "duration_p90_ms": 0,
+          "capturable_profit_usd": "0",
+          "capturable_profit_per_day": "0"
+        },
+        {
+          "min_edge_bps": "40",
+          "n_windows": 0,
+          "windows_per_day": 0.0,
+          "duration_median_ms": 0,
+          "duration_p90_ms": 0,
+          "capturable_profit_usd": "0",
+          "capturable_profit_per_day": "0"
+        },
+        {
+          "min_edge_bps": "60",
+          "n_windows": 0,
+          "windows_per_day": 0.0,
+          "duration_median_ms": 0,
+          "duration_p90_ms": 0,
+          "capturable_profit_usd": "0",
+          "capturable_profit_per_day": "0"
+        }
+      ]
+    },
+    "AAPLx|buy_bybit_sell_fluxion|closed|amm|500": {
+      "n_samples": 4188,
+      "windows_at_zero": 23,
+      "profit_at_zero": "19.7146366248758798445173259",
+      "profit_per_day_at_zero": "10.08046504015637750682815976",
+      "fit": {
+        "min_edge_bps": "60",
+        "capture_fraction": "0.70",
+        "profit_at_fit": "24.7158",
+        "profit_at_zero": "19.7146",
+        "windows_per_day": 4.091,
+        "profit_per_day": "12.6376",
+        "fitted": true
+      },
+      "sweep_selected": [
+        {
+          "min_edge_bps": "0",
+          "n_windows": 23,
+          "windows_per_day": 11.76,
+          "duration_median_ms": 296456,
+          "duration_p90_ms": 3418645,
+          "capturable_profit_usd": "19.7146",
+          "capturable_profit_per_day": "10.0805"
+        },
+        {
+          "min_edge_bps": "10",
+          "n_windows": 28,
+          "windows_per_day": 14.317,
+          "duration_median_ms": 210103,
+          "duration_p90_ms": 1251156,
+          "capturable_profit_usd": "28.8908",
+          "capturable_profit_per_day": "14.7724"
+        },
+        {
+          "min_edge_bps": "20",
+          "n_windows": 53,
+          "windows_per_day": 27.1,
+          "duration_median_ms": 57585,
+          "duration_p90_ms": 403040,
+          "capturable_profit_usd": "65.5484",
+          "capturable_profit_per_day": "33.5161"
+        },
+        {
+          "min_edge_bps": "40",
+          "n_windows": 16,
+          "windows_per_day": 8.181,
+          "duration_median_ms": 45942,
+          "duration_p90_ms": 1554976,
+          "capturable_profit_usd": "35.6944",
+          "capturable_profit_per_day": "18.2512"
+        },
+        {
+          "min_edge_bps": "60",
+          "n_windows": 8,
+          "windows_per_day": 4.091,
+          "duration_median_ms": 30658,
+          "duration_p90_ms": 599000,
+          "capturable_profit_usd": "24.7158",
+          "capturable_profit_per_day": "12.6376"
+        }
+      ]
+    },
+    "AAPLx|buy_bybit_sell_fluxion|closed|rfq|poll_native": {
+      "n_samples": 800,
+      "windows_at_zero": 0,
+      "profit_at_zero": "0",
+      "profit_per_day_at_zero": "0E+27",
+      "fit": {
+        "min_edge_bps": "0",
+        "capture_fraction": "0.70",
+        "profit_at_fit": "0",
+        "profit_at_zero": "0",
+        "windows_per_day": 0.0,
+        "profit_per_day": "0",
+        "fitted": false
+      },
+      "sweep_selected": [
+        {
+          "min_edge_bps": "0",
+          "n_windows": 0,
+          "windows_per_day": 0.0,
+          "duration_median_ms": 0,
+          "duration_p90_ms": 0,
+          "capturable_profit_usd": "0",
+          "capturable_profit_per_day": "0"
+        },
+        {
+          "min_edge_bps": "10",
+          "n_windows": 0,
+          "windows_per_day": 0.0,
+          "duration_median_ms": 0,
+          "duration_p90_ms": 0,
+          "capturable_profit_usd": "0",
+          "capturable_profit_per_day": "0"
+        },
+        {
+          "min_edge_bps": "20",
+          "n_windows": 0,
+          "windows_per_day": 0.0,
+          "duration_median_ms": 0,
+          "duration_p90_ms": 0,
+          "capturable_profit_usd": "0",
+          "capturable_profit_per_day": "0"
+        },
+        {
+          "min_edge_bps": "40",
+          "n_windows": 0,
+          "windows_per_day": 0.0,
+          "duration_median_ms": 0,
+          "duration_p90_ms": 0,
+          "capturable_profit_usd": "0",
+          "capturable_profit_per_day": "0"
+        },
+        {
+          "min_edge_bps": "60",
+          "n_windows": 0,
+          "windows_per_day": 0.0,
+          "duration_median_ms": 0,
+          "duration_p90_ms": 0,
+          "capturable_profit_usd": "0",
+          "capturable_profit_per_day": "0"
+        }
+      ]
+    },
+    "AAPLx|buy_bybit_sell_fluxion|open|amm|1000": {
+      "n_samples": 1191,
+      "windows_at_zero": 0,
+      "profit_at_zero": "0",
+      "profit_per_day_at_zero": "0E+27",
+      "fit": {
+        "min_edge_bps": "0",
+        "capture_fraction": "0.70",
+        "profit_at_fit": "0",
+        "profit_at_zero": "0",
+        "windows_per_day": 0.0,
+        "profit_per_day": "0",
+        "fitted": false
+      },
+      "sweep_selected": [
+        {
+          "min_edge_bps": "0",
+          "n_windows": 0,
+          "windows_per_day": 0.0,
+          "duration_median_ms": 0,
+          "duration_p90_ms": 0,
+          "capturable_profit_usd": "0",
+          "capturable_profit_per_day": "0"
+        },
+        {
+          "min_edge_bps": "10",
+          "n_windows": 0,
+          "windows_per_day": 0.0,
+          "duration_median_ms": 0,
+          "duration_p90_ms": 0,
+          "capturable_profit_usd": "0",
+          "capturable_profit_per_day": "0"
+        },
+        {
+          "min_edge_bps": "20",
+          "n_windows": 0,
+          "windows_per_day": 0.0,
+          "duration_median_ms": 0,
+          "duration_p90_ms": 0,
+          "capturable_profit_usd": "0",
+          "capturable_profit_per_day": "0"
+        },
+        {
+          "min_edge_bps": "40",
+          "n_windows": 0,
+          "windows_per_day": 0.0,
+          "duration_median_ms": 0,
+          "duration_p90_ms": 0,
+          "capturable_profit_usd": "0",
+          "capturable_profit_per_day": "0"
+        },
+        {
+          "min_edge_bps": "60",
+          "n_windows": 0,
+          "windows_per_day": 0.0,
+          "duration_median_ms": 0,
+          "duration_p90_ms": 0,
+          "capturable_profit_usd": "0",
+          "capturable_profit_per_day": "0"
+        }
+      ]
+    },
+    "AAPLx|buy_bybit_sell_fluxion|open|amm|500": {
+      "n_samples": 1191,
+      "windows_at_zero": 8,
+      "profit_at_zero": "1.6516204972857646606010728",
+      "profit_per_day_at_zero": "0.8445046692611643252797185664",
+      "fit": {
+        "min_edge_bps": "58",
+        "capture_fraction": "0.70",
+        "profit_at_fit": "5.9197",
+        "profit_at_zero": "1.6516",
+        "windows_per_day": 1.023,
+        "profit_per_day": "3.0269",
+        "fitted": true
+      },
+      "sweep_selected": [
+        {
+          "min_edge_bps": "0",
+          "n_windows": 8,
+          "windows_per_day": 4.091,
+          "duration_median_ms": 93243,
+          "duration_p90_ms": 730985,
+          "capturable_profit_usd": "1.6516",
+          "capturable_profit_per_day": "0.8445"
+        },
+        {
+          "min_edge_bps": "10",
+          "n_windows": 10,
+          "windows_per_day": 5.113,
+          "duration_median_ms": 14252,
+          "duration_p90_ms": 540067,
+          "capturable_profit_usd": "5.7584",
+          "capturable_profit_per_day": "2.9444"
+        },
+        {
+          "min_edge_bps": "20",
+          "n_windows": 9,
+          "windows_per_day": 4.602,
+          "duration_median_ms": 63046,
+          "duration_p90_ms": 239860,
+          "capturable_profit_usd": "10.7417",
+          "capturable_profit_per_day": "5.4924"
+        },
+        {
+          "min_edge_bps": "40",
+          "n_windows": 5,
+          "windows_per_day": 2.557,
+          "duration_median_ms": 15536,
+          "duration_p90_ms": 662052,
+          "capturable_profit_usd": "10.8188",
+          "capturable_profit_per_day": "5.5319"
+        },
+        {
+          "min_edge_bps": "60",
+          "n_windows": 0,
+          "windows_per_day": 0.0,
+          "duration_median_ms": 0,
+          "duration_p90_ms": 0,
+          "capturable_profit_usd": "0",
+          "capturable_profit_per_day": "0"
+        }
+      ]
+    },
+    "AAPLx|buy_bybit_sell_fluxion|open|rfq|poll_native": {
+      "n_samples": 327,
+      "windows_at_zero": 0,
+      "profit_at_zero": "0",
+      "profit_per_day_at_zero": "0E+27",
+      "fit": {
+        "min_edge_bps": "0",
+        "capture_fraction": "0.70",
+        "profit_at_fit": "0",
+        "profit_at_zero": "0",
+        "windows_per_day": 0.0,
+        "profit_per_day": "0",
+        "fitted": false
+      },
+      "sweep_selected": [
+        {
+          "min_edge_bps": "0",
+          "n_windows": 0,
+          "windows_per_day": 0.0,
+          "duration_median_ms": 0,
+          "duration_p90_ms": 0,
+          "capturable_profit_usd": "0",
+          "capturable_profit_per_day": "0"
+        },
+        {
+          "min_edge_bps": "10",
+          "n_windows": 0,
+          "windows_per_day": 0.0,
+          "duration_median_ms": 0,
+          "duration_p90_ms": 0,
+          "capturable_profit_usd": "0",
+          "capturable_profit_per_day": "0"
+        },
+        {
+          "min_edge_bps": "20",
+          "n_windows": 0,
+          "windows_per_day": 0.0,
+          "duration_median_ms": 0,
+          "duration_p90_ms": 0,
+          "capturable_profit_usd": "0",
+          "capturable_profit_per_day": "0"
+        },
+        {
+          "min_edge_bps": "40",
+          "n_windows": 0,
+          "windows_per_day": 0.0,
+          "duration_median_ms": 0,
+          "duration_p90_ms": 0,
+          "capturable_profit_usd": "0",
+          "capturable_profit_per_day": "0"
+        },
+        {
+          "min_edge_bps": "60",
+          "n_windows": 0,
+          "windows_per_day": 0.0,
+          "duration_median_ms": 0,
+          "duration_p90_ms": 0,
+          "capturable_profit_usd": "0",
+          "capturable_profit_per_day": "0"
+        }
+      ]
+    },
+    "AAPLx|buy_fluxion_sell_bybit|closed|amm|1000": {
+      "n_samples": 4188,
+      "windows_at_zero": 0,
+      "profit_at_zero": "0",
+      "profit_per_day_at_zero": "0E+27",
+      "fit": {
+        "min_edge_bps": "0",
+        "capture_fraction": "0.70",
+        "profit_at_fit": "0",
+        "profit_at_zero": "0",
+        "windows_per_day": 0.0,
+        "profit_per_day": "0",
+        "fitted": false
+      },
+      "sweep_selected": [
+        {
+          "min_edge_bps": "0",
+          "n_windows": 0,
+          "windows_per_day": 0.0,
+          "duration_median_ms": 0,
+          "duration_p90_ms": 0,
+          "capturable_profit_usd": "0",
+          "capturable_profit_per_day": "0"
+        },
+        {
+          "min_edge_bps": "10",
+          "n_windows": 0,
+          "windows_per_day": 0.0,
+          "duration_median_ms": 0,
+          "duration_p90_ms": 0,
+          "capturable_profit_usd": "0",
+          "capturable_profit_per_day": "0"
+        },
+        {
+          "min_edge_bps": "20",
+          "n_windows": 0,
+          "windows_per_day": 0.0,
+          "duration_median_ms": 0,
+          "duration_p90_ms": 0,
+          "capturable_profit_usd": "0",
+          "capturable_profit_per_day": "0"
+        },
+        {
+          "min_edge_bps": "40",
+          "n_windows": 0,
+          "windows_per_day": 0.0,
+          "duration_median_ms": 0,
+          "duration_p90_ms": 0,
+          "capturable_profit_usd": "0",
+          "capturable_profit_per_day": "0"
+        },
+        {
+          "min_edge_bps": "60",
+          "n_windows": 0,
+          "windows_per_day": 0.0,
+          "duration_median_ms": 0,
+          "duration_p90_ms": 0,
+          "capturable_profit_usd": "0",
+          "capturable_profit_per_day": "0"
+        }
+      ]
+    },
+    "AAPLx|buy_fluxion_sell_bybit|closed|amm|500": {
+      "n_samples": 4188,
+      "windows_at_zero": 4,
+      "profit_at_zero": "0.7053143333379745019842374",
+      "profit_per_day_at_zero": "0.3606405035415871645067161100",
+      "fit": {
+        "min_edge_bps": "14",
+        "capture_fraction": "0.70",
+        "profit_at_fit": "0.7211",
+        "profit_at_zero": "0.7053",
+        "windows_per_day": 0.511,
+        "profit_per_day": "0.3687",
+        "fitted": true
+      },
+      "sweep_selected": [
+        {
+          "min_edge_bps": "0",
+          "n_windows": 4,
+          "windows_per_day": 2.045,
+          "duration_median_ms": 187430,
+          "duration_p90_ms": 267570,
+          "capturable_profit_usd": "0.7053",
+          "capturable_profit_per_day": "0.3606"
+        },
+        {
+          "min_edge_bps": "10",
+          "n_windows": 4,
+          "windows_per_day": 2.045,
+          "duration_median_ms": 21312,
+          "duration_p90_ms": 29359,
+          "capturable_profit_usd": "2.4707",
+          "capturable_profit_per_day": "1.2633"
+        },
+        {
+          "min_edge_bps": "20",
+          "n_windows": 0,
+          "windows_per_day": 0.0,
+          "duration_median_ms": 0,
+          "duration_p90_ms": 0,
+          "capturable_profit_usd": "0",
+          "capturable_profit_per_day": "0"
+        },
+        {
+          "min_edge_bps": "40",
+          "n_windows": 0,
+          "windows_per_day": 0.0,
+          "duration_median_ms": 0,
+          "duration_p90_ms": 0,
+          "capturable_profit_usd": "0",
+          "capturable_profit_per_day": "0"
+        },
+        {
+          "min_edge_bps": "60",
+          "n_windows": 0,
+          "windows_per_day": 0.0,
+          "duration_median_ms": 0,
+          "duration_p90_ms": 0,
+          "capturable_profit_usd": "0",
+          "capturable_profit_per_day": "0"
+        }
+      ]
+    },
+    "AAPLx|buy_fluxion_sell_bybit|closed|rfq|poll_native": {
+      "n_samples": 793,
+      "windows_at_zero": 0,
+      "profit_at_zero": "0",
+      "profit_per_day_at_zero": "0E+27",
+      "fit": {
+        "min_edge_bps": "0",
+        "capture_fraction": "0.70",
+        "profit_at_fit": "0",
+        "profit_at_zero": "0",
+        "windows_per_day": 0.0,
+        "profit_per_day": "0",
+        "fitted": false
+      },
+      "sweep_selected": [
+        {
+          "min_edge_bps": "0",
+          "n_windows": 0,
+          "windows_per_day": 0.0,
+          "duration_median_ms": 0,
+          "duration_p90_ms": 0,
+          "capturable_profit_usd": "0",
+          "capturable_profit_per_day": "0"
+        },
+        {
+          "min_edge_bps": "10",
+          "n_windows": 0,
+          "windows_per_day": 0.0,
+          "duration_median_ms": 0,
+          "duration_p90_ms": 0,
+          "capturable_profit_usd": "0",
+          "capturable_profit_per_day": "0"
+        },
+        {
+          "min_edge_bps": "20",
+          "n_windows": 0,
+          "windows_per_day": 0.0,
+          "duration_median_ms": 0,
+          "duration_p90_ms": 0,
+          "capturable_profit_usd": "0",
+          "capturable_profit_per_day": "0"
+        },
+        {
+          "min_edge_bps": "40",
+          "n_windows": 0,
+          "windows_per_day": 0.0,
+          "duration_median_ms": 0,
+          "duration_p90_ms": 0,
+          "capturable_profit_usd": "0",
+          "capturable_profit_per_day": "0"
+        },
+        {
+          "min_edge_bps": "60",
+          "n_windows": 0,
+          "windows_per_day": 0.0,
+          "duration_median_ms": 0,
+          "duration_p90_ms": 0,
+          "capturable_profit_usd": "0",
+          "capturable_profit_per_day": "0"
+        }
+      ]
+    },
+    "AAPLx|buy_fluxion_sell_bybit|open|amm|1000": {
+      "n_samples": 1191,
+      "windows_at_zero": 0,
+      "profit_at_zero": "0",
+      "profit_per_day_at_zero": "0E+27",
+      "fit": {
+        "min_edge_bps": "0",
+        "capture_fraction": "0.70",
+        "profit_at_fit": "0",
+        "profit_at_zero": "0",
+        "windows_per_day": 0.0,
+        "profit_per_day": "0",
+        "fitted": false
+      },
+      "sweep_selected": [
+        {
+          "min_edge_bps": "0",
+          "n_windows": 0,
+          "windows_per_day": 0.0,
+          "duration_median_ms": 0,
+          "duration_p90_ms": 0,
+          "capturable_profit_usd": "0",
+          "capturable_profit_per_day": "0"
+        },
+        {
+          "min_edge_bps": "10",
+          "n_windows": 0,
+          "windows_per_day": 0.0,
+          "duration_median_ms": 0,
+          "duration_p90_ms": 0,
+          "capturable_profit_usd": "0",
+          "capturable_profit_per_day": "0"
+        },
+        {
+          "min_edge_bps": "20",
+          "n_windows": 0,
+          "windows_per_day": 0.0,
+          "duration_median_ms": 0,
+          "duration_p90_ms": 0,
+          "capturable_profit_usd": "0",
+          "capturable_profit_per_day": "0"
+        },
+        {
+          "min_edge_bps": "40",
+          "n_windows": 0,
+          "windows_per_day": 0.0,
+          "duration_median_ms": 0,
+          "duration_p90_ms": 0,
+          "capturable_profit_usd": "0",
+          "capturable_profit_per_day": "0"
+        },
+        {
+          "min_edge_bps": "60",
+          "n_windows": 0,
+          "windows_per_day": 0.0,
+          "duration_median_ms": 0,
+          "duration_p90_ms": 0,
+          "capturable_profit_usd": "0",
+          "capturable_profit_per_day": "0"
+        }
+      ]
+    },
+    "AAPLx|buy_fluxion_sell_bybit|open|amm|500": {
+      "n_samples": 1191,
+      "windows_at_zero": 0,
+      "profit_at_zero": "0",
+      "profit_per_day_at_zero": "0E+27",
+      "fit": {
+        "min_edge_bps": "0",
+        "capture_fraction": "0.70",
+        "profit_at_fit": "0",
+        "profit_at_zero": "0",
+        "windows_per_day": 0.0,
+        "profit_per_day": "0",
+        "fitted": false
+      },
+      "sweep_selected": [
+        {
+          "min_edge_bps": "0",
+          "n_windows": 0,
+          "windows_per_day": 0.0,
+          "duration_median_ms": 0,
+          "duration_p90_ms": 0,
+          "capturable_profit_usd": "0",
+          "capturable_profit_per_day": "0"
+        },
+        {
+          "min_edge_bps": "10",
+          "n_windows": 0,
+          "windows_per_day": 0.0,
+          "duration_median_ms": 0,
+          "duration_p90_ms": 0,
+          "capturable_profit_usd": "0",
+          "capturable_profit_per_day": "0"
+        },
+        {
+          "min_edge_bps": "20",
+          "n_windows": 0,
+          "windows_per_day": 0.0,
+          "duration_median_ms": 0,
+          "duration_p90_ms": 0,
+          "capturable_profit_usd": "0",
+          "capturable_profit_per_day": "0"
+        },
+        {
+          "min_edge_bps": "40",
+          "n_windows": 0,
+          "windows_per_day": 0.0,
+          "duration_median_ms": 0,
+          "duration_p90_ms": 0,
+          "capturable_profit_usd": "0",
+          "capturable_profit_per_day": "0"
+        },
+        {
+          "min_edge_bps": "60",
+          "n_windows": 0,
+          "windows_per_day": 0.0,
+          "duration_median_ms": 0,
+          "duration_p90_ms": 0,
+          "capturable_profit_usd": "0",
+          "capturable_profit_per_day": "0"
+        }
+      ]
+    },
+    "AAPLx|buy_fluxion_sell_bybit|open|rfq|poll_native": {
+      "n_samples": 338,
+      "windows_at_zero": 0,
+      "profit_at_zero": "0",
+      "profit_per_day_at_zero": "0E+27",
+      "fit": {
+        "min_edge_bps": "0",
+        "capture_fraction": "0.70",
+        "profit_at_fit": "0",
+        "profit_at_zero": "0",
+        "windows_per_day": 0.0,
+        "profit_per_day": "0",
+        "fitted": false
+      },
+      "sweep_selected": [
+        {
+          "min_edge_bps": "0",
+          "n_windows": 0,
+          "windows_per_day": 0.0,
+          "duration_median_ms": 0,
+          "duration_p90_ms": 0,
+          "capturable_profit_usd": "0",
+          "capturable_profit_per_day": "0"
+        },
+        {
+          "min_edge_bps": "10",
+          "n_windows": 0,
+          "windows_per_day": 0.0,
+          "duration_median_ms": 0,
+          "duration_p90_ms": 0,
+          "capturable_profit_usd": "0",
+          "capturable_profit_per_day": "0"
+        },
+        {
+          "min_edge_bps": "20",
+          "n_windows": 0,
+          "windows_per_day": 0.0,
+          "duration_median_ms": 0,
+          "duration_p90_ms": 0,
+          "capturable_profit_usd": "0",
+          "capturable_profit_per_day": "0"
+        },
+        {
+          "min_edge_bps": "40",
+          "n_windows": 0,
+          "windows_per_day": 0.0,
+          "duration_median_ms": 0,
+          "duration_p90_ms": 0,
+          "capturable_profit_usd": "0",
+          "capturable_profit_per_day": "0"
+        },
+        {
+          "min_edge_bps": "60",
+          "n_windows": 0,
+          "windows_per_day": 0.0,
+          "duration_median_ms": 0,
+          "duration_p90_ms": 0,
+          "capturable_profit_usd": "0",
+          "capturable_profit_per_day": "0"
+        }
+      ]
+    },
+    "CRCLx|buy_bybit_sell_fluxion|closed|amm|1000": {
+      "n_samples": 3828,
+      "windows_at_zero": 2,
+      "profit_at_zero": "5.975804457908596343034720",
+      "profit_per_day_at_zero": "3.055541376235611576967414669",
+      "fit": {
+        "min_edge_bps": "60",
+        "capture_fraction": "0.70",
+        "profit_at_fit": "30.9373",
+        "profit_at_zero": "5.9758",
+        "windows_per_day": 2.045,
+        "profit_per_day": "15.8188",
+        "fitted": true
+      },
+      "sweep_selected": [
+        {
+          "min_edge_bps": "0",
+          "n_windows": 2,
+          "windows_per_day": 1.023,
+          "duration_median_ms": 206366,
+          "duration_p90_ms": 240068,
+          "capturable_profit_usd": "5.9758",
+          "capturable_profit_per_day": "3.0555"
+        },
+        {
+          "min_edge_bps": "10",
+          "n_windows": 2,
+          "windows_per_day": 1.023,
+          "duration_median_ms": 206366,
+          "duration_p90_ms": 240068,
+          "capturable_profit_usd": "5.9758",
+          "capturable_profit_per_day": "3.0555"
+        },
+        {
+          "min_edge_bps": "20",
+          "n_windows": 2,
+          "windows_per_day": 1.023,
+          "duration_median_ms": 191227,
+          "duration_p90_ms": 240068,
+          "capturable_profit_usd": "9.9833",
+          "capturable_profit_per_day": "5.1046"
+        },
+        {
+          "min_edge_bps": "40",
+          "n_windows": 3,
+          "windows_per_day": 1.534,
+          "duration_median_ms": 136703,
+          "duration_p90_ms": 191227,
+          "capturable_profit_usd": "14.7874",
+          "capturable_profit_per_day": "7.5611"
+        },
+        {
+          "min_edge_bps": "60",
+          "n_windows": 4,
+          "windows_per_day": 2.045,
+          "duration_median_ms": 75808,
+          "duration_p90_ms": 105618,
+          "capturable_profit_usd": "30.9373",
+          "capturable_profit_per_day": "15.8188"
+        }
+      ]
+    },
+    "CRCLx|buy_bybit_sell_fluxion|closed|amm|500": {
+      "n_samples": 3830,
+      "windows_at_zero": 9,
+      "profit_at_zero": "5.4259695588463348652264913",
+      "profit_per_day_at_zero": "2.774400435962768344773868466",
+      "fit": {
+        "min_edge_bps": "60",
+        "capture_fraction": "0.70",
+        "profit_at_fit": "32.5059",
+        "profit_at_zero": "5.4260",
+        "windows_per_day": 4.602,
+        "profit_per_day": "16.6209",
+        "fitted": true
+      },
+      "sweep_selected": [
+        {
+          "min_edge_bps": "0",
+          "n_windows": 9,
+          "windows_per_day": 4.602,
+          "duration_median_ms": 134428,
+          "duration_p90_ms": 492932,
+          "capturable_profit_usd": "5.4260",
+          "capturable_profit_per_day": "2.7744"
+        },
+        {
+          "min_edge_bps": "10",
+          "n_windows": 8,
+          "windows_per_day": 4.091,
+          "duration_median_ms": 270259,
+          "duration_p90_ms": 357790,
+          "capturable_profit_usd": "7.8623",
+          "capturable_profit_per_day": "4.0201"
+        },
+        {
+          "min_edge_bps": "20",
+          "n_windows": 9,
+          "windows_per_day": 4.602,
+          "duration_median_ms": 74897,
+          "duration_p90_ms": 341625,
+          "capturable_profit_usd": "13.8832",
+          "capturable_profit_per_day": "7.0987"
+        },
+        {
+          "min_edge_bps": "40",
+          "n_windows": 10,
+          "windows_per_day": 5.113,
+          "duration_median_ms": 29979,
+          "duration_p90_ms": 270271,
+          "capturable_profit_usd": "25.7854",
+          "capturable_profit_per_day": "13.1846"
+        },
+        {
+          "min_edge_bps": "60",
+          "n_windows": 9,
+          "windows_per_day": 4.602,
+          "duration_median_ms": 15341,
+          "duration_p90_ms": 270271,
+          "capturable_profit_usd": "32.5059",
+          "capturable_profit_per_day": "16.6209"
+        }
+      ]
+    },
+    "CRCLx|buy_bybit_sell_fluxion|open|amm|1000": {
+      "n_samples": 1234,
+      "windows_at_zero": 2,
+      "profit_at_zero": "2.864767047766856544016127",
+      "profit_per_day_at_zero": "1.464809350671336807131277234",
+      "fit": {
+        "min_edge_bps": "12",
+        "capture_fraction": "0.70",
+        "profit_at_fit": "2.8648",
+        "profit_at_zero": "2.8648",
+        "windows_per_day": 1.023,
+        "profit_per_day": "1.4648",
+        "fitted": true
+      },
+      "sweep_selected": [
+        {
+          "min_edge_bps": "0",
+          "n_windows": 2,
+          "windows_per_day": 1.023,
+          "duration_median_ms": 0,
+          "duration_p90_ms": 30159,
+          "capturable_profit_usd": "2.8648",
+          "capturable_profit_per_day": "1.4648"
+        },
+        {
+          "min_edge_bps": "10",
+          "n_windows": 2,
+          "windows_per_day": 1.023,
+          "duration_median_ms": 0,
+          "duration_p90_ms": 30159,
+          "capturable_profit_usd": "2.8648",
+          "capturable_profit_per_day": "1.4648"
+        },
+        {
+          "min_edge_bps": "20",
+          "n_windows": 1,
+          "windows_per_day": 0.511,
+          "duration_median_ms": 15864,
+          "duration_p90_ms": 15864,
+          "capturable_profit_usd": "2.3221",
+          "capturable_profit_per_day": "1.1873"
+        },
+        {
+          "min_edge_bps": "40",
+          "n_windows": 0,
+          "windows_per_day": 0.0,
+          "duration_median_ms": 0,
+          "duration_p90_ms": 0,
+          "capturable_profit_usd": "0",
+          "capturable_profit_per_day": "0"
+        },
+        {
+          "min_edge_bps": "60",
+          "n_windows": 0,
+          "windows_per_day": 0.0,
+          "duration_median_ms": 0,
+          "duration_p90_ms": 0,
+          "capturable_profit_usd": "0",
+          "capturable_profit_per_day": "0"
+        }
+      ]
+    },
+    "CRCLx|buy_bybit_sell_fluxion|open|amm|500": {
+      "n_samples": 1235,
+      "windows_at_zero": 6,
+      "profit_at_zero": "16.7905752184340709228321493",
+      "profit_per_day_at_zero": "8.585337367059196161178548842",
+      "fit": {
+        "min_edge_bps": "60",
+        "capture_fraction": "0.70",
+        "profit_at_fit": "24.9834",
+        "profit_at_zero": "16.7906",
+        "windows_per_day": 3.068,
+        "profit_per_day": "12.7745",
+        "fitted": true
+      },
+      "sweep_selected": [
+        {
+          "min_edge_bps": "0",
+          "n_windows": 6,
+          "windows_per_day": 3.068,
+          "duration_median_ms": 28772,
+          "duration_p90_ms": 210145,
+          "capturable_profit_usd": "16.7906",
+          "capturable_profit_per_day": "8.5853"
+        },
+        {
+          "min_edge_bps": "10",
+          "n_windows": 5,
+          "windows_per_day": 2.557,
+          "duration_median_ms": 58446,
+          "duration_p90_ms": 254660,
+          "capturable_profit_usd": "16.7889",
+          "capturable_profit_per_day": "8.5845"
+        },
+        {
+          "min_edge_bps": "20",
+          "n_windows": 6,
+          "windows_per_day": 3.068,
+          "duration_median_ms": 0,
+          "duration_p90_ms": 179585,
+          "capturable_profit_usd": "19.1297",
+          "capturable_profit_per_day": "9.7814"
+        },
+        {
+          "min_edge_bps": "40",
+          "n_windows": 9,
+          "windows_per_day": 4.602,
+          "duration_median_ms": 0,
+          "duration_p90_ms": 105488,
+          "capturable_profit_usd": "31.2478",
+          "capturable_profit_per_day": "15.9776"
+        },
+        {
+          "min_edge_bps": "60",
+          "n_windows": 6,
+          "windows_per_day": 3.068,
+          "duration_median_ms": 0,
+          "duration_p90_ms": 89824,
+          "capturable_profit_usd": "24.9834",
+          "capturable_profit_per_day": "12.7745"
+        }
+      ]
+    },
+    "CRCLx|buy_fluxion_sell_bybit|closed|amm|1000": {
+      "n_samples": 3830,
+      "windows_at_zero": 2,
+      "profit_at_zero": "14.5111423864964263075691540",
+      "profit_per_day_at_zero": "7.419820425968899084942716701",
+      "fit": {
+        "min_edge_bps": "60",
+        "capture_fraction": "0.70",
+        "profit_at_fit": "27.1464",
+        "profit_at_zero": "14.5111",
+        "windows_per_day": 1.534,
+        "profit_per_day": "13.8804",
+        "fitted": true
+      },
+      "sweep_selected": [
+        {
+          "min_edge_bps": "0",
+          "n_windows": 2,
+          "windows_per_day": 1.023,
+          "duration_median_ms": 104606,
+          "duration_p90_ms": 149811,
+          "capturable_profit_usd": "14.5111",
+          "capturable_profit_per_day": "7.4198"
+        },
+        {
+          "min_edge_bps": "10",
+          "n_windows": 3,
+          "windows_per_day": 1.534,
+          "duration_median_ms": 60125,
+          "duration_p90_ms": 149811,
+          "capturable_profit_usd": "16.6139",
+          "capturable_profit_per_day": "8.4950"
+        },
+        {
+          "min_edge_bps": "20",
+          "n_windows": 3,
+          "windows_per_day": 1.534,
+          "duration_median_ms": 60125,
+          "duration_p90_ms": 149811,
+          "capturable_profit_usd": "16.6139",
+          "capturable_profit_per_day": "8.4950"
+        },
+        {
+          "min_edge_bps": "40",
+          "n_windows": 3,
+          "windows_per_day": 1.534,
+          "duration_median_ms": 43834,
+          "duration_p90_ms": 60125,
+          "capturable_profit_usd": "20.5882",
+          "capturable_profit_per_day": "10.5271"
+        },
+        {
+          "min_edge_bps": "60",
+          "n_windows": 3,
+          "windows_per_day": 1.534,
+          "duration_median_ms": 13876,
+          "duration_p90_ms": 30115,
+          "capturable_profit_usd": "27.1464",
+          "capturable_profit_per_day": "13.8804"
+        }
+      ]
+    },
+    "CRCLx|buy_fluxion_sell_bybit|closed|amm|500": {
+      "n_samples": 3830,
+      "windows_at_zero": 17,
+      "profit_at_zero": "12.0719175956912106218811936",
+      "profit_per_day_at_zero": "6.172598846557742405965655845",
+      "fit": {
+        "min_edge_bps": "60",
+        "capture_fraction": "0.70",
+        "profit_at_fit": "16.8068",
+        "profit_at_zero": "12.0719",
+        "windows_per_day": 2.045,
+        "profit_per_day": "8.5936",
+        "fitted": true
+      },
+      "sweep_selected": [
+        {
+          "min_edge_bps": "0",
+          "n_windows": 17,
+          "windows_per_day": 8.692,
+          "duration_median_ms": 29983,
+          "duration_p90_ms": 179642,
+          "capturable_profit_usd": "12.0719",
+          "capturable_profit_per_day": "6.1726"
+        },
+        {
+          "min_edge_bps": "10",
+          "n_windows": 14,
+          "windows_per_day": 7.158,
+          "duration_median_ms": 29026,
+          "duration_p90_ms": 179642,
+          "capturable_profit_usd": "19.0709",
+          "capturable_profit_per_day": "9.7513"
+        },
+        {
+          "min_edge_bps": "20",
+          "n_windows": 10,
+          "windows_per_day": 5.113,
+          "duration_median_ms": 15761,
+          "duration_p90_ms": 179642,
+          "capturable_profit_usd": "19.6664",
+          "capturable_profit_per_day": "10.0558"
+        },
+        {
+          "min_edge_bps": "40",
+          "n_windows": 7,
+          "windows_per_day": 3.579,
+          "duration_median_ms": 29935,
+          "duration_p90_ms": 134553,
+          "capturable_profit_usd": "22.4621",
+          "capturable_profit_per_day": "11.4853"
+        },
+        {
+          "min_edge_bps": "60",
+          "n_windows": 4,
+          "windows_per_day": 2.045,
+          "duration_median_ms": 134553,
+          "duration_p90_ms": 179642,
+          "capturable_profit_usd": "16.8068",
+          "capturable_profit_per_day": "8.5936"
+        }
+      ]
+    },
+    "CRCLx|buy_fluxion_sell_bybit|closed|rfq|poll_native": {
+      "n_samples": 705,
+      "windows_at_zero": 0,
+      "profit_at_zero": "0",
+      "profit_per_day_at_zero": "0E+27",
+      "fit": {
+        "min_edge_bps": "0",
+        "capture_fraction": "0.70",
+        "profit_at_fit": "0",
+        "profit_at_zero": "0",
+        "windows_per_day": 0.0,
+        "profit_per_day": "0",
+        "fitted": false
+      },
+      "sweep_selected": [
+        {
+          "min_edge_bps": "0",
+          "n_windows": 0,
+          "windows_per_day": 0.0,
+          "duration_median_ms": 0,
+          "duration_p90_ms": 0,
+          "capturable_profit_usd": "0",
+          "capturable_profit_per_day": "0"
+        },
+        {
+          "min_edge_bps": "10",
+          "n_windows": 0,
+          "windows_per_day": 0.0,
+          "duration_median_ms": 0,
+          "duration_p90_ms": 0,
+          "capturable_profit_usd": "0",
+          "capturable_profit_per_day": "0"
+        },
+        {
+          "min_edge_bps": "20",
+          "n_windows": 0,
+          "windows_per_day": 0.0,
+          "duration_median_ms": 0,
+          "duration_p90_ms": 0,
+          "capturable_profit_usd": "0",
+          "capturable_profit_per_day": "0"
+        },
+        {
+          "min_edge_bps": "40",
+          "n_windows": 0,
+          "windows_per_day": 0.0,
+          "duration_median_ms": 0,
+          "duration_p90_ms": 0,
+          "capturable_profit_usd": "0",
+          "capturable_profit_per_day": "0"
+        },
+        {
+          "min_edge_bps": "60",
+          "n_windows": 0,
+          "windows_per_day": 0.0,
+          "duration_median_ms": 0,
+          "duration_p90_ms": 0,
+          "capturable_profit_usd": "0",
+          "capturable_profit_per_day": "0"
+        }
+      ]
+    },
+    "CRCLx|buy_fluxion_sell_bybit|open|amm|1000": {
+      "n_samples": 1235,
+      "windows_at_zero": 10,
+      "profit_at_zero": "22.4933744902120790372728741",
+      "profit_per_day_at_zero": "11.50128604945340625351680433",
+      "fit": {
+        "min_edge_bps": "60",
+        "capture_fraction": "0.70",
+        "profit_at_fit": "18.2197",
+        "profit_at_zero": "22.4934",
+        "windows_per_day": 1.023,
+        "profit_per_day": "9.3161",
+        "fitted": true
+      },
+      "sweep_selected": [
+        {
+          "min_edge_bps": "0",
+          "n_windows": 10,
+          "windows_per_day": 5.113,
+          "duration_median_ms": 0,
+          "duration_p90_ms": 89643,
+          "capturable_profit_usd": "22.4934",
+          "capturable_profit_per_day": "11.5013"
+        },
+        {
+          "min_edge_bps": "10",
+          "n_windows": 9,
+          "windows_per_day": 4.602,
+          "duration_median_ms": 13745,
+          "duration_p90_ms": 89643,
+          "capturable_profit_usd": "30.4133",
+          "capturable_profit_per_day": "15.5509"
+        },
+        {
+          "min_edge_bps": "20",
+          "n_windows": 5,
+          "windows_per_day": 2.557,
+          "duration_median_ms": 13616,
+          "duration_p90_ms": 89643,
+          "capturable_profit_usd": "25.8594",
+          "capturable_profit_per_day": "13.2224"
+        },
+        {
+          "min_edge_bps": "40",
+          "n_windows": 2,
+          "windows_per_day": 1.023,
+          "duration_median_ms": 0,
+          "duration_p90_ms": 89643,
+          "capturable_profit_usd": "18.2197",
+          "capturable_profit_per_day": "9.3161"
+        },
+        {
+          "min_edge_bps": "60",
+          "n_windows": 2,
+          "windows_per_day": 1.023,
+          "duration_median_ms": 0,
+          "duration_p90_ms": 89643,
+          "capturable_profit_usd": "18.2197",
+          "capturable_profit_per_day": "9.3161"
+        }
+      ]
+    },
+    "CRCLx|buy_fluxion_sell_bybit|open|amm|500": {
+      "n_samples": 1235,
+      "windows_at_zero": 11,
+      "profit_at_zero": "22.4891638121806869076763439",
+      "profit_per_day_at_zero": "11.49913305046598159583150700",
+      "fit": {
+        "min_edge_bps": "60",
+        "capture_fraction": "0.70",
+        "profit_at_fit": "49.7043",
+        "profit_at_zero": "22.4892",
+        "windows_per_day": 5.625,
+        "profit_per_day": "25.4147",
+        "fitted": true
+      },
+      "sweep_selected": [
+        {
+          "min_edge_bps": "0",
+          "n_windows": 11,
+          "windows_per_day": 5.625,
+          "duration_median_ms": 31915,
+          "duration_p90_ms": 1184206,
+          "capturable_profit_usd": "22.4892",
+          "capturable_profit_per_day": "11.4991"
+        },
+        {
+          "min_edge_bps": "10",
+          "n_windows": 15,
+          "windows_per_day": 7.67,
+          "duration_median_ms": 55995,
+          "duration_p90_ms": 859122,
+          "capturable_profit_usd": "31.4858",
+          "capturable_profit_per_day": "16.0993"
+        },
+        {
+          "min_edge_bps": "20",
+          "n_windows": 18,
+          "windows_per_day": 9.204,
+          "duration_median_ms": 21657,
+          "duration_p90_ms": 301207,
+          "capturable_profit_usd": "42.5315",
+          "capturable_profit_per_day": "21.7472"
+        },
+        {
+          "min_edge_bps": "40",
+          "n_windows": 6,
+          "windows_per_day": 3.068,
+          "duration_median_ms": 58782,
+          "duration_p90_ms": 480246,
+          "capturable_profit_usd": "30.3120",
+          "capturable_profit_per_day": "15.4991"
+        },
+        {
+          "min_edge_bps": "60",
+          "n_windows": 11,
+          "windows_per_day": 5.625,
+          "duration_median_ms": 16369,
+          "duration_p90_ms": 225061,
+          "capturable_profit_usd": "49.7043",
+          "capturable_profit_per_day": "25.4147"
+        }
+      ]
+    },
+    "CRCLx|buy_fluxion_sell_bybit|open|rfq|poll_native": {
+      "n_samples": 359,
+      "windows_at_zero": 0,
+      "profit_at_zero": "0",
+      "profit_per_day_at_zero": "0E+27",
+      "fit": {
+        "min_edge_bps": "0",
+        "capture_fraction": "0.70",
+        "profit_at_fit": "0",
+        "profit_at_zero": "0",
+        "windows_per_day": 0.0,
+        "profit_per_day": "0",
+        "fitted": false
+      },
+      "sweep_selected": [
+        {
+          "min_edge_bps": "0",
+          "n_windows": 0,
+          "windows_per_day": 0.0,
+          "duration_median_ms": 0,
+          "duration_p90_ms": 0,
+          "capturable_profit_usd": "0",
+          "capturable_profit_per_day": "0"
+        },
+        {
+          "min_edge_bps": "10",
+          "n_windows": 0,
+          "windows_per_day": 0.0,
+          "duration_median_ms": 0,
+          "duration_p90_ms": 0,
+          "capturable_profit_usd": "0",
+          "capturable_profit_per_day": "0"
+        },
+        {
+          "min_edge_bps": "20",
+          "n_windows": 0,
+          "windows_per_day": 0.0,
+          "duration_median_ms": 0,
+          "duration_p90_ms": 0,
+          "capturable_profit_usd": "0",
+          "capturable_profit_per_day": "0"
+        },
+        {
+          "min_edge_bps": "40",
+          "n_windows": 0,
+          "windows_per_day": 0.0,
+          "duration_median_ms": 0,
+          "duration_p90_ms": 0,
+          "capturable_profit_usd": "0",
+          "capturable_profit_per_day": "0"
+        },
+        {
+          "min_edge_bps": "60",
+          "n_windows": 0,
+          "windows_per_day": 0.0,
+          "duration_median_ms": 0,
+          "duration_p90_ms": 0,
+          "capturable_profit_usd": "0",
+          "capturable_profit_per_day": "0"
+        }
+      ]
+    },
+    "GOOGLx|buy_bybit_sell_fluxion|closed|amm|1000": {
+      "n_samples": 3511,
+      "windows_at_zero": 0,
+      "profit_at_zero": "0",
+      "profit_per_day_at_zero": "0E+27",
+      "fit": {
+        "min_edge_bps": "0",
+        "capture_fraction": "0.70",
+        "profit_at_fit": "0",
+        "profit_at_zero": "0",
+        "windows_per_day": 0.0,
+        "profit_per_day": "0",
+        "fitted": false
+      },
+      "sweep_selected": [
+        {
+          "min_edge_bps": "0",
+          "n_windows": 0,
+          "windows_per_day": 0.0,
+          "duration_median_ms": 0,
+          "duration_p90_ms": 0,
+          "capturable_profit_usd": "0",
+          "capturable_profit_per_day": "0"
+        },
+        {
+          "min_edge_bps": "10",
+          "n_windows": 0,
+          "windows_per_day": 0.0,
+          "duration_median_ms": 0,
+          "duration_p90_ms": 0,
+          "capturable_profit_usd": "0",
+          "capturable_profit_per_day": "0"
+        },
+        {
+          "min_edge_bps": "20",
+          "n_windows": 0,
+          "windows_per_day": 0.0,
+          "duration_median_ms": 0,
+          "duration_p90_ms": 0,
+          "capturable_profit_usd": "0",
+          "capturable_profit_per_day": "0"
+        },
+        {
+          "min_edge_bps": "40",
+          "n_windows": 0,
+          "windows_per_day": 0.0,
+          "duration_median_ms": 0,
+          "duration_p90_ms": 0,
+          "capturable_profit_usd": "0",
+          "capturable_profit_per_day": "0"
+        },
+        {
+          "min_edge_bps": "60",
+          "n_windows": 0,
+          "windows_per_day": 0.0,
+          "duration_median_ms": 0,
+          "duration_p90_ms": 0,
+          "capturable_profit_usd": "0",
+          "capturable_profit_per_day": "0"
+        }
+      ]
+    },
+    "GOOGLx|buy_bybit_sell_fluxion|closed|amm|500": {
+      "n_samples": 3513,
+      "windows_at_zero": 0,
+      "profit_at_zero": "0",
+      "profit_per_day_at_zero": "0E+27",
+      "fit": {
+        "min_edge_bps": "0",
+        "capture_fraction": "0.70",
+        "profit_at_fit": "0",
+        "profit_at_zero": "0",
+        "windows_per_day": 0.0,
+        "profit_per_day": "0",
+        "fitted": false
+      },
+      "sweep_selected": [
+        {
+          "min_edge_bps": "0",
+          "n_windows": 0,
+          "windows_per_day": 0.0,
+          "duration_median_ms": 0,
+          "duration_p90_ms": 0,
+          "capturable_profit_usd": "0",
+          "capturable_profit_per_day": "0"
+        },
+        {
+          "min_edge_bps": "10",
+          "n_windows": 0,
+          "windows_per_day": 0.0,
+          "duration_median_ms": 0,
+          "duration_p90_ms": 0,
+          "capturable_profit_usd": "0",
+          "capturable_profit_per_day": "0"
+        },
+        {
+          "min_edge_bps": "20",
+          "n_windows": 0,
+          "windows_per_day": 0.0,
+          "duration_median_ms": 0,
+          "duration_p90_ms": 0,
+          "capturable_profit_usd": "0",
+          "capturable_profit_per_day": "0"
+        },
+        {
+          "min_edge_bps": "40",
+          "n_windows": 0,
+          "windows_per_day": 0.0,
+          "duration_median_ms": 0,
+          "duration_p90_ms": 0,
+          "capturable_profit_usd": "0",
+          "capturable_profit_per_day": "0"
+        },
+        {
+          "min_edge_bps": "60",
+          "n_windows": 0,
+          "windows_per_day": 0.0,
+          "duration_median_ms": 0,
+          "duration_p90_ms": 0,
+          "capturable_profit_usd": "0",
+          "capturable_profit_per_day": "0"
+        }
+      ]
+    },
+    "GOOGLx|buy_bybit_sell_fluxion|closed|rfq|poll_native": {
+      "n_samples": 634,
+      "windows_at_zero": 0,
+      "profit_at_zero": "0",
+      "profit_per_day_at_zero": "0E+27",
+      "fit": {
+        "min_edge_bps": "0",
+        "capture_fraction": "0.70",
+        "profit_at_fit": "0",
+        "profit_at_zero": "0",
+        "windows_per_day": 0.0,
+        "profit_per_day": "0",
+        "fitted": false
+      },
+      "sweep_selected": [
+        {
+          "min_edge_bps": "0",
+          "n_windows": 0,
+          "windows_per_day": 0.0,
+          "duration_median_ms": 0,
+          "duration_p90_ms": 0,
+          "capturable_profit_usd": "0",
+          "capturable_profit_per_day": "0"
+        },
+        {
+          "min_edge_bps": "10",
+          "n_windows": 0,
+          "windows_per_day": 0.0,
+          "duration_median_ms": 0,
+          "duration_p90_ms": 0,
+          "capturable_profit_usd": "0",
+          "capturable_profit_per_day": "0"
+        },
+        {
+          "min_edge_bps": "20",
+          "n_windows": 0,
+          "windows_per_day": 0.0,
+          "duration_median_ms": 0,
+          "duration_p90_ms": 0,
+          "capturable_profit_usd": "0",
+          "capturable_profit_per_day": "0"
+        },
+        {
+          "min_edge_bps": "40",
+          "n_windows": 0,
+          "windows_per_day": 0.0,
+          "duration_median_ms": 0,
+          "duration_p90_ms": 0,
+          "capturable_profit_usd": "0",
+          "capturable_profit_per_day": "0"
+        },
+        {
+          "min_edge_bps": "60",
+          "n_windows": 0,
+          "windows_per_day": 0.0,
+          "duration_median_ms": 0,
+          "duration_p90_ms": 0,
+          "capturable_profit_usd": "0",
+          "capturable_profit_per_day": "0"
+        }
+      ]
+    },
+    "GOOGLx|buy_bybit_sell_fluxion|open|amm|1000": {
+      "n_samples": 1241,
+      "windows_at_zero": 0,
+      "profit_at_zero": "0",
+      "profit_per_day_at_zero": "0E+27",
+      "fit": {
+        "min_edge_bps": "0",
+        "capture_fraction": "0.70",
+        "profit_at_fit": "0",
+        "profit_at_zero": "0",
+        "windows_per_day": 0.0,
+        "profit_per_day": "0",
+        "fitted": false
+      },
+      "sweep_selected": [
+        {
+          "min_edge_bps": "0",
+          "n_windows": 0,
+          "windows_per_day": 0.0,
+          "duration_median_ms": 0,
+          "duration_p90_ms": 0,
+          "capturable_profit_usd": "0",
+          "capturable_profit_per_day": "0"
+        },
+        {
+          "min_edge_bps": "10",
+          "n_windows": 0,
+          "windows_per_day": 0.0,
+          "duration_median_ms": 0,
+          "duration_p90_ms": 0,
+          "capturable_profit_usd": "0",
+          "capturable_profit_per_day": "0"
+        },
+        {
+          "min_edge_bps": "20",
+          "n_windows": 0,
+          "windows_per_day": 0.0,
+          "duration_median_ms": 0,
+          "duration_p90_ms": 0,
+          "capturable_profit_usd": "0",
+          "capturable_profit_per_day": "0"
+        },
+        {
+          "min_edge_bps": "40",
+          "n_windows": 0,
+          "windows_per_day": 0.0,
+          "duration_median_ms": 0,
+          "duration_p90_ms": 0,
+          "capturable_profit_usd": "0",
+          "capturable_profit_per_day": "0"
+        },
+        {
+          "min_edge_bps": "60",
+          "n_windows": 0,
+          "windows_per_day": 0.0,
+          "duration_median_ms": 0,
+          "duration_p90_ms": 0,
+          "capturable_profit_usd": "0",
+          "capturable_profit_per_day": "0"
+        }
+      ]
+    },
+    "GOOGLx|buy_bybit_sell_fluxion|open|amm|500": {
+      "n_samples": 1241,
+      "windows_at_zero": 0,
+      "profit_at_zero": "0",
+      "profit_per_day_at_zero": "0E+27",
+      "fit": {
+        "min_edge_bps": "0",
+        "capture_fraction": "0.70",
+        "profit_at_fit": "0",
+        "profit_at_zero": "0",
+        "windows_per_day": 0.0,
+        "profit_per_day": "0",
+        "fitted": false
+      },
+      "sweep_selected": [
+        {
+          "min_edge_bps": "0",
+          "n_windows": 0,
+          "windows_per_day": 0.0,
+          "duration_median_ms": 0,
+          "duration_p90_ms": 0,
+          "capturable_profit_usd": "0",
+          "capturable_profit_per_day": "0"
+        },
+        {
+          "min_edge_bps": "10",
+          "n_windows": 0,
+          "windows_per_day": 0.0,
+          "duration_median_ms": 0,
+          "duration_p90_ms": 0,
+          "capturable_profit_usd": "0",
+          "capturable_profit_per_day": "0"
+        },
+        {
+          "min_edge_bps": "20",
+          "n_windows": 0,
+          "windows_per_day": 0.0,
+          "duration_median_ms": 0,
+          "duration_p90_ms": 0,
+          "capturable_profit_usd": "0",
+          "capturable_profit_per_day": "0"
+        },
+        {
+          "min_edge_bps": "40",
+          "n_windows": 0,
+          "windows_per_day": 0.0,
+          "duration_median_ms": 0,
+          "duration_p90_ms": 0,
+          "capturable_profit_usd": "0",
+          "capturable_profit_per_day": "0"
+        },
+        {
+          "min_edge_bps": "60",
+          "n_windows": 0,
+          "windows_per_day": 0.0,
+          "duration_median_ms": 0,
+          "duration_p90_ms": 0,
+          "capturable_profit_usd": "0",
+          "capturable_profit_per_day": "0"
+        }
+      ]
+    },
+    "GOOGLx|buy_bybit_sell_fluxion|open|rfq|poll_native": {
+      "n_samples": 365,
+      "windows_at_zero": 0,
+      "profit_at_zero": "0",
+      "profit_per_day_at_zero": "0E+27",
+      "fit": {
+        "min_edge_bps": "0",
+        "capture_fraction": "0.70",
+        "profit_at_fit": "0",
+        "profit_at_zero": "0",
+        "windows_per_day": 0.0,
+        "profit_per_day": "0",
+        "fitted": false
+      },
+      "sweep_selected": [
+        {
+          "min_edge_bps": "0",
+          "n_windows": 0,
+          "windows_per_day": 0.0,
+          "duration_median_ms": 0,
+          "duration_p90_ms": 0,
+          "capturable_profit_usd": "0",
+          "capturable_profit_per_day": "0"
+        },
+        {
+          "min_edge_bps": "10",
+          "n_windows": 0,
+          "windows_per_day": 0.0,
+          "duration_median_ms": 0,
+          "duration_p90_ms": 0,
+          "capturable_profit_usd": "0",
+          "capturable_profit_per_day": "0"
+        },
+        {
+          "min_edge_bps": "20",
+          "n_windows": 0,
+          "windows_per_day": 0.0,
+          "duration_median_ms": 0,
+          "duration_p90_ms": 0,
+          "capturable_profit_usd": "0",
+          "capturable_profit_per_day": "0"
+        },
+        {
+          "min_edge_bps": "40",
+          "n_windows": 0,
+          "windows_per_day": 0.0,
+          "duration_median_ms": 0,
+          "duration_p90_ms": 0,
+          "capturable_profit_usd": "0",
+          "capturable_profit_per_day": "0"
+        },
+        {
+          "min_edge_bps": "60",
+          "n_windows": 0,
+          "windows_per_day": 0.0,
+          "duration_median_ms": 0,
+          "duration_p90_ms": 0,
+          "capturable_profit_usd": "0",
+          "capturable_profit_per_day": "0"
+        }
+      ]
+    },
+    "GOOGLx|buy_fluxion_sell_bybit|closed|amm|1000": {
+      "n_samples": 3513,
+      "windows_at_zero": 3,
+      "profit_at_zero": "9.2541751124684064845469308",
+      "profit_per_day_at_zero": "4.731834041466148528657886895",
+      "fit": {
+        "min_edge_bps": "32",
+        "capture_fraction": "0.70",
+        "profit_at_fit": "8.1284",
+        "profit_at_zero": "9.2542",
+        "windows_per_day": 1.023,
+        "profit_per_day": "4.1562",
+        "fitted": true
+      },
+      "sweep_selected": [
+        {
+          "min_edge_bps": "0",
+          "n_windows": 3,
+          "windows_per_day": 1.534,
+          "duration_median_ms": 0,
+          "duration_p90_ms": 12378,
+          "capturable_profit_usd": "9.2542",
+          "capturable_profit_per_day": "4.7318"
+        },
+        {
+          "min_edge_bps": "10",
+          "n_windows": 3,
+          "windows_per_day": 1.534,
+          "duration_median_ms": 0,
+          "duration_p90_ms": 12378,
+          "capturable_profit_usd": "9.2542",
+          "capturable_profit_per_day": "4.7318"
+        },
+        {
+          "min_edge_bps": "20",
+          "n_windows": 2,
+          "windows_per_day": 1.023,
+          "duration_median_ms": 0,
+          "duration_p90_ms": 12378,
+          "capturable_profit_usd": "8.1284",
+          "capturable_profit_per_day": "4.1562"
+        },
+        {
+          "min_edge_bps": "40",
+          "n_windows": 1,
+          "windows_per_day": 0.511,
+          "duration_median_ms": 0,
+          "duration_p90_ms": 0,
+          "capturable_profit_usd": "4.9277",
+          "capturable_profit_per_day": "2.5196"
+        },
+        {
+          "min_edge_bps": "60",
+          "n_windows": 0,
+          "windows_per_day": 0.0,
+          "duration_median_ms": 0,
+          "duration_p90_ms": 0,
+          "capturable_profit_usd": "0",
+          "capturable_profit_per_day": "0"
+        }
+      ]
+    },
+    "GOOGLx|buy_fluxion_sell_bybit|closed|amm|500": {
+      "n_samples": 3513,
+      "windows_at_zero": 5,
+      "profit_at_zero": "7.3741101551305339472300649",
+      "profit_per_day_at_zero": "3.770521416928396810217206155",
+      "fit": {
+        "min_edge_bps": "60",
+        "capture_fraction": "0.70",
+        "profit_at_fit": "21.3087",
+        "profit_at_zero": "7.3741",
+        "windows_per_day": 3.068,
+        "profit_per_day": "10.8955",
+        "fitted": true
+      },
+      "sweep_selected": [
+        {
+          "min_edge_bps": "0",
+          "n_windows": 5,
+          "windows_per_day": 2.557,
+          "duration_median_ms": 296138,
+          "duration_p90_ms": 1606107,
+          "capturable_profit_usd": "7.3741",
+          "capturable_profit_per_day": "3.7705"
+        },
+        {
+          "min_edge_bps": "10",
+          "n_windows": 8,
+          "windows_per_day": 4.091,
+          "duration_median_ms": 206056,
+          "duration_p90_ms": 748148,
+          "capturable_profit_usd": "11.0557",
+          "capturable_profit_per_day": "5.6530"
+        },
+        {
+          "min_edge_bps": "20",
+          "n_windows": 13,
+          "windows_per_day": 6.647,
+          "duration_median_ms": 38992,
+          "duration_p90_ms": 131547,
+          "capturable_profit_usd": "19.8540",
+          "capturable_profit_per_day": "10.1517"
+        },
+        {
+          "min_edge_bps": "40",
+          "n_windows": 5,
+          "windows_per_day": 2.557,
+          "duration_median_ms": 30256,
+          "duration_p90_ms": 129285,
+          "capturable_profit_usd": "15.0703",
+          "capturable_profit_per_day": "7.7057"
+        },
+        {
+          "min_edge_bps": "60",
+          "n_windows": 6,
+          "windows_per_day": 3.068,
+          "duration_median_ms": 0,
+          "duration_p90_ms": 44811,
+          "capturable_profit_usd": "21.3087",
+          "capturable_profit_per_day": "10.8955"
+        }
+      ]
+    },
+    "GOOGLx|buy_fluxion_sell_bybit|closed|rfq|poll_native": {
+      "n_samples": 630,
+      "windows_at_zero": 1,
+      "profit_at_zero": "0.9509837451604075071496708",
+      "profit_per_day_at_zero": "0.4862559010978891777127408719",
+      "fit": {
+        "min_edge_bps": "60",
+        "capture_fraction": "0.70",
+        "profit_at_fit": "0.9510",
+        "profit_at_zero": "0.9510",
+        "windows_per_day": 0.511,
+        "profit_per_day": "0.4863",
+        "fitted": true
+      },
+      "sweep_selected": [
+        {
+          "min_edge_bps": "0",
+          "n_windows": 1,
+          "windows_per_day": 0.511,
+          "duration_median_ms": 429183,
+          "duration_p90_ms": 429183,
+          "capturable_profit_usd": "0.9510",
+          "capturable_profit_per_day": "0.4863"
+        },
+        {
+          "min_edge_bps": "10",
+          "n_windows": 1,
+          "windows_per_day": 0.511,
+          "duration_median_ms": 429183,
+          "duration_p90_ms": 429183,
+          "capturable_profit_usd": "0.9510",
+          "capturable_profit_per_day": "0.4863"
+        },
+        {
+          "min_edge_bps": "20",
+          "n_windows": 2,
+          "windows_per_day": 1.023,
+          "duration_median_ms": 153650,
+          "duration_p90_ms": 165275,
+          "capturable_profit_usd": "1.5429",
+          "capturable_profit_per_day": "0.7889"
+        },
+        {
+          "min_edge_bps": "40",
+          "n_windows": 3,
+          "windows_per_day": 1.534,
+          "duration_median_ms": 55008,
+          "duration_p90_ms": 153650,
+          "capturable_profit_usd": "2.1350",
+          "capturable_profit_per_day": "1.0917"
+        },
+        {
+          "min_edge_bps": "60",
+          "n_windows": 1,
+          "windows_per_day": 0.511,
+          "duration_median_ms": 153650,
+          "duration_p90_ms": 153650,
+          "capturable_profit_usd": "0.9510",
+          "capturable_profit_per_day": "0.4863"
+        }
+      ]
+    },
+    "GOOGLx|buy_fluxion_sell_bybit|open|amm|1000": {
+      "n_samples": 1241,
+      "windows_at_zero": 2,
+      "profit_at_zero": "1.6329203974495295973350260",
+      "profit_per_day_at_zero": "0.8349429559902869140759367084",
+      "fit": {
+        "min_edge_bps": "12",
+        "capture_fraction": "0.70",
+        "profit_at_fit": "1.2657",
+        "profit_at_zero": "1.6329",
+        "windows_per_day": 0.511,
+        "profit_per_day": "0.6472",
+        "fitted": true
+      },
+      "sweep_selected": [
+        {
+          "min_edge_bps": "0",
+          "n_windows": 2,
+          "windows_per_day": 1.023,
+          "duration_median_ms": 0,
+          "duration_p90_ms": 0,
+          "capturable_profit_usd": "1.6329",
+          "capturable_profit_per_day": "0.8349"
+        },
+        {
+          "min_edge_bps": "10",
+          "n_windows": 1,
+          "windows_per_day": 0.511,
+          "duration_median_ms": 0,
+          "duration_p90_ms": 0,
+          "capturable_profit_usd": "1.2657",
+          "capturable_profit_per_day": "0.6472"
+        },
+        {
+          "min_edge_bps": "20",
+          "n_windows": 0,
+          "windows_per_day": 0.0,
+          "duration_median_ms": 0,
+          "duration_p90_ms": 0,
+          "capturable_profit_usd": "0",
+          "capturable_profit_per_day": "0"
+        },
+        {
+          "min_edge_bps": "40",
+          "n_windows": 0,
+          "windows_per_day": 0.0,
+          "duration_median_ms": 0,
+          "duration_p90_ms": 0,
+          "capturable_profit_usd": "0",
+          "capturable_profit_per_day": "0"
+        },
+        {
+          "min_edge_bps": "60",
+          "n_windows": 0,
+          "windows_per_day": 0.0,
+          "duration_median_ms": 0,
+          "duration_p90_ms": 0,
+          "capturable_profit_usd": "0",
+          "capturable_profit_per_day": "0"
+        }
+      ]
+    },
+    "GOOGLx|buy_fluxion_sell_bybit|open|amm|500": {
+      "n_samples": 1241,
+      "windows_at_zero": 20,
+      "profit_at_zero": "10.6555357017463248335233234",
+      "profit_per_day_at_zero": "5.448376106007393064450100749",
+      "fit": {
+        "min_edge_bps": "60",
+        "capture_fraction": "0.70",
+        "profit_at_fit": "21.1815",
+        "profit_at_zero": "10.6555",
+        "windows_per_day": 3.068,
+        "profit_per_day": "10.8305",
+        "fitted": true
+      },
+      "sweep_selected": [
+        {
+          "min_edge_bps": "0",
+          "n_windows": 20,
+          "windows_per_day": 10.226,
+          "duration_median_ms": 17723,
+          "duration_p90_ms": 1234405,
+          "capturable_profit_usd": "10.6555",
+          "capturable_profit_per_day": "5.4484"
+        },
+        {
+          "min_edge_bps": "10",
+          "n_windows": 16,
+          "windows_per_day": 8.181,
+          "duration_median_ms": 133182,
+          "duration_p90_ms": 1154717,
+          "capturable_profit_usd": "16.2273",
+          "capturable_profit_per_day": "8.2973"
+        },
+        {
+          "min_edge_bps": "20",
+          "n_windows": 19,
+          "windows_per_day": 9.715,
+          "duration_median_ms": 0,
+          "duration_p90_ms": 934110,
+          "capturable_profit_usd": "25.1996",
+          "capturable_profit_per_day": "12.8850"
+        },
+        {
+          "min_edge_bps": "40",
+          "n_windows": 12,
+          "windows_per_day": 6.136,
+          "duration_median_ms": 89906,
+          "duration_p90_ms": 284837,
+          "capturable_profit_usd": "28.7205",
+          "capturable_profit_per_day": "14.6853"
+        },
+        {
+          "min_edge_bps": "60",
+          "n_windows": 6,
+          "windows_per_day": 3.068,
+          "duration_median_ms": 45453,
+          "duration_p90_ms": 120174,
+          "capturable_profit_usd": "21.1815",
+          "capturable_profit_per_day": "10.8305"
+        }
+      ]
+    },
+    "GOOGLx|buy_fluxion_sell_bybit|open|rfq|poll_native": {
+      "n_samples": 366,
+      "windows_at_zero": 0,
+      "profit_at_zero": "0",
+      "profit_per_day_at_zero": "0E+27",
+      "fit": {
+        "min_edge_bps": "0",
+        "capture_fraction": "0.70",
+        "profit_at_fit": "0",
+        "profit_at_zero": "0",
+        "windows_per_day": 0.0,
+        "profit_per_day": "0",
+        "fitted": false
+      },
+      "sweep_selected": [
+        {
+          "min_edge_bps": "0",
+          "n_windows": 0,
+          "windows_per_day": 0.0,
+          "duration_median_ms": 0,
+          "duration_p90_ms": 0,
+          "capturable_profit_usd": "0",
+          "capturable_profit_per_day": "0"
+        },
+        {
+          "min_edge_bps": "10",
+          "n_windows": 0,
+          "windows_per_day": 0.0,
+          "duration_median_ms": 0,
+          "duration_p90_ms": 0,
+          "capturable_profit_usd": "0",
+          "capturable_profit_per_day": "0"
+        },
+        {
+          "min_edge_bps": "20",
+          "n_windows": 0,
+          "windows_per_day": 0.0,
+          "duration_median_ms": 0,
+          "duration_p90_ms": 0,
+          "capturable_profit_usd": "0",
+          "capturable_profit_per_day": "0"
+        },
+        {
+          "min_edge_bps": "40",
+          "n_windows": 0,
+          "windows_per_day": 0.0,
+          "duration_median_ms": 0,
+          "duration_p90_ms": 0,
+          "capturable_profit_usd": "0",
+          "capturable_profit_per_day": "0"
+        },
+        {
+          "min_edge_bps": "60",
+          "n_windows": 0,
+          "windows_per_day": 0.0,
+          "duration_median_ms": 0,
+          "duration_p90_ms": 0,
+          "capturable_profit_usd": "0",
+          "capturable_profit_per_day": "0"
+        }
+      ]
+    },
+    "HOODx|buy_bybit_sell_fluxion|closed|amm|1000": {
+      "n_samples": 3269,
+      "windows_at_zero": 0,
+      "profit_at_zero": "0",
+      "profit_per_day_at_zero": "0E+27",
+      "fit": {
+        "min_edge_bps": "0",
+        "capture_fraction": "0.70",
+        "profit_at_fit": "0",
+        "profit_at_zero": "0",
+        "windows_per_day": 0.0,
+        "profit_per_day": "0",
+        "fitted": false
+      },
+      "sweep_selected": [
+        {
+          "min_edge_bps": "0",
+          "n_windows": 0,
+          "windows_per_day": 0.0,
+          "duration_median_ms": 0,
+          "duration_p90_ms": 0,
+          "capturable_profit_usd": "0",
+          "capturable_profit_per_day": "0"
+        },
+        {
+          "min_edge_bps": "10",
+          "n_windows": 0,
+          "windows_per_day": 0.0,
+          "duration_median_ms": 0,
+          "duration_p90_ms": 0,
+          "capturable_profit_usd": "0",
+          "capturable_profit_per_day": "0"
+        },
+        {
+          "min_edge_bps": "20",
+          "n_windows": 0,
+          "windows_per_day": 0.0,
+          "duration_median_ms": 0,
+          "duration_p90_ms": 0,
+          "capturable_profit_usd": "0",
+          "capturable_profit_per_day": "0"
+        },
+        {
+          "min_edge_bps": "40",
+          "n_windows": 0,
+          "windows_per_day": 0.0,
+          "duration_median_ms": 0,
+          "duration_p90_ms": 0,
+          "capturable_profit_usd": "0",
+          "capturable_profit_per_day": "0"
+        },
+        {
+          "min_edge_bps": "60",
+          "n_windows": 0,
+          "windows_per_day": 0.0,
+          "duration_median_ms": 0,
+          "duration_p90_ms": 0,
+          "capturable_profit_usd": "0",
+          "capturable_profit_per_day": "0"
+        }
+      ]
+    },
+    "HOODx|buy_bybit_sell_fluxion|closed|amm|500": {
+      "n_samples": 3274,
+      "windows_at_zero": 0,
+      "profit_at_zero": "0",
+      "profit_per_day_at_zero": "0E+27",
+      "fit": {
+        "min_edge_bps": "0",
+        "capture_fraction": "0.70",
+        "profit_at_fit": "0",
+        "profit_at_zero": "0",
+        "windows_per_day": 0.0,
+        "profit_per_day": "0",
+        "fitted": false
+      },
+      "sweep_selected": [
+        {
+          "min_edge_bps": "0",
+          "n_windows": 0,
+          "windows_per_day": 0.0,
+          "duration_median_ms": 0,
+          "duration_p90_ms": 0,
+          "capturable_profit_usd": "0",
+          "capturable_profit_per_day": "0"
+        },
+        {
+          "min_edge_bps": "10",
+          "n_windows": 0,
+          "windows_per_day": 0.0,
+          "duration_median_ms": 0,
+          "duration_p90_ms": 0,
+          "capturable_profit_usd": "0",
+          "capturable_profit_per_day": "0"
+        },
+        {
+          "min_edge_bps": "20",
+          "n_windows": 0,
+          "windows_per_day": 0.0,
+          "duration_median_ms": 0,
+          "duration_p90_ms": 0,
+          "capturable_profit_usd": "0",
+          "capturable_profit_per_day": "0"
+        },
+        {
+          "min_edge_bps": "40",
+          "n_windows": 0,
+          "windows_per_day": 0.0,
+          "duration_median_ms": 0,
+          "duration_p90_ms": 0,
+          "capturable_profit_usd": "0",
+          "capturable_profit_per_day": "0"
+        },
+        {
+          "min_edge_bps": "60",
+          "n_windows": 0,
+          "windows_per_day": 0.0,
+          "duration_median_ms": 0,
+          "duration_p90_ms": 0,
+          "capturable_profit_usd": "0",
+          "capturable_profit_per_day": "0"
+        }
+      ]
+    },
+    "HOODx|buy_bybit_sell_fluxion|open|amm|1000": {
+      "n_samples": 1183,
+      "windows_at_zero": 0,
+      "profit_at_zero": "0",
+      "profit_per_day_at_zero": "0E+27",
+      "fit": {
+        "min_edge_bps": "0",
+        "capture_fraction": "0.70",
+        "profit_at_fit": "0",
+        "profit_at_zero": "0",
+        "windows_per_day": 0.0,
+        "profit_per_day": "0",
+        "fitted": false
+      },
+      "sweep_selected": [
+        {
+          "min_edge_bps": "0",
+          "n_windows": 0,
+          "windows_per_day": 0.0,
+          "duration_median_ms": 0,
+          "duration_p90_ms": 0,
+          "capturable_profit_usd": "0",
+          "capturable_profit_per_day": "0"
+        },
+        {
+          "min_edge_bps": "10",
+          "n_windows": 0,
+          "windows_per_day": 0.0,
+          "duration_median_ms": 0,
+          "duration_p90_ms": 0,
+          "capturable_profit_usd": "0",
+          "capturable_profit_per_day": "0"
+        },
+        {
+          "min_edge_bps": "20",
+          "n_windows": 0,
+          "windows_per_day": 0.0,
+          "duration_median_ms": 0,
+          "duration_p90_ms": 0,
+          "capturable_profit_usd": "0",
+          "capturable_profit_per_day": "0"
+        },
+        {
+          "min_edge_bps": "40",
+          "n_windows": 0,
+          "windows_per_day": 0.0,
+          "duration_median_ms": 0,
+          "duration_p90_ms": 0,
+          "capturable_profit_usd": "0",
+          "capturable_profit_per_day": "0"
+        },
+        {
+          "min_edge_bps": "60",
+          "n_windows": 0,
+          "windows_per_day": 0.0,
+          "duration_median_ms": 0,
+          "duration_p90_ms": 0,
+          "capturable_profit_usd": "0",
+          "capturable_profit_per_day": "0"
+        }
+      ]
+    },
+    "HOODx|buy_bybit_sell_fluxion|open|amm|500": {
+      "n_samples": 1183,
+      "windows_at_zero": 0,
+      "profit_at_zero": "0",
+      "profit_per_day_at_zero": "0E+27",
+      "fit": {
+        "min_edge_bps": "0",
+        "capture_fraction": "0.70",
+        "profit_at_fit": "0",
+        "profit_at_zero": "0",
+        "windows_per_day": 0.0,
+        "profit_per_day": "0",
+        "fitted": false
+      },
+      "sweep_selected": [
+        {
+          "min_edge_bps": "0",
+          "n_windows": 0,
+          "windows_per_day": 0.0,
+          "duration_median_ms": 0,
+          "duration_p90_ms": 0,
+          "capturable_profit_usd": "0",
+          "capturable_profit_per_day": "0"
+        },
+        {
+          "min_edge_bps": "10",
+          "n_windows": 0,
+          "windows_per_day": 0.0,
+          "duration_median_ms": 0,
+          "duration_p90_ms": 0,
+          "capturable_profit_usd": "0",
+          "capturable_profit_per_day": "0"
+        },
+        {
+          "min_edge_bps": "20",
+          "n_windows": 0,
+          "windows_per_day": 0.0,
+          "duration_median_ms": 0,
+          "duration_p90_ms": 0,
+          "capturable_profit_usd": "0",
+          "capturable_profit_per_day": "0"
+        },
+        {
+          "min_edge_bps": "40",
+          "n_windows": 0,
+          "windows_per_day": 0.0,
+          "duration_median_ms": 0,
+          "duration_p90_ms": 0,
+          "capturable_profit_usd": "0",
+          "capturable_profit_per_day": "0"
+        },
+        {
+          "min_edge_bps": "60",
+          "n_windows": 0,
+          "windows_per_day": 0.0,
+          "duration_median_ms": 0,
+          "duration_p90_ms": 0,
+          "capturable_profit_usd": "0",
+          "capturable_profit_per_day": "0"
+        }
+      ]
+    },
+    "HOODx|buy_fluxion_sell_bybit|closed|amm|1000": {
+      "n_samples": 3274,
+      "windows_at_zero": 9,
+      "profit_at_zero": "5.0854644282529909951371645",
+      "profit_per_day_at_zero": "2.600293749126398880035694628",
+      "fit": {
+        "min_edge_bps": "54",
+        "capture_fraction": "0.70",
+        "profit_at_fit": "5.5060",
+        "profit_at_zero": "5.0855",
+        "windows_per_day": 0.511,
+        "profit_per_day": "2.8153",
+        "fitted": true
+      },
+      "sweep_selected": [
+        {
+          "min_edge_bps": "0",
+          "n_windows": 9,
+          "windows_per_day": 4.602,
+          "duration_median_ms": 309094,
+          "duration_p90_ms": 749350,
+          "capturable_profit_usd": "5.0855",
+          "capturable_profit_per_day": "2.6003"
+        },
+        {
+          "min_edge_bps": "10",
+          "n_windows": 7,
+          "windows_per_day": 3.579,
+          "duration_median_ms": 86322,
+          "duration_p90_ms": 134654,
+          "capturable_profit_usd": "13.2520",
+          "capturable_profit_per_day": "6.7760"
+        },
+        {
+          "min_edge_bps": "20",
+          "n_windows": 2,
+          "windows_per_day": 1.023,
+          "duration_median_ms": 47233,
+          "duration_p90_ms": 86322,
+          "capturable_profit_usd": "7.5149",
+          "capturable_profit_per_day": "3.8425"
+        },
+        {
+          "min_edge_bps": "40",
+          "n_windows": 1,
+          "windows_per_day": 0.511,
+          "duration_median_ms": 47233,
+          "duration_p90_ms": 47233,
+          "capturable_profit_usd": "5.5060",
+          "capturable_profit_per_day": "2.8153"
+        },
+        {
+          "min_edge_bps": "60",
+          "n_windows": 0,
+          "windows_per_day": 0.0,
+          "duration_median_ms": 0,
+          "duration_p90_ms": 0,
+          "capturable_profit_usd": "0",
+          "capturable_profit_per_day": "0"
+        }
+      ]
+    },
+    "HOODx|buy_fluxion_sell_bybit|closed|amm|500": {
+      "n_samples": 3274,
+      "windows_at_zero": 41,
+      "profit_at_zero": "35.0362125513066779017781365",
+      "profit_per_day_at_zero": "17.91467539996612140300888287",
+      "fit": {
+        "min_edge_bps": "60",
+        "capture_fraction": "0.70",
+        "profit_at_fit": "46.1327",
+        "profit_at_zero": "35.0362",
+        "windows_per_day": 6.647,
+        "profit_per_day": "23.5885",
+        "fitted": true
+      },
+      "sweep_selected": [
+        {
+          "min_edge_bps": "0",
+          "n_windows": 41,
+          "windows_per_day": 20.964,
+          "duration_median_ms": 164069,
+          "duration_p90_ms": 2514601,
+          "capturable_profit_usd": "35.0362",
+          "capturable_profit_per_day": "17.9147"
+        },
+        {
+          "min_edge_bps": "10",
+          "n_windows": 46,
+          "windows_per_day": 23.521,
+          "duration_median_ms": 86195,
+          "duration_p90_ms": 1984476,
+          "capturable_profit_usd": "50.5429",
+          "capturable_profit_per_day": "25.8435"
+        },
+        {
+          "min_edge_bps": "20",
+          "n_windows": 34,
+          "windows_per_day": 17.385,
+          "duration_median_ms": 94991,
+          "duration_p90_ms": 2514601,
+          "capturable_profit_usd": "55.9450",
+          "capturable_profit_per_day": "28.6057"
+        },
+        {
+          "min_edge_bps": "40",
+          "n_windows": 26,
+          "windows_per_day": 13.294,
+          "duration_median_ms": 197091,
+          "duration_p90_ms": 1697475,
+          "capturable_profit_usd": "63.8584",
+          "capturable_profit_per_day": "32.6520"
+        },
+        {
+          "min_edge_bps": "60",
+          "n_windows": 13,
+          "windows_per_day": 6.647,
+          "duration_median_ms": 109444,
+          "duration_p90_ms": 2030921,
+          "capturable_profit_usd": "46.1327",
+          "capturable_profit_per_day": "23.5885"
+        }
+      ]
+    },
+    "HOODx|buy_fluxion_sell_bybit|closed|rfq|poll_native": {
+      "n_samples": 636,
+      "windows_at_zero": 2,
+      "profit_at_zero": "1.19638763009500520406020",
+      "profit_per_day_at_zero": "0.6117355297551252057129255792",
+      "fit": {
+        "min_edge_bps": "60",
+        "capture_fraction": "0.70",
+        "profit_at_fit": "2.0947",
+        "profit_at_zero": "1.1964",
+        "windows_per_day": 1.023,
+        "profit_per_day": "1.0711",
+        "fitted": true
+      },
+      "sweep_selected": [
+        {
+          "min_edge_bps": "0",
+          "n_windows": 2,
+          "windows_per_day": 1.023,
+          "duration_median_ms": 0,
+          "duration_p90_ms": 165014,
+          "capturable_profit_usd": "1.1964",
+          "capturable_profit_per_day": "0.6117"
+        },
+        {
+          "min_edge_bps": "10",
+          "n_windows": 2,
+          "windows_per_day": 1.023,
+          "duration_median_ms": 0,
+          "duration_p90_ms": 165014,
+          "capturable_profit_usd": "1.1964",
+          "capturable_profit_per_day": "0.6117"
+        },
+        {
+          "min_edge_bps": "20",
+          "n_windows": 2,
+          "windows_per_day": 1.023,
+          "duration_median_ms": 0,
+          "duration_p90_ms": 165014,
+          "capturable_profit_usd": "1.1964",
+          "capturable_profit_per_day": "0.6117"
+        },
+        {
+          "min_edge_bps": "40",
+          "n_windows": 2,
+          "windows_per_day": 1.023,
+          "duration_median_ms": 0,
+          "duration_p90_ms": 0,
+          "capturable_profit_usd": "2.0947",
+          "capturable_profit_per_day": "1.0711"
+        },
+        {
+          "min_edge_bps": "60",
+          "n_windows": 2,
+          "windows_per_day": 1.023,
+          "duration_median_ms": 0,
+          "duration_p90_ms": 0,
+          "capturable_profit_usd": "2.0947",
+          "capturable_profit_per_day": "1.0711"
+        }
+      ]
+    },
+    "HOODx|buy_fluxion_sell_bybit|open|amm|1000": {
+      "n_samples": 1183,
+      "windows_at_zero": 10,
+      "profit_at_zero": "67.3168249280106877819444349",
+      "profit_per_day_at_zero": "34.42036052771585652710684118",
+      "fit": {
+        "min_edge_bps": "60",
+        "capture_fraction": "0.70",
+        "profit_at_fit": "78.7199",
+        "profit_at_zero": "67.3168",
+        "windows_per_day": 2.557,
+        "profit_per_day": "40.2510",
+        "fitted": true
+      },
+      "sweep_selected": [
+        {
+          "min_edge_bps": "0",
+          "n_windows": 10,
+          "windows_per_day": 5.113,
+          "duration_median_ms": 191470,
+          "duration_p90_ms": 651755,
+          "capturable_profit_usd": "67.3168",
+          "capturable_profit_per_day": "34.4204"
+        },
+        {
+          "min_edge_bps": "10",
+          "n_windows": 12,
+          "windows_per_day": 6.136,
+          "duration_median_ms": 16148,
+          "duration_p90_ms": 600159,
+          "capturable_profit_usd": "76.8375",
+          "capturable_profit_per_day": "39.2884"
+        },
+        {
+          "min_edge_bps": "20",
+          "n_windows": 11,
+          "windows_per_day": 5.625,
+          "duration_median_ms": 16148,
+          "duration_p90_ms": 465368,
+          "capturable_profit_usd": "85.3694",
+          "capturable_profit_per_day": "43.6510"
+        },
+        {
+          "min_edge_bps": "40",
+          "n_windows": 9,
+          "windows_per_day": 4.602,
+          "duration_median_ms": 16148,
+          "duration_p90_ms": 239576,
+          "capturable_profit_usd": "93.5870",
+          "capturable_profit_per_day": "47.8528"
+        },
+        {
+          "min_edge_bps": "60",
+          "n_windows": 5,
+          "windows_per_day": 2.557,
+          "duration_median_ms": 12604,
+          "duration_p90_ms": 405468,
+          "capturable_profit_usd": "78.7199",
+          "capturable_profit_per_day": "40.2510"
+        }
+      ]
+    },
+    "HOODx|buy_fluxion_sell_bybit|open|amm|500": {
+      "n_samples": 1183,
+      "windows_at_zero": 29,
+      "profit_at_zero": "49.4195063941469859130260037",
+      "profit_per_day_at_zero": "25.26912445748006065380875790",
+      "fit": {
+        "min_edge_bps": "60",
+        "capture_fraction": "0.70",
+        "profit_at_fit": "74.6132",
+        "profit_at_zero": "49.4195",
+        "windows_per_day": 6.136,
+        "profit_per_day": "38.1511",
+        "fitted": true
+      },
+      "sweep_selected": [
+        {
+          "min_edge_bps": "0",
+          "n_windows": 29,
+          "windows_per_day": 14.828,
+          "duration_median_ms": 14216,
+          "duration_p90_ms": 884367,
+          "capturable_profit_usd": "49.4195",
+          "capturable_profit_per_day": "25.2691"
+        },
+        {
+          "min_edge_bps": "10",
+          "n_windows": 22,
+          "windows_per_day": 11.249,
+          "duration_median_ms": 30579,
+          "duration_p90_ms": 1176988,
+          "capturable_profit_usd": "59.1837",
+          "capturable_profit_per_day": "30.2617"
+        },
+        {
+          "min_edge_bps": "20",
+          "n_windows": 24,
+          "windows_per_day": 12.272,
+          "duration_median_ms": 30510,
+          "duration_p90_ms": 975220,
+          "capturable_profit_usd": "69.8484",
+          "capturable_profit_per_day": "35.7148"
+        },
+        {
+          "min_edge_bps": "40",
+          "n_windows": 19,
+          "windows_per_day": 9.715,
+          "duration_median_ms": 16148,
+          "duration_p90_ms": 795365,
+          "capturable_profit_usd": "79.3604",
+          "capturable_profit_per_day": "40.5785"
+        },
+        {
+          "min_edge_bps": "60",
+          "n_windows": 12,
+          "windows_per_day": 6.136,
+          "duration_median_ms": 30338,
+          "duration_p90_ms": 950082,
+          "capturable_profit_usd": "74.6132",
+          "capturable_profit_per_day": "38.1511"
+        }
+      ]
+    },
+    "HOODx|buy_fluxion_sell_bybit|open|rfq|poll_native": {
+      "n_samples": 347,
+      "windows_at_zero": 0,
+      "profit_at_zero": "0",
+      "profit_per_day_at_zero": "0E+27",
+      "fit": {
+        "min_edge_bps": "0",
+        "capture_fraction": "0.70",
+        "profit_at_fit": "0",
+        "profit_at_zero": "0",
+        "windows_per_day": 0.0,
+        "profit_per_day": "0",
+        "fitted": false
+      },
+      "sweep_selected": [
+        {
+          "min_edge_bps": "0",
+          "n_windows": 0,
+          "windows_per_day": 0.0,
+          "duration_median_ms": 0,
+          "duration_p90_ms": 0,
+          "capturable_profit_usd": "0",
+          "capturable_profit_per_day": "0"
+        },
+        {
+          "min_edge_bps": "10",
+          "n_windows": 0,
+          "windows_per_day": 0.0,
+          "duration_median_ms": 0,
+          "duration_p90_ms": 0,
+          "capturable_profit_usd": "0",
+          "capturable_profit_per_day": "0"
+        },
+        {
+          "min_edge_bps": "20",
+          "n_windows": 0,
+          "windows_per_day": 0.0,
+          "duration_median_ms": 0,
+          "duration_p90_ms": 0,
+          "capturable_profit_usd": "0",
+          "capturable_profit_per_day": "0"
+        },
+        {
+          "min_edge_bps": "40",
+          "n_windows": 0,
+          "windows_per_day": 0.0,
+          "duration_median_ms": 0,
+          "duration_p90_ms": 0,
+          "capturable_profit_usd": "0",
+          "capturable_profit_per_day": "0"
+        },
+        {
+          "min_edge_bps": "60",
+          "n_windows": 0,
+          "windows_per_day": 0.0,
+          "duration_median_ms": 0,
+          "duration_p90_ms": 0,
+          "capturable_profit_usd": "0",
+          "capturable_profit_per_day": "0"
+        }
+      ]
+    },
+    "METAx|buy_bybit_sell_fluxion|closed|amm|1000": {
+      "n_samples": 3128,
+      "windows_at_zero": 0,
+      "profit_at_zero": "0",
+      "profit_per_day_at_zero": "0E+27",
+      "fit": {
+        "min_edge_bps": "0",
+        "capture_fraction": "0.70",
+        "profit_at_fit": "0",
+        "profit_at_zero": "0",
+        "windows_per_day": 0.0,
+        "profit_per_day": "0",
+        "fitted": false
+      },
+      "sweep_selected": [
+        {
+          "min_edge_bps": "0",
+          "n_windows": 0,
+          "windows_per_day": 0.0,
+          "duration_median_ms": 0,
+          "duration_p90_ms": 0,
+          "capturable_profit_usd": "0",
+          "capturable_profit_per_day": "0"
+        },
+        {
+          "min_edge_bps": "10",
+          "n_windows": 0,
+          "windows_per_day": 0.0,
+          "duration_median_ms": 0,
+          "duration_p90_ms": 0,
+          "capturable_profit_usd": "0",
+          "capturable_profit_per_day": "0"
+        },
+        {
+          "min_edge_bps": "20",
+          "n_windows": 0,
+          "windows_per_day": 0.0,
+          "duration_median_ms": 0,
+          "duration_p90_ms": 0,
+          "capturable_profit_usd": "0",
+          "capturable_profit_per_day": "0"
+        },
+        {
+          "min_edge_bps": "40",
+          "n_windows": 0,
+          "windows_per_day": 0.0,
+          "duration_median_ms": 0,
+          "duration_p90_ms": 0,
+          "capturable_profit_usd": "0",
+          "capturable_profit_per_day": "0"
+        },
+        {
+          "min_edge_bps": "60",
+          "n_windows": 0,
+          "windows_per_day": 0.0,
+          "duration_median_ms": 0,
+          "duration_p90_ms": 0,
+          "capturable_profit_usd": "0",
+          "capturable_profit_per_day": "0"
+        }
+      ]
+    },
+    "METAx|buy_bybit_sell_fluxion|closed|amm|500": {
+      "n_samples": 3128,
+      "windows_at_zero": 12,
+      "profit_at_zero": "2.5143195136073935300926216",
+      "profit_per_day_at_zero": "1.285618925622063754546521067",
+      "fit": {
+        "min_edge_bps": "60",
+        "capture_fraction": "0.70",
+        "profit_at_fit": "6.4516",
+        "profit_at_zero": "2.5143",
+        "windows_per_day": 1.023,
+        "profit_per_day": "3.2988",
+        "fitted": true
+      },
+      "sweep_selected": [
+        {
+          "min_edge_bps": "0",
+          "n_windows": 12,
+          "windows_per_day": 6.136,
+          "duration_median_ms": 15291,
+          "duration_p90_ms": 423047,
+          "capturable_profit_usd": "2.5143",
+          "capturable_profit_per_day": "1.2856"
+        },
+        {
+          "min_edge_bps": "10",
+          "n_windows": 6,
+          "windows_per_day": 3.068,
+          "duration_median_ms": 30971,
+          "duration_p90_ms": 116901,
+          "capturable_profit_usd": "3.9671",
+          "capturable_profit_per_day": "2.0284"
+        },
+        {
+          "min_edge_bps": "20",
+          "n_windows": 4,
+          "windows_per_day": 2.045,
+          "duration_median_ms": 439475,
+          "duration_p90_ms": 1391977,
+          "capturable_profit_usd": "4.9332",
+          "capturable_profit_per_day": "2.5224"
+        },
+        {
+          "min_edge_bps": "40",
+          "n_windows": 10,
+          "windows_per_day": 5.113,
+          "duration_median_ms": 25808,
+          "duration_p90_ms": 53600,
+          "capturable_profit_usd": "21.3134",
+          "capturable_profit_per_day": "10.8979"
+        },
+        {
+          "min_edge_bps": "60",
+          "n_windows": 2,
+          "windows_per_day": 1.023,
+          "duration_median_ms": 0,
+          "duration_p90_ms": 89548,
+          "capturable_profit_usd": "6.4516",
+          "capturable_profit_per_day": "3.2988"
+        }
+      ]
+    },
+    "METAx|buy_bybit_sell_fluxion|closed|rfq|poll_native": {
+      "n_samples": 584,
+      "windows_at_zero": 0,
+      "profit_at_zero": "0",
+      "profit_per_day_at_zero": "0E+27",
+      "fit": {
+        "min_edge_bps": "0",
+        "capture_fraction": "0.70",
+        "profit_at_fit": "0",
+        "profit_at_zero": "0",
+        "windows_per_day": 0.0,
+        "profit_per_day": "0",
+        "fitted": false
+      },
+      "sweep_selected": [
+        {
+          "min_edge_bps": "0",
+          "n_windows": 0,
+          "windows_per_day": 0.0,
+          "duration_median_ms": 0,
+          "duration_p90_ms": 0,
+          "capturable_profit_usd": "0",
+          "capturable_profit_per_day": "0"
+        },
+        {
+          "min_edge_bps": "10",
+          "n_windows": 0,
+          "windows_per_day": 0.0,
+          "duration_median_ms": 0,
+          "duration_p90_ms": 0,
+          "capturable_profit_usd": "0",
+          "capturable_profit_per_day": "0"
+        },
+        {
+          "min_edge_bps": "20",
+          "n_windows": 0,
+          "windows_per_day": 0.0,
+          "duration_median_ms": 0,
+          "duration_p90_ms": 0,
+          "capturable_profit_usd": "0",
+          "capturable_profit_per_day": "0"
+        },
+        {
+          "min_edge_bps": "40",
+          "n_windows": 0,
+          "windows_per_day": 0.0,
+          "duration_median_ms": 0,
+          "duration_p90_ms": 0,
+          "capturable_profit_usd": "0",
+          "capturable_profit_per_day": "0"
+        },
+        {
+          "min_edge_bps": "60",
+          "n_windows": 0,
+          "windows_per_day": 0.0,
+          "duration_median_ms": 0,
+          "duration_p90_ms": 0,
+          "capturable_profit_usd": "0",
+          "capturable_profit_per_day": "0"
+        }
+      ]
+    },
+    "METAx|buy_bybit_sell_fluxion|open|amm|1000": {
+      "n_samples": 1219,
+      "windows_at_zero": 0,
+      "profit_at_zero": "0",
+      "profit_per_day_at_zero": "0E+27",
+      "fit": {
+        "min_edge_bps": "0",
+        "capture_fraction": "0.70",
+        "profit_at_fit": "0",
+        "profit_at_zero": "0",
+        "windows_per_day": 0.0,
+        "profit_per_day": "0",
+        "fitted": false
+      },
+      "sweep_selected": [
+        {
+          "min_edge_bps": "0",
+          "n_windows": 0,
+          "windows_per_day": 0.0,
+          "duration_median_ms": 0,
+          "duration_p90_ms": 0,
+          "capturable_profit_usd": "0",
+          "capturable_profit_per_day": "0"
+        },
+        {
+          "min_edge_bps": "10",
+          "n_windows": 0,
+          "windows_per_day": 0.0,
+          "duration_median_ms": 0,
+          "duration_p90_ms": 0,
+          "capturable_profit_usd": "0",
+          "capturable_profit_per_day": "0"
+        },
+        {
+          "min_edge_bps": "20",
+          "n_windows": 0,
+          "windows_per_day": 0.0,
+          "duration_median_ms": 0,
+          "duration_p90_ms": 0,
+          "capturable_profit_usd": "0",
+          "capturable_profit_per_day": "0"
+        },
+        {
+          "min_edge_bps": "40",
+          "n_windows": 0,
+          "windows_per_day": 0.0,
+          "duration_median_ms": 0,
+          "duration_p90_ms": 0,
+          "capturable_profit_usd": "0",
+          "capturable_profit_per_day": "0"
+        },
+        {
+          "min_edge_bps": "60",
+          "n_windows": 0,
+          "windows_per_day": 0.0,
+          "duration_median_ms": 0,
+          "duration_p90_ms": 0,
+          "capturable_profit_usd": "0",
+          "capturable_profit_per_day": "0"
+        }
+      ]
+    },
+    "METAx|buy_bybit_sell_fluxion|open|amm|500": {
+      "n_samples": 1219,
+      "windows_at_zero": 0,
+      "profit_at_zero": "0",
+      "profit_per_day_at_zero": "0E+27",
+      "fit": {
+        "min_edge_bps": "0",
+        "capture_fraction": "0.70",
+        "profit_at_fit": "0",
+        "profit_at_zero": "0",
+        "windows_per_day": 0.0,
+        "profit_per_day": "0",
+        "fitted": false
+      },
+      "sweep_selected": [
+        {
+          "min_edge_bps": "0",
+          "n_windows": 0,
+          "windows_per_day": 0.0,
+          "duration_median_ms": 0,
+          "duration_p90_ms": 0,
+          "capturable_profit_usd": "0",
+          "capturable_profit_per_day": "0"
+        },
+        {
+          "min_edge_bps": "10",
+          "n_windows": 0,
+          "windows_per_day": 0.0,
+          "duration_median_ms": 0,
+          "duration_p90_ms": 0,
+          "capturable_profit_usd": "0",
+          "capturable_profit_per_day": "0"
+        },
+        {
+          "min_edge_bps": "20",
+          "n_windows": 0,
+          "windows_per_day": 0.0,
+          "duration_median_ms": 0,
+          "duration_p90_ms": 0,
+          "capturable_profit_usd": "0",
+          "capturable_profit_per_day": "0"
+        },
+        {
+          "min_edge_bps": "40",
+          "n_windows": 0,
+          "windows_per_day": 0.0,
+          "duration_median_ms": 0,
+          "duration_p90_ms": 0,
+          "capturable_profit_usd": "0",
+          "capturable_profit_per_day": "0"
+        },
+        {
+          "min_edge_bps": "60",
+          "n_windows": 0,
+          "windows_per_day": 0.0,
+          "duration_median_ms": 0,
+          "duration_p90_ms": 0,
+          "capturable_profit_usd": "0",
+          "capturable_profit_per_day": "0"
+        }
+      ]
+    },
+    "METAx|buy_bybit_sell_fluxion|open|rfq|poll_native": {
+      "n_samples": 329,
+      "windows_at_zero": 0,
+      "profit_at_zero": "0",
+      "profit_per_day_at_zero": "0E+27",
+      "fit": {
+        "min_edge_bps": "0",
+        "capture_fraction": "0.70",
+        "profit_at_fit": "0",
+        "profit_at_zero": "0",
+        "windows_per_day": 0.0,
+        "profit_per_day": "0",
+        "fitted": false
+      },
+      "sweep_selected": [
+        {
+          "min_edge_bps": "0",
+          "n_windows": 0,
+          "windows_per_day": 0.0,
+          "duration_median_ms": 0,
+          "duration_p90_ms": 0,
+          "capturable_profit_usd": "0",
+          "capturable_profit_per_day": "0"
+        },
+        {
+          "min_edge_bps": "10",
+          "n_windows": 0,
+          "windows_per_day": 0.0,
+          "duration_median_ms": 0,
+          "duration_p90_ms": 0,
+          "capturable_profit_usd": "0",
+          "capturable_profit_per_day": "0"
+        },
+        {
+          "min_edge_bps": "20",
+          "n_windows": 0,
+          "windows_per_day": 0.0,
+          "duration_median_ms": 0,
+          "duration_p90_ms": 0,
+          "capturable_profit_usd": "0",
+          "capturable_profit_per_day": "0"
+        },
+        {
+          "min_edge_bps": "40",
+          "n_windows": 0,
+          "windows_per_day": 0.0,
+          "duration_median_ms": 0,
+          "duration_p90_ms": 0,
+          "capturable_profit_usd": "0",
+          "capturable_profit_per_day": "0"
+        },
+        {
+          "min_edge_bps": "60",
+          "n_windows": 0,
+          "windows_per_day": 0.0,
+          "duration_median_ms": 0,
+          "duration_p90_ms": 0,
+          "capturable_profit_usd": "0",
+          "capturable_profit_per_day": "0"
+        }
+      ]
+    },
+    "METAx|buy_fluxion_sell_bybit|closed|amm|1000": {
+      "n_samples": 3128,
+      "windows_at_zero": 0,
+      "profit_at_zero": "0",
+      "profit_per_day_at_zero": "0E+27",
+      "fit": {
+        "min_edge_bps": "0",
+        "capture_fraction": "0.70",
+        "profit_at_fit": "0",
+        "profit_at_zero": "0",
+        "windows_per_day": 0.0,
+        "profit_per_day": "0",
+        "fitted": false
+      },
+      "sweep_selected": [
+        {
+          "min_edge_bps": "0",
+          "n_windows": 0,
+          "windows_per_day": 0.0,
+          "duration_median_ms": 0,
+          "duration_p90_ms": 0,
+          "capturable_profit_usd": "0",
+          "capturable_profit_per_day": "0"
+        },
+        {
+          "min_edge_bps": "10",
+          "n_windows": 0,
+          "windows_per_day": 0.0,
+          "duration_median_ms": 0,
+          "duration_p90_ms": 0,
+          "capturable_profit_usd": "0",
+          "capturable_profit_per_day": "0"
+        },
+        {
+          "min_edge_bps": "20",
+          "n_windows": 0,
+          "windows_per_day": 0.0,
+          "duration_median_ms": 0,
+          "duration_p90_ms": 0,
+          "capturable_profit_usd": "0",
+          "capturable_profit_per_day": "0"
+        },
+        {
+          "min_edge_bps": "40",
+          "n_windows": 0,
+          "windows_per_day": 0.0,
+          "duration_median_ms": 0,
+          "duration_p90_ms": 0,
+          "capturable_profit_usd": "0",
+          "capturable_profit_per_day": "0"
+        },
+        {
+          "min_edge_bps": "60",
+          "n_windows": 0,
+          "windows_per_day": 0.0,
+          "duration_median_ms": 0,
+          "duration_p90_ms": 0,
+          "capturable_profit_usd": "0",
+          "capturable_profit_per_day": "0"
+        }
+      ]
+    },
+    "METAx|buy_fluxion_sell_bybit|closed|amm|500": {
+      "n_samples": 3128,
+      "windows_at_zero": 1,
+      "profit_at_zero": "0.0744291617938271750215502",
+      "profit_per_day_at_zero": "0.03805703233120286928613296264",
+      "fit": {
+        "min_edge_bps": "0",
+        "capture_fraction": "0.70",
+        "profit_at_fit": "0.0744",
+        "profit_at_zero": "0.0744",
+        "windows_per_day": 0.511,
+        "profit_per_day": "0.0381",
+        "fitted": true
+      },
+      "sweep_selected": [
+        {
+          "min_edge_bps": "0",
+          "n_windows": 1,
+          "windows_per_day": 0.511,
+          "duration_median_ms": 0,
+          "duration_p90_ms": 0,
+          "capturable_profit_usd": "0.0744",
+          "capturable_profit_per_day": "0.0381"
+        },
+        {
+          "min_edge_bps": "10",
+          "n_windows": 0,
+          "windows_per_day": 0.0,
+          "duration_median_ms": 0,
+          "duration_p90_ms": 0,
+          "capturable_profit_usd": "0",
+          "capturable_profit_per_day": "0"
+        },
+        {
+          "min_edge_bps": "20",
+          "n_windows": 0,
+          "windows_per_day": 0.0,
+          "duration_median_ms": 0,
+          "duration_p90_ms": 0,
+          "capturable_profit_usd": "0",
+          "capturable_profit_per_day": "0"
+        },
+        {
+          "min_edge_bps": "40",
+          "n_windows": 0,
+          "windows_per_day": 0.0,
+          "duration_median_ms": 0,
+          "duration_p90_ms": 0,
+          "capturable_profit_usd": "0",
+          "capturable_profit_per_day": "0"
+        },
+        {
+          "min_edge_bps": "60",
+          "n_windows": 0,
+          "windows_per_day": 0.0,
+          "duration_median_ms": 0,
+          "duration_p90_ms": 0,
+          "capturable_profit_usd": "0",
+          "capturable_profit_per_day": "0"
+        }
+      ]
+    },
+    "METAx|buy_fluxion_sell_bybit|closed|rfq|poll_native": {
+      "n_samples": 590,
+      "windows_at_zero": 0,
+      "profit_at_zero": "0",
+      "profit_per_day_at_zero": "0E+27",
+      "fit": {
+        "min_edge_bps": "0",
+        "capture_fraction": "0.70",
+        "profit_at_fit": "0",
+        "profit_at_zero": "0",
+        "windows_per_day": 0.0,
+        "profit_per_day": "0",
+        "fitted": false
+      },
+      "sweep_selected": [
+        {
+          "min_edge_bps": "0",
+          "n_windows": 0,
+          "windows_per_day": 0.0,
+          "duration_median_ms": 0,
+          "duration_p90_ms": 0,
+          "capturable_profit_usd": "0",
+          "capturable_profit_per_day": "0"
+        },
+        {
+          "min_edge_bps": "10",
+          "n_windows": 0,
+          "windows_per_day": 0.0,
+          "duration_median_ms": 0,
+          "duration_p90_ms": 0,
+          "capturable_profit_usd": "0",
+          "capturable_profit_per_day": "0"
+        },
+        {
+          "min_edge_bps": "20",
+          "n_windows": 0,
+          "windows_per_day": 0.0,
+          "duration_median_ms": 0,
+          "duration_p90_ms": 0,
+          "capturable_profit_usd": "0",
+          "capturable_profit_per_day": "0"
+        },
+        {
+          "min_edge_bps": "40",
+          "n_windows": 0,
+          "windows_per_day": 0.0,
+          "duration_median_ms": 0,
+          "duration_p90_ms": 0,
+          "capturable_profit_usd": "0",
+          "capturable_profit_per_day": "0"
+        },
+        {
+          "min_edge_bps": "60",
+          "n_windows": 0,
+          "windows_per_day": 0.0,
+          "duration_median_ms": 0,
+          "duration_p90_ms": 0,
+          "capturable_profit_usd": "0",
+          "capturable_profit_per_day": "0"
+        }
+      ]
+    },
+    "METAx|buy_fluxion_sell_bybit|open|amm|1000": {
+      "n_samples": 1219,
+      "windows_at_zero": 0,
+      "profit_at_zero": "0",
+      "profit_per_day_at_zero": "0E+27",
+      "fit": {
+        "min_edge_bps": "0",
+        "capture_fraction": "0.70",
+        "profit_at_fit": "0",
+        "profit_at_zero": "0",
+        "windows_per_day": 0.0,
+        "profit_per_day": "0",
+        "fitted": false
+      },
+      "sweep_selected": [
+        {
+          "min_edge_bps": "0",
+          "n_windows": 0,
+          "windows_per_day": 0.0,
+          "duration_median_ms": 0,
+          "duration_p90_ms": 0,
+          "capturable_profit_usd": "0",
+          "capturable_profit_per_day": "0"
+        },
+        {
+          "min_edge_bps": "10",
+          "n_windows": 0,
+          "windows_per_day": 0.0,
+          "duration_median_ms": 0,
+          "duration_p90_ms": 0,
+          "capturable_profit_usd": "0",
+          "capturable_profit_per_day": "0"
+        },
+        {
+          "min_edge_bps": "20",
+          "n_windows": 0,
+          "windows_per_day": 0.0,
+          "duration_median_ms": 0,
+          "duration_p90_ms": 0,
+          "capturable_profit_usd": "0",
+          "capturable_profit_per_day": "0"
+        },
+        {
+          "min_edge_bps": "40",
+          "n_windows": 0,
+          "windows_per_day": 0.0,
+          "duration_median_ms": 0,
+          "duration_p90_ms": 0,
+          "capturable_profit_usd": "0",
+          "capturable_profit_per_day": "0"
+        },
+        {
+          "min_edge_bps": "60",
+          "n_windows": 0,
+          "windows_per_day": 0.0,
+          "duration_median_ms": 0,
+          "duration_p90_ms": 0,
+          "capturable_profit_usd": "0",
+          "capturable_profit_per_day": "0"
+        }
+      ]
+    },
+    "METAx|buy_fluxion_sell_bybit|open|amm|500": {
+      "n_samples": 1219,
+      "windows_at_zero": 12,
+      "profit_at_zero": "1.8804652644905898689561135",
+      "profit_per_day_at_zero": "0.9615173091248974887274211983",
+      "fit": {
+        "min_edge_bps": "26",
+        "capture_fraction": "0.70",
+        "profit_at_fit": "1.3253",
+        "profit_at_zero": "1.8805",
+        "windows_per_day": 0.511,
+        "profit_per_day": "0.6776",
+        "fitted": true
+      },
+      "sweep_selected": [
+        {
+          "min_edge_bps": "0",
+          "n_windows": 12,
+          "windows_per_day": 6.136,
+          "duration_median_ms": 42588,
+          "duration_p90_ms": 523286,
+          "capturable_profit_usd": "1.8805",
+          "capturable_profit_per_day": "0.9615"
+        },
+        {
+          "min_edge_bps": "10",
+          "n_windows": 13,
+          "windows_per_day": 6.647,
+          "duration_median_ms": 15759,
+          "duration_p90_ms": 196477,
+          "capturable_profit_usd": "7.7590",
+          "capturable_profit_per_day": "3.9673"
+        },
+        {
+          "min_edge_bps": "20",
+          "n_windows": 3,
+          "windows_per_day": 1.534,
+          "duration_median_ms": 0,
+          "duration_p90_ms": 14756,
+          "capturable_profit_usd": "3.2195",
+          "capturable_profit_per_day": "1.6462"
+        },
+        {
+          "min_edge_bps": "40",
+          "n_windows": 0,
+          "windows_per_day": 0.0,
+          "duration_median_ms": 0,
+          "duration_p90_ms": 0,
+          "capturable_profit_usd": "0",
+          "capturable_profit_per_day": "0"
+        },
+        {
+          "min_edge_bps": "60",
+          "n_windows": 0,
+          "windows_per_day": 0.0,
+          "duration_median_ms": 0,
+          "duration_p90_ms": 0,
+          "capturable_profit_usd": "0",
+          "capturable_profit_per_day": "0"
+        }
+      ]
+    },
+    "METAx|buy_fluxion_sell_bybit|open|rfq|poll_native": {
+      "n_samples": 335,
+      "windows_at_zero": 0,
+      "profit_at_zero": "0",
+      "profit_per_day_at_zero": "0E+27",
+      "fit": {
+        "min_edge_bps": "0",
+        "capture_fraction": "0.70",
+        "profit_at_fit": "0",
+        "profit_at_zero": "0",
+        "windows_per_day": 0.0,
+        "profit_per_day": "0",
+        "fitted": false
+      },
+      "sweep_selected": [
+        {
+          "min_edge_bps": "0",
+          "n_windows": 0,
+          "windows_per_day": 0.0,
+          "duration_median_ms": 0,
+          "duration_p90_ms": 0,
+          "capturable_profit_usd": "0",
+          "capturable_profit_per_day": "0"
+        },
+        {
+          "min_edge_bps": "10",
+          "n_windows": 0,
+          "windows_per_day": 0.0,
+          "duration_median_ms": 0,
+          "duration_p90_ms": 0,
+          "capturable_profit_usd": "0",
+          "capturable_profit_per_day": "0"
+        },
+        {
+          "min_edge_bps": "20",
+          "n_windows": 0,
+          "windows_per_day": 0.0,
+          "duration_median_ms": 0,
+          "duration_p90_ms": 0,
+          "capturable_profit_usd": "0",
+          "capturable_profit_per_day": "0"
+        },
+        {
+          "min_edge_bps": "40",
+          "n_windows": 0,
+          "windows_per_day": 0.0,
+          "duration_median_ms": 0,
+          "duration_p90_ms": 0,
+          "capturable_profit_usd": "0",
+          "capturable_profit_per_day": "0"
+        },
+        {
+          "min_edge_bps": "60",
+          "n_windows": 0,
+          "windows_per_day": 0.0,
+          "duration_median_ms": 0,
+          "duration_p90_ms": 0,
+          "capturable_profit_usd": "0",
+          "capturable_profit_per_day": "0"
+        }
+      ]
+    },
+    "NVDAx|buy_bybit_sell_fluxion|closed|amm|1000": {
+      "n_samples": 4414,
+      "windows_at_zero": 0,
+      "profit_at_zero": "0",
+      "profit_per_day_at_zero": "0E+27",
+      "fit": {
+        "min_edge_bps": "0",
+        "capture_fraction": "0.70",
+        "profit_at_fit": "0",
+        "profit_at_zero": "0",
+        "windows_per_day": 0.0,
+        "profit_per_day": "0",
+        "fitted": false
+      },
+      "sweep_selected": [
+        {
+          "min_edge_bps": "0",
+          "n_windows": 0,
+          "windows_per_day": 0.0,
+          "duration_median_ms": 0,
+          "duration_p90_ms": 0,
+          "capturable_profit_usd": "0",
+          "capturable_profit_per_day": "0"
+        },
+        {
+          "min_edge_bps": "10",
+          "n_windows": 0,
+          "windows_per_day": 0.0,
+          "duration_median_ms": 0,
+          "duration_p90_ms": 0,
+          "capturable_profit_usd": "0",
+          "capturable_profit_per_day": "0"
+        },
+        {
+          "min_edge_bps": "20",
+          "n_windows": 0,
+          "windows_per_day": 0.0,
+          "duration_median_ms": 0,
+          "duration_p90_ms": 0,
+          "capturable_profit_usd": "0",
+          "capturable_profit_per_day": "0"
+        },
+        {
+          "min_edge_bps": "40",
+          "n_windows": 0,
+          "windows_per_day": 0.0,
+          "duration_median_ms": 0,
+          "duration_p90_ms": 0,
+          "capturable_profit_usd": "0",
+          "capturable_profit_per_day": "0"
+        },
+        {
+          "min_edge_bps": "60",
+          "n_windows": 0,
+          "windows_per_day": 0.0,
+          "duration_median_ms": 0,
+          "duration_p90_ms": 0,
+          "capturable_profit_usd": "0",
+          "capturable_profit_per_day": "0"
+        }
+      ]
+    },
+    "NVDAx|buy_bybit_sell_fluxion|closed|amm|500": {
+      "n_samples": 4439,
+      "windows_at_zero": 0,
+      "profit_at_zero": "0",
+      "profit_per_day_at_zero": "0E+27",
+      "fit": {
+        "min_edge_bps": "0",
+        "capture_fraction": "0.70",
+        "profit_at_fit": "0",
+        "profit_at_zero": "0",
+        "windows_per_day": 0.0,
+        "profit_per_day": "0",
+        "fitted": false
+      },
+      "sweep_selected": [
+        {
+          "min_edge_bps": "0",
+          "n_windows": 0,
+          "windows_per_day": 0.0,
+          "duration_median_ms": 0,
+          "duration_p90_ms": 0,
+          "capturable_profit_usd": "0",
+          "capturable_profit_per_day": "0"
+        },
+        {
+          "min_edge_bps": "10",
+          "n_windows": 0,
+          "windows_per_day": 0.0,
+          "duration_median_ms": 0,
+          "duration_p90_ms": 0,
+          "capturable_profit_usd": "0",
+          "capturable_profit_per_day": "0"
+        },
+        {
+          "min_edge_bps": "20",
+          "n_windows": 0,
+          "windows_per_day": 0.0,
+          "duration_median_ms": 0,
+          "duration_p90_ms": 0,
+          "capturable_profit_usd": "0",
+          "capturable_profit_per_day": "0"
+        },
+        {
+          "min_edge_bps": "40",
+          "n_windows": 0,
+          "windows_per_day": 0.0,
+          "duration_median_ms": 0,
+          "duration_p90_ms": 0,
+          "capturable_profit_usd": "0",
+          "capturable_profit_per_day": "0"
+        },
+        {
+          "min_edge_bps": "60",
+          "n_windows": 0,
+          "windows_per_day": 0.0,
+          "duration_median_ms": 0,
+          "duration_p90_ms": 0,
+          "capturable_profit_usd": "0",
+          "capturable_profit_per_day": "0"
+        }
+      ]
+    },
+    "NVDAx|buy_bybit_sell_fluxion|closed|rfq|poll_native": {
+      "n_samples": 824,
+      "windows_at_zero": 0,
+      "profit_at_zero": "0",
+      "profit_per_day_at_zero": "0E+27",
+      "fit": {
+        "min_edge_bps": "0",
+        "capture_fraction": "0.70",
+        "profit_at_fit": "0",
+        "profit_at_zero": "0",
+        "windows_per_day": 0.0,
+        "profit_per_day": "0",
+        "fitted": false
+      },
+      "sweep_selected": [
+        {
+          "min_edge_bps": "0",
+          "n_windows": 0,
+          "windows_per_day": 0.0,
+          "duration_median_ms": 0,
+          "duration_p90_ms": 0,
+          "capturable_profit_usd": "0",
+          "capturable_profit_per_day": "0"
+        },
+        {
+          "min_edge_bps": "10",
+          "n_windows": 0,
+          "windows_per_day": 0.0,
+          "duration_median_ms": 0,
+          "duration_p90_ms": 0,
+          "capturable_profit_usd": "0",
+          "capturable_profit_per_day": "0"
+        },
+        {
+          "min_edge_bps": "20",
+          "n_windows": 0,
+          "windows_per_day": 0.0,
+          "duration_median_ms": 0,
+          "duration_p90_ms": 0,
+          "capturable_profit_usd": "0",
+          "capturable_profit_per_day": "0"
+        },
+        {
+          "min_edge_bps": "40",
+          "n_windows": 0,
+          "windows_per_day": 0.0,
+          "duration_median_ms": 0,
+          "duration_p90_ms": 0,
+          "capturable_profit_usd": "0",
+          "capturable_profit_per_day": "0"
+        },
+        {
+          "min_edge_bps": "60",
+          "n_windows": 0,
+          "windows_per_day": 0.0,
+          "duration_median_ms": 0,
+          "duration_p90_ms": 0,
+          "capturable_profit_usd": "0",
+          "capturable_profit_per_day": "0"
+        }
+      ]
+    },
+    "NVDAx|buy_bybit_sell_fluxion|open|amm|1000": {
+      "n_samples": 1242,
+      "windows_at_zero": 0,
+      "profit_at_zero": "0",
+      "profit_per_day_at_zero": "0E+27",
+      "fit": {
+        "min_edge_bps": "0",
+        "capture_fraction": "0.70",
+        "profit_at_fit": "0",
+        "profit_at_zero": "0",
+        "windows_per_day": 0.0,
+        "profit_per_day": "0",
+        "fitted": false
+      },
+      "sweep_selected": [
+        {
+          "min_edge_bps": "0",
+          "n_windows": 0,
+          "windows_per_day": 0.0,
+          "duration_median_ms": 0,
+          "duration_p90_ms": 0,
+          "capturable_profit_usd": "0",
+          "capturable_profit_per_day": "0"
+        },
+        {
+          "min_edge_bps": "10",
+          "n_windows": 0,
+          "windows_per_day": 0.0,
+          "duration_median_ms": 0,
+          "duration_p90_ms": 0,
+          "capturable_profit_usd": "0",
+          "capturable_profit_per_day": "0"
+        },
+        {
+          "min_edge_bps": "20",
+          "n_windows": 0,
+          "windows_per_day": 0.0,
+          "duration_median_ms": 0,
+          "duration_p90_ms": 0,
+          "capturable_profit_usd": "0",
+          "capturable_profit_per_day": "0"
+        },
+        {
+          "min_edge_bps": "40",
+          "n_windows": 0,
+          "windows_per_day": 0.0,
+          "duration_median_ms": 0,
+          "duration_p90_ms": 0,
+          "capturable_profit_usd": "0",
+          "capturable_profit_per_day": "0"
+        },
+        {
+          "min_edge_bps": "60",
+          "n_windows": 0,
+          "windows_per_day": 0.0,
+          "duration_median_ms": 0,
+          "duration_p90_ms": 0,
+          "capturable_profit_usd": "0",
+          "capturable_profit_per_day": "0"
+        }
+      ]
+    },
+    "NVDAx|buy_bybit_sell_fluxion|open|amm|500": {
+      "n_samples": 1242,
+      "windows_at_zero": 0,
+      "profit_at_zero": "0",
+      "profit_per_day_at_zero": "0E+27",
+      "fit": {
+        "min_edge_bps": "0",
+        "capture_fraction": "0.70",
+        "profit_at_fit": "0",
+        "profit_at_zero": "0",
+        "windows_per_day": 0.0,
+        "profit_per_day": "0",
+        "fitted": false
+      },
+      "sweep_selected": [
+        {
+          "min_edge_bps": "0",
+          "n_windows": 0,
+          "windows_per_day": 0.0,
+          "duration_median_ms": 0,
+          "duration_p90_ms": 0,
+          "capturable_profit_usd": "0",
+          "capturable_profit_per_day": "0"
+        },
+        {
+          "min_edge_bps": "10",
+          "n_windows": 0,
+          "windows_per_day": 0.0,
+          "duration_median_ms": 0,
+          "duration_p90_ms": 0,
+          "capturable_profit_usd": "0",
+          "capturable_profit_per_day": "0"
+        },
+        {
+          "min_edge_bps": "20",
+          "n_windows": 0,
+          "windows_per_day": 0.0,
+          "duration_median_ms": 0,
+          "duration_p90_ms": 0,
+          "capturable_profit_usd": "0",
+          "capturable_profit_per_day": "0"
+        },
+        {
+          "min_edge_bps": "40",
+          "n_windows": 0,
+          "windows_per_day": 0.0,
+          "duration_median_ms": 0,
+          "duration_p90_ms": 0,
+          "capturable_profit_usd": "0",
+          "capturable_profit_per_day": "0"
+        },
+        {
+          "min_edge_bps": "60",
+          "n_windows": 0,
+          "windows_per_day": 0.0,
+          "duration_median_ms": 0,
+          "duration_p90_ms": 0,
+          "capturable_profit_usd": "0",
+          "capturable_profit_per_day": "0"
+        }
+      ]
+    },
+    "NVDAx|buy_bybit_sell_fluxion|open|rfq|poll_native": {
+      "n_samples": 368,
+      "windows_at_zero": 0,
+      "profit_at_zero": "0",
+      "profit_per_day_at_zero": "0E+27",
+      "fit": {
+        "min_edge_bps": "0",
+        "capture_fraction": "0.70",
+        "profit_at_fit": "0",
+        "profit_at_zero": "0",
+        "windows_per_day": 0.0,
+        "profit_per_day": "0",
+        "fitted": false
+      },
+      "sweep_selected": [
+        {
+          "min_edge_bps": "0",
+          "n_windows": 0,
+          "windows_per_day": 0.0,
+          "duration_median_ms": 0,
+          "duration_p90_ms": 0,
+          "capturable_profit_usd": "0",
+          "capturable_profit_per_day": "0"
+        },
+        {
+          "min_edge_bps": "10",
+          "n_windows": 0,
+          "windows_per_day": 0.0,
+          "duration_median_ms": 0,
+          "duration_p90_ms": 0,
+          "capturable_profit_usd": "0",
+          "capturable_profit_per_day": "0"
+        },
+        {
+          "min_edge_bps": "20",
+          "n_windows": 0,
+          "windows_per_day": 0.0,
+          "duration_median_ms": 0,
+          "duration_p90_ms": 0,
+          "capturable_profit_usd": "0",
+          "capturable_profit_per_day": "0"
+        },
+        {
+          "min_edge_bps": "40",
+          "n_windows": 0,
+          "windows_per_day": 0.0,
+          "duration_median_ms": 0,
+          "duration_p90_ms": 0,
+          "capturable_profit_usd": "0",
+          "capturable_profit_per_day": "0"
+        },
+        {
+          "min_edge_bps": "60",
+          "n_windows": 0,
+          "windows_per_day": 0.0,
+          "duration_median_ms": 0,
+          "duration_p90_ms": 0,
+          "capturable_profit_usd": "0",
+          "capturable_profit_per_day": "0"
+        }
+      ]
+    },
+    "NVDAx|buy_fluxion_sell_bybit|closed|amm|1000": {
+      "n_samples": 4439,
+      "windows_at_zero": 7,
+      "profit_at_zero": "0.6909150064242853827874584",
+      "profit_per_day_at_zero": "0.3532778564729582824243808903",
+      "fit": {
+        "min_edge_bps": "28",
+        "capture_fraction": "0.70",
+        "profit_at_fit": "2.8836",
+        "profit_at_zero": "0.6909",
+        "windows_per_day": 0.511,
+        "profit_per_day": "1.4744",
+        "fitted": true
+      },
+      "sweep_selected": [
+        {
+          "min_edge_bps": "0",
+          "n_windows": 7,
+          "windows_per_day": 3.579,
+          "duration_median_ms": 29608,
+          "duration_p90_ms": 635107,
+          "capturable_profit_usd": "0.6909",
+          "capturable_profit_per_day": "0.3533"
+        },
+        {
+          "min_edge_bps": "10",
+          "n_windows": 5,
+          "windows_per_day": 2.557,
+          "duration_median_ms": 60219,
+          "duration_p90_ms": 591257,
+          "capturable_profit_usd": "5.5777",
+          "capturable_profit_per_day": "2.8520"
+        },
+        {
+          "min_edge_bps": "20",
+          "n_windows": 4,
+          "windows_per_day": 2.045,
+          "duration_median_ms": 30076,
+          "duration_p90_ms": 463033,
+          "capturable_profit_usd": "8.1997",
+          "capturable_profit_per_day": "4.1926"
+        },
+        {
+          "min_edge_bps": "40",
+          "n_windows": 0,
+          "windows_per_day": 0.0,
+          "duration_median_ms": 0,
+          "duration_p90_ms": 0,
+          "capturable_profit_usd": "0",
+          "capturable_profit_per_day": "0"
+        },
+        {
+          "min_edge_bps": "60",
+          "n_windows": 0,
+          "windows_per_day": 0.0,
+          "duration_median_ms": 0,
+          "duration_p90_ms": 0,
+          "capturable_profit_usd": "0",
+          "capturable_profit_per_day": "0"
+        }
+      ]
+    },
+    "NVDAx|buy_fluxion_sell_bybit|closed|amm|500": {
+      "n_samples": 4439,
+      "windows_at_zero": 26,
+      "profit_at_zero": "8.1773698029980652362304468",
+      "profit_per_day_at_zero": "4.181243204632051749030646034",
+      "fit": {
+        "min_edge_bps": "60",
+        "capture_fraction": "0.70",
+        "profit_at_fit": "52.4358",
+        "profit_at_zero": "8.1774",
+        "windows_per_day": 8.692,
+        "profit_per_day": "26.8114",
+        "fitted": true
+      },
+      "sweep_selected": [
+        {
+          "min_edge_bps": "0",
+          "n_windows": 26,
+          "windows_per_day": 13.294,
+          "duration_median_ms": 201895,
+          "duration_p90_ms": 3150988,
+          "capturable_profit_usd": "8.1774",
+          "capturable_profit_per_day": "4.1812"
+        },
+        {
+          "min_edge_bps": "10",
+          "n_windows": 37,
+          "windows_per_day": 18.919,
+          "duration_median_ms": 58230,
+          "duration_p90_ms": 536618,
+          "capturable_profit_usd": "24.8394",
+          "capturable_profit_per_day": "12.7009"
+        },
+        {
+          "min_edge_bps": "20",
+          "n_windows": 20,
+          "windows_per_day": 10.226,
+          "duration_median_ms": 72530,
+          "duration_p90_ms": 4710622,
+          "capturable_profit_usd": "22.9632",
+          "capturable_profit_per_day": "11.7415"
+        },
+        {
+          "min_edge_bps": "40",
+          "n_windows": 5,
+          "windows_per_day": 2.557,
+          "duration_median_ms": 1372827,
+          "duration_p90_ms": 7508170,
+          "capturable_profit_usd": "10.4354",
+          "capturable_profit_per_day": "5.3358"
+        },
+        {
+          "min_edge_bps": "60",
+          "n_windows": 17,
+          "windows_per_day": 8.692,
+          "duration_median_ms": 105070,
+          "duration_p90_ms": 514087,
+          "capturable_profit_usd": "52.4358",
+          "capturable_profit_per_day": "26.8114"
+        }
+      ]
+    },
+    "NVDAx|buy_fluxion_sell_bybit|closed|rfq|poll_native": {
+      "n_samples": 842,
+      "windows_at_zero": 1,
+      "profit_at_zero": "0.0307837265892211396158302",
+      "profit_per_day_at_zero": "0.01574029923010714936416040631",
+      "fit": {
+        "min_edge_bps": "2",
+        "capture_fraction": "0.70",
+        "profit_at_fit": "0.0308",
+        "profit_at_zero": "0.0308",
+        "windows_per_day": 0.511,
+        "profit_per_day": "0.0157",
+        "fitted": true
+      },
+      "sweep_selected": [
+        {
+          "min_edge_bps": "0",
+          "n_windows": 1,
+          "windows_per_day": 0.511,
+          "duration_median_ms": 114118,
+          "duration_p90_ms": 114118,
+          "capturable_profit_usd": "0.0308",
+          "capturable_profit_per_day": "0.0157"
+        },
+        {
+          "min_edge_bps": "10",
+          "n_windows": 0,
+          "windows_per_day": 0.0,
+          "duration_median_ms": 0,
+          "duration_p90_ms": 0,
+          "capturable_profit_usd": "0",
+          "capturable_profit_per_day": "0"
+        },
+        {
+          "min_edge_bps": "20",
+          "n_windows": 0,
+          "windows_per_day": 0.0,
+          "duration_median_ms": 0,
+          "duration_p90_ms": 0,
+          "capturable_profit_usd": "0",
+          "capturable_profit_per_day": "0"
+        },
+        {
+          "min_edge_bps": "40",
+          "n_windows": 0,
+          "windows_per_day": 0.0,
+          "duration_median_ms": 0,
+          "duration_p90_ms": 0,
+          "capturable_profit_usd": "0",
+          "capturable_profit_per_day": "0"
+        },
+        {
+          "min_edge_bps": "60",
+          "n_windows": 0,
+          "windows_per_day": 0.0,
+          "duration_median_ms": 0,
+          "duration_p90_ms": 0,
+          "capturable_profit_usd": "0",
+          "capturable_profit_per_day": "0"
+        }
+      ]
+    },
+    "NVDAx|buy_fluxion_sell_bybit|open|amm|1000": {
+      "n_samples": 1242,
+      "windows_at_zero": 2,
+      "profit_at_zero": "4.3349182025144033388029918",
+      "profit_per_day_at_zero": "2.216525327037778061116014027",
+      "fit": {
+        "min_edge_bps": "60",
+        "capture_fraction": "0.70",
+        "profit_at_fit": "27.1111",
+        "profit_at_zero": "4.3349",
+        "windows_per_day": 2.045,
+        "profit_per_day": "13.8624",
+        "fitted": true
+      },
+      "sweep_selected": [
+        {
+          "min_edge_bps": "0",
+          "n_windows": 2,
+          "windows_per_day": 1.023,
+          "duration_median_ms": 195060,
+          "duration_p90_ms": 825489,
+          "capturable_profit_usd": "4.3349",
+          "capturable_profit_per_day": "2.2165"
+        },
+        {
+          "min_edge_bps": "10",
+          "n_windows": 2,
+          "windows_per_day": 1.023,
+          "duration_median_ms": 164979,
+          "duration_p90_ms": 825489,
+          "capturable_profit_usd": "4.3349",
+          "capturable_profit_per_day": "2.2165"
+        },
+        {
+          "min_edge_bps": "20",
+          "n_windows": 3,
+          "windows_per_day": 1.534,
+          "duration_median_ms": 119967,
+          "duration_p90_ms": 825489,
+          "capturable_profit_usd": "7.4996",
+          "capturable_profit_per_day": "3.8347"
+        },
+        {
+          "min_edge_bps": "40",
+          "n_windows": 5,
+          "windows_per_day": 2.557,
+          "duration_median_ms": 89573,
+          "duration_p90_ms": 375024,
+          "capturable_profit_usd": "21.6846",
+          "capturable_profit_per_day": "11.0878"
+        },
+        {
+          "min_edge_bps": "60",
+          "n_windows": 4,
+          "windows_per_day": 2.045,
+          "duration_median_ms": 29962,
+          "duration_p90_ms": 120073,
+          "capturable_profit_usd": "27.1111",
+          "capturable_profit_per_day": "13.8624"
+        }
+      ]
+    },
+    "NVDAx|buy_fluxion_sell_bybit|open|amm|500": {
+      "n_samples": 1242,
+      "windows_at_zero": 30,
+      "profit_at_zero": "11.1701556354763940833519145",
+      "profit_per_day_at_zero": "5.711510971216516095509750749",
+      "fit": {
+        "min_edge_bps": "60",
+        "capture_fraction": "0.70",
+        "profit_at_fit": "34.0987",
+        "profit_at_zero": "11.1702",
+        "windows_per_day": 5.113,
+        "profit_per_day": "17.4353",
+        "fitted": true
+      },
+      "sweep_selected": [
+        {
+          "min_edge_bps": "0",
+          "n_windows": 30,
+          "windows_per_day": 15.34,
+          "duration_median_ms": 30151,
+          "duration_p90_ms": 614878,
+          "capturable_profit_usd": "11.1702",
+          "capturable_profit_per_day": "5.7115"
+        },
+        {
+          "min_edge_bps": "10",
+          "n_windows": 20,
+          "windows_per_day": 10.226,
+          "duration_median_ms": 29568,
+          "duration_p90_ms": 614878,
+          "capturable_profit_usd": "19.0273",
+          "capturable_profit_per_day": "9.7290"
+        },
+        {
+          "min_edge_bps": "20",
+          "n_windows": 12,
+          "windows_per_day": 6.136,
+          "duration_median_ms": 75416,
+          "duration_p90_ms": 825489,
+          "capturable_profit_usd": "19.1587",
+          "capturable_profit_per_day": "9.7962"
+        },
+        {
+          "min_edge_bps": "40",
+          "n_windows": 13,
+          "windows_per_day": 6.647,
+          "duration_median_ms": 29879,
+          "duration_p90_ms": 1105698,
+          "capturable_profit_usd": "31.8705",
+          "capturable_profit_per_day": "16.2960"
+        },
+        {
+          "min_edge_bps": "60",
+          "n_windows": 10,
+          "windows_per_day": 5.113,
+          "duration_median_ms": 90640,
+          "duration_p90_ms": 736457,
+          "capturable_profit_usd": "34.0987",
+          "capturable_profit_per_day": "17.4353"
+        }
+      ]
+    },
+    "NVDAx|buy_fluxion_sell_bybit|open|rfq|poll_native": {
+      "n_samples": 371,
+      "windows_at_zero": 0,
+      "profit_at_zero": "0",
+      "profit_per_day_at_zero": "0E+27",
+      "fit": {
+        "min_edge_bps": "0",
+        "capture_fraction": "0.70",
+        "profit_at_fit": "0",
+        "profit_at_zero": "0",
+        "windows_per_day": 0.0,
+        "profit_per_day": "0",
+        "fitted": false
+      },
+      "sweep_selected": [
+        {
+          "min_edge_bps": "0",
+          "n_windows": 0,
+          "windows_per_day": 0.0,
+          "duration_median_ms": 0,
+          "duration_p90_ms": 0,
+          "capturable_profit_usd": "0",
+          "capturable_profit_per_day": "0"
+        },
+        {
+          "min_edge_bps": "10",
+          "n_windows": 0,
+          "windows_per_day": 0.0,
+          "duration_median_ms": 0,
+          "duration_p90_ms": 0,
+          "capturable_profit_usd": "0",
+          "capturable_profit_per_day": "0"
+        },
+        {
+          "min_edge_bps": "20",
+          "n_windows": 0,
+          "windows_per_day": 0.0,
+          "duration_median_ms": 0,
+          "duration_p90_ms": 0,
+          "capturable_profit_usd": "0",
+          "capturable_profit_per_day": "0"
+        },
+        {
+          "min_edge_bps": "40",
+          "n_windows": 0,
+          "windows_per_day": 0.0,
+          "duration_median_ms": 0,
+          "duration_p90_ms": 0,
+          "capturable_profit_usd": "0",
+          "capturable_profit_per_day": "0"
+        },
+        {
+          "min_edge_bps": "60",
+          "n_windows": 0,
+          "windows_per_day": 0.0,
+          "duration_median_ms": 0,
+          "duration_p90_ms": 0,
+          "capturable_profit_usd": "0",
+          "capturable_profit_per_day": "0"
+        }
+      ]
+    },
+    "SPCXx|buy_bybit_sell_fluxion|closed|rfq|poll_native": {
+      "n_samples": 960,
+      "windows_at_zero": 0,
+      "profit_at_zero": "0",
+      "profit_per_day_at_zero": "0E+27",
+      "fit": {
+        "min_edge_bps": "0",
+        "capture_fraction": "0.70",
+        "profit_at_fit": "0",
+        "profit_at_zero": "0",
+        "windows_per_day": 0.0,
+        "profit_per_day": "0",
+        "fitted": false
+      },
+      "sweep_selected": [
+        {
+          "min_edge_bps": "0",
+          "n_windows": 0,
+          "windows_per_day": 0.0,
+          "duration_median_ms": 0,
+          "duration_p90_ms": 0,
+          "capturable_profit_usd": "0",
+          "capturable_profit_per_day": "0"
+        },
+        {
+          "min_edge_bps": "10",
+          "n_windows": 0,
+          "windows_per_day": 0.0,
+          "duration_median_ms": 0,
+          "duration_p90_ms": 0,
+          "capturable_profit_usd": "0",
+          "capturable_profit_per_day": "0"
+        },
+        {
+          "min_edge_bps": "20",
+          "n_windows": 0,
+          "windows_per_day": 0.0,
+          "duration_median_ms": 0,
+          "duration_p90_ms": 0,
+          "capturable_profit_usd": "0",
+          "capturable_profit_per_day": "0"
+        },
+        {
+          "min_edge_bps": "40",
+          "n_windows": 0,
+          "windows_per_day": 0.0,
+          "duration_median_ms": 0,
+          "duration_p90_ms": 0,
+          "capturable_profit_usd": "0",
+          "capturable_profit_per_day": "0"
+        },
+        {
+          "min_edge_bps": "60",
+          "n_windows": 0,
+          "windows_per_day": 0.0,
+          "duration_median_ms": 0,
+          "duration_p90_ms": 0,
+          "capturable_profit_usd": "0",
+          "capturable_profit_per_day": "0"
+        }
+      ]
+    },
+    "SPCXx|buy_bybit_sell_fluxion|open|rfq|poll_native": {
+      "n_samples": 364,
+      "windows_at_zero": 0,
+      "profit_at_zero": "0",
+      "profit_per_day_at_zero": "0E+27",
+      "fit": {
+        "min_edge_bps": "0",
+        "capture_fraction": "0.70",
+        "profit_at_fit": "0",
+        "profit_at_zero": "0",
+        "windows_per_day": 0.0,
+        "profit_per_day": "0",
+        "fitted": false
+      },
+      "sweep_selected": [
+        {
+          "min_edge_bps": "0",
+          "n_windows": 0,
+          "windows_per_day": 0.0,
+          "duration_median_ms": 0,
+          "duration_p90_ms": 0,
+          "capturable_profit_usd": "0",
+          "capturable_profit_per_day": "0"
+        },
+        {
+          "min_edge_bps": "10",
+          "n_windows": 0,
+          "windows_per_day": 0.0,
+          "duration_median_ms": 0,
+          "duration_p90_ms": 0,
+          "capturable_profit_usd": "0",
+          "capturable_profit_per_day": "0"
+        },
+        {
+          "min_edge_bps": "20",
+          "n_windows": 0,
+          "windows_per_day": 0.0,
+          "duration_median_ms": 0,
+          "duration_p90_ms": 0,
+          "capturable_profit_usd": "0",
+          "capturable_profit_per_day": "0"
+        },
+        {
+          "min_edge_bps": "40",
+          "n_windows": 0,
+          "windows_per_day": 0.0,
+          "duration_median_ms": 0,
+          "duration_p90_ms": 0,
+          "capturable_profit_usd": "0",
+          "capturable_profit_per_day": "0"
+        },
+        {
+          "min_edge_bps": "60",
+          "n_windows": 0,
+          "windows_per_day": 0.0,
+          "duration_median_ms": 0,
+          "duration_p90_ms": 0,
+          "capturable_profit_usd": "0",
+          "capturable_profit_per_day": "0"
+        }
+      ]
+    },
+    "SPCXx|buy_fluxion_sell_bybit|closed|rfq|poll_native": {
+      "n_samples": 959,
+      "windows_at_zero": 0,
+      "profit_at_zero": "0",
+      "profit_per_day_at_zero": "0E+27",
+      "fit": {
+        "min_edge_bps": "0",
+        "capture_fraction": "0.70",
+        "profit_at_fit": "0",
+        "profit_at_zero": "0",
+        "windows_per_day": 0.0,
+        "profit_per_day": "0",
+        "fitted": false
+      },
+      "sweep_selected": [
+        {
+          "min_edge_bps": "0",
+          "n_windows": 0,
+          "windows_per_day": 0.0,
+          "duration_median_ms": 0,
+          "duration_p90_ms": 0,
+          "capturable_profit_usd": "0",
+          "capturable_profit_per_day": "0"
+        },
+        {
+          "min_edge_bps": "10",
+          "n_windows": 0,
+          "windows_per_day": 0.0,
+          "duration_median_ms": 0,
+          "duration_p90_ms": 0,
+          "capturable_profit_usd": "0",
+          "capturable_profit_per_day": "0"
+        },
+        {
+          "min_edge_bps": "20",
+          "n_windows": 0,
+          "windows_per_day": 0.0,
+          "duration_median_ms": 0,
+          "duration_p90_ms": 0,
+          "capturable_profit_usd": "0",
+          "capturable_profit_per_day": "0"
+        },
+        {
+          "min_edge_bps": "40",
+          "n_windows": 0,
+          "windows_per_day": 0.0,
+          "duration_median_ms": 0,
+          "duration_p90_ms": 0,
+          "capturable_profit_usd": "0",
+          "capturable_profit_per_day": "0"
+        },
+        {
+          "min_edge_bps": "60",
+          "n_windows": 0,
+          "windows_per_day": 0.0,
+          "duration_median_ms": 0,
+          "duration_p90_ms": 0,
+          "capturable_profit_usd": "0",
+          "capturable_profit_per_day": "0"
+        }
+      ]
+    },
+    "SPCXx|buy_fluxion_sell_bybit|open|rfq|poll_native": {
+      "n_samples": 364,
+      "windows_at_zero": 0,
+      "profit_at_zero": "0",
+      "profit_per_day_at_zero": "0E+27",
+      "fit": {
+        "min_edge_bps": "0",
+        "capture_fraction": "0.70",
+        "profit_at_fit": "0",
+        "profit_at_zero": "0",
+        "windows_per_day": 0.0,
+        "profit_per_day": "0",
+        "fitted": false
+      },
+      "sweep_selected": [
+        {
+          "min_edge_bps": "0",
+          "n_windows": 0,
+          "windows_per_day": 0.0,
+          "duration_median_ms": 0,
+          "duration_p90_ms": 0,
+          "capturable_profit_usd": "0",
+          "capturable_profit_per_day": "0"
+        },
+        {
+          "min_edge_bps": "10",
+          "n_windows": 0,
+          "windows_per_day": 0.0,
+          "duration_median_ms": 0,
+          "duration_p90_ms": 0,
+          "capturable_profit_usd": "0",
+          "capturable_profit_per_day": "0"
+        },
+        {
+          "min_edge_bps": "20",
+          "n_windows": 0,
+          "windows_per_day": 0.0,
+          "duration_median_ms": 0,
+          "duration_p90_ms": 0,
+          "capturable_profit_usd": "0",
+          "capturable_profit_per_day": "0"
+        },
+        {
+          "min_edge_bps": "40",
+          "n_windows": 0,
+          "windows_per_day": 0.0,
+          "duration_median_ms": 0,
+          "duration_p90_ms": 0,
+          "capturable_profit_usd": "0",
+          "capturable_profit_per_day": "0"
+        },
+        {
+          "min_edge_bps": "60",
+          "n_windows": 0,
+          "windows_per_day": 0.0,
+          "duration_median_ms": 0,
+          "duration_p90_ms": 0,
+          "capturable_profit_usd": "0",
+          "capturable_profit_per_day": "0"
+        }
+      ]
+    },
+    "TSLAx|buy_bybit_sell_fluxion|closed|amm|1000": {
+      "n_samples": 4691,
+      "windows_at_zero": 0,
+      "profit_at_zero": "0",
+      "profit_per_day_at_zero": "0E+27",
+      "fit": {
+        "min_edge_bps": "0",
+        "capture_fraction": "0.70",
+        "profit_at_fit": "0",
+        "profit_at_zero": "0",
+        "windows_per_day": 0.0,
+        "profit_per_day": "0",
+        "fitted": false
+      },
+      "sweep_selected": [
+        {
+          "min_edge_bps": "0",
+          "n_windows": 0,
+          "windows_per_day": 0.0,
+          "duration_median_ms": 0,
+          "duration_p90_ms": 0,
+          "capturable_profit_usd": "0",
+          "capturable_profit_per_day": "0"
+        },
+        {
+          "min_edge_bps": "10",
+          "n_windows": 0,
+          "windows_per_day": 0.0,
+          "duration_median_ms": 0,
+          "duration_p90_ms": 0,
+          "capturable_profit_usd": "0",
+          "capturable_profit_per_day": "0"
+        },
+        {
+          "min_edge_bps": "20",
+          "n_windows": 0,
+          "windows_per_day": 0.0,
+          "duration_median_ms": 0,
+          "duration_p90_ms": 0,
+          "capturable_profit_usd": "0",
+          "capturable_profit_per_day": "0"
+        },
+        {
+          "min_edge_bps": "40",
+          "n_windows": 0,
+          "windows_per_day": 0.0,
+          "duration_median_ms": 0,
+          "duration_p90_ms": 0,
+          "capturable_profit_usd": "0",
+          "capturable_profit_per_day": "0"
+        },
+        {
+          "min_edge_bps": "60",
+          "n_windows": 0,
+          "windows_per_day": 0.0,
+          "duration_median_ms": 0,
+          "duration_p90_ms": 0,
+          "capturable_profit_usd": "0",
+          "capturable_profit_per_day": "0"
+        }
+      ]
+    },
+    "TSLAx|buy_bybit_sell_fluxion|closed|amm|500": {
+      "n_samples": 4691,
+      "windows_at_zero": 0,
+      "profit_at_zero": "0",
+      "profit_per_day_at_zero": "0E+27",
+      "fit": {
+        "min_edge_bps": "0",
+        "capture_fraction": "0.70",
+        "profit_at_fit": "0",
+        "profit_at_zero": "0",
+        "windows_per_day": 0.0,
+        "profit_per_day": "0",
+        "fitted": false
+      },
+      "sweep_selected": [
+        {
+          "min_edge_bps": "0",
+          "n_windows": 0,
+          "windows_per_day": 0.0,
+          "duration_median_ms": 0,
+          "duration_p90_ms": 0,
+          "capturable_profit_usd": "0",
+          "capturable_profit_per_day": "0"
+        },
+        {
+          "min_edge_bps": "10",
+          "n_windows": 0,
+          "windows_per_day": 0.0,
+          "duration_median_ms": 0,
+          "duration_p90_ms": 0,
+          "capturable_profit_usd": "0",
+          "capturable_profit_per_day": "0"
+        },
+        {
+          "min_edge_bps": "20",
+          "n_windows": 0,
+          "windows_per_day": 0.0,
+          "duration_median_ms": 0,
+          "duration_p90_ms": 0,
+          "capturable_profit_usd": "0",
+          "capturable_profit_per_day": "0"
+        },
+        {
+          "min_edge_bps": "40",
+          "n_windows": 0,
+          "windows_per_day": 0.0,
+          "duration_median_ms": 0,
+          "duration_p90_ms": 0,
+          "capturable_profit_usd": "0",
+          "capturable_profit_per_day": "0"
+        },
+        {
+          "min_edge_bps": "60",
+          "n_windows": 0,
+          "windows_per_day": 0.0,
+          "duration_median_ms": 0,
+          "duration_p90_ms": 0,
+          "capturable_profit_usd": "0",
+          "capturable_profit_per_day": "0"
+        }
+      ]
+    },
+    "TSLAx|buy_bybit_sell_fluxion|closed|rfq|poll_native": {
+      "n_samples": 911,
+      "windows_at_zero": 0,
+      "profit_at_zero": "0",
+      "profit_per_day_at_zero": "0E+27",
+      "fit": {
+        "min_edge_bps": "0",
+        "capture_fraction": "0.70",
+        "profit_at_fit": "0",
+        "profit_at_zero": "0",
+        "windows_per_day": 0.0,
+        "profit_per_day": "0",
+        "fitted": false
+      },
+      "sweep_selected": [
+        {
+          "min_edge_bps": "0",
+          "n_windows": 0,
+          "windows_per_day": 0.0,
+          "duration_median_ms": 0,
+          "duration_p90_ms": 0,
+          "capturable_profit_usd": "0",
+          "capturable_profit_per_day": "0"
+        },
+        {
+          "min_edge_bps": "10",
+          "n_windows": 0,
+          "windows_per_day": 0.0,
+          "duration_median_ms": 0,
+          "duration_p90_ms": 0,
+          "capturable_profit_usd": "0",
+          "capturable_profit_per_day": "0"
+        },
+        {
+          "min_edge_bps": "20",
+          "n_windows": 0,
+          "windows_per_day": 0.0,
+          "duration_median_ms": 0,
+          "duration_p90_ms": 0,
+          "capturable_profit_usd": "0",
+          "capturable_profit_per_day": "0"
+        },
+        {
+          "min_edge_bps": "40",
+          "n_windows": 0,
+          "windows_per_day": 0.0,
+          "duration_median_ms": 0,
+          "duration_p90_ms": 0,
+          "capturable_profit_usd": "0",
+          "capturable_profit_per_day": "0"
+        },
+        {
+          "min_edge_bps": "60",
+          "n_windows": 0,
+          "windows_per_day": 0.0,
+          "duration_median_ms": 0,
+          "duration_p90_ms": 0,
+          "capturable_profit_usd": "0",
+          "capturable_profit_per_day": "0"
+        }
+      ]
+    },
+    "TSLAx|buy_bybit_sell_fluxion|open|amm|1000": {
+      "n_samples": 1243,
+      "windows_at_zero": 0,
+      "profit_at_zero": "0",
+      "profit_per_day_at_zero": "0E+27",
+      "fit": {
+        "min_edge_bps": "0",
+        "capture_fraction": "0.70",
+        "profit_at_fit": "0",
+        "profit_at_zero": "0",
+        "windows_per_day": 0.0,
+        "profit_per_day": "0",
+        "fitted": false
+      },
+      "sweep_selected": [
+        {
+          "min_edge_bps": "0",
+          "n_windows": 0,
+          "windows_per_day": 0.0,
+          "duration_median_ms": 0,
+          "duration_p90_ms": 0,
+          "capturable_profit_usd": "0",
+          "capturable_profit_per_day": "0"
+        },
+        {
+          "min_edge_bps": "10",
+          "n_windows": 0,
+          "windows_per_day": 0.0,
+          "duration_median_ms": 0,
+          "duration_p90_ms": 0,
+          "capturable_profit_usd": "0",
+          "capturable_profit_per_day": "0"
+        },
+        {
+          "min_edge_bps": "20",
+          "n_windows": 0,
+          "windows_per_day": 0.0,
+          "duration_median_ms": 0,
+          "duration_p90_ms": 0,
+          "capturable_profit_usd": "0",
+          "capturable_profit_per_day": "0"
+        },
+        {
+          "min_edge_bps": "40",
+          "n_windows": 0,
+          "windows_per_day": 0.0,
+          "duration_median_ms": 0,
+          "duration_p90_ms": 0,
+          "capturable_profit_usd": "0",
+          "capturable_profit_per_day": "0"
+        },
+        {
+          "min_edge_bps": "60",
+          "n_windows": 0,
+          "windows_per_day": 0.0,
+          "duration_median_ms": 0,
+          "duration_p90_ms": 0,
+          "capturable_profit_usd": "0",
+          "capturable_profit_per_day": "0"
+        }
+      ]
+    },
+    "TSLAx|buy_bybit_sell_fluxion|open|amm|500": {
+      "n_samples": 1243,
+      "windows_at_zero": 0,
+      "profit_at_zero": "0",
+      "profit_per_day_at_zero": "0E+27",
+      "fit": {
+        "min_edge_bps": "0",
+        "capture_fraction": "0.70",
+        "profit_at_fit": "0",
+        "profit_at_zero": "0",
+        "windows_per_day": 0.0,
+        "profit_per_day": "0",
+        "fitted": false
+      },
+      "sweep_selected": [
+        {
+          "min_edge_bps": "0",
+          "n_windows": 0,
+          "windows_per_day": 0.0,
+          "duration_median_ms": 0,
+          "duration_p90_ms": 0,
+          "capturable_profit_usd": "0",
+          "capturable_profit_per_day": "0"
+        },
+        {
+          "min_edge_bps": "10",
+          "n_windows": 0,
+          "windows_per_day": 0.0,
+          "duration_median_ms": 0,
+          "duration_p90_ms": 0,
+          "capturable_profit_usd": "0",
+          "capturable_profit_per_day": "0"
+        },
+        {
+          "min_edge_bps": "20",
+          "n_windows": 0,
+          "windows_per_day": 0.0,
+          "duration_median_ms": 0,
+          "duration_p90_ms": 0,
+          "capturable_profit_usd": "0",
+          "capturable_profit_per_day": "0"
+        },
+        {
+          "min_edge_bps": "40",
+          "n_windows": 0,
+          "windows_per_day": 0.0,
+          "duration_median_ms": 0,
+          "duration_p90_ms": 0,
+          "capturable_profit_usd": "0",
+          "capturable_profit_per_day": "0"
+        },
+        {
+          "min_edge_bps": "60",
+          "n_windows": 0,
+          "windows_per_day": 0.0,
+          "duration_median_ms": 0,
+          "duration_p90_ms": 0,
+          "capturable_profit_usd": "0",
+          "capturable_profit_per_day": "0"
+        }
+      ]
+    },
+    "TSLAx|buy_bybit_sell_fluxion|open|rfq|poll_native": {
+      "n_samples": 373,
+      "windows_at_zero": 0,
+      "profit_at_zero": "0",
+      "profit_per_day_at_zero": "0E+27",
+      "fit": {
+        "min_edge_bps": "0",
+        "capture_fraction": "0.70",
+        "profit_at_fit": "0",
+        "profit_at_zero": "0",
+        "windows_per_day": 0.0,
+        "profit_per_day": "0",
+        "fitted": false
+      },
+      "sweep_selected": [
+        {
+          "min_edge_bps": "0",
+          "n_windows": 0,
+          "windows_per_day": 0.0,
+          "duration_median_ms": 0,
+          "duration_p90_ms": 0,
+          "capturable_profit_usd": "0",
+          "capturable_profit_per_day": "0"
+        },
+        {
+          "min_edge_bps": "10",
+          "n_windows": 0,
+          "windows_per_day": 0.0,
+          "duration_median_ms": 0,
+          "duration_p90_ms": 0,
+          "capturable_profit_usd": "0",
+          "capturable_profit_per_day": "0"
+        },
+        {
+          "min_edge_bps": "20",
+          "n_windows": 0,
+          "windows_per_day": 0.0,
+          "duration_median_ms": 0,
+          "duration_p90_ms": 0,
+          "capturable_profit_usd": "0",
+          "capturable_profit_per_day": "0"
+        },
+        {
+          "min_edge_bps": "40",
+          "n_windows": 0,
+          "windows_per_day": 0.0,
+          "duration_median_ms": 0,
+          "duration_p90_ms": 0,
+          "capturable_profit_usd": "0",
+          "capturable_profit_per_day": "0"
+        },
+        {
+          "min_edge_bps": "60",
+          "n_windows": 0,
+          "windows_per_day": 0.0,
+          "duration_median_ms": 0,
+          "duration_p90_ms": 0,
+          "capturable_profit_usd": "0",
+          "capturable_profit_per_day": "0"
+        }
+      ]
+    },
+    "TSLAx|buy_fluxion_sell_bybit|closed|amm|1000": {
+      "n_samples": 4691,
+      "windows_at_zero": 0,
+      "profit_at_zero": "0",
+      "profit_per_day_at_zero": "0E+27",
+      "fit": {
+        "min_edge_bps": "0",
+        "capture_fraction": "0.70",
+        "profit_at_fit": "0",
+        "profit_at_zero": "0",
+        "windows_per_day": 0.0,
+        "profit_per_day": "0",
+        "fitted": false
+      },
+      "sweep_selected": [
+        {
+          "min_edge_bps": "0",
+          "n_windows": 0,
+          "windows_per_day": 0.0,
+          "duration_median_ms": 0,
+          "duration_p90_ms": 0,
+          "capturable_profit_usd": "0",
+          "capturable_profit_per_day": "0"
+        },
+        {
+          "min_edge_bps": "10",
+          "n_windows": 0,
+          "windows_per_day": 0.0,
+          "duration_median_ms": 0,
+          "duration_p90_ms": 0,
+          "capturable_profit_usd": "0",
+          "capturable_profit_per_day": "0"
+        },
+        {
+          "min_edge_bps": "20",
+          "n_windows": 0,
+          "windows_per_day": 0.0,
+          "duration_median_ms": 0,
+          "duration_p90_ms": 0,
+          "capturable_profit_usd": "0",
+          "capturable_profit_per_day": "0"
+        },
+        {
+          "min_edge_bps": "40",
+          "n_windows": 0,
+          "windows_per_day": 0.0,
+          "duration_median_ms": 0,
+          "duration_p90_ms": 0,
+          "capturable_profit_usd": "0",
+          "capturable_profit_per_day": "0"
+        },
+        {
+          "min_edge_bps": "60",
+          "n_windows": 0,
+          "windows_per_day": 0.0,
+          "duration_median_ms": 0,
+          "duration_p90_ms": 0,
+          "capturable_profit_usd": "0",
+          "capturable_profit_per_day": "0"
+        }
+      ]
+    },
+    "TSLAx|buy_fluxion_sell_bybit|closed|amm|500": {
+      "n_samples": 4691,
+      "windows_at_zero": 9,
+      "profit_at_zero": "0.5677588509278542699560633",
+      "profit_per_day_at_zero": "0.2903057944672426365069425920",
+      "fit": {
+        "min_edge_bps": "48",
+        "capture_fraction": "0.70",
+        "profit_at_fit": "2.4456",
+        "profit_at_zero": "0.5678",
+        "windows_per_day": 0.511,
+        "profit_per_day": "1.2505",
+        "fitted": true
+      },
+      "sweep_selected": [
+        {
+          "min_edge_bps": "0",
+          "n_windows": 9,
+          "windows_per_day": 4.602,
+          "duration_median_ms": 19546,
+          "duration_p90_ms": 2400789,
+          "capturable_profit_usd": "0.5678",
+          "capturable_profit_per_day": "0.2903"
+        },
+        {
+          "min_edge_bps": "10",
+          "n_windows": 7,
+          "windows_per_day": 3.579,
+          "duration_median_ms": 1814775,
+          "duration_p90_ms": 3699046,
+          "capturable_profit_usd": "4.3597",
+          "capturable_profit_per_day": "2.2292"
+        },
+        {
+          "min_edge_bps": "20",
+          "n_windows": 22,
+          "windows_per_day": 11.249,
+          "duration_median_ms": 49146,
+          "duration_p90_ms": 932848,
+          "capturable_profit_usd": "24.5370",
+          "capturable_profit_per_day": "12.5462"
+        },
+        {
+          "min_edge_bps": "40",
+          "n_windows": 8,
+          "windows_per_day": 4.091,
+          "duration_median_ms": 9692,
+          "duration_p90_ms": 169116,
+          "capturable_profit_usd": "16.6390",
+          "capturable_profit_per_day": "8.5078"
+        },
+        {
+          "min_edge_bps": "60",
+          "n_windows": 0,
+          "windows_per_day": 0.0,
+          "duration_median_ms": 0,
+          "duration_p90_ms": 0,
+          "capturable_profit_usd": "0",
+          "capturable_profit_per_day": "0"
+        }
+      ]
+    },
+    "TSLAx|buy_fluxion_sell_bybit|closed|rfq|poll_native": {
+      "n_samples": 910,
+      "windows_at_zero": 0,
+      "profit_at_zero": "0",
+      "profit_per_day_at_zero": "0E+27",
+      "fit": {
+        "min_edge_bps": "0",
+        "capture_fraction": "0.70",
+        "profit_at_fit": "0",
+        "profit_at_zero": "0",
+        "windows_per_day": 0.0,
+        "profit_per_day": "0",
+        "fitted": false
+      },
+      "sweep_selected": [
+        {
+          "min_edge_bps": "0",
+          "n_windows": 0,
+          "windows_per_day": 0.0,
+          "duration_median_ms": 0,
+          "duration_p90_ms": 0,
+          "capturable_profit_usd": "0",
+          "capturable_profit_per_day": "0"
+        },
+        {
+          "min_edge_bps": "10",
+          "n_windows": 0,
+          "windows_per_day": 0.0,
+          "duration_median_ms": 0,
+          "duration_p90_ms": 0,
+          "capturable_profit_usd": "0",
+          "capturable_profit_per_day": "0"
+        },
+        {
+          "min_edge_bps": "20",
+          "n_windows": 0,
+          "windows_per_day": 0.0,
+          "duration_median_ms": 0,
+          "duration_p90_ms": 0,
+          "capturable_profit_usd": "0",
+          "capturable_profit_per_day": "0"
+        },
+        {
+          "min_edge_bps": "40",
+          "n_windows": 0,
+          "windows_per_day": 0.0,
+          "duration_median_ms": 0,
+          "duration_p90_ms": 0,
+          "capturable_profit_usd": "0",
+          "capturable_profit_per_day": "0"
+        },
+        {
+          "min_edge_bps": "60",
+          "n_windows": 0,
+          "windows_per_day": 0.0,
+          "duration_median_ms": 0,
+          "duration_p90_ms": 0,
+          "capturable_profit_usd": "0",
+          "capturable_profit_per_day": "0"
+        }
+      ]
+    },
+    "TSLAx|buy_fluxion_sell_bybit|open|amm|1000": {
+      "n_samples": 1243,
+      "windows_at_zero": 1,
+      "profit_at_zero": "0.1954325140471015522729483",
+      "profit_per_day_at_zero": "0.09992832548969593192357088410",
+      "fit": {
+        "min_edge_bps": "28",
+        "capture_fraction": "0.70",
+        "profit_at_fit": "2.8445",
+        "profit_at_zero": "0.1954",
+        "windows_per_day": 0.511,
+        "profit_per_day": "1.4545",
+        "fitted": true
+      },
+      "sweep_selected": [
+        {
+          "min_edge_bps": "0",
+          "n_windows": 1,
+          "windows_per_day": 0.511,
+          "duration_median_ms": 227215,
+          "duration_p90_ms": 227215,
+          "capturable_profit_usd": "0.1954",
+          "capturable_profit_per_day": "0.0999"
+        },
+        {
+          "min_edge_bps": "10",
+          "n_windows": 1,
+          "windows_per_day": 0.511,
+          "duration_median_ms": 195079,
+          "duration_p90_ms": 195079,
+          "capturable_profit_usd": "1.2275",
+          "capturable_profit_per_day": "0.6277"
+        },
+        {
+          "min_edge_bps": "20",
+          "n_windows": 3,
+          "windows_per_day": 1.534,
+          "duration_median_ms": 0,
+          "duration_p90_ms": 45843,
+          "capturable_profit_usd": "7.0569",
+          "capturable_profit_per_day": "3.6083"
+        },
+        {
+          "min_edge_bps": "40",
+          "n_windows": 0,
+          "windows_per_day": 0.0,
+          "duration_median_ms": 0,
+          "duration_p90_ms": 0,
+          "capturable_profit_usd": "0",
+          "capturable_profit_per_day": "0"
+        },
+        {
+          "min_edge_bps": "60",
+          "n_windows": 0,
+          "windows_per_day": 0.0,
+          "duration_median_ms": 0,
+          "duration_p90_ms": 0,
+          "capturable_profit_usd": "0",
+          "capturable_profit_per_day": "0"
+        }
+      ]
+    },
+    "TSLAx|buy_fluxion_sell_bybit|open|amm|500": {
+      "n_samples": 1243,
+      "windows_at_zero": 4,
+      "profit_at_zero": "4.5827553209364518363548881",
+      "profit_per_day_at_zero": "2.343249113808171297899906615",
+      "fit": {
+        "min_edge_bps": "60",
+        "capture_fraction": "0.70",
+        "profit_at_fit": "7.0321",
+        "profit_at_zero": "4.5828",
+        "windows_per_day": 1.023,
+        "profit_per_day": "3.5956",
+        "fitted": true
+      },
+      "sweep_selected": [
+        {
+          "min_edge_bps": "0",
+          "n_windows": 4,
+          "windows_per_day": 2.045,
+          "duration_median_ms": 164743,
+          "duration_p90_ms": 2009544,
+          "capturable_profit_usd": "4.5828",
+          "capturable_profit_per_day": "2.3432"
+        },
+        {
+          "min_edge_bps": "10",
+          "n_windows": 3,
+          "windows_per_day": 1.534,
+          "duration_median_ms": 284623,
+          "duration_p90_ms": 1634503,
+          "capturable_profit_usd": "5.0278",
+          "capturable_profit_per_day": "2.5708"
+        },
+        {
+          "min_edge_bps": "20",
+          "n_windows": 7,
+          "windows_per_day": 3.579,
+          "duration_median_ms": 59571,
+          "duration_p90_ms": 360276,
+          "capturable_profit_usd": "10.8006",
+          "capturable_profit_per_day": "5.5225"
+        },
+        {
+          "min_edge_bps": "40",
+          "n_windows": 6,
+          "windows_per_day": 3.068,
+          "duration_median_ms": 29728,
+          "duration_p90_ms": 150048,
+          "capturable_profit_usd": "14.3807",
+          "capturable_profit_per_day": "7.3531"
+        },
+        {
+          "min_edge_bps": "60",
+          "n_windows": 2,
+          "windows_per_day": 1.023,
+          "duration_median_ms": 29249,
+          "duration_p90_ms": 779678,
+          "capturable_profit_usd": "7.0321",
+          "capturable_profit_per_day": "3.5956"
+        }
+      ]
+    },
+    "TSLAx|buy_fluxion_sell_bybit|open|rfq|poll_native": {
+      "n_samples": 370,
+      "windows_at_zero": 0,
+      "profit_at_zero": "0",
+      "profit_per_day_at_zero": "0E+27",
+      "fit": {
+        "min_edge_bps": "0",
+        "capture_fraction": "0.70",
+        "profit_at_fit": "0",
+        "profit_at_zero": "0",
+        "windows_per_day": 0.0,
+        "profit_per_day": "0",
+        "fitted": false
+      },
+      "sweep_selected": [
+        {
+          "min_edge_bps": "0",
+          "n_windows": 0,
+          "windows_per_day": 0.0,
+          "duration_median_ms": 0,
+          "duration_p90_ms": 0,
+          "capturable_profit_usd": "0",
+          "capturable_profit_per_day": "0"
+        },
+        {
+          "min_edge_bps": "10",
+          "n_windows": 0,
+          "windows_per_day": 0.0,
+          "duration_median_ms": 0,
+          "duration_p90_ms": 0,
+          "capturable_profit_usd": "0",
+          "capturable_profit_per_day": "0"
+        },
+        {
+          "min_edge_bps": "20",
+          "n_windows": 0,
+          "windows_per_day": 0.0,
+          "duration_median_ms": 0,
+          "duration_p90_ms": 0,
+          "capturable_profit_usd": "0",
+          "capturable_profit_per_day": "0"
+        },
+        {
+          "min_edge_bps": "40",
+          "n_windows": 0,
+          "windows_per_day": 0.0,
+          "duration_median_ms": 0,
+          "duration_p90_ms": 0,
+          "capturable_profit_usd": "0",
+          "capturable_profit_per_day": "0"
+        },
+        {
+          "min_edge_bps": "60",
+          "n_windows": 0,
+          "windows_per_day": 0.0,
+          "duration_median_ms": 0,
+          "duration_p90_ms": 0,
+          "capturable_profit_usd": "0",
+          "capturable_profit_per_day": "0"
+        }
+      ]
+    }
+  }
+}

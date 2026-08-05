@@ -235,6 +235,13 @@ placeholders. Agents must not assume a module exists until its issue lands. -->
     fail-fast on closed clients, `dev-web.sh` external heartbeat stall →
     `kill -9`, platform-aware `recovery_hint` (no systemctl on macOS),
     meta `collector_last_feed_error*`.
+  - **M8 xStocks edge quant / bot go-no-go (WHI-866) landed:** pure
+    `monitor.analysis.edge_quant` (windows, single-flight capturable profit,
+    knee threshold fit) + `scripts/xstocks_edge_quant.py` over the
+    bybit-fluxion journal (PnL v2 engine, $500/$1k rungs, AMM vs RFQ).
+    Report `docs/references/m8-xstocks-edge-quant.md` (+ companion JSON).
+    Headline is AMM-only portfolio single-flight at ≤$1k/trade; gates the
+    sibling `mantle-stocks-arbitrage-bots` M0.
 
 ## Build, test, run
 
@@ -270,6 +277,9 @@ uv run python -m monitor.underlying --tickers AAPL,TSLA,SKHY
 # MM attribution research backfill (WHI-767); needs Mantle RPC + network:
 #   uv run python scripts/mm_attribution_analysis.py --days 30
 #   uv run python scripts/mm_attribution_analysis.py --skip-fetch
+# M8 xStocks edge quant / bot go-no-go (WHI-866); needs bybit-fluxion journal:
+#   uv run python scripts/xstocks_edge_quant.py
+#   uv run python scripts/xstocks_edge_quant.py --db data/monitor-bybit-fluxion.db --sample-ms 15000
 # WHI-768: enrich historical RFQ fills + refresh address labels from journal:
 #   uv run python -m monitor.collector.backfill_rfq
 #   uv run python -m monitor.attribution.refresh
