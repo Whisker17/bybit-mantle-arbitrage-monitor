@@ -301,13 +301,26 @@ def threshold_sweep(
     span_ms: int,
     max_trade_usd: Decimal | None = None,
 ) -> list[SweepRow]:
-    """Sweep ``min_edge_bps`` and report window stats + capturable profit/day."""
+    """Sweep ``min_edge_bps`` and report window stats + capturable profit/day.
+
+    Windows are detected once at the minimum threshold (usually 0), then each
+    higher T keeps only windows whose ``peak_edge_bps >= T``. That keeps
+    capturable profit **monotone non-increasing** in T (same fire-on-open
+    trades, progressively dropped weak windows) so the 70% knee fit is well
+    defined. Re-detecting at each T can *raise* profit via fragmentation and
+    pins the fit to the grid ceiling.
+    """
     if span_ms <= 0:
         raise ValueError("span_ms must be positive")
     days = Decimal(span_ms) / Decimal(86_400_000)
+    ordered_thr = sorted(thresholds_bps)
+    base_thr = ordered_thr[0] if ordered_thr else Decimal(0)
+    base_wins = detect_windows(
+        samples, min_edge_bps=base_thr, max_gap_ms=max_gap_ms
+    )
     rows: list[SweepRow] = []
-    for thr in thresholds_bps:
-        wins = detect_windows(samples, min_edge_bps=thr, max_gap_ms=max_gap_ms)
+    for thr in ordered_thr:
+        wins = [w for w in base_wins if w.peak_edge_bps >= thr]
         durs = [w.duration_ms for w in wins]
         profit = capturable_profit_single_flight(
             wins,
@@ -369,12 +382,13 @@ def fit_min_edge_bps(
             fitted=False,
         )
     target = p0 * capture_fraction
+    # Scan the full sweep (no early break): keep the *highest* T that still
+    # clears the capture bar. With monotone-filtered windows this is the knee;
+    # without the break, a mid-sweep dip cannot hide a later recovery either.
     chosen = baseline
     for row in ordered:
         if row.capturable_profit_usd >= target:
             chosen = row
-        else:
-            break
     return ThresholdFit(
         min_edge_bps=chosen.min_edge_bps,
         capture_fraction=capture_fraction,

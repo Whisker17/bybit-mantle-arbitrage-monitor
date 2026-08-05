@@ -12,7 +12,7 @@ Usage (repo root; journal must exist):
 
   uv run python scripts/xstocks_edge_quant.py
   uv run python scripts/xstocks_edge_quant.py --db data/monitor-bybit-fluxion.db
-  uv run python scripts/xstocks_edge_quant.py --sample-ms 15000 --report-only
+  uv run python scripts/xstocks_edge_quant.py --sample-ms 15000
 """
 
 from __future__ import annotations
@@ -25,7 +25,7 @@ import sys
 import time
 from collections import defaultdict
 from collections.abc import Sequence
-from dataclasses import asdict, dataclass
+from dataclasses import dataclass
 from datetime import UTC, datetime
 from decimal import Decimal
 from pathlib import Path
@@ -86,7 +86,6 @@ DEFAULT_TRADE_DURATION_MS = 5_000
 DEFAULT_MAX_GAP_MS = 120_000  # glue-break for window detection
 DEFAULT_SAMPLE_MS = 10_000
 DEFAULT_ALIGN_MS = 15_000  # max as-of age for pool / depth
-# Max |AMM−CEX| bps before we skip as pricing_anomaly (same default as metrics).
 DEFAULT_REPORT = _REPO / "docs" / "references" / "m8-xstocks-edge-quant.md"
 DEFAULT_JSON = _REPO / "docs" / "references" / "m8-xstocks-edge-quant.json"
 
@@ -478,22 +477,23 @@ def analyze_series(
     max_gap_ms: int,
 ) -> dict[str, Any]:
     samples = sorted(samples, key=lambda s: s.ts_ms)
+    empty_fit = ThresholdFit(
+        min_edge_bps=Decimal(0),
+        capture_fraction=Decimal("0.70"),
+        profit_at_fit=Decimal(0),
+        profit_at_zero=Decimal(0),
+        windows_per_day=0.0,
+        profit_per_day=Decimal(0),
+        fitted=False,
+    )
     if not samples:
         return {
             "n_samples": 0,
             "sweep": [],
-            "fit": asdict(
-                ThresholdFit(
-                    min_edge_bps=Decimal(0),
-                    capture_fraction=Decimal("0.70"),
-                    profit_at_fit=Decimal(0),
-                    profit_at_zero=Decimal(0),
-                    windows_per_day=0.0,
-                    profit_per_day=Decimal(0),
-                    fitted=False,
-                )
-            ),
+            "fit": _fit_dict(empty_fit),
             "windows_at_zero": 0,
+            "profit_at_zero": "0",
+            "profit_per_day_at_zero": "0",
         }
     sweep = threshold_sweep(
         samples,
@@ -513,9 +513,9 @@ def analyze_series(
         "sweep": [_sweep_dict(r) for r in sweep],
         "fit": _fit_dict(fit),
         "windows_at_zero": len(wins0),
-        "profit_at_zero": str(sweep[0].capturable_profit_usd) if sweep else "0",
+        "profit_at_zero": _fmt_dec(sweep[0].capturable_profit_usd) if sweep else "0",
         "profit_per_day_at_zero": (
-            str(sweep[0].capturable_profit_per_day) if sweep else "0"
+            _fmt_dec(sweep[0].capturable_profit_per_day) if sweep else "0"
         ),
     }
 
@@ -728,9 +728,9 @@ def render_report(payload: dict[str, Any]) -> str:
     a("## Window statistics (selected thresholds)")
     a("")
     a(
-        "Full 0..60 / step-2 sweeps are in the companion JSON. Tables below "
-        "show thresholds 0 / 10 / 20 / 40 bps for AMM $1,000 (open session) "
-        "and RFQ (all sizes pooled as poll-native, open session)."
+        "Selected thresholds 0 / 10 / 20 / 40 bps are tabulated below; the "
+        "companion JSON keeps the same selected rows per series (re-run the "
+        "script to rebuild the full 0..60 / step-2 sweep in memory)."
     )
     a("")
     a("### AMM $1,000 — RTH open")
@@ -744,6 +744,25 @@ def render_report(payload: dict[str, Any]) -> str:
         "---------:|---------:|---------:|---------:|"
     )
     for row in payload["amm_open_1000_table"]:
+        a(
+            f"| {row['pair_id']} | {row['direction'][:16]} | "
+            f"{row['t0_wd']:.2f} | {row['t0_pd']} | "
+            f"{row['t10_wd']:.2f} | {row['t10_pd']} | "
+            f"{row['t20_wd']:.2f} | {row['t20_pd']} | "
+            f"{row['t40_wd']:.2f} | {row['t40_pd']} |"
+        )
+    a("")
+    a("### AMM $1,000 — closed session")
+    a("")
+    a(
+        "| Symbol | Dir | T=0 w/d | T=0 $/d | T=10 w/d | T=10 $/d | "
+        "T=20 w/d | T=20 $/d | T=40 w/d | T=40 $/d |"
+    )
+    a(
+        "|--------|-----|--------:|--------:|---------:|---------:|"
+        "---------:|---------:|---------:|---------:|"
+    )
+    for row in payload["amm_closed_1000_table"]:
         a(
             f"| {row['pair_id']} | {row['direction'][:16]} | "
             f"{row['t0_wd']:.2f} | {row['t0_pd']} | "
@@ -877,9 +896,6 @@ def run(args: argparse.Namespace) -> int:
 
     # --- Build samples ---
     series: dict[tuple[str, str, str, str, str], list[EdgeSample]] = defaultdict(list)
-    all_amm_windows_1000: list[OpportunityWindow] = []
-    per_pair_open_profit_1000: dict[str, Decimal] = defaultdict(lambda: Decimal(0))
-
     sample_ms = int(args.sample_ms)
     align_ms = int(args.align_ms)
     reentry = int(args.reentry_cooldown_ms)
@@ -941,10 +957,31 @@ def run(args: argparse.Namespace) -> int:
 
     # --- Analyze each series ---
     results: dict[str, Any] = {}
-    fits_amm_1000: list[dict[str, Any]] = []
     amm_open_1000_table: list[dict[str, Any]] = []
+    amm_closed_1000_table: list[dict[str, Any]] = []
     amm_open_500_summary: list[dict[str, Any]] = []
     rfq_open_table: list[dict[str, Any]] = []
+    all_amm_1000: list[OpportunityWindow] = []
+
+    def _amm_threshold_row(
+        pair_id: str, direction: str, analysis: dict[str, Any]
+    ) -> dict[str, Any]:
+        s0 = _pick_sweep(analysis["sweep"], "0")
+        s10 = _pick_sweep(analysis["sweep"], "10")
+        s20 = _pick_sweep(analysis["sweep"], "20")
+        s40 = _pick_sweep(analysis["sweep"], "40")
+        return {
+            "pair_id": pair_id,
+            "direction": direction,
+            "t0_wd": s0["windows_per_day"] if s0 else 0,
+            "t0_pd": s0["capturable_profit_per_day"] if s0 else "0",
+            "t10_wd": s10["windows_per_day"] if s10 else 0,
+            "t10_pd": s10["capturable_profit_per_day"] if s10 else "0",
+            "t20_wd": s20["windows_per_day"] if s20 else 0,
+            "t20_pd": s20["capturable_profit_per_day"] if s20 else "0",
+            "t40_wd": s40["windows_per_day"] if s40 else 0,
+            "t40_pd": s40["capturable_profit_per_day"] if s40 else "0",
+        }
 
     for key, samples in sorted(series.items()):
         pair_id, direction, session, venue, size_s = key
@@ -957,36 +994,18 @@ def run(args: argparse.Namespace) -> int:
         )
         results["|".join(key)] = analysis
 
-        if venue == "amm" and size_s == "1000" and session == "open":
-            fit = analysis["fit"]
-            # Collect windows at T=0 for portfolio.
+        if venue == "amm" and size_s == "1000":
             wins = detect_windows(
                 sorted(samples, key=lambda s: s.ts_ms),
                 min_edge_bps=Decimal(0),
                 max_gap_ms=max_gap,
             )
-            all_amm_windows_1000.extend(wins)
-            per_pair_open_profit_1000[pair_id] += Decimal(
-                analysis["profit_at_zero"] or "0"
-            )
-            s0 = _pick_sweep(analysis["sweep"], "0")
-            s10 = _pick_sweep(analysis["sweep"], "10")
-            s20 = _pick_sweep(analysis["sweep"], "20")
-            s40 = _pick_sweep(analysis["sweep"], "40")
-            amm_open_1000_table.append(
-                {
-                    "pair_id": pair_id,
-                    "direction": direction,
-                    "t0_wd": s0["windows_per_day"] if s0 else 0,
-                    "t0_pd": s0["capturable_profit_per_day"] if s0 else "0",
-                    "t10_wd": s10["windows_per_day"] if s10 else 0,
-                    "t10_pd": s10["capturable_profit_per_day"] if s10 else "0",
-                    "t20_wd": s20["windows_per_day"] if s20 else 0,
-                    "t20_pd": s20["capturable_profit_per_day"] if s20 else "0",
-                    "t40_wd": s40["windows_per_day"] if s40 else 0,
-                    "t40_pd": s40["capturable_profit_per_day"] if s40 else "0",
-                }
-            )
+            all_amm_1000.extend(wins)
+            row = _amm_threshold_row(pair_id, direction, analysis)
+            if session == "open":
+                amm_open_1000_table.append(row)
+            else:
+                amm_closed_1000_table.append(row)
 
         if venue == "amm" and size_s == "500" and session == "open":
             s0 = _pick_sweep(analysis["sweep"], "0")
@@ -1044,29 +1063,8 @@ def run(args: argparse.Namespace) -> int:
         key=lambda r: (r["pair_id"], 0 if r["session"] == "open" else 1),
     )
 
-    # Portfolio single-flight across all AMM $1000 open+closed windows at T=0.
-    port_profit = portfolio_capturable_profit(
-        all_amm_windows_1000,
-        reentry_cooldown_ms=reentry,
-        trade_duration_ms=trade_dur,
-        max_trade_usd=MAX_TRADE_USD,
-        inventory_usd=INVENTORY_USD,
-    )
-    # Also include closed-session windows for headline? Issue says average
-    # capturable profit — use all sessions for portfolio (bot may trade closed).
-    # Re-collect all AMM 1000 windows (open+closed).
-    all_amm_1000: list[OpportunityWindow] = []
-    for key, samples in series.items():
-        pair_id, direction, session, venue, size_s = key
-        if venue != "amm" or size_s != "1000":
-            continue
-        all_amm_1000.extend(
-            detect_windows(
-                sorted(samples, key=lambda s: s.ts_ms),
-                min_edge_bps=Decimal(0),
-                max_gap_ms=max_gap,
-            )
-        )
+    # Portfolio single-flight: AMM $1000, open+closed, T=0 windows,
+    # one entry per window (default reentry cooldown).
     port_profit = portfolio_capturable_profit(
         all_amm_1000,
         reentry_cooldown_ms=reentry,
@@ -1230,18 +1228,21 @@ def run(args: argparse.Namespace) -> int:
         },
         "pairs_span": pairs_span,
         "hygiene": [
-            "No corporate-action calendar was applied: observation window is "
-            f"{_ms_iso(since_ms)} → {_ms_iso(until_ms)} and no xStock "
-            "dividend/split/rebase was announced in-span for the tracked names "
-            "(manual check; automate later per bot DESIGN §8).",
-            "No bStocks-style share rebase applies to Fluxion xStocks wrapper "
-            "mechanics in this window; no segment break was introduced.",
+            "No automated corporate-action calendar is applied. The observation "
+            f"window is {_ms_iso(since_ms)} → {_ms_iso(until_ms)}; re-runs over "
+            "a longer span must re-check dividends/splits/rebases and disclose "
+            "any excluded days (bot DESIGN §8).",
+            "No bStocks-style share rebase segment break was introduced for "
+            "Fluxion xStocks wrappers in this study.",
             "Samples with `gap=1` on book/pool/depth rows are dropped at load.",
             "Pairs failing `amm_quote_for_cex` (empty_pool / invalid_mid / "
             "pricing_anomaly, default |spread| > 500 bps) are excluded from "
             "AMM samples for that timestamp (SPCXx frequently hits this).",
             "CEX-only inventory pairs (no Fluxion AMM) are out of scope for "
             "the bot v1 AMM path and appear only in the coverage table.",
+            "Headline portfolio mixes open+closed AMM $1000 windows at T=0 "
+            "(one trade per window, single-flight). Go-list symbols are "
+            "open-session fits only.",
         ],
         "headline": {
             "calendar_days": float(calendar_days),
@@ -1255,6 +1256,9 @@ def run(args: argparse.Namespace) -> int:
         "fits_amm_1000": fits_amm_1000,
         "amm_open_1000_table": sorted(
             amm_open_1000_table, key=lambda r: (r["pair_id"], r["direction"])
+        ),
+        "amm_closed_1000_table": sorted(
+            amm_closed_1000_table, key=lambda r: (r["pair_id"], r["direction"])
         ),
         "amm_open_500_summary": sorted(
             amm_open_500_summary, key=lambda r: (r["pair_id"], r["direction"])
@@ -1337,11 +1341,6 @@ def main() -> int:
         "--trade-duration-ms", type=int, default=DEFAULT_TRADE_DURATION_MS
     )
     p.add_argument("--max-gap-ms", type=int, default=DEFAULT_MAX_GAP_MS)
-    p.add_argument(
-        "--report-only",
-        action="store_true",
-        help="Unused placeholder (always regenerates from journal).",
-    )
     return run(p.parse_args())
 
 

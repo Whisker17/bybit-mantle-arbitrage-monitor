@@ -247,11 +247,15 @@ class TestThresholdFit:
         )
         fit = fit_min_edge_bps(sweep, capture_fraction=Decimal("0.70"))
         assert fit.fitted
-        # At T=0 and T=4 the mild noise window still counts; at T=10+ only the
-        # 30-bps window remains. Knee should sit at the highest T that still
-        # keeps ≥70% of P0 — here the single fat window dominates.
+        # Base windows at T=0: fat 30-bps window (pnl=3) + mild 5-bps window
+        # (pnl=0.2). Filtering peak>=10 drops the mild window and keeps ≥70%
+        # of P0; peak>=40 drops both → fit lands in [10, 30].
         assert fit.min_edge_bps >= Decimal(10)
+        assert fit.min_edge_bps < Decimal(40)
         assert fit.profit_at_fit > 0
+        # Monotone: higher T never increases capturable profit.
+        profits = [Decimal(r.capturable_profit_usd) for r in sweep]
+        assert profits == sorted(profits, reverse=True)
 
     def test_unfitted_when_no_profit(self) -> None:
         samples = [_s(0, edge=-5, pnl=-1), _s(1000, edge=-2, pnl=-0.5)]
