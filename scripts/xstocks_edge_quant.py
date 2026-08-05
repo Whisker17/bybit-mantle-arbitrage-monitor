@@ -60,6 +60,10 @@ from monitor.quotes import (  # noqa: E402
     FluxionPoolStateTick,
     FluxionRfqQuoteTick,
 )
+
+# Row mappers are module-private on JournalReader but are the only typed
+# SQLite→tick path; research scripts reuse them rather than re-parsing
+# columns (same pattern as offline analysis elsewhere).
 from monitor.storage.reader import (  # noqa: E402
     _row_to_bybit_book,
     _row_to_bybit_depth,
@@ -109,10 +113,6 @@ def _ms_iso(ms: int | None) -> str:
     if ms is None:
         return "n/a"
     return datetime.fromtimestamp(ms / 1000, tz=UTC).strftime("%Y-%m-%d %H:%M:%S UTC")
-
-
-def _dec(v: Any) -> Decimal:
-    return Decimal(str(v))
 
 
 def _in_gap(ts_ms: int, gaps: Sequence[GapInterval]) -> bool:
@@ -698,30 +698,40 @@ def render_report(payload: dict[str, Any]) -> str:
     a(f"| **Average capturable profit / day** | **{h['profit_per_day_usd']} USDT/day** |")
     a(f"| Symbols with fitted stable windows (open, $1000) | {h['n_stable_symbols']} |")
     a(f"| Go-list | {', '.join(h['go_list']) if h['go_list'] else '—'} |")
+    core = ", ".join(h["core_go_list"]) if h["core_go_list"] else "—"
+    a(f"| Core go-list (≥1 USDT/day open fit) | {core} |")
+    a(f"| Portfolio $/day excluding HOODx | {h['profit_per_day_ex_hoodx']} |")
     a(f"| **Verdict** | **{h['verdict']}** |")
     a("")
     a(h["verdict_detail"])
     a("")
+    if h.get("concentration_note"):
+        a(h["concentration_note"])
+        a("")
     a("## Fitted `min_edge_bps` (AMM, for bot config)")
     a("")
     a(
         "Per (symbol × session) at the **$1,000** rung, best direction by "
         "zero-threshold profit/day. Knee fit = highest threshold retaining ≥70% "
-        "of that direction's capturable profit."
+        "of that direction's capturable profit (windows filtered from the T=0 "
+        "set by ``peak_edge_bps``). Rows marked **ceiling** hit the top of the "
+        "0..60 sweep still above the capture bar — treat 60 as a lower bound, "
+        "not a tight optimum."
     )
     a("")
     a(
-        "| Symbol | Session | Direction | Fit bps | Windows/day | "
+        "| Symbol | Session | Direction | Fit bps | Flag | Windows/day | "
         "Profit/day (USDT) | Fitted? | N samples |"
     )
     a(
-        "|--------|---------|-----------|--------:|------------:|"
+        "|--------|---------|-----------|--------:|------|------------:|"
         "------------------:|---------|----------:|"
     )
     for row in payload["fits_amm_1000"]:
         a(
             f"| {row['pair_id']} | {row['session']} | {row['direction']} | "
-            f"{row['min_edge_bps']} | {row['windows_per_day']:.2f} | "
+            f"{row['min_edge_bps']} | {row.get('flag', '—')} | "
+            f"{row['windows_per_day']:.2f} | "
             f"{row['profit_per_day']} | {row['fitted']} | {row['n_samples']} |"
         )
     a("")
@@ -1076,21 +1086,64 @@ def run(args: argparse.Namespace) -> int:
         port_profit / calendar_days if calendar_days > 0 else Decimal(0)
     )
 
+    # Annotate ceiling-pinned fits (hit top of 0..60 grid still ≥70% of P0).
+    for bucket in (best_open, best_closed):
+        for row in bucket.values():
+            row["flag"] = (
+                "ceiling"
+                if row["fitted"] and Decimal(row["min_edge_bps"]) >= Decimal(60)
+                else "—"
+            )
+
     # Stable symbols: open-session fitted with profit/day > 0 at $1000.
-    go_list = [
-        r["pair_id"]
-        for r in best_open.values()
-        if r["fitted"] and Decimal(r["profit_per_day"]) > 0
-    ]
-    go_list = sorted(set(go_list))
+    go_list = sorted(
+        {
+            r["pair_id"]
+            for r in best_open.values()
+            if r["fitted"] and Decimal(r["profit_per_day"]) > 0
+        }
+    )
+    core_go_list = sorted(
+        {
+            r["pair_id"]
+            for r in best_open.values()
+            if r["fitted"] and Decimal(r["profit_per_day"]) >= Decimal(1)
+        }
+    )
     n_stable = len(go_list)
+
+    # HOODx concentration sensitivity (portfolio recompute excluding HOODx).
+    port_ex_hood = portfolio_capturable_profit(
+        [w for w in all_amm_1000 if w.pair_id != "HOODx"],
+        reentry_cooldown_ms=reentry,
+        trade_duration_ms=trade_dur,
+        max_trade_usd=MAX_TRADE_USD,
+        inventory_usd=INVENTORY_USD,
+    )
+    profit_ex_hood_day = (
+        port_ex_hood / calendar_days if calendar_days > 0 else Decimal(0)
+    )
+    hood_open = best_open.get("HOODx")
+    concentration_note = ""
+    if hood_open and Decimal(hood_open["profit_per_day"]) > 0:
+        concentration_note = (
+            f"**Concentration:** HOODx open fit contributes "
+            f"{hood_open['profit_per_day']} USDT/day of series-level profit; "
+            f"portfolio single-flight excluding all HOODx windows is "
+            f"**{profit_ex_hood_day:.2f} USDT/day** "
+            f"({'still ≥15' if profit_ex_hood_day >= GO_USDT_PER_DAY else 'below 15'}). "
+            f"Core go-list (≥1 USDT/day open fit): "
+            f"{', '.join(core_go_list) if core_go_list else '—'}. "
+            f"GOOGLx/TSLAx seats are thin — provisional only."
+        )
 
     if profit_per_day >= GO_USDT_PER_DAY and n_stable >= GO_MIN_SYMBOLS:
         verdict = "GO"
         detail = (
             f"Portfolio average **{profit_per_day:.2f} USDT/day** meets the "
             f"≥{GO_USDT_PER_DAY} gate with **{n_stable}** symbols showing "
-            f"positive fitted open-session windows ({', '.join(go_list)})."
+            f"positive fitted open-session windows ({', '.join(go_list)}). "
+            f"Core (≥1 USDT/day): {', '.join(core_go_list) if core_go_list else '—'}."
         )
     elif profit_per_day < NOGO_USDT_PER_DAY:
         verdict = "NO-GO"
@@ -1248,10 +1301,13 @@ def run(args: argparse.Namespace) -> int:
             "calendar_days": float(calendar_days),
             "profit_total_usd": f"{port_profit:.4f}",
             "profit_per_day_usd": f"{profit_per_day:.4f}",
+            "profit_per_day_ex_hoodx": f"{profit_ex_hood_day:.4f}",
             "n_stable_symbols": n_stable,
             "go_list": go_list,
+            "core_go_list": core_go_list,
             "verdict": verdict,
             "verdict_detail": detail,
+            "concentration_note": concentration_note,
         },
         "fits_amm_1000": fits_amm_1000,
         "amm_open_1000_table": sorted(

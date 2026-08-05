@@ -19,7 +19,6 @@ from dataclasses import dataclass
 from decimal import Decimal
 from typing import Literal
 
-SessionLabel = Literal["open", "closed", "all"]
 VenueLabel = Literal["amm", "rfq"]
 
 
@@ -221,19 +220,22 @@ def capturable_profit_single_flight(
 def portfolio_capturable_profit(
     windows: Sequence[OpportunityWindow],
     *,
-    reentry_cooldown_ms: int,
+    reentry_cooldown_ms: int = 0,
     trade_duration_ms: int = 5_000,
     max_trade_usd: Decimal = Decimal(1000),
     inventory_usd: Decimal = Decimal(5000),
 ) -> Decimal:
-    """Single-flight across symbols: greedily take non-overlapping best trades.
+    """Single-flight across symbols: one entry per window, best-first in time.
 
-    At each free slot, among windows that still contain a feasible entry time,
-    pick the highest scaled ``trade_pnl_usd``. One trade occupies
-    ``trade_duration_ms + reentry_cooldown_ms``. Concurrent exposure is a single
-    flight, so ``inventory_usd`` only caps per-trade size (with ``max_trade_usd``),
-    not parallel positions.
+    At each free slot, among remaining windows that still contain a feasible
+    entry, pick the highest scaled ``trade_pnl_usd`` and **consume that window**
+    (no within-window re-entry). Flight holds only ``trade_duration_ms``.
+    ``reentry_cooldown_ms`` is accepted for call-site symmetry with the
+    series-level helper but is unused here — portfolio mode is always one
+    entry per window. ``inventory_usd`` caps per-trade size with
+    ``max_trade_usd`` (single-flight ⇒ no parallel exposure).
     """
+    _ = reentry_cooldown_ms  # intentional no-op; see docstring
     if not windows or inventory_usd <= 0 or max_trade_usd <= 0:
         return Decimal(0)
     cap = min(max_trade_usd, inventory_usd)
