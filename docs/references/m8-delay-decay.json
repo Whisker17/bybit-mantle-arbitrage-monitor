@@ -1,6 +1,6 @@
 {
   "schema_version": 1,
-  "generated_utc": "2026-08-07 03:32:57 UTC",
+  "generated_utc": "2026-08-07 03:39:40 UTC",
   "regen_cmd": "uv run python scripts/xstocks_delay_decay.py --db data/monitor-bybit-fluxion.db --sample-ms 20000",
   "method": {
     "market": "bybit-fluxion",
@@ -17,27 +17,28 @@
     "reentry_cooldown_ms": 86400000,
     "trade_duration_ms": 5000,
     "max_gap_ms": 120000,
-    "pricing_anomaly_gate": "500"
+    "pricing_anomaly_gate": "500",
+    "sigma_align_ms": "max(align_ms, sample_ms)"
   },
-  "data_span_note": "Study window wall clock: **2026-08-05 03:19:03 UTC \u2192 2026-08-07 03:32:03 UTC** (2.009 d). RTH excl. gap: **5.37 h**. Delayed sells may resolve up to 60 min past the book max timestamp.",
+  "data_span_note": "Study window wall clock: **2026-08-05 03:19:03 UTC \u2192 2026-08-07 03:38:46 UTC** (2.014 d). RTH excl. gap: **5.37 h**. Delayed sells may resolve up to 60 min past the book max timestamp.",
   "spans": [
     {
       "table": "bybit_book",
-      "n_rows": 998658,
+      "n_rows": 1000151,
       "min_utc": "2026-08-05 03:19:03 UTC",
-      "max_utc": "2026-08-07 03:32:03 UTC"
+      "max_utc": "2026-08-07 03:38:46 UTC"
     },
     {
       "table": "bybit_depth",
-      "n_rows": 752505,
+      "n_rows": 754614,
       "min_utc": "2026-08-05 03:19:03 UTC",
-      "max_utc": "2026-08-07 03:32:03 UTC"
+      "max_utc": "2026-08-07 03:38:47 UTC"
     },
     {
       "table": "fluxion_pool_state",
-      "n_rows": 897712,
+      "n_rows": 899272,
       "min_utc": "2026-08-02 03:18:24 UTC",
-      "max_utc": "2026-08-07 03:32:03 UTC"
+      "max_utc": "2026-08-07 03:38:46 UTC"
     },
     {
       "table": "collector_gaps",
@@ -47,17 +48,17 @@
     }
   ],
   "headline": {
-    "calendar_days": "2.009",
+    "calendar_days": "2.014",
     "primary_lag_min": 10,
     "primary_size_usd": "500",
     "withdraw_fee_usd": "1",
-    "sim_portfolio_per_day": "0.7404",
-    "seq_portfolio_per_day": "4.4607",
+    "sim_portfolio_per_day": "0.7387",
+    "seq_portfolio_per_day": "4.4503",
     "seq_over_sim_ratio": "6.025",
     "go_list": "CRCLx, HOODx, NVDAx",
     "core_go_list": "NVDAx",
     "verdict": "NO-GO (sequential)",
-    "verdict_detail": "Sequential portfolio **4.4607 USDT/day** is below the 5 no-go floor. Simultaneous baseline was 0.7404 USDT/day. Do not live-trade on this span.",
+    "verdict_detail": "Sequential portfolio **4.4503 USDT/day** is below the 5 no-go floor. Simultaneous baseline was 0.7387 USDT/day. Do not live-trade on this span.",
     "median_k90": null,
     "recommended_k_by_symbol": {}
   },
@@ -65,266 +66,458 @@
     {
       "pair_id": "AAPLx",
       "session": "open",
-      "n10": 526,
-      "s5": "15.94",
-      "s10": "23.58",
-      "s15": "31.12",
-      "s20": "35.82",
-      "s30": "46.87",
-      "s60": "58.31"
+      "n10": 708,
+      "n_by_lag": {
+        "5": 720,
+        "10": 708,
+        "15": 662,
+        "20": 626,
+        "30": 528,
+        "60": 461
+      },
+      "s5": "17.47",
+      "s10": "24.85",
+      "s15": "31.67",
+      "s20": "37.31",
+      "s30": "45.92",
+      "s60": "60.08"
     },
     {
       "pair_id": "AAPLx",
       "session": "closed",
-      "n10": 1649,
-      "s5": "6.53",
-      "s10": "9.86",
-      "s15": "11.95",
-      "s20": "13.68",
-      "s30": "15.83",
-      "s60": "19.78"
+      "n10": 2176,
+      "n_by_lag": {
+        "5": 2228,
+        "10": 2176,
+        "15": 2069,
+        "20": 2043,
+        "30": 2014,
+        "60": 1835
+      },
+      "s5": "6.87",
+      "s10": "9.84",
+      "s15": "11.77",
+      "s20": "13.44",
+      "s30": "15.42",
+      "s60": "19.53"
     },
     {
       "pair_id": "AAPLx",
       "session": "all",
-      "n10": 2188,
+      "n10": 2909,
+      "n_by_lag": {
+        "5": 2961,
+        "10": 2909,
+        "15": 2756,
+        "20": 2699,
+        "30": 2572,
+        "60": 2296
+      },
+      "s5": "10.90",
+      "s10": "16.58",
+      "s15": "20.66",
+      "s20": "23.08",
+      "s30": "26.34",
+      "s60": "32.14"
+    },
+    {
+      "pair_id": "CRCLx",
+      "session": "open",
+      "n10": 715,
+      "n_by_lag": {
+        "5": 769,
+        "10": 715,
+        "15": 686,
+        "20": 650,
+        "30": 571,
+        "60": 481
+      },
+      "s5": "54.72",
+      "s10": "68.83",
+      "s15": "78.94",
+      "s20": "81.27",
+      "s30": "80.00",
+      "s60": "106.21"
+    },
+    {
+      "pair_id": "CRCLx",
+      "session": "closed",
+      "n10": 2814,
+      "n_by_lag": {
+        "5": 2875,
+        "10": 2814,
+        "15": 2757,
+        "20": 2700,
+        "30": 2674,
+        "60": 2502
+      },
+      "s5": "36.91",
+      "s10": "58.57",
+      "s15": "79.55",
+      "s20": "97.06",
+      "s30": "117.58",
+      "s60": "146.98"
+    },
+    {
+      "pair_id": "CRCLx",
+      "session": "all",
+      "n10": 3553,
+      "n_by_lag": {
+        "5": 3657,
+        "10": 3553,
+        "15": 3473,
+        "20": 3378,
+        "30": 3278,
+        "60": 2983
+      },
+      "s5": "44.42",
+      "s10": "64.00",
+      "s15": "80.52",
+      "s20": "94.35",
+      "s30": "111.65",
+      "s60": "141.19"
+    },
+    {
+      "pair_id": "GOOGLx",
+      "session": "open",
+      "n10": 710,
+      "n_by_lag": {
+        "5": 752,
+        "10": 710,
+        "15": 678,
+        "20": 654,
+        "30": 577,
+        "60": 477
+      },
+      "s5": "44.45",
+      "s10": "74.27",
+      "s15": "95.46",
+      "s20": "101.10",
+      "s30": "112.62",
+      "s60": "166.94"
+    },
+    {
+      "pair_id": "GOOGLx",
+      "session": "closed",
+      "n10": 2232,
+      "n_by_lag": {
+        "5": 2298,
+        "10": 2232,
+        "15": 2171,
+        "20": 2132,
+        "30": 2108,
+        "60": 1985
+      },
+      "s5": "16.63",
+      "s10": "22.18",
+      "s15": "23.87",
+      "s20": "24.90",
+      "s30": "28.74",
+      "s60": "33.75"
+    },
+    {
+      "pair_id": "GOOGLx",
+      "session": "all",
+      "n10": 2969,
+      "n_by_lag": {
+        "5": 3063,
+        "10": 2969,
+        "15": 2878,
+        "20": 2814,
+        "30": 2712,
+        "60": 2462
+      },
+      "s5": "26.62",
+      "s10": "42.27",
+      "s15": "52.93",
+      "s20": "56.32",
+      "s30": "62.35",
+      "s60": "86.59"
+    },
+    {
+      "pair_id": "HOODx",
+      "session": "open",
+      "n10": 717,
+      "n_by_lag": {
+        "5": 773,
+        "10": 717,
+        "15": 683,
+        "20": 650,
+        "30": 558,
+        "60": 492
+      },
+      "s5": "30.30",
+      "s10": "44.03",
+      "s15": "58.03",
+      "s20": "65.00",
+      "s30": "55.46",
+      "s60": "49.38"
+    },
+    {
+      "pair_id": "HOODx",
+      "session": "closed",
+      "n10": 1955,
+      "n_by_lag": {
+        "5": 2002,
+        "10": 1955,
+        "15": 1910,
+        "20": 1881,
+        "30": 1805,
+        "60": 1735
+      },
+      "s5": "17.60",
+      "s10": "25.08",
+      "s15": "29.13",
+      "s20": "34.28",
+      "s30": "38.43",
+      "s60": "36.32"
+    },
+    {
+      "pair_id": "HOODx",
+      "session": "all",
+      "n10": 2697,
+      "n_by_lag": {
+        "5": 2788,
+        "10": 2697,
+        "15": 2620,
+        "20": 2559,
+        "30": 2391,
+        "60": 2227
+      },
+      "s5": "22.53",
+      "s10": "31.76",
+      "s15": "39.11",
+      "s20": "45.36",
+      "s30": "46.71",
+      "s60": "44.05"
+    },
+    {
+      "pair_id": "METAx",
+      "session": "open",
+      "n10": 699,
+      "n_by_lag": {
+        "5": 730,
+        "10": 699,
+        "15": 658,
+        "20": 641,
+        "30": 556,
+        "60": 458
+      },
+      "s5": "18.56",
+      "s10": "22.36",
+      "s15": "26.09",
+      "s20": "28.31",
+      "s30": "31.46",
+      "s60": "53.82"
+    },
+    {
+      "pair_id": "METAx",
+      "session": "closed",
+      "n10": 1894,
+      "n_by_lag": {
+        "5": 1929,
+        "10": 1894,
+        "15": 1818,
+        "20": 1745,
+        "30": 1668,
+        "60": 1539
+      },
+      "s5": "10.65",
+      "s10": "13.18",
+      "s15": "16.35",
+      "s20": "19.36",
+      "s30": "23.38",
+      "s60": "32.76"
+    },
+    {
+      "pair_id": "METAx",
+      "session": "all",
+      "n10": 2616,
+      "n_by_lag": {
+        "5": 2672,
+        "10": 2616,
+        "15": 2500,
+        "20": 2411,
+        "30": 2254,
+        "60": 1997
+      },
+      "s5": "14.42",
+      "s10": "19.19",
+      "s15": "22.64",
+      "s20": "24.57",
+      "s30": "29.06",
+      "s60": "44.21"
+    },
+    {
+      "pair_id": "NVDAx",
+      "session": "open",
+      "n10": 716,
+      "n_by_lag": {
+        "5": 775,
+        "10": 716,
+        "15": 686,
+        "20": 647,
+        "30": 586,
+        "60": 483
+      },
+      "s5": "23.90",
+      "s10": "26.50",
+      "s15": "27.09",
+      "s20": "27.27",
+      "s30": "31.69",
+      "s60": "40.55"
+    },
+    {
+      "pair_id": "NVDAx",
+      "session": "closed",
+      "n10": 3092,
+      "n_by_lag": {
+        "5": 3109,
+        "10": 3092,
+        "15": 3032,
+        "20": 2943,
+        "30": 2919,
+        "60": 2743
+      },
       "s5": "9.84",
-      "s10": "15.64",
-      "s15": "20.00",
-      "s20": "22.37",
-      "s30": "26.55",
-      "s60": "31.61"
-    },
-    {
-      "pair_id": "CRCLx",
-      "session": "open",
-      "n10": 434,
-      "s5": "51.63",
-      "s10": "66.08",
-      "s15": "77.71",
-      "s20": "81.09",
-      "s30": "77.65",
-      "s60": "100.85"
-    },
-    {
-      "pair_id": "CRCLx",
-      "session": "closed",
-      "n10": 2168,
-      "s5": "33.45",
-      "s10": "53.27",
-      "s15": "69.74",
-      "s20": "88.02",
-      "s30": "107.31",
-      "s60": "129.65"
-    },
-    {
-      "pair_id": "CRCLx",
-      "session": "all",
-      "n10": 2610,
-      "s5": "38.70",
-      "s10": "57.50",
-      "s15": "71.96",
-      "s20": "87.02",
-      "s30": "103.21",
-      "s60": "125.73"
-    },
-    {
-      "pair_id": "GOOGLx",
-      "session": "open",
-      "n10": 493,
-      "s5": "34.78",
-      "s10": "63.49",
-      "s15": "61.21",
-      "s20": "70.86",
-      "s30": "90.88",
-      "s60": "121.53"
-    },
-    {
-      "pair_id": "GOOGLx",
-      "session": "closed",
-      "n10": 1720,
-      "s5": "17.48",
-      "s10": "22.95",
-      "s15": "23.64",
-      "s20": "24.32",
-      "s30": "28.42",
-      "s60": "33.08"
-    },
-    {
-      "pair_id": "GOOGLx",
-      "session": "all",
-      "n10": 2230,
-      "s5": "22.56",
-      "s10": "36.63",
-      "s15": "36.15",
-      "s20": "41.09",
-      "s30": "49.10",
-      "s60": "61.44"
-    },
-    {
-      "pair_id": "HOODx",
-      "session": "open",
-      "n10": 464,
-      "s5": "28.59",
-      "s10": "38.72",
-      "s15": "52.11",
-      "s20": "58.18",
-      "s30": "51.56",
-      "s60": "48.68"
-    },
-    {
-      "pair_id": "HOODx",
-      "session": "closed",
-      "n10": 1536,
-      "s5": "16.58",
-      "s10": "24.36",
-      "s15": "28.02",
-      "s20": "33.06",
-      "s30": "37.14",
-      "s60": "36.78"
-    },
-    {
-      "pair_id": "HOODx",
-      "session": "all",
-      "n10": 2016,
-      "s5": "20.63",
-      "s10": "28.72",
-      "s15": "34.96",
-      "s20": "40.87",
-      "s30": "44.02",
-      "s60": "43.92"
-    },
-    {
-      "pair_id": "METAx",
-      "session": "open",
-      "n10": 510,
-      "s5": "18.04",
-      "s10": "22.19",
-      "s15": "26.30",
-      "s20": "27.97",
-      "s30": "30.86",
-      "s60": "51.18"
-    },
-    {
-      "pair_id": "METAx",
-      "session": "closed",
-      "n10": 1465,
-      "s5": "10.04",
-      "s10": "12.12",
-      "s15": "16.07",
-      "s20": "18.98",
-      "s30": "23.08",
-      "s60": "31.41"
-    },
-    {
-      "pair_id": "METAx",
-      "session": "all",
-      "n10": 1987,
-      "s5": "13.41",
-      "s10": "17.55",
-      "s15": "21.01",
-      "s20": "23.62",
-      "s30": "28.22",
-      "s60": "42.34"
-    },
-    {
-      "pair_id": "NVDAx",
-      "session": "open",
-      "n10": 444,
-      "s5": "23.98",
-      "s10": "25.98",
-      "s15": "28.04",
-      "s20": "28.01",
-      "s30": "31.76",
-      "s60": "40.40"
-    },
-    {
-      "pair_id": "NVDAx",
-      "session": "closed",
-      "n10": 2295,
-      "s5": "9.43",
-      "s10": "13.55",
-      "s15": "17.03",
-      "s20": "20.81",
-      "s30": "25.37",
-      "s60": "32.31"
+      "s10": "14.19",
+      "s15": "18.22",
+      "s20": "21.88",
+      "s30": "26.94",
+      "s60": "32.40"
     },
     {
       "pair_id": "NVDAx",
       "session": "all",
-      "n10": 2749,
-      "s5": "14.05",
-      "s10": "18.74",
-      "s15": "23.91",
-      "s20": "26.00",
-      "s30": "29.90",
-      "s60": "34.06"
+      "n10": 3834,
+      "n_by_lag": {
+        "5": 3898,
+        "10": 3834,
+        "15": 3748,
+        "20": 3618,
+        "30": 3533,
+        "60": 3226
+      },
+      "s5": "15.09",
+      "s10": "21.04",
+      "s15": "27.00",
+      "s20": "29.72",
+      "s30": "32.65",
+      "s60": "33.97"
     },
     {
       "pair_id": "TSLAx",
       "session": "open",
-      "n10": 453,
-      "s5": "21.28",
-      "s10": "24.55",
-      "s15": "30.15",
-      "s20": "30.63",
-      "s30": "30.46",
-      "s60": "33.17"
+      "n10": 721,
+      "n_by_lag": {
+        "5": 765,
+        "10": 721,
+        "15": 691,
+        "20": 644,
+        "30": 581,
+        "60": 493
+      },
+      "s5": "20.97",
+      "s10": "25.13",
+      "s15": "30.13",
+      "s20": "27.79",
+      "s30": "29.00",
+      "s60": "33.61"
     },
     {
       "pair_id": "TSLAx",
       "session": "closed",
-      "n10": 2120,
-      "s5": "7.98",
-      "s10": "11.70",
-      "s15": "15.03",
-      "s20": "17.36",
-      "s30": "21.49",
-      "s60": "27.36"
+      "n10": 2899,
+      "n_by_lag": {
+        "5": 2948,
+        "10": 2899,
+        "15": 2877,
+        "20": 2798,
+        "30": 2734,
+        "60": 2545
+      },
+      "s5": "8.02",
+      "s10": "11.86",
+      "s15": "15.43",
+      "s20": "17.89",
+      "s30": "22.35",
+      "s60": "27.58"
     },
     {
       "pair_id": "TSLAx",
       "session": "all",
-      "n10": 2581,
-      "s5": "11.62",
-      "s10": "14.87",
-      "s15": "18.76",
-      "s20": "20.78",
-      "s30": "24.53",
-      "s60": "30.68"
+      "n10": 3647,
+      "n_by_lag": {
+        "5": 3726,
+        "10": 3647,
+        "15": 3597,
+        "20": 3469,
+        "30": 3343,
+        "60": 3038
+      },
+      "s5": "12.09",
+      "s10": "15.66",
+      "s15": "19.59",
+      "s20": "21.16",
+      "s30": "25.15",
+      "s60": "31.57"
     },
     {
       "pair_id": "SPCXx",
       "session": "open",
-      "n10": 453,
-      "s5": "62.32",
-      "s10": "72.32",
-      "s15": "76.62",
-      "s20": "82.57",
-      "s30": "100.66",
-      "s60": "109.84"
+      "n10": 734,
+      "n_by_lag": {
+        "5": 758,
+        "10": 734,
+        "15": 691,
+        "20": 652,
+        "30": 577,
+        "60": 487
+      },
+      "s5": "65.65",
+      "s10": "78.51",
+      "s15": "78.83",
+      "s20": "85.59",
+      "s30": "99.03",
+      "s60": "113.79"
     },
     {
       "pair_id": "SPCXx",
       "session": "closed",
-      "n10": 2183,
-      "s5": "26.12",
-      "s10": "37.55",
-      "s15": "48.62",
-      "s20": "58.56",
-      "s30": "69.06",
-      "s60": "87.11"
+      "n10": 3285,
+      "n_by_lag": {
+        "5": 3339,
+        "10": 3285,
+        "15": 3280,
+        "20": 3219,
+        "30": 3133,
+        "60": 2984
+      },
+      "s5": "29.24",
+      "s10": "42.75",
+      "s15": "54.16",
+      "s20": "63.06",
+      "s30": "74.74",
+      "s60": "97.45"
     },
     {
       "pair_id": "SPCXx",
       "session": "all",
-      "n10": 2649,
-      "s5": "35.49",
-      "s10": "45.84",
-      "s15": "54.60",
-      "s20": "63.68",
-      "s30": "74.79",
-      "s60": "90.74"
+      "n10": 4042,
+      "n_by_lag": {
+        "5": 4108,
+        "10": 4042,
+        "15": 3997,
+        "20": 3900,
+        "30": 3737,
+        "60": 3471
+      },
+      "s5": "39.65",
+      "s10": "51.76",
+      "s15": "60.53",
+      "s20": "68.67",
+      "s30": "80.10",
+      "s60": "100.24"
     }
   ],
   "dist_open": [
@@ -2135,7 +2328,8 @@
     {
       "pair_id": "AAPLx",
       "session": "open",
-      "sigma_bps": "23.58",
+      "sigma_bps": "24.85",
+      "sigma_session": "open",
       "k90": "n/a",
       "wr90": "n/a",
       "n90": 0,
@@ -2153,7 +2347,7 @@
           "k": null,
           "n_admitted": 0,
           "realised_win_rate": null,
-          "sigma_bps": "23.575843051986965",
+          "sigma_bps": "24.848405134226127",
           "reachable": false
         },
         {
@@ -2161,7 +2355,7 @@
           "k": null,
           "n_admitted": 0,
           "realised_win_rate": null,
-          "sigma_bps": "23.575843051986965",
+          "sigma_bps": "24.848405134226127",
           "reachable": false
         },
         {
@@ -2169,7 +2363,7 @@
           "k": null,
           "n_admitted": 0,
           "realised_win_rate": null,
-          "sigma_bps": "23.575843051986965",
+          "sigma_bps": "24.848405134226127",
           "reachable": false
         }
       ]
@@ -2177,7 +2371,8 @@
     {
       "pair_id": "AAPLx",
       "session": "closed",
-      "sigma_bps": "9.86",
+      "sigma_bps": "9.84",
+      "sigma_session": "closed",
       "k90": "n/a",
       "wr90": "n/a",
       "n90": 0,
@@ -2195,7 +2390,7 @@
           "k": null,
           "n_admitted": 0,
           "realised_win_rate": null,
-          "sigma_bps": "9.859527830305007",
+          "sigma_bps": "9.84075065441991",
           "reachable": false
         },
         {
@@ -2203,7 +2398,7 @@
           "k": null,
           "n_admitted": 0,
           "realised_win_rate": null,
-          "sigma_bps": "9.859527830305007",
+          "sigma_bps": "9.84075065441991",
           "reachable": false
         },
         {
@@ -2211,7 +2406,7 @@
           "k": null,
           "n_admitted": 0,
           "realised_win_rate": null,
-          "sigma_bps": "9.859527830305007",
+          "sigma_bps": "9.84075065441991",
           "reachable": false
         }
       ]
@@ -2219,7 +2414,8 @@
     {
       "pair_id": "CRCLx",
       "session": "open",
-      "sigma_bps": "66.08",
+      "sigma_bps": "68.83",
+      "sigma_session": "open",
       "k90": "n/a",
       "wr90": "n/a",
       "n90": 0,
@@ -2237,7 +2433,7 @@
           "k": null,
           "n_admitted": 0,
           "realised_win_rate": null,
-          "sigma_bps": "66.0815537887764",
+          "sigma_bps": "68.83258392154808",
           "reachable": false
         },
         {
@@ -2245,7 +2441,7 @@
           "k": null,
           "n_admitted": 0,
           "realised_win_rate": null,
-          "sigma_bps": "66.0815537887764",
+          "sigma_bps": "68.83258392154808",
           "reachable": false
         },
         {
@@ -2253,7 +2449,7 @@
           "k": null,
           "n_admitted": 0,
           "realised_win_rate": null,
-          "sigma_bps": "66.0815537887764",
+          "sigma_bps": "68.83258392154808",
           "reachable": false
         }
       ]
@@ -2261,7 +2457,8 @@
     {
       "pair_id": "CRCLx",
       "session": "closed",
-      "sigma_bps": "53.27",
+      "sigma_bps": "58.57",
+      "sigma_session": "closed",
       "k90": "n/a",
       "wr90": "40.0%",
       "n90": 5,
@@ -2279,7 +2476,7 @@
           "k": "0",
           "n_admitted": 5,
           "realised_win_rate": "0.4",
-          "sigma_bps": "53.27270296971115",
+          "sigma_bps": "58.57358866242136",
           "reachable": false
         },
         {
@@ -2287,7 +2484,7 @@
           "k": "0",
           "n_admitted": 5,
           "realised_win_rate": "0.4",
-          "sigma_bps": "53.27270296971115",
+          "sigma_bps": "58.57358866242136",
           "reachable": false
         },
         {
@@ -2295,7 +2492,7 @@
           "k": "0",
           "n_admitted": 5,
           "realised_win_rate": "0.4",
-          "sigma_bps": "53.27270296971115",
+          "sigma_bps": "58.57358866242136",
           "reachable": false
         }
       ]
@@ -2303,7 +2500,8 @@
     {
       "pair_id": "GOOGLx",
       "session": "open",
-      "sigma_bps": "63.49",
+      "sigma_bps": "74.27",
+      "sigma_session": "open",
       "k90": "n/a",
       "wr90": "n/a",
       "n90": 0,
@@ -2321,7 +2519,7 @@
           "k": null,
           "n_admitted": 0,
           "realised_win_rate": null,
-          "sigma_bps": "63.48861016280411",
+          "sigma_bps": "74.27375134550375",
           "reachable": false
         },
         {
@@ -2329,7 +2527,7 @@
           "k": null,
           "n_admitted": 0,
           "realised_win_rate": null,
-          "sigma_bps": "63.48861016280411",
+          "sigma_bps": "74.27375134550375",
           "reachable": false
         },
         {
@@ -2337,7 +2535,7 @@
           "k": null,
           "n_admitted": 0,
           "realised_win_rate": null,
-          "sigma_bps": "63.48861016280411",
+          "sigma_bps": "74.27375134550375",
           "reachable": false
         }
       ]
@@ -2345,7 +2543,8 @@
     {
       "pair_id": "GOOGLx",
       "session": "closed",
-      "sigma_bps": "22.95",
+      "sigma_bps": "22.18",
+      "sigma_session": "closed",
       "k90": "n/a",
       "wr90": "n/a",
       "n90": 0,
@@ -2363,7 +2562,7 @@
           "k": null,
           "n_admitted": 0,
           "realised_win_rate": null,
-          "sigma_bps": "22.951545670951397",
+          "sigma_bps": "22.177361238553228",
           "reachable": false
         },
         {
@@ -2371,7 +2570,7 @@
           "k": null,
           "n_admitted": 0,
           "realised_win_rate": null,
-          "sigma_bps": "22.951545670951397",
+          "sigma_bps": "22.177361238553228",
           "reachable": false
         },
         {
@@ -2379,7 +2578,7 @@
           "k": null,
           "n_admitted": 0,
           "realised_win_rate": null,
-          "sigma_bps": "22.951545670951397",
+          "sigma_bps": "22.177361238553228",
           "reachable": false
         }
       ]
@@ -2387,7 +2586,8 @@
     {
       "pair_id": "HOODx",
       "session": "open",
-      "sigma_bps": "38.72",
+      "sigma_bps": "44.03",
+      "sigma_session": "open",
       "k90": "n/a",
       "wr90": "n/a",
       "n90": 0,
@@ -2405,7 +2605,7 @@
           "k": null,
           "n_admitted": 0,
           "realised_win_rate": null,
-          "sigma_bps": "38.71663871382874",
+          "sigma_bps": "44.03019905941144",
           "reachable": false
         },
         {
@@ -2413,7 +2613,7 @@
           "k": null,
           "n_admitted": 0,
           "realised_win_rate": null,
-          "sigma_bps": "38.71663871382874",
+          "sigma_bps": "44.03019905941144",
           "reachable": false
         },
         {
@@ -2421,7 +2621,7 @@
           "k": null,
           "n_admitted": 0,
           "realised_win_rate": null,
-          "sigma_bps": "38.71663871382874",
+          "sigma_bps": "44.03019905941144",
           "reachable": false
         }
       ]
@@ -2429,7 +2629,8 @@
     {
       "pair_id": "HOODx",
       "session": "closed",
-      "sigma_bps": "24.36",
+      "sigma_bps": "25.08",
+      "sigma_session": "closed",
       "k90": "0.90",
       "wr90": "100.0%",
       "n90": 5,
@@ -2447,7 +2648,7 @@
           "k": "0.9",
           "n_admitted": 5,
           "realised_win_rate": "1",
-          "sigma_bps": "24.35855033155358",
+          "sigma_bps": "25.084504135173358",
           "reachable": true
         },
         {
@@ -2455,7 +2656,7 @@
           "k": "0.9",
           "n_admitted": 5,
           "realised_win_rate": "1",
-          "sigma_bps": "24.35855033155358",
+          "sigma_bps": "25.084504135173358",
           "reachable": true
         },
         {
@@ -2463,7 +2664,7 @@
           "k": "0.9",
           "n_admitted": 5,
           "realised_win_rate": "1",
-          "sigma_bps": "24.35855033155358",
+          "sigma_bps": "25.084504135173358",
           "reachable": true
         }
       ]
@@ -2471,7 +2672,8 @@
     {
       "pair_id": "METAx",
       "session": "open",
-      "sigma_bps": "22.19",
+      "sigma_bps": "22.36",
+      "sigma_session": "open",
       "k90": "n/a",
       "wr90": "n/a",
       "n90": 0,
@@ -2489,7 +2691,7 @@
           "k": null,
           "n_admitted": 0,
           "realised_win_rate": null,
-          "sigma_bps": "22.192365085582612",
+          "sigma_bps": "22.362066912177617",
           "reachable": false
         },
         {
@@ -2497,7 +2699,7 @@
           "k": null,
           "n_admitted": 0,
           "realised_win_rate": null,
-          "sigma_bps": "22.192365085582612",
+          "sigma_bps": "22.362066912177617",
           "reachable": false
         },
         {
@@ -2505,7 +2707,7 @@
           "k": null,
           "n_admitted": 0,
           "realised_win_rate": null,
-          "sigma_bps": "22.192365085582612",
+          "sigma_bps": "22.362066912177617",
           "reachable": false
         }
       ]
@@ -2513,7 +2715,8 @@
     {
       "pair_id": "METAx",
       "session": "closed",
-      "sigma_bps": "12.12",
+      "sigma_bps": "13.18",
+      "sigma_session": "closed",
       "k90": "n/a",
       "wr90": "n/a",
       "n90": 0,
@@ -2531,7 +2734,7 @@
           "k": null,
           "n_admitted": 0,
           "realised_win_rate": null,
-          "sigma_bps": "12.117357330886373",
+          "sigma_bps": "13.178589284879024",
           "reachable": false
         },
         {
@@ -2539,7 +2742,7 @@
           "k": null,
           "n_admitted": 0,
           "realised_win_rate": null,
-          "sigma_bps": "12.117357330886373",
+          "sigma_bps": "13.178589284879024",
           "reachable": false
         },
         {
@@ -2547,7 +2750,7 @@
           "k": null,
           "n_admitted": 0,
           "realised_win_rate": null,
-          "sigma_bps": "12.117357330886373",
+          "sigma_bps": "13.178589284879024",
           "reachable": false
         }
       ]
@@ -2555,7 +2758,8 @@
     {
       "pair_id": "NVDAx",
       "session": "open",
-      "sigma_bps": "25.98",
+      "sigma_bps": "26.50",
+      "sigma_session": "open",
       "k90": "n/a",
       "wr90": "n/a",
       "n90": 0,
@@ -2573,7 +2777,7 @@
           "k": null,
           "n_admitted": 0,
           "realised_win_rate": null,
-          "sigma_bps": "25.97539677833285",
+          "sigma_bps": "26.5034716667864",
           "reachable": false
         },
         {
@@ -2581,7 +2785,7 @@
           "k": null,
           "n_admitted": 0,
           "realised_win_rate": null,
-          "sigma_bps": "25.97539677833285",
+          "sigma_bps": "26.5034716667864",
           "reachable": false
         },
         {
@@ -2589,7 +2793,7 @@
           "k": null,
           "n_admitted": 0,
           "realised_win_rate": null,
-          "sigma_bps": "25.97539677833285",
+          "sigma_bps": "26.5034716667864",
           "reachable": false
         }
       ]
@@ -2597,7 +2801,8 @@
     {
       "pair_id": "NVDAx",
       "session": "closed",
-      "sigma_bps": "13.55",
+      "sigma_bps": "14.19",
+      "sigma_session": "closed",
       "k90": "n/a",
       "wr90": "n/a",
       "n90": 0,
@@ -2615,7 +2820,7 @@
           "k": null,
           "n_admitted": 0,
           "realised_win_rate": null,
-          "sigma_bps": "13.552811844423793",
+          "sigma_bps": "14.190674694159457",
           "reachable": false
         },
         {
@@ -2623,7 +2828,7 @@
           "k": null,
           "n_admitted": 0,
           "realised_win_rate": null,
-          "sigma_bps": "13.552811844423793",
+          "sigma_bps": "14.190674694159457",
           "reachable": false
         },
         {
@@ -2631,7 +2836,7 @@
           "k": null,
           "n_admitted": 0,
           "realised_win_rate": null,
-          "sigma_bps": "13.552811844423793",
+          "sigma_bps": "14.190674694159457",
           "reachable": false
         }
       ]
@@ -2639,7 +2844,8 @@
     {
       "pair_id": "SPCXx",
       "session": "open",
-      "sigma_bps": "72.32",
+      "sigma_bps": "78.51",
+      "sigma_session": "open",
       "k90": "n/a",
       "wr90": "n/a",
       "n90": 0,
@@ -2657,7 +2863,7 @@
           "k": null,
           "n_admitted": 0,
           "realised_win_rate": null,
-          "sigma_bps": "72.32051546130599",
+          "sigma_bps": "78.51460250148527",
           "reachable": false
         },
         {
@@ -2665,7 +2871,7 @@
           "k": null,
           "n_admitted": 0,
           "realised_win_rate": null,
-          "sigma_bps": "72.32051546130599",
+          "sigma_bps": "78.51460250148527",
           "reachable": false
         },
         {
@@ -2673,7 +2879,7 @@
           "k": null,
           "n_admitted": 0,
           "realised_win_rate": null,
-          "sigma_bps": "72.32051546130599",
+          "sigma_bps": "78.51460250148527",
           "reachable": false
         }
       ]
@@ -2681,7 +2887,8 @@
     {
       "pair_id": "SPCXx",
       "session": "closed",
-      "sigma_bps": "37.55",
+      "sigma_bps": "42.75",
+      "sigma_session": "closed",
       "k90": "n/a",
       "wr90": "n/a",
       "n90": 0,
@@ -2699,7 +2906,7 @@
           "k": null,
           "n_admitted": 0,
           "realised_win_rate": null,
-          "sigma_bps": "37.549560418756364",
+          "sigma_bps": "42.74943759097423",
           "reachable": false
         },
         {
@@ -2707,7 +2914,7 @@
           "k": null,
           "n_admitted": 0,
           "realised_win_rate": null,
-          "sigma_bps": "37.549560418756364",
+          "sigma_bps": "42.74943759097423",
           "reachable": false
         },
         {
@@ -2715,7 +2922,7 @@
           "k": null,
           "n_admitted": 0,
           "realised_win_rate": null,
-          "sigma_bps": "37.549560418756364",
+          "sigma_bps": "42.74943759097423",
           "reachable": false
         }
       ]
@@ -2723,7 +2930,8 @@
     {
       "pair_id": "TSLAx",
       "session": "open",
-      "sigma_bps": "24.55",
+      "sigma_bps": "25.13",
+      "sigma_session": "open",
       "k90": "n/a",
       "wr90": "n/a",
       "n90": 0,
@@ -2741,7 +2949,7 @@
           "k": null,
           "n_admitted": 0,
           "realised_win_rate": null,
-          "sigma_bps": "24.554627775137153",
+          "sigma_bps": "25.13344555297181",
           "reachable": false
         },
         {
@@ -2749,7 +2957,7 @@
           "k": null,
           "n_admitted": 0,
           "realised_win_rate": null,
-          "sigma_bps": "24.554627775137153",
+          "sigma_bps": "25.13344555297181",
           "reachable": false
         },
         {
@@ -2757,7 +2965,7 @@
           "k": null,
           "n_admitted": 0,
           "realised_win_rate": null,
-          "sigma_bps": "24.554627775137153",
+          "sigma_bps": "25.13344555297181",
           "reachable": false
         }
       ]
@@ -2765,7 +2973,8 @@
     {
       "pair_id": "TSLAx",
       "session": "closed",
-      "sigma_bps": "11.70",
+      "sigma_bps": "11.86",
+      "sigma_session": "closed",
       "k90": "n/a",
       "wr90": "n/a",
       "n90": 0,
@@ -2783,7 +2992,7 @@
           "k": null,
           "n_admitted": 0,
           "realised_win_rate": null,
-          "sigma_bps": "11.696882634259692",
+          "sigma_bps": "11.860167050924147",
           "reachable": false
         },
         {
@@ -2791,7 +3000,7 @@
           "k": null,
           "n_admitted": 0,
           "realised_win_rate": null,
-          "sigma_bps": "11.696882634259692",
+          "sigma_bps": "11.860167050924147",
           "reachable": false
         },
         {
@@ -2799,7 +3008,7 @@
           "k": null,
           "n_admitted": 0,
           "realised_win_rate": null,
-          "sigma_bps": "11.696882634259692",
+          "sigma_bps": "11.860167050924147",
           "reachable": false
         }
       ]
@@ -3266,168 +3475,242 @@
       "note": "no positive-mean size"
     }
   ],
+  "clip_optimum_closed": [
+    {
+      "pair_id": "AAPLx",
+      "size_usd": "n/a",
+      "n": 0,
+      "mean_usd": "n/a",
+      "mean_bps": "n/a",
+      "win_rate": "n/a",
+      "note": "no positive-mean size"
+    },
+    {
+      "pair_id": "CRCLx",
+      "size_usd": "1000",
+      "n": 1,
+      "mean_usd": "15.3463",
+      "mean_bps": "153.46",
+      "win_rate": "100.0%",
+      "note": "provisional (n<5); closed diagnostic"
+    },
+    {
+      "pair_id": "GOOGLx",
+      "size_usd": "500",
+      "n": 2,
+      "mean_usd": "0.3492",
+      "mean_bps": "6.98",
+      "win_rate": "50.0%",
+      "note": "provisional (n<5); closed diagnostic"
+    },
+    {
+      "pair_id": "HOODx",
+      "size_usd": "500",
+      "n": 6,
+      "mean_usd": "1.6906",
+      "mean_bps": "33.81",
+      "win_rate": "83.3%",
+      "note": "closed diagnostic"
+    },
+    {
+      "pair_id": "METAx",
+      "size_usd": "n/a",
+      "n": 0,
+      "mean_usd": "n/a",
+      "mean_bps": "n/a",
+      "win_rate": "n/a",
+      "note": "no positive-mean size"
+    },
+    {
+      "pair_id": "NVDAx",
+      "size_usd": "n/a",
+      "n": 0,
+      "mean_usd": "n/a",
+      "mean_bps": "n/a",
+      "win_rate": "n/a",
+      "note": "no positive-mean size"
+    },
+    {
+      "pair_id": "SPCXx",
+      "size_usd": "n/a",
+      "n": 0,
+      "mean_usd": "n/a",
+      "mean_bps": "n/a",
+      "win_rate": "n/a",
+      "note": "no positive-mean size"
+    },
+    {
+      "pair_id": "TSLAx",
+      "size_usd": "n/a",
+      "n": 0,
+      "mean_usd": "n/a",
+      "mean_bps": "n/a",
+      "win_rate": "n/a",
+      "note": "no positive-mean size"
+    }
+  ],
   "universe": [
     {
       "pair_id": "CRCLx",
       "session": "open",
-      "sim_per_day": "0.1076",
-      "seq_per_day": "0.9936",
+      "sim_per_day": "0.1073",
+      "seq_per_day": "0.9913",
       "win_rate": "100.0%",
       "n_windows": 1,
       "clears": "no",
-      "seq_per_day_raw": "0.9936035172919581065655634901",
-      "sim_per_day_raw": "0.1075654505383963511501080027"
+      "seq_per_day_raw": "0.9913016103346816518157163068",
+      "sim_per_day_raw": "0.1073162508781216431298403419"
     },
     {
       "pair_id": "CRCLx",
       "session": "closed",
-      "sim_per_day": "2.8444",
-      "seq_per_day": "-0.8364",
+      "sim_per_day": "2.8378",
+      "seq_per_day": "-0.8345",
       "win_rate": "40.0%",
       "n_windows": 5,
       "clears": "no",
-      "seq_per_day_raw": "-0.8363958504388385168223527474",
-      "sim_per_day_raw": "2.844400346408020277927880263"
+      "seq_per_day_raw": "-0.8344581505478299866067656811",
+      "sim_per_day_raw": "2.837810650585967078905698183"
     },
     {
       "pair_id": "GOOGLx",
       "session": "closed",
-      "sim_per_day": "0.8187",
-      "seq_per_day": "-0.0902",
+      "sim_per_day": "0.8168",
+      "seq_per_day": "-0.0900",
       "win_rate": "50.0%",
       "n_windows": 2,
       "clears": "no",
-      "seq_per_day_raw": "-0.09016256551923358598756037181",
-      "sim_per_day_raw": "0.8186585375800605999568644157"
+      "seq_per_day_raw": "-0.08995368357261942842036264583",
+      "sim_per_day_raw": "0.8167619301803350013855208583"
     },
     {
       "pair_id": "HOODx",
       "session": "open",
-      "sim_per_day": "0.0774",
-      "seq_per_day": "0.3757",
+      "sim_per_day": "0.0772",
+      "seq_per_day": "0.3749",
       "win_rate": "100.0%",
       "n_windows": 1,
       "clears": "no",
-      "seq_per_day_raw": "0.3757313058524668357396921698",
-      "sim_per_day_raw": "0.07741033432337413322158410655"
+      "seq_per_day_raw": "0.3748608394219879858967133198",
+      "sim_per_day_raw": "0.07723099580046941616430134900"
     },
     {
       "pair_id": "HOODx",
       "session": "closed",
-      "sim_per_day": "8.9088",
-      "seq_per_day": "0.4539",
+      "sim_per_day": "8.8881",
+      "seq_per_day": "0.4528",
       "win_rate": "83.3%",
       "n_windows": 6,
       "clears": "no",
-      "seq_per_day_raw": "0.4538779119732976221347404887",
-      "sim_per_day_raw": "8.908781803579648487485138041"
+      "seq_per_day_raw": "0.4528264012800052119910350884",
+      "sim_per_day_raw": "8.888142598446387981775612336"
     },
     {
       "pair_id": "NVDAx",
       "session": "open",
-      "sim_per_day": "0.5554",
-      "seq_per_day": "3.0913",
+      "sim_per_day": "0.5541",
+      "seq_per_day": "3.0842",
       "win_rate": "100.0%",
       "n_windows": 1,
       "clears": "yes",
-      "seq_per_day_raw": "3.091348886186250769647881250",
-      "sim_per_day_raw": "0.5553965336218534921239136199"
+      "seq_per_day_raw": "3.084187078297450792647981305",
+      "sim_per_day_raw": "0.5541098321131110386344744283"
     },
     {
       "pair_id": "NVDAx",
       "session": "closed",
-      "sim_per_day": "0.0219",
-      "seq_per_day": "-0.4960",
+      "sim_per_day": "0.0218",
+      "seq_per_day": "-0.4949",
       "win_rate": "0.0%",
       "n_windows": 2,
       "clears": "no",
-      "seq_per_day_raw": "-0.4960027612737939675140055092",
-      "sim_per_day_raw": "0.02189780067352845231773754905"
+      "seq_per_day_raw": "-0.4948536588530252726424483602",
+      "sim_per_day_raw": "0.02184706947255924641288739523"
     },
     {
       "pair_id": "TSLAx",
       "session": "closed",
-      "sim_per_day": "0.0208",
-      "seq_per_day": "-0.6132",
+      "sim_per_day": "0.0207",
+      "seq_per_day": "-0.6118",
       "win_rate": "0.0%",
       "n_windows": 1,
       "clears": "no",
-      "seq_per_day_raw": "-0.6131990827555137825546009475",
-      "sim_per_day_raw": "0.02077409353335589027042220944"
+      "seq_per_day_raw": "-0.6117784685867580796877285549",
+      "sim_per_day_raw": "0.02072596565377080582309652360"
     }
   ],
-  "universe_note": "Sequential vs simultaneous on this span: simultaneous portfolio 0.7404 \u2192 sequential 4.4607 USDT/day (ratio 6.025). Sequential books **all** admitted cycles' realised PnL (losses included) with flight = lag (10 min); simultaneous books decision-time paper edge with a short flight. Direction 1 only, primary clip $500, fire-on-open windows \u2014 not the M0 two-direction $1k headline. Compare methodology carefully against `m8-xstocks-edge-quant.md`.",
+  "universe_note": "Sequential vs simultaneous on this span: simultaneous portfolio 0.7387 \u2192 sequential 4.4503 USDT/day (ratio 6.025). Sequential books **all** admitted cycles' realised PnL (losses included) with flight = lag (10 min); simultaneous books decision-time paper edge with a short flight. Direction 1 only, primary clip $500, fire-on-open windows \u2014 not the M0 two-direction $1k headline. Compare methodology carefully against `m8-xstocks-edge-quant.md`.",
   "lag_sensitivity": [
     {
       "lag_min": 5,
-      "portfolio_per_day": "1.8580",
+      "portfolio_per_day": "1.8537",
       "win_rate": "100.0%",
       "mean_bps": "24.88",
       "n": 3,
       "paired_n": 3,
-      "paired_portfolio_per_day": "1.8580",
+      "paired_portfolio_per_day": "1.8537",
       "paired_win_rate": "100.0%",
       "paired_mean_bps": "24.88"
     },
     {
       "lag_min": 10,
-      "portfolio_per_day": "4.4607",
+      "portfolio_per_day": "4.4503",
       "win_rate": "100.0%",
       "mean_bps": "59.74",
       "n": 3,
       "paired_n": 3,
-      "paired_portfolio_per_day": "4.4607",
+      "paired_portfolio_per_day": "4.4503",
       "paired_win_rate": "100.0%",
       "paired_mean_bps": "59.74"
     },
     {
       "lag_min": 15,
-      "portfolio_per_day": "0.4491",
+      "portfolio_per_day": "0.4481",
       "win_rate": "50.0%",
       "mean_bps": "-46.29",
       "n": 2,
       "paired_n": 1,
-      "paired_portfolio_per_day": "0.4491",
+      "paired_portfolio_per_day": "0.4481",
       "paired_win_rate": "100.0%",
       "paired_mean_bps": "18.05"
     },
     {
       "lag_min": 20,
-      "portfolio_per_day": "1.2604",
+      "portfolio_per_day": "1.2574",
       "win_rate": "100.0%",
       "mean_bps": "50.64",
       "n": 1,
       "paired_n": 1,
-      "paired_portfolio_per_day": "1.2604",
+      "paired_portfolio_per_day": "1.2574",
       "paired_win_rate": "100.0%",
       "paired_mean_bps": "50.64"
     },
     {
       "lag_min": 30,
-      "portfolio_per_day": "2.5516",
+      "portfolio_per_day": "2.5456",
       "win_rate": "100.0%",
       "mean_bps": "102.52",
       "n": 1,
       "paired_n": 1,
-      "paired_portfolio_per_day": "2.5516",
+      "paired_portfolio_per_day": "2.5456",
       "paired_win_rate": "100.0%",
       "paired_mean_bps": "102.52"
     },
     {
       "lag_min": 60,
-      "portfolio_per_day": "-3.0548",
+      "portfolio_per_day": "-3.0478",
       "win_rate": "0.0%",
       "mean_bps": "-122.75",
       "n": 1,
       "paired_n": 1,
-      "paired_portfolio_per_day": "-3.0548",
+      "paired_portfolio_per_day": "-3.0478",
       "paired_win_rate": "0.0%",
       "paired_mean_bps": "-122.75"
     }
   ],
   "lag_sensitivity_note": "Each lag reports (a) **all** open windows that resolve at that lag (n may shrink \u2014 missing delayed books) and (b) the **paired** subset also present at the primary lag N=10 (fair degradation). Portfolio flight = lag. If N=30/60 paired $/day collapses, set `deposit_timeout_s` inside the still-viable horizon (bot DESIGN \u00a72.8).",
   "caveats": [
-    "Study window 2026-08-05 03:19:03 UTC \u2192 2026-08-07 03:32:03 UTC (2.009 calendar days). RTH hours in window: 13.00 h (excl. collector_down: 5.37 h). Closed: 35.22 h (excl. gap: 24.10 h). Collector downtime: 40.31 h.",
+    "Study window 2026-08-05 03:19:03 UTC \u2192 2026-08-07 03:38:46 UTC (2.014 calendar days). RTH hours in window: 13.00 h (excl. collector_down: 5.37 h). Closed: 35.33 h (excl. gap: 24.21 h). Collector downtime: 40.31 h.",
     "Flat withdraw fee assumed **$1** per cycle (bot DESIGN \u00a72.3 / \u00a73.1 A+D). Authenticated fee pull (WHI-907) should replace this constant when it lands.",
     "Bybit sell at t+N is a paper VWAP with the same depth model as PnL v2 \u2014 not a live fill. Thin books and crediting delays can be worse than measured.",
     "Direction 2 (`buy_bybit_sell_fluxion`) is out of scope (needs ~15 min Bybit xStock withdrawal before the DEX leg).",
@@ -3441,5 +3724,5 @@
     "Deposit timeout: set from the lag-sensitivity table so that waiting inside the timeout remains positive-EV on average; beyond that, take the exposure-breaker path.",
     "Update bot `docs/DESIGN.md` \u00a78 delay-decay bullet to cite this report (companion commit in mantle-stocks-arbitrage-bots)."
   ],
-  "elapsed_s": 53.7
+  "elapsed_s": 53.3
 }

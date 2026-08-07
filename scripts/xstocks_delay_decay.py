@@ -802,6 +802,26 @@ def build_report(payload: dict[str, Any]) -> str:
             f"{row.get('note', '')} |"
         )
     a("")
+    a("### Closed-session optimum (diagnostic only)")
+    a("")
+    a(
+        "Not used for live RTH sizing. Surfaces any ≥n sizes when open-session "
+        "windows are too sparse."
+    )
+    a("")
+    a(
+        "| Symbol | Optimum size | n | Mean USD / cycle | Mean bps | Win% | Note |"
+    )
+    a(
+        "|--------|-------------:|--:|-----------------:|---------:|-----:|------|"
+    )
+    for row in payload.get("clip_optimum_closed", []):
+        a(
+            f"| {row['pair_id']} | ${row['size_usd']} | {row.get('n', 'n/a')} | "
+            f"{row['mean_usd']} | {row['mean_bps']} | {row['win_rate']} | "
+            f"{row.get('note', '')} |"
+        )
+    a("")
 
     a("## Symbol universe under sequential model")
     a("")
@@ -899,7 +919,7 @@ def run(args: argparse.Namespace) -> int:
     metrics_cfg = ctx.metrics
     pairs_amm = ctx.pairs.pairs_with_amm()
     quote_decimals = ctx.dex.quote_decimals
-    max_abs = getattr(metrics_cfg, "max_abs_amm_spread_bps", None)
+    max_abs = metrics_cfg.max_abs_amm_spread_bps
 
     conn = sqlite3.connect(f"file:{db_path}?mode=ro", uri=True)
     conn.row_factory = sqlite3.Row
@@ -968,20 +988,25 @@ def run(args: argparse.Namespace) -> int:
             continue
 
         mids = collect_mids(books, gaps=gaps, metrics_cfg=metrics_cfg)
+        # σ as-of: allow one sample bucket of slack so sample_ms > align_ms
+        # does not systematically drop returns.
+        sigma_align_ms = max(align_ms, sample_ms)
         for sess in ("open", "closed", "all"):
             row: dict[str, Any] = {
                 "pair_id": pair.id,
                 "session": sess,
                 "n10": 0,
+                "n_by_lag": {},
             }
             for mins in LAG_MINUTES:
                 sig, n = transit_sigma_bps(
                     mids[sess],
                     lag_ms=mins * 60_000,
-                    max_align_ms=align_ms,
+                    max_align_ms=sigma_align_ms,
                 )
                 sk = f"s{mins}"
                 row[sk] = _fmt_dec(sig, 2) if sig is not None else "n/a"
+                row["n_by_lag"][str(mins)] = n
                 if mins == 10:
                     row["n10"] = n
                 if sig is not None:
@@ -1067,9 +1092,8 @@ def run(args: argparse.Namespace) -> int:
         return _fmt_dec(fit.k, 2)
 
     # --- drift_premium_k at primary ---
-    # Fit on fire-on-open outcomes (decision-aligned). When n is too thin for
-    # min_admitted=5, also report a dense-sample fit (all positive-sim edge
-    # samples that resolved) so the engine has a provisional constant.
+    # Fit on fire-on-open outcomes (decision-aligned). When n is thin, lower
+    # min_admitted to 3 for a provisional fit (flagged in the table).
     drift_rows: list[dict[str, Any]] = []
     recommended_k: dict[str, Any] = {}
     for pair_id, by_size in sorted(all_outcomes.items()):
@@ -1079,15 +1103,14 @@ def run(args: argparse.Namespace) -> int:
                 .get(primary_lag_ms, {})
                 .get(sess, [])
             )
-            # Dense = all resolved samples with positive sim edge (already true).
-            dense = outs  # fire-on-open is already a subset; use same pool
-            # When fire-on-open is thin, lower min_admitted to 3 for provisional k.
             min_adm = 5 if len(outs) >= 5 else 3
             sig = sigma_lookup.get((pair_id, sess, primary_lag_ms))
+            sigma_src = sess
             if sig is None:
                 sig = sigma_lookup.get((pair_id, "all", primary_lag_ms), Decimal(0))
+                sigma_src = "all" if sig else sess
             fits = fit_drift_premium_k(
-                dense,
+                outs,
                 sigma_bps=sig or Decimal(0),
                 targets=DEFAULT_WIN_RATE_TARGETS,
                 min_admitted=min_adm,
@@ -1114,6 +1137,7 @@ def run(args: argparse.Namespace) -> int:
                     "pair_id": pair_id,
                     "session": sess,
                     "sigma_bps": _fmt_dec(sig, 2),
+                    "sigma_session": sigma_src,
                     "k90": _k_cell(f90),
                     "wr90": _fmt_pct(f90.realised_win_rate),
                     "n90": f90.n_admitted,
@@ -1141,67 +1165,73 @@ def run(args: argparse.Namespace) -> int:
                     ),
                 }
 
-    # --- Clip sweep ---
+    # --- Clip sweep (open primary; closed diagnostic) ---
     clip_rows: list[dict[str, Any]] = []
     clip_opt: list[dict[str, Any]] = []
+    clip_opt_closed: list[dict[str, Any]] = []
     for pair_id, by_size in sorted(all_outcomes.items()):
-        by_size_outs: dict[Decimal, list[SequentialOutcome]] = {}
-        impact_map: dict[Decimal, Decimal] = {}
-        for size in CLIP_SIZES:
-            outs = by_size.get(size, {}).get(primary_lag_ms, {}).get("open", [])
-            by_size_outs[size] = outs
-            impacts = impact_by_pair_size.get((pair_id, size), [])
-            if impacts:
-                impact_map[size] = sum(impacts, start=Decimal(0)) / Decimal(
-                    len(impacts)
+        for sess, opt_dest in (("open", clip_opt), ("closed", clip_opt_closed)):
+            by_size_outs: dict[Decimal, list[SequentialOutcome]] = {}
+            impact_map: dict[Decimal, Decimal] = {}
+            for size in CLIP_SIZES:
+                outs = by_size.get(size, {}).get(primary_lag_ms, {}).get(sess, [])
+                by_size_outs[size] = outs
+                if sess == "open":
+                    impacts = impact_by_pair_size.get((pair_id, size), [])
+                    if impacts:
+                        impact_map[size] = sum(impacts, start=Decimal(0)) / Decimal(
+                            len(impacts)
+                        )
+            rows = clip_size_sweep(
+                by_size_outs,
+                withdraw_fee_usd=withdraw_fee,
+                impact_bps_by_size=impact_map if sess == "open" else None,
+            )
+            opt = optimal_clip_size(rows)
+            if sess == "open":
+                for r in rows:
+                    is_opt = opt is not None and r.size_usd == opt.size_usd
+                    clip_rows.append(
+                        {
+                            "pair_id": pair_id,
+                            "size_usd": str(int(r.size_usd)),
+                            "n": r.n,
+                            "mean_bps": _fmt_dec(r.mean_realised_bps, 2),
+                            "median_bps": _fmt_dec(r.median_realised_bps, 2),
+                            "mean_usd": _fmt_dec(r.mean_realised_usd, 4),
+                            "win_rate": _fmt_pct(r.win_rate),
+                            "fee_bps": _fmt_dec(r.withdraw_fee_bps, 2),
+                            "impact_bps": _fmt_dec(r.mean_fluxion_impact_bps, 2),
+                            "optimum": "✓" if is_opt else "",
+                        }
+                    )
+            if opt is not None:
+                note = "provisional (n<5)" if opt.n < 5 else ""
+                if sess == "closed":
+                    note = (note + "; closed diagnostic").strip("; ")
+                opt_dest.append(
+                    {
+                        "pair_id": pair_id,
+                        "size_usd": str(int(opt.size_usd)),
+                        "n": opt.n,
+                        "mean_usd": _fmt_dec(opt.mean_realised_usd, 4),
+                        "mean_bps": _fmt_dec(opt.mean_realised_bps, 2),
+                        "win_rate": _fmt_pct(opt.win_rate),
+                        "note": note,
+                    }
                 )
-        rows = clip_size_sweep(
-            by_size_outs,
-            withdraw_fee_usd=withdraw_fee,
-            impact_bps_by_size=impact_map,
-        )
-        opt = optimal_clip_size(rows)
-        for r in rows:
-            is_opt = opt is not None and r.size_usd == opt.size_usd
-            clip_rows.append(
-                {
-                    "pair_id": pair_id,
-                    "size_usd": str(int(r.size_usd)),
-                    "n": r.n,
-                    "mean_bps": _fmt_dec(r.mean_realised_bps, 2),
-                    "median_bps": _fmt_dec(r.median_realised_bps, 2),
-                    "mean_usd": _fmt_dec(r.mean_realised_usd, 4),
-                    "win_rate": _fmt_pct(r.win_rate),
-                    "fee_bps": _fmt_dec(r.withdraw_fee_bps, 2),
-                    "impact_bps": _fmt_dec(r.mean_fluxion_impact_bps, 2),
-                    "optimum": "✓" if is_opt else "",
-                }
-            )
-        if opt is not None:
-            note = "provisional (n<5)" if opt.n < 5 else ""
-            clip_opt.append(
-                {
-                    "pair_id": pair_id,
-                    "size_usd": str(int(opt.size_usd)),
-                    "n": opt.n,
-                    "mean_usd": _fmt_dec(opt.mean_realised_usd, 4),
-                    "mean_bps": _fmt_dec(opt.mean_realised_bps, 2),
-                    "win_rate": _fmt_pct(opt.win_rate),
-                    "note": note,
-                }
-            )
-        else:
-            clip_opt.append(
-                {
-                    "pair_id": pair_id,
-                    "size_usd": "n/a",
-                    "n": 0,
-                    "mean_usd": "n/a",
-                    "mean_bps": "n/a",
-                    "win_rate": "n/a",
-                    "note": "no positive-mean size",
-                }
-            )
+            else:
+                opt_dest.append(
+                    {
+                        "pair_id": pair_id,
+                        "size_usd": "n/a",
+                        "n": 0,
+                        "mean_usd": "n/a",
+                        "mean_bps": "n/a",
+                        "win_rate": "n/a",
+                        "note": "no positive-mean size",
+                    }
+                )
 
     # --- Universe + portfolio ---
     # Sequential capital lock = primary lag (legs are not simultaneous).
@@ -1531,7 +1561,10 @@ def run(args: argparse.Namespace) -> int:
             "reentry_cooldown_ms": reentry_ms,
             "trade_duration_ms": trade_ms,
             "max_gap_ms": max_gap_ms,
-            "pricing_anomaly_gate": str(max_abs) if max_abs is not None else "off",
+            "pricing_anomaly_gate": (
+                str(max_abs) if max_abs is not None else "off"
+            ),
+            "sigma_align_ms": "max(align_ms, sample_ms)",
         },
         "data_span_note": (
             f"Study window wall clock: **{_ms_iso(since_ms)} → {_ms_iso(until_ms)}** "
@@ -1571,6 +1604,7 @@ def run(args: argparse.Namespace) -> int:
         "drift_premium_note": drift_note,
         "clip_sweep": clip_rows,
         "clip_optimum": clip_opt,
+        "clip_optimum_closed": clip_opt_closed,
         "universe": universe,
         "universe_note": universe_note,
         "lag_sensitivity": lag_sens,
