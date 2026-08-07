@@ -35,8 +35,6 @@ from monitor.metrics.amm_pool import AmmPoolState
 from monitor.metrics.amm_slip import Q96, fluxion_amm_slip_bps
 
 WindowClass = Literal["taken", "untaken_with_liquidity", "untaken_too_thin"]
-PaperDirection = Literal["buy_fluxion_sell_bybit", "buy_bybit_sell_fluxion"]
-SwapDirection = Literal["buy_native", "sell_native", "unknown"]
 
 _BPS = Decimal(10_000)
 
@@ -56,8 +54,10 @@ class DecodedSwapView:
     amount_token0: Decimal
     amount_token1: Decimal
     price_usdc_per_wrapper: Decimal | None
-    # Absolute USD notional proxy (max of |quote leg|, |base * mid|).
+    # USD notional proxy: prefer |quote leg|, else |base| × mid.
     notional_usd: Decimal
+    # Fill price (quote per base) from signed amounts, not post-swap mid.
+    effective_price: Decimal | None
 
 
 @dataclass(frozen=True, slots=True)
@@ -261,6 +261,28 @@ def swap_notional_usd(
     return Decimal(0)
 
 
+def effective_fill_price(
+    *,
+    amount_token0: Decimal,
+    amount_token1: Decimal,
+    token0_is_quote: bool,
+) -> Decimal | None:
+    """Average fill price (quote per base) from the two human-unit legs.
+
+    Distinct from post-swap pool mid (``price_usdc_per_wrapper`` on the journal
+    tick): this is |quote transferred| / |base transferred|.
+    """
+    a0 = abs(amount_token0)
+    a1 = abs(amount_token1)
+    if token0_is_quote:
+        quote_leg, base_leg = a0, a1
+    else:
+        quote_leg, base_leg = a1, a0
+    if base_leg <= 0 or quote_leg <= 0:
+        return None
+    return quote_leg / base_leg
+
+
 __all__ = [
     "DecodedSwapView",
     "WindowClass",
@@ -268,6 +290,7 @@ __all__ = [
     "abs_basis_bps",
     "classify_window",
     "depth_supports_size",
+    "effective_fill_price",
     "matching_profitable_swaps",
     "pool_age_stats",
     "profitable_swap_direction",

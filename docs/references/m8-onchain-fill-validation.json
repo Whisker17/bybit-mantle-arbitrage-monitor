@@ -1,8 +1,8 @@
 {
   "schema_version": 1,
-  "generated_utc": "2026-08-07 03:09:35 UTC",
+  "generated_utc": "2026-08-07 03:17:43 UTC",
   "repro_command": "uv run python scripts/xstocks_fill_validation.py --db data/monitor-bybit-fluxion.db --sample-ms 20000",
-  "elapsed_s": 57.0,
+  "elapsed_s": 63.1,
   "method": {
     "market": "bybit-fluxion",
     "engine": "monitor.metrics.pnl_v2.compute_pnl_usd",
@@ -20,19 +20,19 @@
     "inventory_usd": "5000",
     "max_trade_usd": "1000"
   },
-  "data_span_note": "M0 (`m8-xstocks-edge-quant.md`) used raw ticks spanning **2026-08-03 14:51 UTC \u2192 2026-08-05 14:48 UTC**. Collector retention keeps raw `bybit_book` / `bybit_depth` for ~2 days, so that study window is **no longer fully present** in the journal. This note recomputes windows on the **currently retained** raw span (2026-08-05 02:12:00 UTC \u2192 2026-08-07 03:08:37 UTC) with the same methodology (sample_ms=20000, align_ms=15000, size=$1000, T=0, pricing_anomaly gate=500 bps). `fluxion_pool_state` and `fluxion_swaps` still cover a longer history; swaps are joined on `recv_ts_ms` inside each detected window. Numbers are therefore a **method-matched re-run**, not a byte-for-byte replay of the M0 window list \u2014 the scientific question (are large paper dislocations taken on-chain?) is unchanged.",
+  "data_span_note": "M0 (`m8-xstocks-edge-quant.md`) used raw ticks spanning **2026-08-03 14:51 UTC \u2192 2026-08-05 14:48 UTC**. Collector retention keeps raw `bybit_book` / `bybit_depth` for ~2 days, so that study window is **no longer fully present** in the journal. This note recomputes windows on the **currently retained** raw span (2026-08-05 03:19:03 UTC \u2192 2026-08-07 03:16:40 UTC) with the same methodology (sample_ms=20000, align_ms=15000, size=$1000, T=0, pricing_anomaly gate=500 bps). `fluxion_pool_state` and `fluxion_swaps` still cover a longer history; swaps are joined on `recv_ts_ms` inside each detected window. Numbers are therefore a **method-matched re-run**, not a byte-for-byte replay of the M0 window list \u2014 the scientific question (are large paper dislocations taken on-chain?) is unchanged.",
   "study": {
-    "start": "2026-08-05 02:12:00 UTC",
-    "end": "2026-08-07 03:08:37 UTC",
-    "span_hours": 48.943755833333334,
-    "calendar_days": 2.039323159722222,
-    "n_swaps": 17,
+    "start": "2026-08-05 03:19:03 UTC",
+    "end": "2026-08-07 03:16:40 UTC",
+    "span_hours": 47.96027361111111,
+    "calendar_days": 1.9983447337962963,
+    "n_swaps": 18,
     "n_swap_pairs": 8,
     "n_amm_pairs": 8
   },
   "headline": {
     "profit_total_usd": "49.0568",
-    "profit_per_day_usd": "24.0554",
+    "profit_per_day_usd": "24.5487",
     "n_windows": 39,
     "top_n": 20,
     "top_n_profit_usd": "49.5621",
@@ -71,6 +71,8 @@
       "end": "2026-08-05 10:18:59 UTC",
       "start_ms": 1785925039404,
       "end_ms": 1785925139480,
+      "start_block": 98897331,
+      "end_block": 98897381,
       "duration_s": 100.1,
       "n_samples": 6,
       "peak_edge_bps": "93.92",
@@ -80,6 +82,7 @@
       "n_swaps_total": 0,
       "n_swaps_matching": 0,
       "matching_swaps": [],
+      "all_swaps": [],
       "depth_adequate": true,
       "virtual_quote_usd": "40602.8892",
       "pool_age": {
@@ -102,6 +105,8 @@
       "end": "2026-08-05 08:06:48 UTC",
       "start_ms": 1785917177508,
       "end_ms": 1785917208404,
+      "start_block": 98893403,
+      "end_block": 98893425,
       "duration_s": 30.9,
       "n_samples": 3,
       "peak_edge_bps": "55.06",
@@ -111,6 +116,7 @@
       "n_swaps_total": 0,
       "n_swaps_matching": 0,
       "matching_swaps": [],
+      "all_swaps": [],
       "depth_adequate": true,
       "virtual_quote_usd": "57522.0196",
       "pool_age": {
@@ -133,6 +139,8 @@
       "end": "2026-08-05 11:23:19 UTC",
       "start_ms": 1785928759196,
       "end_ms": 1785928999736,
+      "start_block": 98899193,
+      "end_block": 98899312,
       "duration_s": 240.5,
       "n_samples": 13,
       "peak_edge_bps": "90.21",
@@ -142,6 +150,7 @@
       "n_swaps_total": 0,
       "n_swaps_matching": 0,
       "matching_swaps": [],
+      "all_swaps": [],
       "depth_adequate": true,
       "virtual_quote_usd": "42068.4048",
       "pool_age": {
@@ -164,6 +173,8 @@
       "end": "2026-08-05 08:03:19 UTC",
       "start_ms": 1785916999144,
       "end_ms": 1785916999144,
+      "start_block": 98893318,
+      "end_block": 98893318,
       "duration_s": 0.0,
       "n_samples": 1,
       "peak_edge_bps": "49.02",
@@ -173,6 +184,7 @@
       "n_swaps_total": 0,
       "n_swaps_matching": 0,
       "matching_swaps": [],
+      "all_swaps": [],
       "depth_adequate": true,
       "virtual_quote_usd": "57739.5551",
       "pool_age": {
@@ -195,6 +207,8 @@
       "end": "2026-08-05 10:23:59 UTC",
       "start_ms": 1785925299627,
       "end_ms": 1785925439751,
+      "start_block": 98897463,
+      "end_block": 98897534,
       "duration_s": 140.1,
       "n_samples": 8,
       "peak_edge_bps": "52.79",
@@ -204,6 +218,7 @@
       "n_swaps_total": 0,
       "n_swaps_matching": 0,
       "matching_swaps": [],
+      "all_swaps": [],
       "depth_adequate": true,
       "virtual_quote_usd": "41101.3892",
       "pool_age": {
@@ -226,6 +241,8 @@
       "end": "2026-08-05 08:02:19 UTC",
       "start_ms": 1785916939132,
       "end_ms": 1785916939132,
+      "start_block": 98893291,
+      "end_block": 98893291,
       "duration_s": 0.0,
       "n_samples": 1,
       "peak_edge_bps": "31.49",
@@ -235,6 +252,7 @@
       "n_swaps_total": 0,
       "n_swaps_matching": 0,
       "matching_swaps": [],
+      "all_swaps": [],
       "depth_adequate": true,
       "virtual_quote_usd": "57739.5551",
       "pool_age": {
@@ -257,6 +275,8 @@
       "end": "2026-08-05 13:32:19 UTC",
       "start_ms": 1785936739729,
       "end_ms": 1785936739729,
+      "start_block": 98903193,
+      "end_block": 98903193,
       "duration_s": 0.0,
       "n_samples": 1,
       "peak_edge_bps": "28.35",
@@ -266,6 +286,7 @@
       "n_swaps_total": 0,
       "n_swaps_matching": 0,
       "matching_swaps": [],
+      "all_swaps": [],
       "depth_adequate": true,
       "virtual_quote_usd": "40043.8500",
       "pool_age": {
@@ -288,6 +309,8 @@
       "end": "2026-08-05 08:03:57 UTC",
       "start_ms": 1785916979826,
       "end_ms": 1785917037577,
+      "start_block": 98893302,
+      "end_block": 98893343,
       "duration_s": 57.8,
       "n_samples": 4,
       "peak_edge_bps": "39.16",
@@ -297,6 +320,7 @@
       "n_swaps_total": 0,
       "n_swaps_matching": 0,
       "matching_swaps": [],
+      "all_swaps": [],
       "depth_adequate": true,
       "virtual_quote_usd": "57522.0196",
       "pool_age": {
@@ -319,6 +343,8 @@
       "end": "2026-08-05 08:02:18 UTC",
       "start_ms": 1785916938929,
       "end_ms": 1785916938929,
+      "start_block": 98893291,
+      "end_block": 98893291,
       "duration_s": 0.0,
       "n_samples": 1,
       "peak_edge_bps": "17.91",
@@ -328,6 +354,7 @@
       "n_swaps_total": 0,
       "n_swaps_matching": 0,
       "matching_swaps": [],
+      "all_swaps": [],
       "depth_adequate": true,
       "virtual_quote_usd": "57522.0196",
       "pool_age": {
@@ -350,6 +377,8 @@
       "end": "2026-08-06 15:10:19 UTC",
       "start_ms": 1786028979441,
       "end_ms": 1786029019796,
+      "start_block": 98949315,
+      "end_block": 98949334,
       "duration_s": 40.4,
       "n_samples": 3,
       "peak_edge_bps": "19.69",
@@ -359,6 +388,7 @@
       "n_swaps_total": 0,
       "n_swaps_matching": 0,
       "matching_swaps": [],
+      "all_swaps": [],
       "depth_adequate": true,
       "virtual_quote_usd": "40569.2972",
       "pool_age": {
@@ -381,6 +411,8 @@
       "end": "2026-08-05 16:14:39 UTC",
       "start_ms": 1785945919944,
       "end_ms": 1785946479623,
+      "start_block": 98907786,
+      "end_block": 98908064,
       "duration_s": 559.7,
       "n_samples": 29,
       "peak_edge_bps": "229.32",
@@ -399,7 +431,26 @@
           "log_index": 2,
           "direction": "sell_native",
           "notional_usd": "507.9916",
-          "price_usdc_per_wrapper": "367.6472"
+          "effective_price": "369.8088",
+          "post_swap_mid": "367.6472",
+          "amount_token0": "-507.991571",
+          "amount_token1": "1.373659979874323455"
+        }
+      ],
+      "all_swaps": [
+        {
+          "recv": "2026-08-05 16:14:22 UTC",
+          "recv_ts_ms": 1785946462836,
+          "block_number": 98908057,
+          "block_ts": 1785946426,
+          "tx_hash": "0xe6fd11885bae4f730915fe3578346d93cc4655266a3abd3b056f22955bb52fb5",
+          "log_index": 2,
+          "direction": "sell_native",
+          "notional_usd": "507.9916",
+          "effective_price": "369.8088",
+          "post_swap_mid": "367.6472",
+          "amount_token0": "-507.991571",
+          "amount_token1": "1.373659979874323455"
         }
       ],
       "depth_adequate": true,
@@ -424,6 +475,8 @@
       "end": "2026-08-05 08:01:26 UTC",
       "start_ms": 1785916886786,
       "end_ms": 1785916886786,
+      "start_block": 98893265,
+      "end_block": 98893265,
       "duration_s": 0.0,
       "n_samples": 1,
       "peak_edge_bps": "11.26",
@@ -433,6 +486,7 @@
       "n_swaps_total": 0,
       "n_swaps_matching": 0,
       "matching_swaps": [],
+      "all_swaps": [],
       "depth_adequate": true,
       "virtual_quote_usd": "57739.5551",
       "pool_age": {
@@ -455,6 +509,8 @@
       "end": "2026-08-05 06:14:55 UTC",
       "start_ms": 1785910218553,
       "end_ms": 1785910495747,
+      "start_block": 98889931,
+      "end_block": 98890064,
       "duration_s": 277.2,
       "n_samples": 10,
       "peak_edge_bps": "14.05",
@@ -464,6 +520,7 @@
       "n_swaps_total": 0,
       "n_swaps_matching": 0,
       "matching_swaps": [],
+      "all_swaps": [],
       "depth_adequate": true,
       "virtual_quote_usd": "57224.6750",
       "pool_age": {
@@ -486,6 +543,8 @@
       "end": "2026-08-05 11:40:41 UTC",
       "start_ms": 1785929839974,
       "end_ms": 1785930041184,
+      "start_block": 98899735,
+      "end_block": 98899829,
       "duration_s": 201.2,
       "n_samples": 12,
       "peak_edge_bps": "98.35",
@@ -495,6 +554,7 @@
       "n_swaps_total": 0,
       "n_swaps_matching": 0,
       "matching_swaps": [],
+      "all_swaps": [],
       "depth_adequate": true,
       "virtual_quote_usd": "41558.6230",
       "pool_age": {
@@ -517,6 +577,8 @@
       "end": "2026-08-05 16:12:58 UTC",
       "start_ms": 1785946299500,
       "end_ms": 1785946378473,
+      "start_block": 98907973,
+      "end_block": 98908015,
       "duration_s": 79.0,
       "n_samples": 5,
       "peak_edge_bps": "21.09",
@@ -526,6 +588,7 @@
       "n_swaps_total": 0,
       "n_swaps_matching": 0,
       "matching_swaps": [],
+      "all_swaps": [],
       "depth_adequate": true,
       "virtual_quote_usd": "52042.9052",
       "pool_age": {
@@ -548,6 +611,8 @@
       "end": "2026-08-05 06:07:18 UTC",
       "start_ms": 1785909289331,
       "end_ms": 1785910038681,
+      "start_block": 98889458,
+      "end_block": 98889836,
       "duration_s": 749.4,
       "n_samples": 25,
       "peak_edge_bps": "10.90",
@@ -557,6 +622,7 @@
       "n_swaps_total": 0,
       "n_swaps_matching": 0,
       "matching_swaps": [],
+      "all_swaps": [],
       "depth_adequate": true,
       "virtual_quote_usd": "57224.6750",
       "pool_age": {
@@ -579,6 +645,8 @@
       "end": "2026-08-06 15:08:59 UTC",
       "start_ms": 1786028919889,
       "end_ms": 1786028939520,
+      "start_block": 98949285,
+      "end_block": 98949295,
       "duration_s": 19.6,
       "n_samples": 2,
       "peak_edge_bps": "8.75",
@@ -588,6 +656,7 @@
       "n_swaps_total": 0,
       "n_swaps_matching": 0,
       "matching_swaps": [],
+      "all_swaps": [],
       "depth_adequate": true,
       "virtual_quote_usd": "40569.2972",
       "pool_age": {
@@ -610,6 +679,8 @@
       "end": "2026-08-05 16:04:39 UTC",
       "start_ms": 1785945659831,
       "end_ms": 1785945879963,
+      "start_block": 98907655,
+      "end_block": 98907765,
       "duration_s": 220.1,
       "n_samples": 12,
       "peak_edge_bps": "235.70",
@@ -619,6 +690,7 @@
       "n_swaps_total": 0,
       "n_swaps_matching": 0,
       "matching_swaps": [],
+      "all_swaps": [],
       "depth_adequate": true,
       "virtual_quote_usd": "58057.8985",
       "pool_age": {
@@ -641,6 +713,8 @@
       "end": "2026-08-05 13:41:59 UTC",
       "start_ms": 1785937099987,
       "end_ms": 1785937319977,
+      "start_block": 98903370,
+      "end_block": 98903484,
       "duration_s": 220.0,
       "n_samples": 12,
       "peak_edge_bps": "64.48",
@@ -659,7 +733,26 @@
           "log_index": 13,
           "direction": "buy_native",
           "notional_usd": "167.5710",
-          "price_usdc_per_wrapper": "216.7136"
+          "effective_price": "216.7140",
+          "post_swap_mid": "216.7136",
+          "amount_token0": "167.571014",
+          "amount_token1": "-0.773235704298308743"
+        }
+      ],
+      "all_swaps": [
+        {
+          "recv": "2026-08-05 13:41:36 UTC",
+          "recv_ts_ms": 1785937296091,
+          "block_number": 98903472,
+          "block_ts": 1785937256,
+          "tx_hash": "0xdd62e9e562ae802c158a0c2139304cb7bd62feb8e3a2ec1ced47694fcb3f791b",
+          "log_index": 13,
+          "direction": "buy_native",
+          "notional_usd": "167.5710",
+          "effective_price": "216.7140",
+          "post_swap_mid": "216.7136",
+          "amount_token0": "167.571014",
+          "amount_token1": "-0.773235704298308743"
         }
       ],
       "depth_adequate": true,
@@ -684,6 +777,8 @@
       "end": "2026-08-06 15:10:58 UTC",
       "start_ms": 1786029058337,
       "end_ms": 1786029058337,
+      "start_block": 98949354,
+      "end_block": 98949354,
       "duration_s": 0.0,
       "n_samples": 1,
       "peak_edge_bps": "3.01",
@@ -693,6 +788,7 @@
       "n_swaps_total": 0,
       "n_swaps_matching": 0,
       "matching_swaps": [],
+      "all_swaps": [],
       "depth_adequate": true,
       "virtual_quote_usd": "57036.9532",
       "pool_age": {
@@ -710,23 +806,23 @@
   "anomaly_sensitivity": [
     {
       "gate_bps": "500",
-      "n_samples": 62911,
+      "n_samples": 61467,
       "n_windows": 39,
       "profit_total_usd": "49.0568",
-      "profit_per_day_usd": "24.0554",
+      "profit_per_day_usd": "24.5487",
       "retained_pct": "100.0"
     },
     {
       "gate_bps": "300",
-      "n_samples": 62762,
+      "n_samples": 61318,
       "n_windows": 35,
       "profit_total_usd": "27.3479",
-      "profit_per_day_usd": "13.4103",
+      "profit_per_day_usd": "13.6853",
       "retained_pct": "55.7"
     },
     {
       "gate_bps": "200",
-      "n_samples": 61442,
+      "n_samples": 59998,
       "n_windows": 0,
       "profit_total_usd": "0.0000",
       "profit_per_day_usd": "0.0000",
@@ -734,7 +830,7 @@
     },
     {
       "gate_bps": "100",
-      "n_samples": 50028,
+      "n_samples": 49000,
       "n_windows": 0,
       "profit_total_usd": "0.0000",
       "profit_per_day_usd": "0.0000",
@@ -742,10 +838,10 @@
     }
   ],
   "conclusion": [
-    "Over the available raw journal span (2026-08-05 02:12:00 UTC \u2192 2026-08-07 03:08:37 UTC), portfolio single-flight capturable profit at AMM $1,000 / T=0 is **49.0568 USDT** (24.0554 USDT/day), across **39** windows. The top 20 windows carry **101.0%** of that portfolio total.",
-    "Classification of the top 20: **2 taken**, **18 untaken-with-liquidity**, **0 untaken-too-thin**. On-chain matching swaps validate **4.5%** of top-20 paper profit and **4.6%** of the full portfolio headline. Journal swap activity in-span is sparse (17 swaps total) \u2014 most large paper windows had **nobody** trading the pool in the profitable direction while the edge was open.",
-    "Of 18 untaken-with-liquidity top windows, median pool-join ages range 434\u20133384 ms (max ages up to 8187 ms; align gate 15000 ms). Ages sit well inside the align gate, so the join itself is fresh; the untaken status is more consistent with a real but uncontested (or risk-blocked) dislocation than with a stale pool snapshot.",
-    "Tightening `pricing_anomaly` from 500 \u2192 300 / 200 / 100 bps retains **55.7% / 0.0% / 0.0%** of the 500-bps portfolio profit. A large drop under a tighter gate means the go-case rests on quotes the tooling itself nearly rejects; a small drop means the headline is robust to basis scrubbing.",
-    "**Implication for the bot go-case:** treat only the **taken** share as hard evidence that large dislocations were real and firm. Untaken-with-liquidity windows need a human explanation (MM risk limits, gas, inventory, or residual join artifact) before sizing; untaken-too-thin windows must not count toward live inventory allocation. Re-run this script after \u22655 clean RTH sessions so the original M0 concentration claim (two HOODx windows \u2248 98% of HOODx profit) can be re-checked on a longer raw span \u2014 raw `bybit_book` / `bybit_depth` retention is ~2 days, so the original 2026-08-03\u219205 M0 study ticks are mostly pruned."
+    "Over the available raw journal span (2026-08-05 03:19:03 UTC \u2192 2026-08-07 03:16:40 UTC), portfolio single-flight capturable profit at AMM $1,000 / T=0 is **49.0568 USDT** (24.5487 USDT/day), across **39** windows. The top 20 windows' raw trade-PnL sum is **101.0%** of that portfolio total (can exceed 100% when high-PnL windows overlap; portfolio is single-flight).",
+    "Classification of the top 20: **2 taken**, **18 untaken-with-liquidity**, **0 untaken-too-thin**. On-chain matching swaps validate **4.5%** of top-20 raw trade-PnL and **4.6%** of the portfolio single-flight headline (numerator is raw per-window `trade_pnl_usd`, same caveat as the top-N share footnote). Journal swap activity in-span is sparse (18 swaps total) \u2014 most large paper windows had **nobody** trading the pool in the profitable direction while the edge was open.",
+    "Of 18 untaken-with-liquidity top windows, median pool-join ages (conditional on passing the 15000 ms align gate used at sample construction) range 434\u20133384 ms (max ages up to 8187 ms). Surviving samples sit well inside the align gate, so the untaken status is more consistent with a real but uncontested (or risk-blocked) dislocation than with a stale pool snapshot among the samples that passed the join filter. This dig cannot speak to joins older than the gate \u2014 those never entered a window.",
+    "Tightening `pricing_anomaly` from 500 \u2192 300 / 200 / 100 bps retains **55.7% / 0.0% / 0.0%** of the 500-bps portfolio profit. **At 200 bps the entire portfolio headline disappears** (0 windows) \u2014 every profitable window in this span has |AMM\u2212CEX| basis large enough that a modestly tighter gate rejects it. The go-case therefore rests on quotes the tooling itself nearly flags as `pricing_anomaly` (default gate 500 bps).",
+    "**Implication for the bot go-case:** only the **taken** share is hard evidence that large dislocations were real and firm enough for someone to trade. Untaken-with-liquidity windows need a human explanation (MM risk limits, gas, inventory, residual join risk) before sizing \u2014 and given the anomaly-gate sensitivity, any live size-up must also survive a tighter basis scrub. Untaken-too-thin windows must not count toward live inventory allocation. Re-run after \u22655 clean RTH sessions so the original M0 concentration claim (two HOODx windows \u2248 98% of HOODx profit) can be re-checked on a longer raw span \u2014 raw `bybit_book` / `bybit_depth` retention is ~2 days, so the original 2026-08-03\u219205 M0 study ticks are mostly pruned."
   ]
 }

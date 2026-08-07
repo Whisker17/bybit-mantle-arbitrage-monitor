@@ -242,6 +242,12 @@ placeholders. Agents must not assume a module exists until its issue lands. -->
     Report `docs/references/m8-xstocks-edge-quant.md` (+ companion JSON).
     Headline is AMM-only portfolio single-flight at ≤$1k/trade; gates the
     sibling `mantle-stocks-arbitrage-bots` M0.
+  - **M8 on-chain fill validation (WHI-908) landed:** pure
+    `monitor.analysis.fill_validation` + `scripts/xstocks_fill_validation.py`
+    ranks top paper windows, matches journal `fluxion_swaps`, classifies
+    taken / untaken-with-liquidity / untaken-too-thin, reports as-of join
+    staleness and `pricing_anomaly` gate sensitivity. Note
+    `docs/references/m8-onchain-fill-validation.md` (+ companion JSON).
 
 ## Build, test, run
 
@@ -280,6 +286,9 @@ uv run python -m monitor.underlying --tickers AAPL,TSLA,SKHY
 # M8 xStocks edge quant / bot go-no-go (WHI-866); needs bybit-fluxion journal:
 #   uv run python scripts/xstocks_edge_quant.py
 #   uv run python scripts/xstocks_edge_quant.py --db data/monitor-bybit-fluxion.db --sample-ms 15000
+# M8 on-chain fill validation of dislocation windows (WHI-908); needs journal:
+#   uv run python scripts/xstocks_fill_validation.py
+#   uv run python scripts/xstocks_fill_validation.py --db data/monitor-bybit-fluxion.db --sample-ms 20000
 # WHI-768: enrich historical RFQ fills + refresh address labels from journal:
 #   uv run python -m monitor.collector.backfill_rfq
 #   uv run python -m monitor.attribution.refresh

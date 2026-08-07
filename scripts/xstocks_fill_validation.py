@@ -46,10 +46,10 @@ from monitor.analysis.fill_validation import (  # noqa: E402
     DecodedSwapView,
     abs_basis_bps,
     classify_window,
+    effective_fill_price,
     pool_age_stats,
     swap_notional_usd,
     swaps_in_window,
-    virtual_quote_side_usd,
 )
 from monitor.markets import load_market_context  # noqa: E402
 from monitor.metrics.amm_pool import (  # noqa: E402
@@ -69,6 +69,9 @@ from monitor.quotes import (  # noqa: E402
 )
 from monitor.storage.reader import _row_to_swap  # noqa: E402
 from monitor.symbols.models import Pair  # noqa: E402
+
+# `_row_to_swap` is module-private on JournalReader but is the only typed
+# SQLite→tick path; research scripts reuse it (same as xstocks_edge_quant.py).
 
 # Load sibling M0 script for shared journal loaders (same path as M0).
 _EQ_PATH = _REPO / "scripts" / "xstocks_edge_quant.py"
@@ -124,14 +127,6 @@ def _fmt(v: Decimal | float | int | None, places: int = 4) -> str:
     return f"{v:.{places}f}"
 
 
-def _as_of_idx(ts_list: Sequence[int], ts_ms: int) -> int | None:
-    return _eq._as_of_idx(ts_list, ts_ms)
-
-
-def _in_gap(ts_ms: int, gaps: Sequence[Any]) -> bool:
-    return _eq._in_gap(ts_ms, gaps)
-
-
 def build_amm_samples_with_meta(
     *,
     pair: Pair,
@@ -154,9 +149,9 @@ def build_amm_samples_with_meta(
     metas: list[SampleMeta] = []
     for book in books:
         ts = book.recv_ts_ms
-        if _in_gap(ts, gaps):
+        if _eq._in_gap(ts, gaps):
             continue
-        pi = _as_of_idx(pool_ts, ts)
+        pi = _eq._as_of_idx(pool_ts, ts)
         if pi is None:
             continue
         pool_tick = pools[pi]
@@ -177,7 +172,7 @@ def build_amm_samples_with_meta(
         if reason is not None:
             continue
         bids = asks = None
-        di = _as_of_idx(depth_ts, ts) if depth_ts else None
+        di = _eq._as_of_idx(depth_ts, ts) if depth_ts else None
         if di is not None and ts - depths[di].recv_ts_ms <= align_ms:
             bids = levels_from_depth_curve(depths[di], side="bid") or None
             asks = levels_from_depth_curve(depths[di], side="ask") or None
@@ -233,8 +228,13 @@ def load_swaps(
     *,
     since_ms: int,
     until_ms: int,
-    token0_is_quote: bool | None,
+    token0_is_quote: bool,
 ) -> list[DecodedSwapView]:
+    """Load journal swaps in ``[since_ms, until_ms]`` (recv time).
+
+    Token order must be known so notional and fill price use the quote leg
+    correctly — callers derive it from pool state for the pair.
+    """
     rows = conn.execute(
         """
         SELECT * FROM fluxion_swaps
@@ -249,12 +249,16 @@ def load_swaps(
     out: list[DecodedSwapView] = []
     for row in rows:
         tick = _row_to_swap(row)
-        t0_is_q = True if token0_is_quote is None else token0_is_quote
         notional = swap_notional_usd(
             amount_token0=tick.amount_token0,
             amount_token1=tick.amount_token1,
-            token0_is_quote=t0_is_q,
+            token0_is_quote=token0_is_quote,
             price_usdc_per_wrapper=tick.price_usdc_per_wrapper,
+        )
+        fill_px = effective_fill_price(
+            amount_token0=tick.amount_token0,
+            amount_token1=tick.amount_token1,
+            token0_is_quote=token0_is_quote,
         )
         out.append(
             DecodedSwapView(
@@ -269,6 +273,7 @@ def load_swaps(
                 amount_token1=tick.amount_token1,
                 price_usdc_per_wrapper=tick.price_usdc_per_wrapper,
                 notional_usd=notional,
+                effective_price=fill_px,
             )
         )
     return out
@@ -290,23 +295,50 @@ def _window_metas(
     ]
 
 
-def _pool_at_open(
+def _pool_as_of(
     pools: Sequence[FluxionPoolStateTick],
     pair: Pair,
     *,
-    start_ms: int,
+    ts_ms: int,
     quote_decimals: int,
+    max_age_ms: int | None = None,
 ) -> tuple[AmmPoolState | None, FluxionPoolStateTick | None, int | None]:
+    """As-of pool at ``ts_ms``; optionally refuse joins older than ``max_age_ms``."""
     if not pools:
         return None, None, None
     pool_ts = [p.recv_ts_ms for p in pools]
-    pi = _as_of_idx(pool_ts, start_ms)
+    pi = _eq._as_of_idx(pool_ts, ts_ms)
     if pi is None:
         return None, None, None
     tick = pools[pi]
+    age = ts_ms - tick.recv_ts_ms
+    if max_age_ms is not None and age > max_age_ms:
+        return None, tick, age
     amm = amm_pool_from_pair_tick(pair, tick, quote_decimals=quote_decimals)
-    age = start_ms - tick.recv_ts_ms
     return amm, tick, age
+
+
+def _swap_row_dict(sw: DecodedSwapView) -> dict[str, Any]:
+    return {
+        "recv": _ms_iso(sw.recv_ts_ms),
+        "recv_ts_ms": sw.recv_ts_ms,
+        "block_number": sw.block_number,
+        "block_ts": sw.block_ts,
+        "tx_hash": sw.tx_hash,
+        "log_index": sw.log_index,
+        "direction": sw.direction,
+        "notional_usd": _fmt(sw.notional_usd),
+        "effective_price": (
+            _fmt(sw.effective_price) if sw.effective_price is not None else "—"
+        ),
+        "post_swap_mid": (
+            _fmt(sw.price_usdc_per_wrapper)
+            if sw.price_usdc_per_wrapper is not None
+            else "—"
+        ),
+        "amount_token0": str(sw.amount_token0),
+        "amount_token1": str(sw.amount_token1),
+    }
 
 
 def render_report(payload: dict[str, Any]) -> str:
@@ -386,7 +418,7 @@ def render_report(payload: dict[str, Any]) -> str:
     a(f"| Top-{h['top_n']} profit that is **taken** | {h['taken_profit_usd']} USDT |")
     a(
         f"| Share of portfolio profit validated by real fills "
-        f"| **{h['validated_share_of_portfolio_pct']}%** |"
+        f"| **{h['validated_share_of_portfolio_pct']}%**² |"
     )
     a(
         f"| Share of top-{h['top_n']} profit validated by real fills "
@@ -397,6 +429,10 @@ def render_report(payload: dict[str, Any]) -> str:
         "¹ Top-N sums each window's fire-on-open `trade_pnl_usd` without portfolio "
         "single-flight, so the ratio can exceed 100% when high-PnL windows overlap "
         "in time. Portfolio profit (row 1) is the single-flight figure."
+    )
+    a(
+        "² Numerator is the raw sum of taken windows' `trade_pnl_usd` (not "
+        "single-flight-adjusted); denominator is portfolio single-flight profit."
     )
     a("")
     a("### Classification counts (top-N)")
@@ -413,35 +449,43 @@ def render_report(payload: dict[str, Any]) -> str:
     a("")
     a(
         "| # | Pair | Dir | Session | Start (UTC) | End (UTC) | "
-        "Dur (s) | Peak edge (bps) | Trade PnL | Class | "
-        "Swaps (match/tot) | Virtual quote $ | Pool age med (ms) | Max |basis| (bps) |"
+        "Start blk | End blk | Dur (s) | Peak edge (bps) | Trade PnL | Class | "
+        "Swaps (match/tot) | Virtual quote $ | Pool age med (ms) | Max abs basis (bps) |"
     )
     a(
         "|--:|------|-----|---------|-------------|-----------|"
-        "--------:|----------------:|----------:|-------|"
-        "-----------------:|----------------:|------------------:|------------------:|"
+        "---------:|--------:|--------:|----------------:|----------:|-------|"
+        "-----------------:|----------------:|------------------:|-------------------:|"
     )
     for i, w in enumerate(payload["top_windows"], 1):
         a(
             f"| {i} | {w['pair_id']} | {w['direction_short']} | {w['session']} | "
-            f"{w['start']} | {w['end']} | {w['duration_s']} | {w['peak_edge_bps']} | "
+            f"{w['start']} | {w['end']} | {w['start_block']} | {w['end_block']} | "
+            f"{w['duration_s']} | {w['peak_edge_bps']} | "
             f"{w['trade_pnl_usd']} | **{w['classification']}** | "
             f"{w['n_swaps_matching']}/{w['n_swaps_total']} | "
             f"{w['virtual_quote_usd']} | {w['pool_age_median_ms']} | "
             f"{w['max_abs_basis_bps']} |"
         )
     a("")
-    a("### Taken windows — on-chain evidence")
+    a("### Windows with on-chain swaps — full inventory")
     a("")
-    taken = [w for w in payload["top_windows"] if w["classification"] == "taken"]
-    if not taken:
-        a("_No top-N window had a matching on-chain swap in the profitable direction._")
+    a(
+        "Every in-window swap (matching **and** opposite/unknown). "
+        "`effective_price` is |quote|/|base| from the two legs; "
+        "`post_swap_mid` is residual slot0 mid after the swap."
+    )
+    a("")
+    with_swaps = [w for w in payload["top_windows"] if w["n_swaps_total"] > 0]
+    if not with_swaps:
+        a("_No top-N window contained any on-chain swap._")
         a("")
     else:
-        for w in taken:
+        for w in with_swaps:
             a(
                 f"#### {w['pair_id']} {w['direction']} @ {w['start']} "
-                f"(PnL {w['trade_pnl_usd']} USDT)"
+                f"(class **{w['classification']}**, PnL {w['trade_pnl_usd']} USDT, "
+                f"blocks {w['start_block']}–{w['end_block']})"
             )
             a("")
             a(
@@ -449,13 +493,20 @@ def render_report(payload: dict[str, Any]) -> str:
                 f"{w['n_swaps_matching']} matching / {w['n_swaps_total']} total."
             )
             a("")
-            a("| recv (UTC) | block | tx | direction | notional $ | price |")
-            a("|------------|------:|----|-----------|-----------:|------:|")
-            for sw in w["matching_swaps"]:
+            a(
+                "| recv (UTC) | block | tx | direction | notional $ | "
+                "effective_price | post_swap_mid |"
+            )
+            a(
+                "|------------|------:|----|-----------|-----------:|"
+                "----------------:|--------------:|"
+            )
+            for sw in w["all_swaps"]:
                 a(
                     f"| {sw['recv']} | {sw['block_number']} | "
                     f"`{sw['tx_hash'][:10]}…` | {sw['direction']} | "
-                    f"{sw['notional_usd']} | {sw['price_usdc_per_wrapper']} |"
+                    f"{sw['notional_usd']} | {sw['effective_price']} | "
+                    f"{sw['post_swap_mid']} |"
                 )
             a("")
     a("### Untaken windows — as-of join staleness")
@@ -470,18 +521,21 @@ def render_report(payload: dict[str, Any]) -> str:
         a("")
     else:
         a(
-            "Pool age = book sample time − as-of `fluxion_pool_state.recv_ts_ms` "
-            f"(align gate = {m['align_ms']} ms). High ages near the gate mean the "
-            "window can be an as-of join artifact rather than a live dislocation."
+            "Pool age = book sample time − as-of `fluxion_pool_state.recv_ts_ms`. "
+            f"Sample construction already drops joins older than align_ms="
+            f"{m['align_ms']} ms, so ages reported here are **conditional on "
+            f"passing that gate** — they cannot diagnose joins that were filtered "
+            "out upstream. Ages near the gate still flag residual join risk; "
+            "ages well below it mean the surviving samples used a fresh pool snapshot."
         )
         a("")
         a(
             "| Pair | Class | Start | Trade PnL | Age min | Age med | Age p90 | "
-            "Age max | N samples | Max |basis| (bps) | Depth OK |"
+            "Age max | N samples | Max abs basis (bps) | Depth OK |"
         )
         a(
             "|------|-------|-------|----------:|--------:|--------:|--------:|"
-            "--------:|----------:|------------------:|---------:|"
+            "--------:|----------:|--------------------:|---------:|"
         )
         for w in untaken:
             age = w["pool_age"]
@@ -646,10 +700,16 @@ def run(args: argparse.Namespace) -> int:
             samples_by_gate[gate].extend(g_samples)
             print(f"    AMM $1000 @ gate {gate}: {len(g_samples)} samples", flush=True)
 
-        # Token order for notional: first pool tick if any.
-        t0_is_q: bool | None = None
-        if pools:
-            t0_is_q = quote_is_token0_for_pair(pair, pools[0])
+        # Token order for notional / fill price: first pool tick if any.
+        if not pools:
+            print("    swaps=0 (no pool state → skip token-order)", flush=True)
+            swaps_by_pair[pair.id] = []
+            continue
+        t0_is_q = quote_is_token0_for_pair(pair, pools[0])
+        if t0_is_q is None:
+            print("    swaps=0 (cannot resolve token0 quote order)", flush=True)
+            swaps_by_pair[pair.id] = []
+            continue
         swaps = load_swaps(
             conn,
             pair.id,
@@ -695,32 +755,66 @@ def run(args: argparse.Namespace) -> int:
     for w in top:
         pair = pairs_by_id[w.pair_id]
         pools = pools_by_pair[w.pair_id]
-        amm, _tick, open_age = _pool_at_open(
-            pools, pair, start_ms=w.start_ms, quote_decimals=quote_decimals
+        w_metas = _window_metas(metas_by_key, w)
+        # Prefer the first in-window sample's pool (already align-gated); fall
+        # back to as-of at window open with the same align cap used for samples.
+        if w_metas:
+            amm = w_metas[0].pool
+            open_tick = w_metas[0].pool_tick
+            open_age = w_metas[0].pool_age_ms
+        else:
+            amm, open_tick, open_age = _pool_as_of(
+                pools,
+                pair,
+                ts_ms=w.start_ms,
+                quote_decimals=quote_decimals,
+                max_age_ms=align_ms,
+            )
+        _, end_tick, _ = _pool_as_of(
+            pools,
+            pair,
+            ts_ms=w.end_ms,
+            quote_decimals=quote_decimals,
+            max_age_ms=None,  # block boundary only
         )
+        start_block = open_tick.block_number if open_tick is not None else "—"
+        end_block = end_tick.block_number if end_tick is not None else "—"
+
         in_swaps = swaps_in_window(
             swaps_by_pair.get(w.pair_id, []),
             start_ms=w.start_ms,
             end_ms=w.end_ms,
         )
+        # Also accept swaps whose block falls inside [start_block, end_block]
+        # when both bounds are known (covers recv_ts near edges).
+        if isinstance(start_block, int) and isinstance(end_block, int):
+            by_block = [
+                s
+                for s in swaps_by_pair.get(w.pair_id, [])
+                if start_block <= s.block_number <= end_block
+            ]
+            # Union by (tx, log_index).
+            seen = {(s.tx_hash, s.log_index) for s in in_swaps}
+            for s in by_block:
+                key = (s.tx_hash, s.log_index)
+                if key not in seen:
+                    in_swaps.append(s)
+                    seen.add(key)
+            in_swaps.sort(key=lambda s: (s.recv_ts_ms, s.log_index))
+
         match = classify_window(
             paper_direction=w.direction,
             size_usd=SIZE_USD,
             swaps_in_range=in_swaps,
             pool=amm,
         )
-        w_metas = _window_metas(metas_by_key, w)
         ages = [m.pool_age_ms for m in w_metas]
         if open_age is not None and not ages:
             ages = [open_age]
         age_stats = pool_age_stats(ages)
         bases = [m.abs_basis_bps for m in w_metas if m.abs_basis_bps is not None]
         max_basis = max(bases) if bases else None
-        vq = (
-            virtual_quote_side_usd(amm)
-            if amm is not None
-            else match.virtual_quote_usd
-        )
+        vq = match.virtual_quote_usd
 
         class_n[match.classification] += 1
         class_profit[match.classification] += w.trade_pnl_usd
@@ -732,25 +826,8 @@ def run(args: argparse.Namespace) -> int:
             if w.direction.startswith("buy_fluxion")
             else "buy_bybit_sell"
         )
-        matching_swaps_out = []
-        for sw in match.matching_swaps:
-            matching_swaps_out.append(
-                {
-                    "recv": _ms_iso(sw.recv_ts_ms),
-                    "recv_ts_ms": sw.recv_ts_ms,
-                    "block_number": sw.block_number,
-                    "block_ts": sw.block_ts,
-                    "tx_hash": sw.tx_hash,
-                    "log_index": sw.log_index,
-                    "direction": sw.direction,
-                    "notional_usd": _fmt(sw.notional_usd),
-                    "price_usdc_per_wrapper": (
-                        _fmt(sw.price_usdc_per_wrapper)
-                        if sw.price_usdc_per_wrapper is not None
-                        else "—"
-                    ),
-                }
-            )
+        matching_swaps_out = [_swap_row_dict(sw) for sw in match.matching_swaps]
+        all_swaps_out = [_swap_row_dict(sw) for sw in in_swaps]
 
         top_rows.append(
             {
@@ -762,6 +839,8 @@ def run(args: argparse.Namespace) -> int:
                 "end": _ms_iso(w.end_ms),
                 "start_ms": w.start_ms,
                 "end_ms": w.end_ms,
+                "start_block": start_block,
+                "end_block": end_block,
                 "duration_s": round(w.duration_ms / 1000, 1),
                 "n_samples": w.n_samples,
                 "peak_edge_bps": _fmt(w.peak_edge_bps, 2),
@@ -771,6 +850,7 @@ def run(args: argparse.Namespace) -> int:
                 "n_swaps_total": match.n_swaps_total,
                 "n_swaps_matching": match.n_swaps_matching,
                 "matching_swaps": matching_swaps_out,
+                "all_swaps": all_swaps_out,
                 "depth_adequate": match.depth_adequate,
                 "virtual_quote_usd": _fmt(vq) if vq is not None else "—",
                 "pool_age": age_stats,
@@ -869,27 +949,51 @@ def run(args: argparse.Namespace) -> int:
     if class_b:
         med_ages = [int(w["pool_age"]["median_ms"]) for w in class_b]
         max_ages = [int(w["pool_age"]["max_ms"]) for w in class_b]
+        near_gate = sum(1 for a in max_ages if a >= align_ms * 8 // 10)
         staleness_note = (
             f"Of {len(class_b)} untaken-with-liquidity top windows, median pool-join "
-            f"ages range {min(med_ages)}–{max(med_ages)} ms "
-            f"(max ages up to {max(max_ages)} ms; align gate {align_ms} ms). "
+            f"ages (conditional on passing the {align_ms} ms align gate used at "
+            f"sample construction) range {min(med_ages)}–{max(med_ages)} ms "
+            f"(max ages up to {max(max_ages)} ms). "
         )
-        near_gate = sum(1 for a in max_ages if a >= align_ms * 8 // 10)
         if near_gate:
             staleness_note += (
                 f"{near_gate} of those windows have max age ≥80% of the align gate — "
-                "treat them as join-staleness candidates, not firm free edge."
+                "treat them as residual join-staleness candidates even among the "
+                "surviving samples."
             )
         else:
             staleness_note += (
-                "Ages sit well inside the align gate, so the join itself is fresh; "
-                "the untaken status is more consistent with a real but uncontested "
-                "(or risk-blocked) dislocation than with a stale pool snapshot."
+                "Surviving samples sit well inside the align gate, so the untaken "
+                "status is more consistent with a real but uncontested (or "
+                "risk-blocked) dislocation than with a stale pool snapshot among "
+                "the samples that passed the join filter. This dig cannot speak "
+                "to joins older than the gate — those never entered a window."
             )
     else:
         staleness_note = (
             "No top-N window fell in untaken-with-liquidity, so the as-of join "
             "staleness dig did not fire on the profit-dominant set."
+        )
+
+    # Interpret anomaly sensitivity (commit to a reading, not a template).
+    if Decimal(retained_200.replace("—", "0") if retained_200 != "—" else "0") == 0:
+        anomaly_reading = (
+            f"Tightening `pricing_anomaly` from 500 → 300 / 200 / 100 bps retains "
+            f"**{retained_300}% / {retained_200}% / {retained_100}%** of the "
+            f"500-bps portfolio profit. **At 200 bps the entire portfolio "
+            f"headline disappears** (0 windows) — every profitable window in this "
+            f"span has |AMM−CEX| basis large enough that a modestly tighter gate "
+            f"rejects it. The go-case therefore rests on quotes the tooling itself "
+            f"nearly flags as `pricing_anomaly` (default gate 500 bps)."
+        )
+    else:
+        anomaly_reading = (
+            f"Tightening `pricing_anomaly` from 500 → 300 / 200 / 100 bps retains "
+            f"**{retained_300}% / {retained_200}% / {retained_100}%** of the "
+            f"500-bps portfolio profit. The retained share at 200 bps is the "
+            f"robust core; the drop from 500 is the portion sitting near the "
+            f"anomaly gate."
         )
 
     conclusion = [
@@ -898,38 +1002,36 @@ def run(args: argparse.Namespace) -> int:
             f"{_ms_iso(until_ms)}), portfolio single-flight capturable profit at "
             f"AMM $1,000 / T=0 is **{_fmt(port_profit)} USDT** "
             f"({_fmt(profit_per_day)} USDT/day), across **{len(all_windows)}** "
-            f"windows. The top {top_n} windows carry **{_fmt(top_share, 1)}%** of "
-            f"that portfolio total."
+            f"windows. The top {top_n} windows' raw trade-PnL sum is "
+            f"**{_fmt(top_share, 1)}%** of that portfolio total (can exceed 100% "
+            f"when high-PnL windows overlap; portfolio is single-flight)."
         ),
         (
             f"Classification of the top {top_n}: **{n_taken} taken**, "
             f"**{n_liq} untaken-with-liquidity**, **{n_thin} untaken-too-thin**. "
             f"On-chain matching swaps validate **{_fmt(validated_top, 1)}%** of "
-            f"top-{top_n} paper profit and **{_fmt(validated_port, 1)}%** of the "
-            f"full portfolio headline. Journal swap activity in-span is sparse "
-            f"({n_swaps_total} swaps total) — most large paper windows had "
-            f"**nobody** trading the pool in the profitable direction while the "
-            f"edge was open."
+            f"top-{top_n} raw trade-PnL and **{_fmt(validated_port, 1)}%** of the "
+            f"portfolio single-flight headline (numerator is raw per-window "
+            f"`trade_pnl_usd`, same caveat as the top-N share footnote). "
+            f"Journal swap activity in-span is sparse ({n_swaps_total} swaps "
+            f"total) — most large paper windows had **nobody** trading the pool "
+            f"in the profitable direction while the edge was open."
         ),
         staleness_note,
+        anomaly_reading,
         (
-            f"Tightening `pricing_anomaly` from 500 → 300 / 200 / 100 bps retains "
-            f"**{retained_300}% / {retained_200}% / {retained_100}%** of the "
-            f"500-bps portfolio profit. A large drop under a tighter gate means "
-            f"the go-case rests on quotes the tooling itself nearly rejects; a "
-            f"small drop means the headline is robust to basis scrubbing."
-        ),
-        (
-            "**Implication for the bot go-case:** treat only the **taken** share as "
-            "hard evidence that large dislocations were real and firm. "
-            "Untaken-with-liquidity windows need a human explanation (MM risk "
-            "limits, gas, inventory, or residual join artifact) before sizing; "
-            "untaken-too-thin windows must not count toward live inventory "
-            "allocation. Re-run this script after ≥5 clean RTH sessions so the "
-            "original M0 concentration claim (two HOODx windows ≈ 98% of HOODx "
-            "profit) can be re-checked on a longer raw span — raw `bybit_book` / "
-            "`bybit_depth` retention is ~2 days, so the original 2026-08-03→05 "
-            "M0 study ticks are mostly pruned."
+            "**Implication for the bot go-case:** only the **taken** share is hard "
+            "evidence that large dislocations were real and firm enough for "
+            "someone to trade. Untaken-with-liquidity windows need a human "
+            "explanation (MM risk limits, gas, inventory, residual join risk) "
+            "before sizing — and given the anomaly-gate sensitivity, any live "
+            "size-up must also survive a tighter basis scrub. Untaken-too-thin "
+            "windows must not count toward live inventory allocation. Re-run "
+            "after ≥5 clean RTH sessions so the original M0 concentration claim "
+            "(two HOODx windows ≈ 98% of HOODx profit) can be re-checked on a "
+            "longer raw span — raw `bybit_book` / `bybit_depth` retention is "
+            "~2 days, so the original 2026-08-03→05 M0 study ticks are mostly "
+            "pruned."
         ),
     ]
 

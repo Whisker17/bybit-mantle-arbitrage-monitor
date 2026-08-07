@@ -11,6 +11,7 @@ from monitor.analysis.fill_validation import (
     abs_basis_bps,
     classify_window,
     depth_supports_size,
+    effective_fill_price,
     matching_profitable_swaps,
     pool_age_stats,
     profitable_swap_direction,
@@ -43,6 +44,7 @@ def _swap(
         amount_token1=Decimal("-1"),
         price_usdc_per_wrapper=Decimal(price) if price is not None else None,
         notional_usd=n,
+        effective_price=n,  # quote/base with base=1 in this fixture
     )
 
 
@@ -226,3 +228,22 @@ class TestNotional:
             price_usdc_per_wrapper=Decimal(50),
         )
         assert n == Decimal(150)
+
+    def test_effective_fill_price(self) -> None:
+        # Spend 250 quote, receive 2 base → 125 quote/base.
+        p = effective_fill_price(
+            amount_token0=Decimal("250"),
+            amount_token1=Decimal("-2"),
+            token0_is_quote=True,
+        )
+        assert p == Decimal("125")
+
+    def test_effective_fill_price_missing_leg(self) -> None:
+        assert (
+            effective_fill_price(
+                amount_token0=Decimal(0),
+                amount_token1=Decimal("-2"),
+                token0_is_quote=True,
+            )
+            is None
+        )
