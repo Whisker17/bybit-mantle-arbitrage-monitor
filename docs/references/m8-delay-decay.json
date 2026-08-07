@@ -1,6 +1,6 @@
 {
   "schema_version": 1,
-  "generated_utc": "2026-08-07 03:09:50 UTC",
+  "generated_utc": "2026-08-07 03:23:49 UTC",
   "regen_cmd": "uv run python scripts/xstocks_delay_decay.py --db data/monitor-bybit-fluxion.db --sample-ms 20000",
   "method": {
     "market": "bybit-fluxion",
@@ -19,25 +19,25 @@
     "max_gap_ms": 120000,
     "pricing_anomaly_gate": "500"
   },
-  "data_span_note": "Study window wall clock: **2026-08-05 02:12:00 UTC \u2192 2026-08-07 03:08:59 UTC** (2.040 d). RTH excl. gap: **5.37 h**. Delayed sells may resolve up to 60 min past the book max timestamp.",
+  "data_span_note": "Study window wall clock: **2026-08-05 03:19:03 UTC \u2192 2026-08-07 03:22:56 UTC** (2.003 d). RTH excl. gap: **5.37 h**. Delayed sells may resolve up to 60 min past the book max timestamp.",
   "spans": [
     {
       "table": "bybit_book",
-      "n_rows": 1005518,
-      "min_utc": "2026-08-05 02:12:00 UTC",
-      "max_utc": "2026-08-07 03:08:59 UTC"
+      "n_rows": 996438,
+      "min_utc": "2026-08-05 03:19:03 UTC",
+      "max_utc": "2026-08-07 03:22:56 UTC"
     },
     {
       "table": "bybit_depth",
-      "n_rows": 762141,
-      "min_utc": "2026-08-05 02:12:36 UTC",
-      "max_utc": "2026-08-07 03:08:59 UTC"
+      "n_rows": 749668,
+      "min_utc": "2026-08-05 03:19:03 UTC",
+      "max_utc": "2026-08-07 03:22:56 UTC"
     },
     {
       "table": "fluxion_pool_state",
-      "n_rows": 892128,
+      "n_rows": 895488,
       "min_utc": "2026-08-02 03:18:24 UTC",
-      "max_utc": "2026-08-07 03:08:58 UTC"
+      "max_utc": "2026-08-07 03:22:56 UTC"
     },
     {
       "table": "collector_gaps",
@@ -47,17 +47,17 @@
     }
   ],
   "headline": {
-    "calendar_days": "2.040",
+    "calendar_days": "2.003",
     "primary_lag_min": 10,
     "primary_size_usd": "500",
     "withdraw_fee_usd": "1",
-    "sim_portfolio_per_day": "0.7293",
-    "seq_portfolio_per_day": "4.3939",
+    "sim_portfolio_per_day": "0.7427",
+    "seq_portfolio_per_day": "4.4748",
     "seq_over_sim_ratio": "6.025",
     "go_list": "CRCLx, HOODx, NVDAx",
     "core_go_list": "NVDAx",
     "verdict": "NO-GO (sequential)",
-    "verdict_detail": "Sequential portfolio **4.3939 USDT/day** is below the 5 no-go floor. Simultaneous baseline was 0.7293 USDT/day. Do not live-trade on this span.",
+    "verdict_detail": "Sequential portfolio **4.4748 USDT/day** is below the 5 no-go floor. Simultaneous baseline was 0.7427 USDT/day. Do not live-trade on this span.",
     "median_k90": null,
     "recommended_k_by_symbol": {}
   },
@@ -76,24 +76,24 @@
     {
       "pair_id": "AAPLx",
       "session": "closed",
-      "n10": 1681,
-      "s5": "6.50",
-      "s10": "9.89",
-      "s15": "11.96",
-      "s20": "13.63",
-      "s30": "15.68",
-      "s60": "19.52"
+      "n10": 1635,
+      "s5": "6.55",
+      "s10": "9.90",
+      "s15": "11.99",
+      "s20": "13.73",
+      "s30": "15.87",
+      "s60": "19.86"
     },
     {
       "pair_id": "AAPLx",
       "session": "all",
-      "n10": 2220,
-      "s5": "9.78",
-      "s10": "15.59",
-      "s15": "19.93",
-      "s20": "22.23",
-      "s30": "26.30",
-      "s60": "31.25"
+      "n10": 2174,
+      "s5": "9.87",
+      "s10": "15.69",
+      "s15": "20.05",
+      "s20": "22.44",
+      "s30": "26.61",
+      "s60": "31.71"
     },
     {
       "pair_id": "CRCLx",
@@ -109,24 +109,24 @@
     {
       "pair_id": "CRCLx",
       "session": "closed",
-      "n10": 2199,
-      "s5": "33.12",
-      "s10": "52.94",
-      "s15": "69.39",
-      "s20": "87.45",
-      "s30": "106.79",
-      "s60": "128.58"
+      "n10": 2153,
+      "s5": "33.56",
+      "s10": "53.42",
+      "s15": "69.91",
+      "s20": "88.34",
+      "s30": "107.70",
+      "s60": "130.19"
     },
     {
       "pair_id": "CRCLx",
       "session": "all",
-      "n10": 2641,
-      "s5": "38.37",
-      "s10": "57.20",
-      "s15": "71.64",
-      "s20": "86.55",
-      "s30": "102.80",
-      "s60": "124.85"
+      "n10": 2595,
+      "s5": "38.81",
+      "s10": "57.64",
+      "s15": "72.11",
+      "s20": "87.28",
+      "s30": "103.52",
+      "s60": "126.17"
     },
     {
       "pair_id": "GOOGLx",
@@ -142,24 +142,24 @@
     {
       "pair_id": "GOOGLx",
       "session": "closed",
-      "n10": 1728,
-      "s5": "17.49",
-      "s10": "22.90",
-      "s15": "23.72",
+      "n10": 1711,
+      "s5": "17.53",
+      "s10": "23.01",
+      "s15": "23.75",
       "s20": "24.41",
-      "s30": "28.53",
-      "s60": "33.11"
+      "s30": "28.58",
+      "s60": "33.18"
     },
     {
       "pair_id": "GOOGLx",
       "session": "all",
-      "n10": 2238,
-      "s5": "22.58",
-      "s10": "36.57",
-      "s15": "36.23",
-      "s20": "41.20",
-      "s30": "49.22",
-      "s60": "61.39"
+      "n10": 2221,
+      "s5": "22.62",
+      "s10": "36.70",
+      "s15": "36.27",
+      "s20": "41.21",
+      "s30": "49.33",
+      "s60": "61.61"
     },
     {
       "pair_id": "HOODx",
@@ -175,24 +175,24 @@
     {
       "pair_id": "HOODx",
       "session": "closed",
-      "n10": 1571,
-      "s5": "16.40",
-      "s10": "24.10",
-      "s15": "27.82",
-      "s20": "32.71",
-      "s30": "36.81",
-      "s60": "36.17"
+      "n10": 1532,
+      "s5": "16.61",
+      "s10": "24.39",
+      "s15": "28.08",
+      "s20": "33.11",
+      "s30": "37.24",
+      "s60": "36.87"
     },
     {
       "pair_id": "HOODx",
       "session": "all",
-      "n10": 2051,
-      "s5": "20.45",
-      "s10": "28.48",
-      "s15": "34.76",
-      "s20": "40.54",
-      "s30": "43.71",
-      "s60": "43.34"
+      "n10": 2012,
+      "s5": "20.65",
+      "s10": "28.75",
+      "s15": "35.02",
+      "s20": "40.92",
+      "s30": "44.12",
+      "s60": "44.00"
     },
     {
       "pair_id": "METAx",
@@ -208,24 +208,24 @@
     {
       "pair_id": "METAx",
       "session": "closed",
-      "n10": 1436,
-      "s5": "10.11",
-      "s10": "12.24",
-      "s15": "16.24",
-      "s20": "19.17",
-      "s30": "23.29",
-      "s60": "30.39"
+      "n10": 1450,
+      "s5": "10.08",
+      "s10": "12.17",
+      "s15": "16.16",
+      "s20": "19.08",
+      "s30": "23.23",
+      "s60": "31.14"
     },
     {
       "pair_id": "METAx",
       "session": "all",
-      "n10": 1958,
-      "s5": "13.47",
-      "s10": "17.68",
-      "s15": "21.17",
-      "s20": "23.80",
-      "s30": "28.50",
-      "s60": "42.24"
+      "n10": 1972,
+      "s5": "13.45",
+      "s10": "17.61",
+      "s15": "21.09",
+      "s20": "23.71",
+      "s30": "28.36",
+      "s60": "42.44"
     },
     {
       "pair_id": "NVDAx",
@@ -241,24 +241,24 @@
     {
       "pair_id": "NVDAx",
       "session": "closed",
-      "n10": 2346,
-      "s5": "9.39",
-      "s10": "13.47",
-      "s15": "16.96",
-      "s20": "20.71",
-      "s30": "25.24",
-      "s60": "32.09"
+      "n10": 2285,
+      "s5": "9.46",
+      "s10": "13.58",
+      "s15": "17.08",
+      "s20": "20.87",
+      "s30": "25.45",
+      "s60": "32.40"
     },
     {
       "pair_id": "NVDAx",
       "session": "all",
-      "n10": 2800,
-      "s5": "13.97",
-      "s10": "18.60",
-      "s15": "23.78",
-      "s20": "25.86",
-      "s30": "29.74",
-      "s60": "33.83"
+      "n10": 2739,
+      "s5": "14.09",
+      "s10": "18.77",
+      "s15": "23.97",
+      "s20": "26.07",
+      "s30": "29.98",
+      "s60": "34.14"
     },
     {
       "pair_id": "TSLAx",
@@ -274,24 +274,24 @@
     {
       "pair_id": "TSLAx",
       "session": "closed",
-      "n10": 2143,
-      "s5": "7.92",
-      "s10": "11.60",
-      "s15": "14.92",
-      "s20": "17.26",
-      "s30": "21.32",
-      "s60": "27.37"
+      "n10": 2104,
+      "s5": "8.00",
+      "s10": "11.73",
+      "s15": "15.05",
+      "s20": "17.40",
+      "s30": "21.54",
+      "s60": "27.45"
     },
     {
       "pair_id": "TSLAx",
       "session": "all",
-      "n10": 2604,
-      "s5": "11.54",
-      "s10": "14.79",
-      "s15": "18.66",
-      "s20": "20.69",
-      "s30": "24.40",
-      "s60": "30.74"
+      "n10": 2565,
+      "s5": "11.65",
+      "s10": "14.91",
+      "s15": "18.79",
+      "s20": "20.83",
+      "s30": "24.59",
+      "s60": "30.76"
     },
     {
       "pair_id": "SPCXx",
@@ -307,24 +307,24 @@
     {
       "pair_id": "SPCXx",
       "session": "closed",
-      "n10": 2220,
-      "s5": "25.98",
-      "s10": "37.41",
-      "s15": "48.64",
-      "s20": "58.77",
-      "s30": "69.47",
-      "s60": "86.62"
+      "n10": 2168,
+      "s5": "26.21",
+      "s10": "37.67",
+      "s15": "48.80",
+      "s20": "58.74",
+      "s30": "69.36",
+      "s60": "87.34"
     },
     {
       "pair_id": "SPCXx",
       "session": "all",
-      "n10": 2686,
-      "s5": "35.27",
-      "s10": "45.61",
-      "s15": "54.50",
-      "s20": "63.74",
-      "s30": "75.03",
-      "s60": "90.28"
+      "n10": 2634,
+      "s5": "35.59",
+      "s10": "45.96",
+      "s15": "54.76",
+      "s20": "63.85",
+      "s30": "75.08",
+      "s60": "90.95"
     }
   ],
   "dist_open": [
@@ -336,6 +336,8 @@
       "mean_bps": "22.13",
       "median_bps": "22.13",
       "p5_bps": "22.13",
+      "p25_bps": "22.13",
+      "p75_bps": "22.13",
       "p95_bps": "22.13",
       "worst_bps": "22.13",
       "mean_usd": "1.1064",
@@ -374,6 +376,8 @@
       "mean_bps": "39.92",
       "median_bps": "39.92",
       "p5_bps": "39.92",
+      "p25_bps": "39.92",
+      "p75_bps": "39.92",
       "p95_bps": "39.92",
       "worst_bps": "39.92",
       "mean_usd": "1.9962",
@@ -412,6 +416,8 @@
       "mean_bps": "33.61",
       "median_bps": "33.61",
       "p5_bps": "33.61",
+      "p25_bps": "33.61",
+      "p75_bps": "33.61",
       "p95_bps": "33.61",
       "worst_bps": "33.61",
       "mean_usd": "1.6807",
@@ -450,6 +456,8 @@
       "mean_bps": "15.10",
       "median_bps": "15.10",
       "p5_bps": "15.10",
+      "p25_bps": "15.10",
+      "p75_bps": "15.10",
       "p95_bps": "15.10",
       "worst_bps": "15.10",
       "mean_usd": "0.7549",
@@ -488,6 +496,8 @@
       "mean_bps": "-46.29",
       "median_bps": "-110.63",
       "p5_bps": "-110.63",
+      "p25_bps": "-110.63",
+      "p75_bps": "18.05",
       "p95_bps": "18.05",
       "worst_bps": "-110.63",
       "mean_usd": "-2.3147",
@@ -526,6 +536,8 @@
       "mean_bps": "-122.75",
       "median_bps": "-122.75",
       "p5_bps": "-122.75",
+      "p25_bps": "-122.75",
+      "p75_bps": "-122.75",
       "p95_bps": "-122.75",
       "worst_bps": "-122.75",
       "mean_usd": "-6.1373",
@@ -564,6 +576,8 @@
       "mean_bps": "18.91",
       "median_bps": "18.91",
       "p5_bps": "18.91",
+      "p25_bps": "18.91",
+      "p75_bps": "18.91",
       "p95_bps": "18.91",
       "worst_bps": "18.91",
       "mean_usd": "0.9457",
@@ -602,6 +616,8 @@
       "mean_bps": "124.21",
       "median_bps": "124.21",
       "p5_bps": "124.21",
+      "p25_bps": "124.21",
+      "p75_bps": "124.21",
       "p95_bps": "124.21",
       "worst_bps": "124.21",
       "mean_usd": "6.2106",
@@ -640,6 +656,8 @@
       "mean_bps": "50.64",
       "median_bps": "50.64",
       "p5_bps": "50.64",
+      "p25_bps": "50.64",
+      "p75_bps": "50.64",
       "p95_bps": "50.64",
       "worst_bps": "50.64",
       "mean_usd": "2.5321",
@@ -678,6 +696,8 @@
       "mean_bps": "102.52",
       "median_bps": "102.52",
       "p5_bps": "102.52",
+      "p25_bps": "102.52",
+      "p75_bps": "102.52",
       "p95_bps": "102.52",
       "worst_bps": "102.52",
       "mean_usd": "5.1262",
@@ -718,6 +738,8 @@
       "mean_bps": "-20.93",
       "median_bps": "-20.93",
       "p5_bps": "-20.93",
+      "p25_bps": "-20.93",
+      "p75_bps": "-20.93",
       "p95_bps": "-20.93",
       "worst_bps": "-20.93",
       "mean_usd": "-1.0466",
@@ -756,6 +778,8 @@
       "mean_bps": "-38.70",
       "median_bps": "-39.39",
       "p5_bps": "-39.39",
+      "p25_bps": "-39.39",
+      "p75_bps": "-38.00",
       "p95_bps": "-38.00",
       "worst_bps": "-39.39",
       "mean_usd": "-1.9348",
@@ -794,6 +818,8 @@
       "mean_bps": "-42.83",
       "median_bps": "-47.34",
       "p5_bps": "-47.34",
+      "p25_bps": "-47.34",
+      "p75_bps": "-38.32",
       "p95_bps": "-38.32",
       "worst_bps": "-47.34",
       "mean_usd": "-2.1416",
@@ -832,6 +858,8 @@
       "mean_bps": "-35.25",
       "median_bps": "-35.25",
       "p5_bps": "-35.25",
+      "p25_bps": "-35.25",
+      "p75_bps": "-35.25",
       "p95_bps": "-35.25",
       "worst_bps": "-35.25",
       "mean_usd": "-1.7626",
@@ -870,6 +898,8 @@
       "mean_bps": "-50.12",
       "median_bps": "-64.98",
       "p5_bps": "-64.98",
+      "p25_bps": "-64.98",
+      "p75_bps": "-35.25",
       "p95_bps": "-35.25",
       "worst_bps": "-64.98",
       "mean_usd": "-2.5058",
@@ -908,6 +938,8 @@
       "mean_bps": "41.21",
       "median_bps": "-19.67",
       "p5_bps": "-32.14",
+      "p25_bps": "-21.46",
+      "p75_bps": "92.49",
       "p95_bps": "152.12",
       "worst_bps": "-32.14",
       "mean_usd": "2.0603",
@@ -946,6 +978,8 @@
       "mean_bps": "63.05",
       "median_bps": "-5.93",
       "p5_bps": "-69.63",
+      "p25_bps": "-33.61",
+      "p75_bps": "188.84",
       "p95_bps": "235.60",
       "worst_bps": "-69.63",
       "mean_usd": "3.1527",
@@ -984,6 +1018,8 @@
       "mean_bps": "143.68",
       "median_bps": "-2.72",
       "p5_bps": "-103.31",
+      "p25_bps": "-86.06",
+      "p75_bps": "425.33",
       "p95_bps": "485.17",
       "worst_bps": "-103.31",
       "mean_usd": "7.1841",
@@ -1022,6 +1058,8 @@
       "mean_bps": "141.03",
       "median_bps": "0.62",
       "p5_bps": "-132.70",
+      "p25_bps": "-132.70",
+      "p75_bps": "555.18",
       "p95_bps": "555.18",
       "worst_bps": "-132.70",
       "mean_usd": "7.0517",
@@ -1060,6 +1098,8 @@
       "mean_bps": "52.65",
       "median_bps": "-86.11",
       "p5_bps": "-194.26",
+      "p25_bps": "-153.90",
+      "p75_bps": "201.43",
       "p95_bps": "496.10",
       "worst_bps": "-194.26",
       "mean_usd": "2.6326",
@@ -1098,6 +1138,8 @@
       "mean_bps": "-148.89",
       "median_bps": "-79.24",
       "p5_bps": "-491.75",
+      "p25_bps": "-322.08",
+      "p75_bps": "-79.24",
       "p95_bps": "297.50",
       "worst_bps": "-491.75",
       "mean_usd": "-7.4447",
@@ -1136,6 +1178,8 @@
       "mean_bps": "17.71",
       "median_bps": "-8.63",
       "p5_bps": "-8.63",
+      "p25_bps": "-8.63",
+      "p75_bps": "44.04",
       "p95_bps": "44.04",
       "worst_bps": "-8.63",
       "mean_usd": "0.8853",
@@ -1174,6 +1218,8 @@
       "mean_bps": "6.98",
       "median_bps": "-3.62",
       "p5_bps": "-3.62",
+      "p25_bps": "-3.62",
+      "p75_bps": "17.59",
       "p95_bps": "17.59",
       "worst_bps": "-3.62",
       "mean_usd": "0.3492",
@@ -1212,6 +1258,8 @@
       "mean_bps": "-0.38",
       "median_bps": "-5.11",
       "p5_bps": "-5.11",
+      "p25_bps": "-5.11",
+      "p75_bps": "4.36",
       "p95_bps": "4.36",
       "worst_bps": "-5.11",
       "mean_usd": "-0.0188",
@@ -1250,6 +1298,8 @@
       "mean_bps": "-31.19",
       "median_bps": "-7.32",
       "p5_bps": "-80.65",
+      "p25_bps": "-80.65",
+      "p75_bps": "-5.59",
       "p95_bps": "-5.59",
       "worst_bps": "-80.65",
       "mean_usd": "-1.5594",
@@ -1288,6 +1338,8 @@
       "mean_bps": "-25.28",
       "median_bps": "-10.52",
       "p5_bps": "-60.34",
+      "p25_bps": "-60.34",
+      "p75_bps": "-4.96",
       "p95_bps": "-4.96",
       "worst_bps": "-60.34",
       "mean_usd": "-1.2638",
@@ -1326,6 +1378,8 @@
       "mean_bps": "50.53",
       "median_bps": "55.93",
       "p5_bps": "22.50",
+      "p25_bps": "22.50",
+      "p75_bps": "73.15",
       "p95_bps": "73.15",
       "worst_bps": "22.50",
       "mean_usd": "2.5263",
@@ -1364,6 +1418,8 @@
       "mean_bps": "33.81",
       "median_bps": "35.31",
       "p5_bps": "-28.50",
+      "p25_bps": "18.24",
+      "p75_bps": "65.10",
       "p95_bps": "73.58",
       "worst_bps": "-28.50",
       "mean_usd": "1.6906",
@@ -1397,39 +1453,41 @@
     {
       "pair_id": "HOODx",
       "lag_min": 15,
-      "n": 6,
-      "win_rate": "83.3%",
-      "mean_bps": "13.72",
-      "median_bps": "20.39",
+      "n": 5,
+      "win_rate": "80.0%",
+      "mean_bps": "12.38",
+      "median_bps": "33.68",
       "p5_bps": "-66.49",
+      "p25_bps": "10.78",
+      "p75_bps": "38.51",
       "p95_bps": "45.42",
       "worst_bps": "-66.49",
-      "mean_usd": "0.6858",
+      "mean_usd": "0.6191",
       "stats_bps": {
-        "n": 6,
-        "mean": "13.71690320219007829840701433",
-        "median": "20.39378961455200780554893400",
+        "n": 5,
+        "mean": "12.38152591971769239697863040",
+        "median": "33.68316568464152048877645400",
         "p5": "-66.48676014248548143940305000",
         "p25": "10.78024926571763389330222000",
         "p75": "38.50856971856334635601101200",
         "p95": "45.42240507215144268620651600",
         "worst": "-66.48676014248548143940305000",
         "best": "45.42240507215144268620651600",
-        "win_rate": "0.8333333333333333333333333333",
-        "n_wins": 5
+        "win_rate": "0.8",
+        "n_wins": 4
       },
       "stats_usd": {
-        "n": 6,
-        "mean": "0.6858451601095039149203507167",
-        "median": "1.0196894807276003902774467",
+        "n": 5,
+        "mean": "0.61907629598588461984893152",
+        "median": "1.6841582842320760244388227",
         "p5": "-3.3243380071242740719701525",
         "p25": "0.5390124632858816946651110",
         "p75": "1.9254284859281673178005506",
         "p95": "2.2711202536075721343103258",
         "worst": "-3.3243380071242740719701525",
         "best": "2.2711202536075721343103258",
-        "win_rate": "0.8333333333333333333333333333",
-        "n_wins": 5
+        "win_rate": "0.8",
+        "n_wins": 4
       }
     },
     {
@@ -1440,6 +1498,8 @@
       "mean_bps": "26.81",
       "median_bps": "41.69",
       "p5_bps": "-69.65",
+      "p25_bps": "32.90",
+      "p75_bps": "41.69",
       "p95_bps": "73.59",
       "worst_bps": "-69.65",
       "mean_usd": "1.3403",
@@ -1478,6 +1538,8 @@
       "mean_bps": "14.59",
       "median_bps": "39.05",
       "p5_bps": "-134.00",
+      "p25_bps": "24.08",
+      "p75_bps": "54.50",
       "p95_bps": "60.58",
       "worst_bps": "-134.00",
       "mean_usd": "0.7297",
@@ -1516,6 +1578,8 @@
       "mean_bps": "27.38",
       "median_bps": "58.71",
       "p5_bps": "-110.81",
+      "p25_bps": "44.97",
+      "p75_bps": "71.48",
       "p95_bps": "72.55",
       "worst_bps": "-110.81",
       "mean_usd": "1.3690",
@@ -1554,6 +1618,8 @@
       "mean_bps": "-42.99",
       "median_bps": "-42.99",
       "p5_bps": "-42.99",
+      "p25_bps": "-42.99",
+      "p75_bps": "-42.99",
       "p95_bps": "-42.99",
       "worst_bps": "-42.99",
       "mean_usd": "-2.1497",
@@ -1592,6 +1658,8 @@
       "mean_bps": "-57.84",
       "median_bps": "-57.84",
       "p5_bps": "-57.84",
+      "p25_bps": "-57.84",
+      "p75_bps": "-57.84",
       "p95_bps": "-57.84",
       "worst_bps": "-57.84",
       "mean_usd": "-2.8922",
@@ -1630,6 +1698,8 @@
       "mean_bps": "-20.58",
       "median_bps": "-20.86",
       "p5_bps": "-20.86",
+      "p25_bps": "-20.86",
+      "p75_bps": "-20.31",
       "p95_bps": "-20.31",
       "worst_bps": "-20.86",
       "mean_usd": "-1.0291",
@@ -1668,6 +1738,8 @@
       "mean_bps": "-18.30",
       "median_bps": "-19.93",
       "p5_bps": "-19.93",
+      "p25_bps": "-19.93",
+      "p75_bps": "-16.67",
       "p95_bps": "-16.67",
       "worst_bps": "-19.93",
       "mean_usd": "-0.9150",
@@ -1706,6 +1778,8 @@
       "mean_bps": "-1.88",
       "median_bps": "-1.88",
       "p5_bps": "-1.88",
+      "p25_bps": "-1.88",
+      "p75_bps": "-1.88",
       "p95_bps": "-1.88",
       "worst_bps": "-1.88",
       "mean_usd": "-0.0938",
@@ -1744,6 +1818,8 @@
       "mean_bps": "-6.32",
       "median_bps": "-10.37",
       "p5_bps": "-10.37",
+      "p25_bps": "-10.37",
+      "p75_bps": "-2.27",
       "p95_bps": "-2.27",
       "worst_bps": "-10.37",
       "mean_usd": "-0.3161",
@@ -1782,6 +1858,8 @@
       "mean_bps": "-3.28",
       "median_bps": "-3.28",
       "p5_bps": "-3.28",
+      "p25_bps": "-3.28",
+      "p75_bps": "-3.28",
       "p95_bps": "-3.28",
       "worst_bps": "-3.28",
       "mean_usd": "-0.1642",
@@ -1820,6 +1898,8 @@
       "mean_bps": "-11.03",
       "median_bps": "-11.03",
       "p5_bps": "-11.03",
+      "p25_bps": "-11.03",
+      "p75_bps": "-11.03",
       "p95_bps": "-11.03",
       "worst_bps": "-11.03",
       "mean_usd": "-0.5513",
@@ -1858,6 +1938,8 @@
       "mean_bps": "-23.12",
       "median_bps": "-23.12",
       "p5_bps": "-23.12",
+      "p25_bps": "-23.12",
+      "p75_bps": "-23.12",
       "p95_bps": "-23.12",
       "worst_bps": "-23.12",
       "mean_usd": "-1.1559",
@@ -1896,6 +1978,8 @@
       "mean_bps": "-24.64",
       "median_bps": "-24.64",
       "p5_bps": "-24.64",
+      "p25_bps": "-24.64",
+      "p75_bps": "-24.64",
       "p95_bps": "-24.64",
       "worst_bps": "-24.64",
       "mean_usd": "-1.2319",
@@ -1934,6 +2018,8 @@
       "mean_bps": "-23.42",
       "median_bps": "-23.73",
       "p5_bps": "-23.73",
+      "p25_bps": "-23.73",
+      "p75_bps": "-23.12",
       "p95_bps": "-23.12",
       "worst_bps": "-23.73",
       "mean_usd": "-1.1711",
@@ -1972,6 +2058,8 @@
       "mean_bps": "-23.73",
       "median_bps": "-23.73",
       "p5_bps": "-23.73",
+      "p25_bps": "-23.73",
+      "p75_bps": "-23.73",
       "p95_bps": "-23.73",
       "worst_bps": "-23.73",
       "mean_usd": "-1.1863",
@@ -2010,6 +2098,8 @@
       "mean_bps": "-49.31",
       "median_bps": "-53.22",
       "p5_bps": "-53.22",
+      "p25_bps": "-53.22",
+      "p75_bps": "-45.40",
       "p95_bps": "-45.40",
       "worst_bps": "-53.22",
       "mean_usd": "-2.4656",
@@ -2056,6 +2146,7 @@
       "wr99": "n/a",
       "n99": 0,
       "reachable": "no",
+      "min_admitted": 3,
       "fits": [
         {
           "target_win_rate": "0.90",
@@ -2086,7 +2177,7 @@
     {
       "pair_id": "AAPLx",
       "session": "closed",
-      "sigma_bps": "9.89",
+      "sigma_bps": "9.90",
       "k90": "n/a",
       "wr90": "n/a",
       "n90": 0,
@@ -2097,13 +2188,14 @@
       "wr99": "n/a",
       "n99": 0,
       "reachable": "no",
+      "min_admitted": 3,
       "fits": [
         {
           "target_win_rate": "0.90",
           "k": null,
           "n_admitted": 0,
           "realised_win_rate": null,
-          "sigma_bps": "9.888764726893754",
+          "sigma_bps": "9.899096961569168",
           "reachable": false
         },
         {
@@ -2111,7 +2203,7 @@
           "k": null,
           "n_admitted": 0,
           "realised_win_rate": null,
-          "sigma_bps": "9.888764726893754",
+          "sigma_bps": "9.899096961569168",
           "reachable": false
         },
         {
@@ -2119,7 +2211,7 @@
           "k": null,
           "n_admitted": 0,
           "realised_win_rate": null,
-          "sigma_bps": "9.888764726893754",
+          "sigma_bps": "9.899096961569168",
           "reachable": false
         }
       ]
@@ -2138,6 +2230,7 @@
       "wr99": "n/a",
       "n99": 0,
       "reachable": "no",
+      "min_admitted": 3,
       "fits": [
         {
           "target_win_rate": "0.90",
@@ -2168,24 +2261,25 @@
     {
       "pair_id": "CRCLx",
       "session": "closed",
-      "sigma_bps": "52.94",
-      "k90": "0",
+      "sigma_bps": "53.42",
+      "k90": "n/a",
       "wr90": "40.0%",
       "n90": 5,
-      "k95": "0",
+      "k95": "n/a",
       "wr95": "40.0%",
       "n95": 5,
-      "k99": "0",
+      "k99": "n/a",
       "wr99": "40.0%",
       "n99": 5,
       "reachable": "no",
+      "min_admitted": 5,
       "fits": [
         {
           "target_win_rate": "0.90",
           "k": "0",
           "n_admitted": 5,
           "realised_win_rate": "0.4",
-          "sigma_bps": "52.94464418520614",
+          "sigma_bps": "53.423294817368905",
           "reachable": false
         },
         {
@@ -2193,7 +2287,7 @@
           "k": "0",
           "n_admitted": 5,
           "realised_win_rate": "0.4",
-          "sigma_bps": "52.94464418520614",
+          "sigma_bps": "53.423294817368905",
           "reachable": false
         },
         {
@@ -2201,7 +2295,7 @@
           "k": "0",
           "n_admitted": 5,
           "realised_win_rate": "0.4",
-          "sigma_bps": "52.94464418520614",
+          "sigma_bps": "53.423294817368905",
           "reachable": false
         }
       ]
@@ -2220,6 +2314,7 @@
       "wr99": "n/a",
       "n99": 0,
       "reachable": "no",
+      "min_admitted": 3,
       "fits": [
         {
           "target_win_rate": "0.90",
@@ -2250,7 +2345,7 @@
     {
       "pair_id": "GOOGLx",
       "session": "closed",
-      "sigma_bps": "22.90",
+      "sigma_bps": "23.01",
       "k90": "n/a",
       "wr90": "n/a",
       "n90": 0,
@@ -2261,13 +2356,14 @@
       "wr99": "n/a",
       "n99": 0,
       "reachable": "no",
+      "min_admitted": 3,
       "fits": [
         {
           "target_win_rate": "0.90",
           "k": null,
           "n_admitted": 0,
           "realised_win_rate": null,
-          "sigma_bps": "22.90084703656081",
+          "sigma_bps": "23.01050156147781",
           "reachable": false
         },
         {
@@ -2275,7 +2371,7 @@
           "k": null,
           "n_admitted": 0,
           "realised_win_rate": null,
-          "sigma_bps": "22.90084703656081",
+          "sigma_bps": "23.01050156147781",
           "reachable": false
         },
         {
@@ -2283,7 +2379,7 @@
           "k": null,
           "n_admitted": 0,
           "realised_win_rate": null,
-          "sigma_bps": "22.90084703656081",
+          "sigma_bps": "23.01050156147781",
           "reachable": false
         }
       ]
@@ -2302,6 +2398,7 @@
       "wr99": "n/a",
       "n99": 0,
       "reachable": "no",
+      "min_admitted": 3,
       "fits": [
         {
           "target_win_rate": "0.90",
@@ -2332,7 +2429,7 @@
     {
       "pair_id": "HOODx",
       "session": "closed",
-      "sigma_bps": "24.10",
+      "sigma_bps": "24.39",
       "k90": "0.90",
       "wr90": "100.0%",
       "n90": 5,
@@ -2343,13 +2440,14 @@
       "wr99": "100.0%",
       "n99": 5,
       "reachable": "90/95/99",
+      "min_admitted": 5,
       "fits": [
         {
           "target_win_rate": "0.90",
           "k": "0.9",
           "n_admitted": 5,
           "realised_win_rate": "1",
-          "sigma_bps": "24.10060510101951",
+          "sigma_bps": "24.388589450068384",
           "reachable": true
         },
         {
@@ -2357,7 +2455,7 @@
           "k": "0.9",
           "n_admitted": 5,
           "realised_win_rate": "1",
-          "sigma_bps": "24.10060510101951",
+          "sigma_bps": "24.388589450068384",
           "reachable": true
         },
         {
@@ -2365,7 +2463,7 @@
           "k": "0.9",
           "n_admitted": 5,
           "realised_win_rate": "1",
-          "sigma_bps": "24.10060510101951",
+          "sigma_bps": "24.388589450068384",
           "reachable": true
         }
       ]
@@ -2384,6 +2482,7 @@
       "wr99": "n/a",
       "n99": 0,
       "reachable": "no",
+      "min_admitted": 3,
       "fits": [
         {
           "target_win_rate": "0.90",
@@ -2414,7 +2513,7 @@
     {
       "pair_id": "METAx",
       "session": "closed",
-      "sigma_bps": "12.24",
+      "sigma_bps": "12.17",
       "k90": "n/a",
       "wr90": "n/a",
       "n90": 0,
@@ -2425,13 +2524,14 @@
       "wr99": "n/a",
       "n99": 0,
       "reachable": "no",
+      "min_admitted": 3,
       "fits": [
         {
           "target_win_rate": "0.90",
           "k": null,
           "n_admitted": 0,
           "realised_win_rate": null,
-          "sigma_bps": "12.235145781368907",
+          "sigma_bps": "12.173566380996926",
           "reachable": false
         },
         {
@@ -2439,7 +2539,7 @@
           "k": null,
           "n_admitted": 0,
           "realised_win_rate": null,
-          "sigma_bps": "12.235145781368907",
+          "sigma_bps": "12.173566380996926",
           "reachable": false
         },
         {
@@ -2447,7 +2547,7 @@
           "k": null,
           "n_admitted": 0,
           "realised_win_rate": null,
-          "sigma_bps": "12.235145781368907",
+          "sigma_bps": "12.173566380996926",
           "reachable": false
         }
       ]
@@ -2466,6 +2566,7 @@
       "wr99": "n/a",
       "n99": 0,
       "reachable": "no",
+      "min_admitted": 3,
       "fits": [
         {
           "target_win_rate": "0.90",
@@ -2496,7 +2597,7 @@
     {
       "pair_id": "NVDAx",
       "session": "closed",
-      "sigma_bps": "13.47",
+      "sigma_bps": "13.58",
       "k90": "n/a",
       "wr90": "n/a",
       "n90": 0,
@@ -2507,13 +2608,14 @@
       "wr99": "n/a",
       "n99": 0,
       "reachable": "no",
+      "min_admitted": 3,
       "fits": [
         {
           "target_win_rate": "0.90",
           "k": null,
           "n_admitted": 0,
           "realised_win_rate": null,
-          "sigma_bps": "13.469650864921167",
+          "sigma_bps": "13.580991048973646",
           "reachable": false
         },
         {
@@ -2521,7 +2623,7 @@
           "k": null,
           "n_admitted": 0,
           "realised_win_rate": null,
-          "sigma_bps": "13.469650864921167",
+          "sigma_bps": "13.580991048973646",
           "reachable": false
         },
         {
@@ -2529,7 +2631,7 @@
           "k": null,
           "n_admitted": 0,
           "realised_win_rate": null,
-          "sigma_bps": "13.469650864921167",
+          "sigma_bps": "13.580991048973646",
           "reachable": false
         }
       ]
@@ -2548,6 +2650,7 @@
       "wr99": "n/a",
       "n99": 0,
       "reachable": "no",
+      "min_admitted": 3,
       "fits": [
         {
           "target_win_rate": "0.90",
@@ -2578,7 +2681,7 @@
     {
       "pair_id": "SPCXx",
       "session": "closed",
-      "sigma_bps": "37.41",
+      "sigma_bps": "37.67",
       "k90": "n/a",
       "wr90": "n/a",
       "n90": 0,
@@ -2589,13 +2692,14 @@
       "wr99": "n/a",
       "n99": 0,
       "reachable": "no",
+      "min_admitted": 3,
       "fits": [
         {
           "target_win_rate": "0.90",
           "k": null,
           "n_admitted": 0,
           "realised_win_rate": null,
-          "sigma_bps": "37.41425934164752",
+          "sigma_bps": "37.67368284356221",
           "reachable": false
         },
         {
@@ -2603,7 +2707,7 @@
           "k": null,
           "n_admitted": 0,
           "realised_win_rate": null,
-          "sigma_bps": "37.41425934164752",
+          "sigma_bps": "37.67368284356221",
           "reachable": false
         },
         {
@@ -2611,7 +2715,7 @@
           "k": null,
           "n_admitted": 0,
           "realised_win_rate": null,
-          "sigma_bps": "37.41425934164752",
+          "sigma_bps": "37.67368284356221",
           "reachable": false
         }
       ]
@@ -2630,6 +2734,7 @@
       "wr99": "n/a",
       "n99": 0,
       "reachable": "no",
+      "min_admitted": 3,
       "fits": [
         {
           "target_win_rate": "0.90",
@@ -2660,7 +2765,7 @@
     {
       "pair_id": "TSLAx",
       "session": "closed",
-      "sigma_bps": "11.60",
+      "sigma_bps": "11.73",
       "k90": "n/a",
       "wr90": "n/a",
       "n90": 0,
@@ -2671,13 +2776,14 @@
       "wr99": "n/a",
       "n99": 0,
       "reachable": "no",
+      "min_admitted": 3,
       "fits": [
         {
           "target_win_rate": "0.90",
           "k": null,
           "n_admitted": 0,
           "realised_win_rate": null,
-          "sigma_bps": "11.601462058064893",
+          "sigma_bps": "11.731105211184207",
           "reachable": false
         },
         {
@@ -2685,7 +2791,7 @@
           "k": null,
           "n_admitted": 0,
           "realised_win_rate": null,
-          "sigma_bps": "11.601462058064893",
+          "sigma_bps": "11.731105211184207",
           "reachable": false
         },
         {
@@ -2693,7 +2799,7 @@
           "k": null,
           "n_admitted": 0,
           "realised_win_rate": null,
-          "sigma_bps": "11.601462058064893",
+          "sigma_bps": "11.731105211184207",
           "reachable": false
         }
       ]
@@ -2710,7 +2816,7 @@
       "mean_usd": "n/a",
       "win_rate": "n/a",
       "fee_bps": "100.00",
-      "impact_bps": "17.54",
+      "impact_bps": "17.53",
       "optimum": ""
     },
     {
@@ -2818,7 +2924,7 @@
       "mean_usd": "n/a",
       "win_rate": "n/a",
       "fee_bps": "40.00",
-      "impact_bps": "42.62",
+      "impact_bps": "42.61",
       "optimum": ""
     },
     {
@@ -2854,7 +2960,7 @@
       "mean_usd": "0.0412",
       "win_rate": "100.0%",
       "fee_bps": "100.00",
-      "impact_bps": "17.01",
+      "impact_bps": "17.02",
       "optimum": ""
     },
     {
@@ -2878,7 +2984,7 @@
       "mean_usd": "0.7549",
       "win_rate": "100.0%",
       "fee_bps": "20.00",
-      "impact_bps": "84.85",
+      "impact_bps": "84.84",
       "optimum": "\u2713"
     },
     {
@@ -2950,7 +3056,7 @@
       "mean_usd": "n/a",
       "win_rate": "n/a",
       "fee_bps": "100.00",
-      "impact_bps": "17.71",
+      "impact_bps": "17.70",
       "optimum": ""
     },
     {
@@ -2962,7 +3068,7 @@
       "mean_usd": "n/a",
       "win_rate": "n/a",
       "fee_bps": "40.00",
-      "impact_bps": "44.20",
+      "impact_bps": "44.15",
       "optimum": ""
     },
     {
@@ -3046,7 +3152,7 @@
       "mean_usd": "n/a",
       "win_rate": "n/a",
       "fee_bps": "100.00",
-      "impact_bps": "20.60",
+      "impact_bps": "20.59",
       "optimum": ""
     },
     {
@@ -3148,140 +3254,164 @@
     {
       "pair_id": "CRCLx",
       "session": "open",
-      "sim_per_day": "0.1060",
-      "seq_per_day": "0.9787",
+      "sim_per_day": "0.1079",
+      "seq_per_day": "0.9967",
       "win_rate": "100.0%",
       "n_windows": 1,
       "clears": "no",
-      "seq_per_day_raw": "0.9787227004898565736385246034",
-      "sim_per_day_raw": "0.1059544842567350764567368769"
+      "seq_per_day_raw": "0.9967462718803540841882126888",
+      "sim_per_day_raw": "0.1079056786146352292067198918"
     },
     {
       "pair_id": "CRCLx",
       "session": "closed",
-      "sim_per_day": "2.8018",
-      "seq_per_day": "0",
+      "sim_per_day": "2.8534",
+      "seq_per_day": "-0.8390",
       "win_rate": "40.0%",
       "n_windows": 5,
       "clears": "no",
-      "seq_per_day_raw": "0E+27",
-      "sim_per_day_raw": "2.801800859057076628717204250"
+      "seq_per_day_raw": "-0.8390413592871225530878338191",
+      "sim_per_day_raw": "2.853397146524300688807696035"
     },
     {
       "pair_id": "GOOGLx",
       "session": "closed",
-      "sim_per_day": "0.8064",
-      "seq_per_day": "0",
+      "sim_per_day": "0.8212",
+      "seq_per_day": "-0.0904",
       "win_rate": "50.0%",
       "n_windows": 2,
       "clears": "no",
-      "seq_per_day_raw": "0E+27",
-      "sim_per_day_raw": "0.8063978042903800094671452968"
+      "seq_per_day_raw": "-0.09044774850374979601700644060",
+      "sim_per_day_raw": "0.8212479435458541754101628804"
     },
     {
       "pair_id": "HOODx",
       "session": "open",
-      "sim_per_day": "0.0763",
-      "seq_per_day": "0.3701",
+      "sim_per_day": "0.0777",
+      "seq_per_day": "0.3769",
       "win_rate": "100.0%",
       "n_windows": 1,
       "clears": "no",
-      "seq_per_day_raw": "0.3701041229450999359355790703",
-      "sim_per_day_raw": "0.07625098959118647258960530846"
+      "seq_per_day_raw": "0.3769197389295660182674602706",
+      "sim_per_day_raw": "0.07765518217178665587850354035"
     },
     {
       "pair_id": "HOODx",
       "session": "closed",
-      "sim_per_day": "8.7754",
-      "seq_per_day": "0.4471",
+      "sim_per_day": "8.9370",
+      "seq_per_day": "0.4553",
       "win_rate": "83.3%",
       "n_windows": 6,
       "clears": "no",
-      "seq_per_day_raw": "0.4470803574748966199540076128",
-      "sim_per_day_raw": "8.775358413221409255095080632"
+      "seq_per_day_raw": "0.4553135217166219594514546833",
+      "sim_per_day_raw": "8.936960160844854940567243448"
     },
     {
       "pair_id": "NVDAx",
       "session": "open",
-      "sim_per_day": "0.5471",
-      "seq_per_day": "3.0451",
+      "sim_per_day": "0.5572",
+      "seq_per_day": "3.1011",
       "win_rate": "100.0%",
       "n_windows": 1,
       "clears": "yes",
-      "seq_per_day_raw": "3.045050945764204980098035321",
-      "sim_per_day_raw": "0.5470785738667648528642746573"
+      "seq_per_day_raw": "3.101126781219144356609248910",
+      "sim_per_day_raw": "0.5571532454028026477951290070"
     },
     {
       "pair_id": "NVDAx",
       "session": "closed",
-      "sim_per_day": "0.0216",
-      "seq_per_day": "0",
+      "sim_per_day": "0.0220",
+      "seq_per_day": "-0.4976",
       "win_rate": "0.0%",
       "n_windows": 2,
       "clears": "no",
-      "seq_per_day_raw": "0E+27",
-      "sim_per_day_raw": "0.02156984575537374598659074634"
+      "seq_per_day_raw": "-0.4975716113500284019902125347",
+      "sim_per_day_raw": "0.02196706312313217120139329622"
     },
     {
       "pair_id": "TSLAx",
       "session": "closed",
-      "sim_per_day": "0.0205",
-      "seq_per_day": "0",
+      "sim_per_day": "0.0208",
+      "seq_per_day": "-0.6151",
       "win_rate": "0.0%",
       "n_windows": 1,
       "clears": "no",
-      "seq_per_day_raw": "0E+27",
-      "sim_per_day_raw": "0.02046296794380269276913484014"
+      "seq_per_day_raw": "-0.6151386232235089569062007377",
+      "sim_per_day_raw": "0.02083980171235837803620050516"
     }
   ],
-  "universe_note": "Cost of going sequential on this span: simultaneous portfolio 0.7293 \u2192 sequential 4.3939 USDT/day (ratio 6.025). The simultaneous baseline here is **not** identical to the M0 headline (different span, fire-on-open only, primary clip $500, and M0 did not charge the flat withdraw fee). Compare ratios, not absolute dollars, against `m8-xstocks-edge-quant.md`.",
+  "universe_note": "Sequential vs simultaneous on this span: simultaneous portfolio 0.7427 \u2192 sequential 4.4748 USDT/day (ratio 6.025). Sequential books **all** admitted cycles' realised PnL (losses included) with flight = lag (10 min); simultaneous books decision-time paper edge with a short flight. Direction 1 only, primary clip $500, fire-on-open windows \u2014 not the M0 two-direction $1k headline. Compare methodology carefully against `m8-xstocks-edge-quant.md`.",
   "lag_sensitivity": [
     {
       "lag_min": 5,
-      "portfolio_per_day": "1.8301",
+      "portfolio_per_day": "1.8638",
       "win_rate": "100.0%",
       "mean_bps": "24.88",
-      "n": 3
+      "n": 3,
+      "paired_n": 3,
+      "paired_portfolio_per_day": "1.8638",
+      "paired_win_rate": "100.0%",
+      "paired_mean_bps": "24.88"
     },
     {
       "lag_min": 10,
-      "portfolio_per_day": "4.3939",
+      "portfolio_per_day": "4.4748",
       "win_rate": "100.0%",
       "mean_bps": "59.74",
-      "n": 3
+      "n": 3,
+      "paired_n": 3,
+      "paired_portfolio_per_day": "4.4748",
+      "paired_win_rate": "100.0%",
+      "paired_mean_bps": "59.74"
     },
     {
       "lag_min": 15,
-      "portfolio_per_day": "0.4424",
+      "portfolio_per_day": "0.4506",
       "win_rate": "50.0%",
       "mean_bps": "-46.29",
-      "n": 2
+      "n": 2,
+      "paired_n": 1,
+      "paired_portfolio_per_day": "0.4506",
+      "paired_win_rate": "100.0%",
+      "paired_mean_bps": "18.05"
     },
     {
       "lag_min": 20,
-      "portfolio_per_day": "1.2415",
+      "portfolio_per_day": "1.2643",
       "win_rate": "100.0%",
       "mean_bps": "50.64",
-      "n": 1
+      "n": 1,
+      "paired_n": 1,
+      "paired_portfolio_per_day": "1.2643",
+      "paired_win_rate": "100.0%",
+      "paired_mean_bps": "50.64"
     },
     {
       "lag_min": 30,
-      "portfolio_per_day": "2.5133",
+      "portfolio_per_day": "2.5596",
       "win_rate": "100.0%",
       "mean_bps": "102.52",
-      "n": 1
+      "n": 1,
+      "paired_n": 1,
+      "paired_portfolio_per_day": "2.5596",
+      "paired_win_rate": "100.0%",
+      "paired_mean_bps": "102.52"
     },
     {
       "lag_min": 60,
-      "portfolio_per_day": "0",
+      "portfolio_per_day": "-3.0645",
       "win_rate": "0.0%",
       "mean_bps": "-122.75",
-      "n": 1
+      "n": 1,
+      "paired_n": 1,
+      "paired_portfolio_per_day": "-3.0645",
+      "paired_win_rate": "0.0%",
+      "paired_mean_bps": "-122.75"
     }
   ],
-  "lag_sensitivity_note": "If N=30 or N=60 still clears the go floor on this span, the deposit-timeout policy can wait longer before forced handling; if either collapses win rate or $/day, the timeout should be set inside the still-viable horizon and treat longer delays as the exposure-breaker path (bot DESIGN \u00a72.8).",
+  "lag_sensitivity_note": "Each lag reports (a) **all** open windows that resolve at that lag (n may shrink \u2014 missing delayed books) and (b) the **paired** subset also present at the primary lag N=10 (fair degradation). Portfolio flight = lag. If N=30/60 paired $/day collapses, set `deposit_timeout_s` inside the still-viable horizon (bot DESIGN \u00a72.8).",
   "caveats": [
-    "Study window 2026-08-05 02:12:00 UTC \u2192 2026-08-07 03:08:59 UTC (2.040 calendar days). RTH hours in window: 13.00 h (excl. collector_down: 5.37 h). Closed: 35.95 h (excl. gap: 24.62 h). Collector downtime: 40.31 h.",
+    "Study window 2026-08-05 03:19:03 UTC \u2192 2026-08-07 03:22:56 UTC (2.003 calendar days). RTH hours in window: 13.00 h (excl. collector_down: 5.37 h). Closed: 35.06 h (excl. gap: 23.95 h). Collector downtime: 40.31 h.",
     "Flat withdraw fee assumed **$1** per cycle (bot DESIGN \u00a72.3 / \u00a73.1 A+D). Authenticated fee pull (WHI-907) should replace this constant when it lands.",
     "Bybit sell at t+N is a paper VWAP with the same depth model as PnL v2 \u2014 not a live fill. Thin books and crediting delays can be worse than measured.",
     "Direction 2 (`buy_bybit_sell_fluxion`) is out of scope (needs ~15 min Bybit xStock withdrawal before the DEX leg).",
@@ -3295,5 +3425,5 @@
     "Deposit timeout: set from the lag-sensitivity table so that waiting inside the timeout remains positive-EV on average; beyond that, take the exposure-breaker path.",
     "Update bot `docs/DESIGN.md` \u00a78 delay-decay bullet to cite this report (companion commit in mantle-stocks-arbitrage-bots)."
   ],
-  "elapsed_s": 50.7
+  "elapsed_s": 52.6
 }

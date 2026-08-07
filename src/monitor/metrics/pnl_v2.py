@@ -262,6 +262,36 @@ def _bybit_sell_cash(
     )
 
 
+def bybit_sell_proceeds_usd(
+    *,
+    bybit_bid: Decimal,
+    bybit_ask: Decimal,
+    q_base: Decimal,
+    config: MetricsConfig,
+    bybit_bids: list[tuple[Decimal, Decimal]] | None = None,
+) -> Decimal | None:
+    """Public seam: USDT received selling ``q_base`` into Bybit bids (fee-in).
+
+    Used by sequential-cycle analysis (WHI-915) to re-price the exit leg at
+    ``t + N`` without reimplementing taker-fee / VWAP math. Returns ``None``
+    when the book cannot fill ``q_base``.
+    """
+    mid = mid_from_bid_ask(bybit_bid, bybit_ask)
+    if mid is None or mid <= 0 or q_base <= 0:
+        return None
+    leg = _bybit_sell_cash(
+        bid=bybit_bid,
+        ask=bybit_ask,
+        bybit_mid=mid,
+        q=q_base,
+        f_b=_fee_fraction(config),
+        depth=bybit_bids,
+    )
+    if leg is None:
+        return None
+    return leg.cash_usd
+
+
 def _bybit_buy_cash(
     *,
     bid: Decimal,
@@ -1137,6 +1167,7 @@ __all__ = [
     "PnlCostBreakdownUsd",
     "PnlResult",
     "RfqPollQuote",
+    "bybit_sell_proceeds_usd",
     "compute_pnl_usd",
     "optimal_size",
     "pnl_bucket_table",

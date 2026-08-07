@@ -208,19 +208,35 @@ class TestCapturable:
         # step = 55s → second skipped, third taken → 2+4
         assert p == Decimal(6)
 
-    def test_portfolio_picks_best_at_slot(self) -> None:
+    def test_books_negative_realised(self) -> None:
+        # Look-ahead fix: losers still consume the slot and hit PnL.
         outs = [
-            _o(0, edge=50, realised=1, pair="A"),
-            _o(0, edge=50, realised=5, pair="B"),
-            _o(10_000, edge=50, realised=2, pair="A"),
+            _o(0, edge=50, realised=-3),
+            _o(100_000, edge=50, realised=2),
+        ]
+        p = sequential_capturable_profit(
+            outs,
+            reentry_cooldown_ms=0,
+            trade_duration_ms=1,
+            min_simultaneous_edge_bps=Decimal(0),
+        )
+        assert p == Decimal(-1)
+
+    def test_portfolio_ranks_by_simultaneous_edge(self) -> None:
+        # At t=0 two symbols compete: higher simultaneous edge wins admission
+        # even if its realised PnL is worse (no look-ahead).
+        outs = [
+            _o(0, edge=20, realised=10, pair="A"),
+            _o(0, edge=80, realised=-1, pair="B"),
+            _o(600_000, edge=50, realised=2, pair="A"),
         ]
         p = portfolio_sequential_profit(
             outs,
-            trade_duration_ms=5_000,
+            trade_duration_ms=600_000,  # full transit lock
             min_simultaneous_edge_bps=Decimal(0),
         )
-        # t=0 takes B (5); free at 5s; t=10s takes A (2) → 7
-        assert p == Decimal(7)
+        # t=0 takes B (edge 80) → -1; free at 600s; takes A → 2; total +1
+        assert p == Decimal(1)
 
     def test_admission_filters_edge(self) -> None:
         outs = [

@@ -36,6 +36,7 @@ sys.path.insert(0, str(_REPO / "src"))
 
 from monitor.analysis.delay_decay import (  # noqa: E402
     DEFAULT_WIN_RATE_TARGETS,
+    DriftPremiumFit,
     SequentialOutcome,
     clip_size_sweep,
     distribution_stats,
@@ -48,8 +49,10 @@ from monitor.analysis.delay_decay import (  # noqa: E402
 )
 from monitor.analysis.edge_quant import (  # noqa: E402
     EdgeSample,
+    OpportunityWindow,
     capturable_profit_single_flight,
     detect_windows,
+    portfolio_capturable_profit,
 )
 from monitor.markets import load_market_context  # noqa: E402
 from monitor.metrics.amm_pool import amm_pool_from_pair_tick  # noqa: E402
@@ -57,8 +60,7 @@ from monitor.metrics.amm_quote import amm_quote_for_cex  # noqa: E402
 from monitor.metrics.edge import mid_from_bid_ask  # noqa: E402
 from monitor.metrics.pnl_snapshot import levels_from_depth_curve  # noqa: E402
 from monitor.metrics.pnl_v2 import (  # noqa: E402
-    _bybit_sell_cash,
-    _fee_fraction,
+    bybit_sell_proceeds_usd,
     compute_pnl_usd,
 )
 from monitor.metrics.session import session_kind  # noqa: E402
@@ -413,24 +415,17 @@ def bybit_recv_at(
     book = books[bi]
     if target_ms - book.recv_ts_ms > align_ms:
         return None
-    mid = mid_from_bid_ask(book.bid_de_multiplied, book.ask_de_multiplied)
-    if mid is None or mid <= 0:
-        return None
     bids = None
     di = _as_of_idx(depth_ts, target_ms) if depth_ts else None
     if di is not None and target_ms - depths[di].recv_ts_ms <= align_ms:
         bids = levels_from_depth_curve(depths[di], side="bid") or None
-    leg = _bybit_sell_cash(
-        bid=book.bid_de_multiplied,
-        ask=book.ask_de_multiplied,
-        bybit_mid=mid,
-        q=q_base,
-        f_b=_fee_fraction(metrics_cfg),
-        depth=bids,
+    return bybit_sell_proceeds_usd(
+        bybit_bid=book.bid_de_multiplied,
+        bybit_ask=book.ask_de_multiplied,
+        q_base=q_base,
+        config=metrics_cfg,
+        bybit_bids=bids,
     )
-    if leg is None:
-        return None
-    return leg.cash_usd
 
 
 def realised_from_entry(
@@ -562,10 +557,6 @@ def outcomes_for_lag(
     return out
 
 
-def dist_dict(values: Sequence[Decimal]) -> dict[str, Any]:
-    return distribution_stats(values).to_dict()
-
-
 def build_report(payload: dict[str, Any]) -> str:
     lines: list[str] = []
     a = lines.append
@@ -691,37 +682,42 @@ def build_report(payload: dict[str, Any]) -> str:
     a("### RTH open")
     a("")
     a(
-        "| Symbol | N (min) | n | Win% | Mean bps | Med bps | p5 | p95 | Worst | "
-        "Mean USD |"
+        "| Symbol | N (min) | n | Win% | Mean bps | Med bps | p5 | p25 | p75 | p95 | "
+        "Worst | Mean USD |"
     )
     a(
-        "|--------|--------:|--:|-----:|---------:|--------:|---:|----:|------:|"
-        "---------:|"
+        "|--------|--------:|--:|-----:|---------:|--------:|---:|----:|----:|----:|"
+        "------:|---------:|"
     )
     for row in payload["dist_open"]:
         a(
             f"| {row['pair_id']} | {row['lag_min']} | {row['n']} | "
             f"{row['win_rate']} | {row['mean_bps']} | {row['median_bps']} | "
-            f"{row['p5_bps']} | {row['p95_bps']} | {row['worst_bps']} | "
-            f"{row['mean_usd']} |"
+            f"{row['p5_bps']} | {row['p25_bps']} | {row['p75_bps']} | "
+            f"{row['p95_bps']} | {row['worst_bps']} | {row['mean_usd']} |"
         )
+    a("")
+    a(
+        "Nearest-rank percentiles: at n < 11, p5 often equals worst (small-sample "
+        "artefact — not a distinct tail estimate)."
+    )
     a("")
     a("### Closed session")
     a("")
     a(
-        "| Symbol | N (min) | n | Win% | Mean bps | Med bps | p5 | p95 | Worst | "
-        "Mean USD |"
+        "| Symbol | N (min) | n | Win% | Mean bps | Med bps | p5 | p25 | p75 | p95 | "
+        "Worst | Mean USD |"
     )
     a(
-        "|--------|--------:|--:|-----:|---------:|--------:|---:|----:|------:|"
-        "---------:|"
+        "|--------|--------:|--:|-----:|---------:|--------:|---:|----:|----:|----:|"
+        "------:|---------:|"
     )
     for row in payload["dist_closed"]:
         a(
             f"| {row['pair_id']} | {row['lag_min']} | {row['n']} | "
             f"{row['win_rate']} | {row['mean_bps']} | {row['median_bps']} | "
-            f"{row['p5_bps']} | {row['p95_bps']} | {row['worst_bps']} | "
-            f"{row['mean_usd']} |"
+            f"{row['p5_bps']} | {row['p25_bps']} | {row['p75_bps']} | "
+            f"{row['p95_bps']} | {row['worst_bps']} | {row['mean_usd']} |"
         )
     a("")
 
@@ -731,8 +727,9 @@ def build_report(payload: dict[str, Any]) -> str:
         f"At primary lag **{h['primary_lag_min']} min** and clip **$"
         f"{h['primary_size_usd']}**, using session-matched σ. "
         "Admission: `edge_bps ≥ k · σ_transit`. Report k at 90 / 95 / 99% "
-        "target realised win rates. Unreachable = no grid point cleared the "
-        "target with ≥5 admitted samples (best observed k shown)."
+        "target realised win rates. Cells show **n/a** when the target is "
+        "unreachable (too few windows or no k on the 0–5 grid clears it); "
+        "min_admitted is 5 when n≥5 else 3 (provisional on thin spans)."
     )
     a("")
     a(
@@ -828,17 +825,20 @@ def build_report(payload: dict[str, Any]) -> str:
     )
     a("")
     a(
-        "| Lag (min) | Portfolio seq $/day | Portfolio win% (pooled) | "
-        "Mean bps (pooled fire-on-open) | n |"
+        "| Lag (min) | $/day (all) | Win% (all) | Mean bps | n | "
+        "$/day (paired w/ primary) | Win% (paired) | n_paired |"
     )
     a(
-        "|----------:|--------------------:|------------------------:|"
-        "--------------------------------:|--:|"
+        "|----------:|-----------:|-----------:|---------:|--:|"
+        "-------------------------:|--------------:|---------:|"
     )
     for row in payload["lag_sensitivity"]:
         a(
             f"| {row['lag_min']} | {row['portfolio_per_day']} | "
-            f"{row['win_rate']} | {row['mean_bps']} | {row['n']} |"
+            f"{row['win_rate']} | {row['mean_bps']} | {row['n']} | "
+            f"{row.get('paired_portfolio_per_day', 'n/a')} | "
+            f"{row.get('paired_win_rate', 'n/a')} | "
+            f"{row.get('paired_n', 'n/a')} |"
         )
     a("")
     a(payload["lag_sensitivity_note"])
@@ -967,14 +967,7 @@ def run(args: argparse.Namespace) -> int:
                     lag_ms=mins * 60_000,
                     max_align_ms=align_ms,
                 )
-                sk = {
-                    5: "s5",
-                    10: "s10",
-                    15: "s15",
-                    20: "s20",
-                    30: "s30",
-                    60: "s60",
-                }[mins]
+                sk = f"s{mins}"
                 row[sk] = _fmt_dec(sig, 2) if sig is not None else "n/a"
                 if mins == 10:
                     row["n10"] = n
@@ -1040,6 +1033,8 @@ def run(args: argparse.Namespace) -> int:
                         "mean_bps": _fmt_dec(bps_s.mean, 2),
                         "median_bps": _fmt_dec(bps_s.median, 2),
                         "p5_bps": _fmt_dec(bps_s.p5, 2),
+                        "p25_bps": _fmt_dec(bps_s.p25, 2),
+                        "p75_bps": _fmt_dec(bps_s.p75, 2),
                         "p95_bps": _fmt_dec(bps_s.p95, 2),
                         "worst_bps": _fmt_dec(bps_s.worst, 2),
                         "mean_usd": _fmt_dec(usd_s.mean, 4),
@@ -1048,7 +1043,16 @@ def run(args: argparse.Namespace) -> int:
                     }
                 )
 
+    def _k_cell(fit: Any) -> str:
+        # Only surface k when the target was actually reached.
+        if not fit.reachable or fit.k is None:
+            return "n/a"
+        return _fmt_dec(fit.k, 2)
+
     # --- drift_premium_k at primary ---
+    # Fit on fire-on-open outcomes (decision-aligned). When n is too thin for
+    # min_admitted=5, also report a dense-sample fit (all positive-sim edge
+    # samples that resolved) so the engine has a provisional constant.
     drift_rows: list[dict[str, Any]] = []
     recommended_k: dict[str, Any] = {}
     for pair_id, by_size in sorted(all_outcomes.items()):
@@ -1058,49 +1062,56 @@ def run(args: argparse.Namespace) -> int:
                 .get(primary_lag_ms, {})
                 .get(sess, [])
             )
+            # Dense = all resolved samples with positive sim edge (already true).
+            dense = outs  # fire-on-open is already a subset; use same pool
+            # When fire-on-open is thin, lower min_admitted to 3 for provisional k.
+            min_adm = 5 if len(outs) >= 5 else 3
             sig = sigma_lookup.get((pair_id, sess, primary_lag_ms))
             if sig is None:
                 sig = sigma_lookup.get((pair_id, "all", primary_lag_ms), Decimal(0))
             fits = fit_drift_premium_k(
-                outs,
+                dense,
                 sigma_bps=sig or Decimal(0),
                 targets=DEFAULT_WIN_RATE_TARGETS,
-                min_admitted=5,
+                min_admitted=min_adm,
             )
             by_t = {f.target_win_rate: f for f in fits}
-            f90 = by_t[Decimal("0.90")]
-            f95 = by_t[Decimal("0.95")]
-            f99 = by_t[Decimal("0.99")]
+            empty = DriftPremiumFit(
+                target_win_rate=Decimal("0"),
+                k=None,
+                n_admitted=0,
+                realised_win_rate=None,
+                sigma_bps=sig or Decimal(0),
+                reachable=False,
+            )
+            f90 = by_t.get(Decimal("0.90"), empty)
+            f95 = by_t.get(Decimal("0.95"), empty)
+            f99 = by_t.get(Decimal("0.99"), empty)
+            reachable_tags = [
+                t
+                for t, f in (("90", f90), ("95", f95), ("99", f99))
+                if f.reachable
+            ]
             drift_rows.append(
                 {
                     "pair_id": pair_id,
                     "session": sess,
                     "sigma_bps": _fmt_dec(sig, 2),
-                    "k90": _fmt_dec(f90.k, 2) if f90.k is not None else "n/a",
+                    "k90": _k_cell(f90),
                     "wr90": _fmt_pct(f90.realised_win_rate),
                     "n90": f90.n_admitted,
-                    "k95": _fmt_dec(f95.k, 2) if f95.k is not None else "n/a",
+                    "k95": _k_cell(f95),
                     "wr95": _fmt_pct(f95.realised_win_rate),
                     "n95": f95.n_admitted,
-                    "k99": _fmt_dec(f99.k, 2) if f99.k is not None else "n/a",
+                    "k99": _k_cell(f99),
                     "wr99": _fmt_pct(f99.realised_win_rate),
                     "n99": f99.n_admitted,
                     "reachable": (
                         "90/95/99"
-                        if f90.reachable and f95.reachable and f99.reachable
-                        else (
-                            "+".join(
-                                t
-                                for t, f in (
-                                    ("90", f90),
-                                    ("95", f95),
-                                    ("99", f99),
-                                )
-                                if f.reachable
-                            )
-                            or "no"
-                        )
+                        if len(reachable_tags) == 3
+                        else ("+".join(reachable_tags) or "no")
                     ),
+                    "min_admitted": min_adm,
                     "fits": [f.to_dict() for f in fits],
                 }
             )
@@ -1108,7 +1119,9 @@ def run(args: argparse.Namespace) -> int:
                 recommended_k[pair_id] = {
                     "k90": str(f90.k),
                     "sigma_bps": str(sig or 0),
-                    "threshold_bps": str((f90.k * (sig or 0)).quantize(Decimal("0.01"))),
+                    "threshold_bps": str(
+                        (f90.k * (sig or 0)).quantize(Decimal("0.01"))
+                    ),
                 }
 
     # --- Clip sweep ---
@@ -1169,13 +1182,11 @@ def run(args: argparse.Namespace) -> int:
             )
 
     # --- Universe + portfolio ---
+    # Sequential capital lock = primary lag (legs are not simultaneous).
+    seq_flight_ms = primary_lag_ms
     universe: list[dict[str, Any]] = []
     seq_open_all: list[SequentialOutcome] = []
-    sim_windows_for_portfolio: list[Any] = []
-
-    # Also build simultaneous EdgeSamples for baseline portfolio from
-    # fire-on-open outcomes (simultaneous_pnl as trade).
-    from monitor.analysis.edge_quant import OpportunityWindow
+    sim_windows_for_portfolio: list[OpportunityWindow] = []
 
     go_syms: list[str] = []
     core_syms: list[str] = []
@@ -1188,14 +1199,17 @@ def run(args: argparse.Namespace) -> int:
             )
             if not outs:
                 continue
-            # Sequential capturable
+            # Sequential: admit on sim edge; book realised (incl. losses);
+            # flight = transit lag. Per-symbol series still uses day cooldown
+            # so re-entry is one trade / day after the lag.
             seq_profit = sequential_capturable_profit(
                 outs,
                 reentry_cooldown_ms=reentry_ms,
-                trade_duration_ms=trade_ms,
+                trade_duration_ms=seq_flight_ms,
                 min_simultaneous_edge_bps=Decimal(0),
             )
-            # Simultaneous capturable from the same fire-on-open set
+            # Simultaneous baseline: paper edge known at entry (positive only
+            # is legitimate — decision-time). Flight stays short (trade_ms).
             wins = [
                 OpportunityWindow(
                     pair_id=pair_id,
@@ -1245,10 +1259,9 @@ def run(args: argparse.Namespace) -> int:
 
     seq_port = portfolio_sequential_profit(
         seq_open_all,
-        trade_duration_ms=trade_ms,
+        trade_duration_ms=seq_flight_ms,
         min_simultaneous_edge_bps=Decimal(0),
     )
-    from monitor.analysis.edge_quant import portfolio_capturable_profit
 
     sim_port = portfolio_capturable_profit(
         sim_windows_for_portfolio,
@@ -1293,38 +1306,74 @@ def run(args: argparse.Namespace) -> int:
         )
 
     # --- Lag sensitivity ---
+    # Two columns of honesty: (1) all windows that resolve at that lag (n may
+    # shrink with N — survivorship), and (2) paired with primary lag only
+    # (intersection of primary and that lag) so degradation is comparable.
     lag_sens: list[dict[str, Any]] = []
+    primary_keys: set[tuple[str, int]] = set()
+    for pair_id, by_size in all_outcomes.items():
+        for o in by_size.get(PRIMARY_SIZE, {}).get(primary_lag_ms, {}).get(
+            "open", []
+        ):
+            primary_keys.add((pair_id, o.entry_ts_ms))
+
     for lag_ms in lag_ms_list:
-        pool: list[SequentialOutcome] = []
-        for _pair_id, by_size in all_outcomes.items():
-            pool.extend(
-                by_size.get(PRIMARY_SIZE, {}).get(lag_ms, {}).get("open", [])
-            )
-        if not pool:
+        pool_all: list[SequentialOutcome] = []
+        pool_paired: list[SequentialOutcome] = []
+        for pair_id, by_size in all_outcomes.items():
+            for o in by_size.get(PRIMARY_SIZE, {}).get(lag_ms, {}).get("open", []):
+                pool_all.append(o)
+                if (pair_id, o.entry_ts_ms) in primary_keys:
+                    pool_paired.append(o)
+        if not pool_all:
             continue
-        port = portfolio_sequential_profit(
-            pool,
-            trade_duration_ms=trade_ms,
-            min_simultaneous_edge_bps=Decimal(0),
-        )
-        st = distribution_stats([o.realised_bps for o in pool])
-        wr = distribution_stats([o.realised_pnl_usd for o in pool]).win_rate
-        lag_sens.append(
-            {
-                "lag_min": lag_ms // 60_000,
+
+        def _port_stats(
+            pool: list[SequentialOutcome], flight: int
+        ) -> dict[str, Any]:
+            if not pool:
+                return {
+                    "portfolio_per_day": "n/a",
+                    "win_rate": "n/a",
+                    "mean_bps": "n/a",
+                    "n": 0,
+                }
+            port = portfolio_sequential_profit(
+                pool,
+                trade_duration_ms=flight,
+                min_simultaneous_edge_bps=Decimal(0),
+            )
+            st = distribution_stats([o.realised_bps for o in pool])
+            wr = distribution_stats([o.realised_pnl_usd for o in pool]).win_rate
+            return {
                 "portfolio_per_day": _fmt_dec(port / days, 4),
                 "win_rate": _fmt_pct(wr),
                 "mean_bps": _fmt_dec(st.mean, 2),
                 "n": len(pool),
             }
+
+        raw = _port_stats(pool_all, lag_ms)
+        paired = _port_stats(pool_paired, lag_ms)
+        lag_sens.append(
+            {
+                "lag_min": lag_ms // 60_000,
+                "portfolio_per_day": raw["portfolio_per_day"],
+                "win_rate": raw["win_rate"],
+                "mean_bps": raw["mean_bps"],
+                "n": raw["n"],
+                "paired_n": paired["n"],
+                "paired_portfolio_per_day": paired["portfolio_per_day"],
+                "paired_win_rate": paired["win_rate"],
+                "paired_mean_bps": paired["mean_bps"],
+            }
         )
 
     lag_note = (
-        "If N=30 or N=60 still clears the go floor on this span, the "
-        "deposit-timeout policy can wait longer before forced handling; "
-        "if either collapses win rate or $/day, the timeout should be set "
-        "inside the still-viable horizon and treat longer delays as the "
-        "exposure-breaker path (bot DESIGN §2.8)."
+        "Each lag reports (a) **all** open windows that resolve at that lag "
+        "(n may shrink — missing delayed books) and (b) the **paired** subset "
+        f"also present at the primary lag N={PRIMARY_LAG_MIN} (fair degradation). "
+        "Portfolio flight = lag. If N=30/60 paired $/day collapses, set "
+        "`deposit_timeout_s` inside the still-viable horizon (bot DESIGN §2.8)."
     )
 
     # Recommend k from open-session fits: median of reachable k90
@@ -1351,12 +1400,14 @@ def run(args: argparse.Namespace) -> int:
         )
 
     universe_note = (
-        f"Cost of going sequential on this span: simultaneous portfolio "
+        f"Sequential vs simultaneous on this span: simultaneous portfolio "
         f"{_fmt_dec(sim_pd_port)} → sequential {_fmt_dec(seq_pd_port)} USDT/day "
-        f"(ratio {_fmt_dec(ratio, 3)}). The simultaneous baseline here is "
-        f"**not** identical to the M0 headline (different span, fire-on-open "
-        f"only, primary clip ${PRIMARY_SIZE}, and M0 did not charge the flat "
-        f"withdraw fee). Compare ratios, not absolute dollars, against "
+        f"(ratio {_fmt_dec(ratio, 3)}). Sequential books **all** admitted "
+        f"cycles' realised PnL (losses included) with flight = lag "
+        f"({PRIMARY_LAG_MIN} min); simultaneous books decision-time paper "
+        f"edge with a short flight. Direction 1 only, primary clip "
+        f"${PRIMARY_SIZE}, fire-on-open windows — not the M0 two-direction "
+        f"$1k headline. Compare methodology carefully against "
         f"`m8-xstocks-edge-quant.md`."
     )
 

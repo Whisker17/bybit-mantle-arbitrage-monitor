@@ -417,13 +417,14 @@ def sequential_capturable_profit(
 ) -> Decimal:
     """Single-flight sum of **realised** PnL on admitted fire-on-open cycles.
 
-    Outcomes must be one (pair, size, lag) series. Admission uses simultaneous
-    edge; booked PnL is realised. Only positive realised fills contribute
-    (same spirit as edge_quant capturable profit).
+    Outcomes must be one (pair, size, lag) series. **Admission** uses only
+    information available at entry (``simultaneous_edge_bps``); **booked PnL
+    is realised** and may be negative — the bot cannot discard a cycle after
+    commit because the delayed sell lost money.
 
-    ``reentry_cooldown_ms`` spaces successive entries on this series
-    (``trade_duration_ms + reentry_cooldown_ms`` after an entry). With the
-    study default of a 1-day cooldown this is effectively one cycle per day.
+    ``trade_duration_ms`` should be the capital lock for one cycle (typically
+    the transit lag, not a 5 s simultaneous-leg duration).
+    ``reentry_cooldown_ms`` spaces successive entries after that lock.
     """
     admitted = sorted(
         (
@@ -441,8 +442,7 @@ def sequential_capturable_profit(
     for o in admitted:
         if o.entry_ts_ms < next_free:
             continue
-        if o.realised_pnl_usd > 0:
-            profit += o.realised_pnl_usd
+        profit += o.realised_pnl_usd  # may be negative
         next_free = o.entry_ts_ms + step
     return profit
 
@@ -455,15 +455,16 @@ def portfolio_sequential_profit(
 ) -> Decimal:
     """Cross-symbol single-flight on realised PnL (one cycle at a time).
 
-    At each free slot, among remaining admitted outcomes still available,
-    pick the highest positive realised PnL and consume it.
+    At each free slot, among remaining **admitted** outcomes (simultaneous edge
+    only), pick the one with highest simultaneous edge (decision-time ranking)
+    and book its realised PnL (may be negative). Flight occupies
+    ``trade_duration_ms`` — pass the transit lag so cycles cannot overlap in
+    capital.
     """
     remaining = [
         o
         for o in outcomes
-        if o.fillable
-        and o.simultaneous_edge_bps >= min_simultaneous_edge_bps
-        and o.realised_pnl_usd > 0
+        if o.fillable and o.simultaneous_edge_bps >= min_simultaneous_edge_bps
     ]
     if not remaining:
         return Decimal(0)
@@ -471,16 +472,14 @@ def portfolio_sequential_profit(
     profit = Decimal(0)
     next_free = 0
     flight = max(1, trade_duration_ms)
-    # Greedy: walk time, at each free moment take best available entry.
-    # Bound iterations by n.
     for _ in range(len(remaining) + 1):
         candidates = [o for o in remaining if o.entry_ts_ms >= next_free]
         if not candidates:
             break
-        # Earliest free time among candidates that can enter now.
         earliest = min(o.entry_ts_ms for o in candidates)
         at_earliest = [o for o in candidates if o.entry_ts_ms == earliest]
-        best = max(at_earliest, key=lambda o: o.realised_pnl_usd)
+        # Rank by simultaneous edge (known at decision time), not realised.
+        best = max(at_earliest, key=lambda o: o.simultaneous_edge_bps)
         profit += best.realised_pnl_usd
         next_free = earliest + flight
         remaining = [o for o in remaining if o is not best]
