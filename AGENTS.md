@@ -248,6 +248,12 @@ placeholders. Agents must not assume a module exists until its issue lands. -->
     taken / untaken-with-liquidity / untaken-too-thin, reports as-of join
     staleness and `pricing_anomaly` gate sensitivity. Note
     `docs/references/m8-onchain-fill-validation.md` (+ companion JSON).
+  - **M8 delay-decay / sequential cycle (WHI-915) landed:** pure
+    `monitor.analysis.delay_decay` (realised PnL distributions, transit σ,
+    `drift_premium_k`, clip-size optimum, sequential single-flight) +
+    `scripts/xstocks_delay_decay.py`. Report
+    `docs/references/m8-delay-decay.md` (+ companion JSON). Direction 1 only
+    (`buy_fluxion_sell_bybit`); gates bot live trading / admission premium.
 
 ## Build, test, run
 
@@ -283,6 +289,10 @@ uv run python -m monitor.underlying --tickers AAPL,TSLA,SKHY
 # MM attribution research backfill (WHI-767); needs Mantle RPC + network:
 #   uv run python scripts/mm_attribution_analysis.py --days 30
 #   uv run python scripts/mm_attribution_analysis.py --skip-fetch
+# M8 xStocks edge quant (WHI-866); needs bybit-fluxion journal:
+#   uv run python scripts/xstocks_edge_quant.py --db data/monitor-bybit-fluxion.db
+# M8 delay-decay sequential cycle (WHI-915); needs bybit-fluxion journal:
+#   uv run python scripts/xstocks_delay_decay.py --db data/monitor-bybit-fluxion.db
 # M8 xStocks edge quant / bot go-no-go (WHI-866); needs bybit-fluxion journal:
 #   uv run python scripts/xstocks_edge_quant.py
 #   uv run python scripts/xstocks_edge_quant.py --db data/monitor-bybit-fluxion.db --sample-ms 15000
