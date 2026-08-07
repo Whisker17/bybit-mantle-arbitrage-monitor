@@ -31,6 +31,22 @@ soon — anything touching key handling, RPC credentials defaults to at least Hi
 
 ## Open
 
+- **WHI-908: fill-validation script duplicates M0 sample builder** (Low, WHI-908).
+  `scripts/xstocks_fill_validation.py::build_amm_samples_with_meta` is a near-
+  copy of `scripts/xstocks_edge_quant.py::build_amm_samples`, adding only the
+  parallel `SampleMeta` list (pool age / basis). Deferred: research ticket
+  scope; extracting a shared builder that optionally yields meta is a separate
+  refactor. Fix: move sample construction into `monitor.analysis` (or a shared
+  script helper) and have both scripts call it.
+
+- **WHI-908: research scripts reach private JournalReader + sibling script
+  helpers** (Low, WHI-908). Extends the WHI-866 private-mapper pattern:
+  `scripts/xstocks_fill_validation.py` imports `_row_to_swap` and, via
+  `importlib`, `_eq._in_gap` / `_eq._as_of_idx` / `_eq.load_*` from
+  `xstocks_edge_quant`. Justified for offline analysis; no public bulk-load
+  API yet. Fix: promote typed bulk loaders on `JournalReader` (and pure join
+  helpers into `monitor.analysis`) and switch both M8 scripts.
+
 - **WHI-866: research script imports private JournalReader row mappers** (Low, WHI-866).
   `scripts/xstocks_edge_quant.py` reaches `_row_to_bybit_book` / depth / pool /
   RFQ helpers. First cross-package private use; justified for offline analysis
