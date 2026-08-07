@@ -2,7 +2,7 @@
 
 Does the bot's **zero-inventory transfer cycle** still earn money when the legs are sequential? Fluxion buy at opportunity-window open, Bybit sell at `t + N`, full cost stack including the flat recycle withdraw fee. Companion to the simultaneous M0 report (`docs/references/m8-xstocks-edge-quant.md`).
 
-**Generated:** 2026-08-07 03:23:49 UTC
+**Generated:** 2026-08-07 03:32:57 UTC
 
 ## Regeneration
 
@@ -44,31 +44,33 @@ Venue math: `monitor.metrics.pnl_v2.compute_pnl_usd` + delayed Bybit sell.
 
 ## Data span
 
-Study window wall clock: **2026-08-05 03:19:03 UTC → 2026-08-07 03:22:56 UTC** (2.003 d). RTH excl. gap: **5.37 h**. Delayed sells may resolve up to 60 min past the book max timestamp.
+Study window wall clock: **2026-08-05 03:19:03 UTC → 2026-08-07 03:32:03 UTC** (2.009 d). RTH excl. gap: **5.37 h**. Delayed sells may resolve up to 60 min past the book max timestamp.
 
 | Table | Rows | Min (UTC) | Max (UTC) |
 |-------|-----:|-----------|-----------|
-| `bybit_book` | 996,438 | 2026-08-05 03:19:03 UTC | 2026-08-07 03:22:56 UTC |
-| `bybit_depth` | 749,668 | 2026-08-05 03:19:03 UTC | 2026-08-07 03:22:56 UTC |
-| `fluxion_pool_state` | 895,488 | 2026-08-02 03:18:24 UTC | 2026-08-07 03:22:56 UTC |
+| `bybit_book` | 998,658 | 2026-08-05 03:19:03 UTC | 2026-08-07 03:32:03 UTC |
+| `bybit_depth` | 752,505 | 2026-08-05 03:19:03 UTC | 2026-08-07 03:32:03 UTC |
+| `fluxion_pool_state` | 897,712 | 2026-08-02 03:18:24 UTC | 2026-08-07 03:32:03 UTC |
 | `collector_gaps` | 3,735 | 2026-08-02 03:18:32 UTC | 2026-08-07 02:51:08 UTC |
 
 ## Headline (sequential vs simultaneous)
 
 | Metric | Value |
 |--------|------:|
-| Study calendar days | 2.003 |
+| Study calendar days | 2.009 |
 | Primary lag | 10 min |
 | Primary clip | $500 |
 | Withdraw fee (flat) | $1 / cycle |
-| Simultaneous portfolio $/day (baseline, no withdraw fee) | 0.7427 |
-| Sequential portfolio $/day (realised, w/ withdraw fee) | 4.4748 |
+| Simultaneous portfolio $/day (baseline, no withdraw fee) | 0.7404 |
+| Sequential portfolio $/day (realised, w/ withdraw fee) | 4.4607 |
 | Sequential / simultaneous ratio | 6.025 |
 | Sequential go-list (open, primary) | CRCLx, HOODx, NVDAx |
 | Symbols clearing ≥1 USDT/day sequential | NVDAx |
 | **Verdict** | **NO-GO (sequential)** |
 
-Sequential portfolio **4.4748 USDT/day** is below the 5 no-go floor. Simultaneous baseline was 0.7427 USDT/day. Do not live-trade on this span.
+Sequential portfolio **4.4607 USDT/day** is below the 5 no-go floor. Simultaneous baseline was 0.7404 USDT/day. Do not live-trade on this span.
+
+> **Headline caveat:** the sequential/simultaneous ratio is **not** an M0 apples-to-apples edge comparison. Simultaneous here is direction-1 fire-on-open paper PnL on the **same sparse windows** (n open windows is small on this span); sequential adds favourable or adverse transit drift plus the flat withdraw fee. A ratio > 1 usually means the delayed sell luckily improved a few cycles — not that delay is free. See universe note below.
 
 ## Measured transit-window σ (Bybit mid log-return, bps)
 
@@ -77,29 +79,29 @@ Replaces the ~40 bps / 10 min HOODx estimate. 1σ sample std; RTH and closed rep
 | Symbol | Session | N=5m | N=10m | N=15m | N=20m | N=30m | N=60m | n@10m |
 |--------|---------|-----:|------:|------:|------:|------:|------:|------:|
 | AAPLx | open | 15.94 | 23.58 | 31.12 | 35.82 | 46.87 | 58.31 | 526 |
-| AAPLx | closed | 6.55 | 9.90 | 11.99 | 13.73 | 15.87 | 19.86 | 1635 |
-| AAPLx | all | 9.87 | 15.69 | 20.05 | 22.44 | 26.61 | 31.71 | 2174 |
+| AAPLx | closed | 6.53 | 9.86 | 11.95 | 13.68 | 15.83 | 19.78 | 1649 |
+| AAPLx | all | 9.84 | 15.64 | 20.00 | 22.37 | 26.55 | 31.61 | 2188 |
 | CRCLx | open | 51.63 | 66.08 | 77.71 | 81.09 | 77.65 | 100.85 | 434 |
-| CRCLx | closed | 33.56 | 53.42 | 69.91 | 88.34 | 107.70 | 130.19 | 2153 |
-| CRCLx | all | 38.81 | 57.64 | 72.11 | 87.28 | 103.52 | 126.17 | 2595 |
+| CRCLx | closed | 33.45 | 53.27 | 69.74 | 88.02 | 107.31 | 129.65 | 2168 |
+| CRCLx | all | 38.70 | 57.50 | 71.96 | 87.02 | 103.21 | 125.73 | 2610 |
 | GOOGLx | open | 34.78 | 63.49 | 61.21 | 70.86 | 90.88 | 121.53 | 493 |
-| GOOGLx | closed | 17.53 | 23.01 | 23.75 | 24.41 | 28.58 | 33.18 | 1711 |
-| GOOGLx | all | 22.62 | 36.70 | 36.27 | 41.21 | 49.33 | 61.61 | 2221 |
+| GOOGLx | closed | 17.48 | 22.95 | 23.64 | 24.32 | 28.42 | 33.08 | 1720 |
+| GOOGLx | all | 22.56 | 36.63 | 36.15 | 41.09 | 49.10 | 61.44 | 2230 |
 | HOODx | open | 28.59 | 38.72 | 52.11 | 58.18 | 51.56 | 48.68 | 464 |
-| HOODx | closed | 16.61 | 24.39 | 28.08 | 33.11 | 37.24 | 36.87 | 1532 |
-| HOODx | all | 20.65 | 28.75 | 35.02 | 40.92 | 44.12 | 44.00 | 2012 |
+| HOODx | closed | 16.58 | 24.36 | 28.02 | 33.06 | 37.14 | 36.78 | 1536 |
+| HOODx | all | 20.63 | 28.72 | 34.96 | 40.87 | 44.02 | 43.92 | 2016 |
 | METAx | open | 18.04 | 22.19 | 26.30 | 27.97 | 30.86 | 51.18 | 510 |
-| METAx | closed | 10.08 | 12.17 | 16.16 | 19.08 | 23.23 | 31.14 | 1450 |
-| METAx | all | 13.45 | 17.61 | 21.09 | 23.71 | 28.36 | 42.44 | 1972 |
+| METAx | closed | 10.04 | 12.12 | 16.07 | 18.98 | 23.08 | 31.41 | 1465 |
+| METAx | all | 13.41 | 17.55 | 21.01 | 23.62 | 28.22 | 42.34 | 1987 |
 | NVDAx | open | 23.98 | 25.98 | 28.04 | 28.01 | 31.76 | 40.40 | 444 |
-| NVDAx | closed | 9.46 | 13.58 | 17.08 | 20.87 | 25.45 | 32.40 | 2285 |
-| NVDAx | all | 14.09 | 18.77 | 23.97 | 26.07 | 29.98 | 34.14 | 2739 |
+| NVDAx | closed | 9.43 | 13.55 | 17.03 | 20.81 | 25.37 | 32.31 | 2295 |
+| NVDAx | all | 14.05 | 18.74 | 23.91 | 26.00 | 29.90 | 34.06 | 2749 |
 | TSLAx | open | 21.28 | 24.55 | 30.15 | 30.63 | 30.46 | 33.17 | 453 |
-| TSLAx | closed | 8.00 | 11.73 | 15.05 | 17.40 | 21.54 | 27.45 | 2104 |
-| TSLAx | all | 11.65 | 14.91 | 18.79 | 20.83 | 24.59 | 30.76 | 2565 |
+| TSLAx | closed | 7.98 | 11.70 | 15.03 | 17.36 | 21.49 | 27.36 | 2120 |
+| TSLAx | all | 11.62 | 14.87 | 18.76 | 20.78 | 24.53 | 30.68 | 2581 |
 | SPCXx | open | 62.32 | 72.32 | 76.62 | 82.57 | 100.66 | 109.84 | 453 |
-| SPCXx | closed | 26.21 | 37.67 | 48.80 | 58.74 | 69.36 | 87.34 | 2168 |
-| SPCXx | all | 35.59 | 45.96 | 54.76 | 63.85 | 75.08 | 90.95 | 2634 |
+| SPCXx | closed | 26.12 | 37.55 | 48.62 | 58.56 | 69.06 | 87.11 | 2183 |
+| SPCXx | all | 35.49 | 45.84 | 54.60 | 63.68 | 74.79 | 90.74 | 2649 |
 
 ## Realised PnL distribution (primary clip, fire-on-open windows)
 
@@ -169,23 +171,23 @@ At primary lag **10 min** and clip **$500**, using session-matched σ. Admission
 | Symbol | Session | σ@primary (bps) | k@90% | wr | n | k@95% | wr | n | k@99% | wr | n | Reachable? |
 |--------|---------|----------------:|------:|---:|--:|------:|---:|--:|------:|---:|--:|-----------|
 | AAPLx | open | 23.58 | n/a | n/a | 0 | n/a | n/a | 0 | n/a | n/a | 0 | no |
-| AAPLx | closed | 9.90 | n/a | n/a | 0 | n/a | n/a | 0 | n/a | n/a | 0 | no |
+| AAPLx | closed | 9.86 | n/a | n/a | 0 | n/a | n/a | 0 | n/a | n/a | 0 | no |
 | CRCLx | open | 66.08 | n/a | n/a | 0 | n/a | n/a | 0 | n/a | n/a | 0 | no |
-| CRCLx | closed | 53.42 | n/a | 40.0% | 5 | n/a | 40.0% | 5 | n/a | 40.0% | 5 | no |
+| CRCLx | closed | 53.27 | n/a | 40.0% | 5 | n/a | 40.0% | 5 | n/a | 40.0% | 5 | no |
 | GOOGLx | open | 63.49 | n/a | n/a | 0 | n/a | n/a | 0 | n/a | n/a | 0 | no |
-| GOOGLx | closed | 23.01 | n/a | n/a | 0 | n/a | n/a | 0 | n/a | n/a | 0 | no |
+| GOOGLx | closed | 22.95 | n/a | n/a | 0 | n/a | n/a | 0 | n/a | n/a | 0 | no |
 | HOODx | open | 38.72 | n/a | n/a | 0 | n/a | n/a | 0 | n/a | n/a | 0 | no |
-| HOODx | closed | 24.39 | 0.90 | 100.0% | 5 | 0.90 | 100.0% | 5 | 0.90 | 100.0% | 5 | 90/95/99 |
+| HOODx | closed | 24.36 | 0.90 | 100.0% | 5 | 0.90 | 100.0% | 5 | 0.90 | 100.0% | 5 | 90/95/99 |
 | METAx | open | 22.19 | n/a | n/a | 0 | n/a | n/a | 0 | n/a | n/a | 0 | no |
-| METAx | closed | 12.17 | n/a | n/a | 0 | n/a | n/a | 0 | n/a | n/a | 0 | no |
+| METAx | closed | 12.12 | n/a | n/a | 0 | n/a | n/a | 0 | n/a | n/a | 0 | no |
 | NVDAx | open | 25.98 | n/a | n/a | 0 | n/a | n/a | 0 | n/a | n/a | 0 | no |
-| NVDAx | closed | 13.58 | n/a | n/a | 0 | n/a | n/a | 0 | n/a | n/a | 0 | no |
+| NVDAx | closed | 13.55 | n/a | n/a | 0 | n/a | n/a | 0 | n/a | n/a | 0 | no |
 | SPCXx | open | 72.32 | n/a | n/a | 0 | n/a | n/a | 0 | n/a | n/a | 0 | no |
-| SPCXx | closed | 37.67 | n/a | n/a | 0 | n/a | n/a | 0 | n/a | n/a | 0 | no |
+| SPCXx | closed | 37.55 | n/a | n/a | 0 | n/a | n/a | 0 | n/a | n/a | 0 | no |
 | TSLAx | open | 24.55 | n/a | n/a | 0 | n/a | n/a | 0 | n/a | n/a | 0 | no |
-| TSLAx | closed | 11.73 | n/a | n/a | 0 | n/a | n/a | 0 | n/a | n/a | 0 | no |
+| TSLAx | closed | 11.70 | n/a | n/a | 0 | n/a | n/a | 0 | n/a | n/a | 0 | no |
 
-No open-session symbol reached a 90% realised win-rate target on the k-grid with ≥5 admitted samples. Either widen the span, lower the clip, or treat sequential trading as not yet admissible.
+**This span derives no open-session `drift_premium_k`.** No open symbol reached a 90% realised win-rate target on the k-grid with enough admitted samples. The bot must not live-trade until a re-run with thicker RTH produces reachable open-session k values (or an explicit owner waiver). Closed-session fits exist for diagnostics only (HOODx k90=0.90 (n=5)) — **do not** use them for RTH admission.
 
 ## Clip-size sweep (fee vs Fluxion impact)
 
@@ -193,51 +195,51 @@ Flat withdraw fee = **$1** (20.000 bps on $500, 10.000 bps on $1,000). Primary l
 
 | Symbol | Size | n | Mean bps | Med bps | Mean USD | Win% | Fee bps | Mean Flux impact bps | Optimum? |
 |--------|-----:|--:|---------:|--------:|---------:|-----:|-------:|---------------------:|---------|
-| AAPLx | 100 | 0 | n/a | n/a | n/a | n/a | 100.00 | 17.53 |  |
-| AAPLx | 250 | 0 | n/a | n/a | n/a | n/a | 40.00 | 43.90 |  |
-| AAPLx | 500 | 0 | n/a | n/a | n/a | n/a | 20.00 | 87.57 |  |
+| AAPLx | 100 | 0 | n/a | n/a | n/a | n/a | 100.00 | n/a |  |
+| AAPLx | 250 | 0 | n/a | n/a | n/a | n/a | 40.00 | n/a |  |
+| AAPLx | 500 | 0 | n/a | n/a | n/a | n/a | 20.00 | n/a |  |
 | AAPLx | 1000 | 0 | n/a | n/a | n/a | n/a | 10.00 | n/a |  |
-| CRCLx | 100 | 3 | -138.17 | -144.94 | -1.3817 | 0.0% | 100.00 | 24.46 |  |
-| CRCLx | 250 | 1 | -75.20 | -75.20 | -1.8800 | 0.0% | 40.00 | 60.74 |  |
-| CRCLx | 500 | 1 | 39.92 | 39.92 | 1.9962 | 100.0% | 20.00 | 119.35 | ✓ |
-| CRCLx | 1000 | 0 | n/a | n/a | n/a | n/a | 10.00 | 236.49 |  |
-| GOOGLx | 100 | 1 | -163.41 | -163.41 | -1.6341 | 0.0% | 100.00 | 17.06 |  |
-| GOOGLx | 250 | 0 | n/a | n/a | n/a | n/a | 40.00 | 42.61 |  |
-| GOOGLx | 500 | 0 | n/a | n/a | n/a | n/a | 20.00 | 84.70 |  |
-| GOOGLx | 1000 | 0 | n/a | n/a | n/a | n/a | 10.00 | 168.50 |  |
-| HOODx | 100 | 1 | 4.12 | 4.12 | 0.0412 | 100.0% | 100.00 | 17.02 |  |
-| HOODx | 250 | 0 | n/a | n/a | n/a | n/a | 40.00 | 42.38 |  |
-| HOODx | 500 | 1 | 15.10 | 15.10 | 0.7549 | 100.0% | 20.00 | 84.84 | ✓ |
-| HOODx | 1000 | 0 | n/a | n/a | n/a | n/a | 10.00 | 169.60 |  |
-| METAx | 100 | 0 | n/a | n/a | n/a | n/a | 100.00 | 18.91 |  |
-| METAx | 250 | 0 | n/a | n/a | n/a | n/a | 40.00 | 47.11 |  |
-| METAx | 500 | 0 | n/a | n/a | n/a | n/a | 20.00 | 94.73 |  |
+| CRCLx | 100 | 3 | -138.17 | -144.94 | -1.3817 | 0.0% | 100.00 | 24.24 |  |
+| CRCLx | 250 | 1 | -75.20 | -75.20 | -1.8800 | 0.0% | 40.00 | 60.83 |  |
+| CRCLx | 500 | 1 | 39.92 | 39.92 | 1.9962 | 100.0% | 20.00 | 120.59 | ✓ |
+| CRCLx | 1000 | 0 | n/a | n/a | n/a | n/a | 10.00 | 239.81 |  |
+| GOOGLx | 100 | 1 | -163.41 | -163.41 | -1.6341 | 0.0% | 100.00 | 17.04 |  |
+| GOOGLx | 250 | 0 | n/a | n/a | n/a | n/a | 40.00 | n/a |  |
+| GOOGLx | 500 | 0 | n/a | n/a | n/a | n/a | 20.00 | n/a |  |
+| GOOGLx | 1000 | 0 | n/a | n/a | n/a | n/a | 10.00 | n/a |  |
+| HOODx | 100 | 1 | 4.12 | 4.12 | 0.0412 | 100.0% | 100.00 | 17.11 |  |
+| HOODx | 250 | 0 | n/a | n/a | n/a | n/a | 40.00 | 42.55 |  |
+| HOODx | 500 | 1 | 15.10 | 15.10 | 0.7549 | 100.0% | 20.00 | 85.08 | ✓ |
+| HOODx | 1000 | 0 | n/a | n/a | n/a | n/a | 10.00 | n/a |  |
+| METAx | 100 | 0 | n/a | n/a | n/a | n/a | 100.00 | n/a |  |
+| METAx | 250 | 0 | n/a | n/a | n/a | n/a | 40.00 | n/a |  |
+| METAx | 500 | 0 | n/a | n/a | n/a | n/a | 20.00 | n/a |  |
 | METAx | 1000 | 0 | n/a | n/a | n/a | n/a | 10.00 | n/a |  |
-| NVDAx | 100 | 0 | n/a | n/a | n/a | n/a | 100.00 | 17.70 |  |
-| NVDAx | 250 | 0 | n/a | n/a | n/a | n/a | 40.00 | 44.15 |  |
-| NVDAx | 500 | 1 | 124.21 | 124.21 | 6.2106 | 100.0% | 20.00 | 88.40 | ✓ |
+| NVDAx | 100 | 0 | n/a | n/a | n/a | n/a | 100.00 | 17.62 |  |
+| NVDAx | 250 | 0 | n/a | n/a | n/a | n/a | 40.00 | 44.19 |  |
+| NVDAx | 500 | 1 | 124.21 | 124.21 | 6.2106 | 100.0% | 20.00 | 88.00 | ✓ |
 | NVDAx | 1000 | 1 | 25.88 | 25.88 | 2.5878 | 100.0% | 10.00 | 175.16 |  |
 | SPCXx | 100 | 0 | n/a | n/a | n/a | n/a | 100.00 | n/a |  |
 | SPCXx | 250 | 0 | n/a | n/a | n/a | n/a | 40.00 | n/a |  |
 | SPCXx | 500 | 0 | n/a | n/a | n/a | n/a | 20.00 | n/a |  |
 | SPCXx | 1000 | 0 | n/a | n/a | n/a | n/a | 10.00 | n/a |  |
-| TSLAx | 100 | 0 | n/a | n/a | n/a | n/a | 100.00 | 20.59 |  |
-| TSLAx | 250 | 0 | n/a | n/a | n/a | n/a | 40.00 | 51.52 |  |
-| TSLAx | 500 | 0 | n/a | n/a | n/a | n/a | 20.00 | 102.59 |  |
+| TSLAx | 100 | 0 | n/a | n/a | n/a | n/a | 100.00 | n/a |  |
+| TSLAx | 250 | 0 | n/a | n/a | n/a | n/a | 40.00 | n/a |  |
+| TSLAx | 500 | 0 | n/a | n/a | n/a | n/a | 20.00 | n/a |  |
 | TSLAx | 1000 | 0 | n/a | n/a | n/a | n/a | 10.00 | n/a |  |
 
 ### Stated optimum per symbol (RTH open, primary lag)
 
-| Symbol | Optimum size | Mean USD / cycle | Mean bps | Win% |
-|--------|-------------:|-----------------:|---------:|-----:|
-| AAPLx | $n/a | n/a | n/a | n/a |
-| CRCLx | $500 | 1.9962 | 39.92 | 100.0% |
-| GOOGLx | $n/a | n/a | n/a | n/a |
-| HOODx | $500 | 0.7549 | 15.10 | 100.0% |
-| METAx | $n/a | n/a | n/a | n/a |
-| NVDAx | $500 | 6.2106 | 124.21 | 100.0% |
-| SPCXx | $n/a | n/a | n/a | n/a |
-| TSLAx | $n/a | n/a | n/a | n/a |
+| Symbol | Optimum size | n | Mean USD / cycle | Mean bps | Win% | Note |
+|--------|-------------:|--:|-----------------:|---------:|-----:|------|
+| AAPLx | $n/a | 0 | n/a | n/a | n/a | no positive-mean size |
+| CRCLx | $500 | 1 | 1.9962 | 39.92 | 100.0% | provisional (n<5) |
+| GOOGLx | $n/a | 0 | n/a | n/a | n/a | no positive-mean size |
+| HOODx | $500 | 1 | 0.7549 | 15.10 | 100.0% | provisional (n<5) |
+| METAx | $n/a | 0 | n/a | n/a | n/a | no positive-mean size |
+| NVDAx | $500 | 1 | 6.2106 | 124.21 | 100.0% | provisional (n<5) |
+| SPCXx | $n/a | 0 | n/a | n/a | n/a | no positive-mean size |
+| TSLAx | $n/a | 0 | n/a | n/a | n/a | no positive-mean size |
 
 ## Symbol universe under sequential model
 
@@ -245,16 +247,16 @@ Per-symbol series-level capturable profit/day at primary lag + primary clip, sin
 
 | Symbol | Session | Sim $/day | Seq $/day | Seq win% | Windows | Seq ≥1 $/day? |
 |--------|---------|----------:|----------:|---------:|--------:|--------------|
-| CRCLx | open | 0.1079 | 0.9967 | 100.0% | 1 | no |
-| CRCLx | closed | 2.8534 | -0.8390 | 40.0% | 5 | no |
-| GOOGLx | closed | 0.8212 | -0.0904 | 50.0% | 2 | no |
-| HOODx | open | 0.0777 | 0.3769 | 100.0% | 1 | no |
-| HOODx | closed | 8.9370 | 0.4553 | 83.3% | 6 | no |
-| NVDAx | open | 0.5572 | 3.1011 | 100.0% | 1 | yes |
-| NVDAx | closed | 0.0220 | -0.4976 | 0.0% | 2 | no |
-| TSLAx | closed | 0.0208 | -0.6151 | 0.0% | 1 | no |
+| CRCLx | open | 0.1076 | 0.9936 | 100.0% | 1 | no |
+| CRCLx | closed | 2.8444 | -0.8364 | 40.0% | 5 | no |
+| GOOGLx | closed | 0.8187 | -0.0902 | 50.0% | 2 | no |
+| HOODx | open | 0.0774 | 0.3757 | 100.0% | 1 | no |
+| HOODx | closed | 8.9088 | 0.4539 | 83.3% | 6 | no |
+| NVDAx | open | 0.5554 | 3.0913 | 100.0% | 1 | yes |
+| NVDAx | closed | 0.0219 | -0.4960 | 0.0% | 2 | no |
+| TSLAx | closed | 0.0208 | -0.6132 | 0.0% | 1 | no |
 
-Sequential vs simultaneous on this span: simultaneous portfolio 0.7427 → sequential 4.4748 USDT/day (ratio 6.025). Sequential books **all** admitted cycles' realised PnL (losses included) with flight = lag (10 min); simultaneous books decision-time paper edge with a short flight. Direction 1 only, primary clip $500, fire-on-open windows — not the M0 two-direction $1k headline. Compare methodology carefully against `m8-xstocks-edge-quant.md`.
+Sequential vs simultaneous on this span: simultaneous portfolio 0.7404 → sequential 4.4607 USDT/day (ratio 6.025). Sequential books **all** admitted cycles' realised PnL (losses included) with flight = lag (10 min); simultaneous books decision-time paper edge with a short flight. Direction 1 only, primary clip $500, fire-on-open windows — not the M0 two-direction $1k headline. Compare methodology carefully against `m8-xstocks-edge-quant.md`.
 
 ## Sensitivity: N = 30 and 60 minutes
 
@@ -262,18 +264,18 @@ Deposit-timeout evidence base. Same primary clip, RTH open portfolio single-flig
 
 | Lag (min) | $/day (all) | Win% (all) | Mean bps | n | $/day (paired w/ primary) | Win% (paired) | n_paired |
 |----------:|-----------:|-----------:|---------:|--:|-------------------------:|--------------:|---------:|
-| 5 | 1.8638 | 100.0% | 24.88 | 3 | 1.8638 | 100.0% | 3 |
-| 10 | 4.4748 | 100.0% | 59.74 | 3 | 4.4748 | 100.0% | 3 |
-| 15 | 0.4506 | 50.0% | -46.29 | 2 | 0.4506 | 100.0% | 1 |
-| 20 | 1.2643 | 100.0% | 50.64 | 1 | 1.2643 | 100.0% | 1 |
-| 30 | 2.5596 | 100.0% | 102.52 | 1 | 2.5596 | 100.0% | 1 |
-| 60 | -3.0645 | 0.0% | -122.75 | 1 | -3.0645 | 0.0% | 1 |
+| 5 | 1.8580 | 100.0% | 24.88 | 3 | 1.8580 | 100.0% | 3 |
+| 10 | 4.4607 | 100.0% | 59.74 | 3 | 4.4607 | 100.0% | 3 |
+| 15 | 0.4491 | 50.0% | -46.29 | 2 | 0.4491 | 100.0% | 1 |
+| 20 | 1.2604 | 100.0% | 50.64 | 1 | 1.2604 | 100.0% | 1 |
+| 30 | 2.5516 | 100.0% | 102.52 | 1 | 2.5516 | 100.0% | 1 |
+| 60 | -3.0548 | 0.0% | -122.75 | 1 | -3.0548 | 0.0% | 1 |
 
 Each lag reports (a) **all** open windows that resolve at that lag (n may shrink — missing delayed books) and (b) the **paired** subset also present at the primary lag N=10 (fair degradation). Portfolio flight = lag. If N=30/60 paired $/day collapses, set `deposit_timeout_s` inside the still-viable horizon (bot DESIGN §2.8).
 
 ## Fit quality & caveats
 
-- Study window 2026-08-05 03:19:03 UTC → 2026-08-07 03:22:56 UTC (2.003 calendar days). RTH hours in window: 13.00 h (excl. collector_down: 5.37 h). Closed: 35.06 h (excl. gap: 23.95 h). Collector downtime: 40.31 h.
+- Study window 2026-08-05 03:19:03 UTC → 2026-08-07 03:32:03 UTC (2.009 calendar days). RTH hours in window: 13.00 h (excl. collector_down: 5.37 h). Closed: 35.22 h (excl. gap: 24.10 h). Collector downtime: 40.31 h.
 - Flat withdraw fee assumed **$1** per cycle (bot DESIGN §2.3 / §3.1 A+D). Authenticated fee pull (WHI-907) should replace this constant when it lands.
 - Bybit sell at t+N is a paper VWAP with the same depth model as PnL v2 — not a live fill. Thin books and crediting delays can be worse than measured.
 - Direction 2 (`buy_bybit_sell_fluxion`) is out of scope (needs ~15 min Bybit xStock withdrawal before the DEX leg).
@@ -282,7 +284,7 @@ Each lag reports (a) **all** open windows that resolve at that lag (n may shrink
 
 ## What the bot should consume
 
-- Admission: `edge_bps ≥ min_edge_bps[session][direction]` **and** `edge_bps ≥ drift_premium_k[symbol] × sigma_transit_bps[symbol, N]` with N≈10 min until deposit latency is measured live.
+- Admission: `edge_bps ≥ min_edge_bps[session][direction]` **and** `edge_bps ≥ drift_premium_k[symbol] × sigma_transit_bps[symbol, N]` with N≈10 min — **but this span produced no open-session k**; block live trading until a re-run supplies one.
 - Clip size: per-symbol optimum from the sweep (often below $1000); flat fee pushes up, Fluxion impact + transit premium push down.
 - Symbol universe: open-session sequential go-list above; drop symbols whose sequential $/day is ~0 even before the premium.
 - Deposit timeout: set from the lag-sensitivity table so that waiting inside the timeout remains positive-EV on average; beyond that, take the exposure-breaker path.

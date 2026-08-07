@@ -1,6 +1,6 @@
 {
   "schema_version": 1,
-  "generated_utc": "2026-08-07 03:23:49 UTC",
+  "generated_utc": "2026-08-07 03:32:57 UTC",
   "regen_cmd": "uv run python scripts/xstocks_delay_decay.py --db data/monitor-bybit-fluxion.db --sample-ms 20000",
   "method": {
     "market": "bybit-fluxion",
@@ -19,25 +19,25 @@
     "max_gap_ms": 120000,
     "pricing_anomaly_gate": "500"
   },
-  "data_span_note": "Study window wall clock: **2026-08-05 03:19:03 UTC \u2192 2026-08-07 03:22:56 UTC** (2.003 d). RTH excl. gap: **5.37 h**. Delayed sells may resolve up to 60 min past the book max timestamp.",
+  "data_span_note": "Study window wall clock: **2026-08-05 03:19:03 UTC \u2192 2026-08-07 03:32:03 UTC** (2.009 d). RTH excl. gap: **5.37 h**. Delayed sells may resolve up to 60 min past the book max timestamp.",
   "spans": [
     {
       "table": "bybit_book",
-      "n_rows": 996438,
+      "n_rows": 998658,
       "min_utc": "2026-08-05 03:19:03 UTC",
-      "max_utc": "2026-08-07 03:22:56 UTC"
+      "max_utc": "2026-08-07 03:32:03 UTC"
     },
     {
       "table": "bybit_depth",
-      "n_rows": 749668,
+      "n_rows": 752505,
       "min_utc": "2026-08-05 03:19:03 UTC",
-      "max_utc": "2026-08-07 03:22:56 UTC"
+      "max_utc": "2026-08-07 03:32:03 UTC"
     },
     {
       "table": "fluxion_pool_state",
-      "n_rows": 895488,
+      "n_rows": 897712,
       "min_utc": "2026-08-02 03:18:24 UTC",
-      "max_utc": "2026-08-07 03:22:56 UTC"
+      "max_utc": "2026-08-07 03:32:03 UTC"
     },
     {
       "table": "collector_gaps",
@@ -47,17 +47,17 @@
     }
   ],
   "headline": {
-    "calendar_days": "2.003",
+    "calendar_days": "2.009",
     "primary_lag_min": 10,
     "primary_size_usd": "500",
     "withdraw_fee_usd": "1",
-    "sim_portfolio_per_day": "0.7427",
-    "seq_portfolio_per_day": "4.4748",
+    "sim_portfolio_per_day": "0.7404",
+    "seq_portfolio_per_day": "4.4607",
     "seq_over_sim_ratio": "6.025",
     "go_list": "CRCLx, HOODx, NVDAx",
     "core_go_list": "NVDAx",
     "verdict": "NO-GO (sequential)",
-    "verdict_detail": "Sequential portfolio **4.4748 USDT/day** is below the 5 no-go floor. Simultaneous baseline was 0.7427 USDT/day. Do not live-trade on this span.",
+    "verdict_detail": "Sequential portfolio **4.4607 USDT/day** is below the 5 no-go floor. Simultaneous baseline was 0.7404 USDT/day. Do not live-trade on this span.",
     "median_k90": null,
     "recommended_k_by_symbol": {}
   },
@@ -76,24 +76,24 @@
     {
       "pair_id": "AAPLx",
       "session": "closed",
-      "n10": 1635,
-      "s5": "6.55",
-      "s10": "9.90",
-      "s15": "11.99",
-      "s20": "13.73",
-      "s30": "15.87",
-      "s60": "19.86"
+      "n10": 1649,
+      "s5": "6.53",
+      "s10": "9.86",
+      "s15": "11.95",
+      "s20": "13.68",
+      "s30": "15.83",
+      "s60": "19.78"
     },
     {
       "pair_id": "AAPLx",
       "session": "all",
-      "n10": 2174,
-      "s5": "9.87",
-      "s10": "15.69",
-      "s15": "20.05",
-      "s20": "22.44",
-      "s30": "26.61",
-      "s60": "31.71"
+      "n10": 2188,
+      "s5": "9.84",
+      "s10": "15.64",
+      "s15": "20.00",
+      "s20": "22.37",
+      "s30": "26.55",
+      "s60": "31.61"
     },
     {
       "pair_id": "CRCLx",
@@ -109,24 +109,24 @@
     {
       "pair_id": "CRCLx",
       "session": "closed",
-      "n10": 2153,
-      "s5": "33.56",
-      "s10": "53.42",
-      "s15": "69.91",
-      "s20": "88.34",
-      "s30": "107.70",
-      "s60": "130.19"
+      "n10": 2168,
+      "s5": "33.45",
+      "s10": "53.27",
+      "s15": "69.74",
+      "s20": "88.02",
+      "s30": "107.31",
+      "s60": "129.65"
     },
     {
       "pair_id": "CRCLx",
       "session": "all",
-      "n10": 2595,
-      "s5": "38.81",
-      "s10": "57.64",
-      "s15": "72.11",
-      "s20": "87.28",
-      "s30": "103.52",
-      "s60": "126.17"
+      "n10": 2610,
+      "s5": "38.70",
+      "s10": "57.50",
+      "s15": "71.96",
+      "s20": "87.02",
+      "s30": "103.21",
+      "s60": "125.73"
     },
     {
       "pair_id": "GOOGLx",
@@ -142,24 +142,24 @@
     {
       "pair_id": "GOOGLx",
       "session": "closed",
-      "n10": 1711,
-      "s5": "17.53",
-      "s10": "23.01",
-      "s15": "23.75",
-      "s20": "24.41",
-      "s30": "28.58",
-      "s60": "33.18"
+      "n10": 1720,
+      "s5": "17.48",
+      "s10": "22.95",
+      "s15": "23.64",
+      "s20": "24.32",
+      "s30": "28.42",
+      "s60": "33.08"
     },
     {
       "pair_id": "GOOGLx",
       "session": "all",
-      "n10": 2221,
-      "s5": "22.62",
-      "s10": "36.70",
-      "s15": "36.27",
-      "s20": "41.21",
-      "s30": "49.33",
-      "s60": "61.61"
+      "n10": 2230,
+      "s5": "22.56",
+      "s10": "36.63",
+      "s15": "36.15",
+      "s20": "41.09",
+      "s30": "49.10",
+      "s60": "61.44"
     },
     {
       "pair_id": "HOODx",
@@ -175,24 +175,24 @@
     {
       "pair_id": "HOODx",
       "session": "closed",
-      "n10": 1532,
-      "s5": "16.61",
-      "s10": "24.39",
-      "s15": "28.08",
-      "s20": "33.11",
-      "s30": "37.24",
-      "s60": "36.87"
+      "n10": 1536,
+      "s5": "16.58",
+      "s10": "24.36",
+      "s15": "28.02",
+      "s20": "33.06",
+      "s30": "37.14",
+      "s60": "36.78"
     },
     {
       "pair_id": "HOODx",
       "session": "all",
-      "n10": 2012,
-      "s5": "20.65",
-      "s10": "28.75",
-      "s15": "35.02",
-      "s20": "40.92",
-      "s30": "44.12",
-      "s60": "44.00"
+      "n10": 2016,
+      "s5": "20.63",
+      "s10": "28.72",
+      "s15": "34.96",
+      "s20": "40.87",
+      "s30": "44.02",
+      "s60": "43.92"
     },
     {
       "pair_id": "METAx",
@@ -208,24 +208,24 @@
     {
       "pair_id": "METAx",
       "session": "closed",
-      "n10": 1450,
-      "s5": "10.08",
-      "s10": "12.17",
-      "s15": "16.16",
-      "s20": "19.08",
-      "s30": "23.23",
-      "s60": "31.14"
+      "n10": 1465,
+      "s5": "10.04",
+      "s10": "12.12",
+      "s15": "16.07",
+      "s20": "18.98",
+      "s30": "23.08",
+      "s60": "31.41"
     },
     {
       "pair_id": "METAx",
       "session": "all",
-      "n10": 1972,
-      "s5": "13.45",
-      "s10": "17.61",
-      "s15": "21.09",
-      "s20": "23.71",
-      "s30": "28.36",
-      "s60": "42.44"
+      "n10": 1987,
+      "s5": "13.41",
+      "s10": "17.55",
+      "s15": "21.01",
+      "s20": "23.62",
+      "s30": "28.22",
+      "s60": "42.34"
     },
     {
       "pair_id": "NVDAx",
@@ -241,24 +241,24 @@
     {
       "pair_id": "NVDAx",
       "session": "closed",
-      "n10": 2285,
-      "s5": "9.46",
-      "s10": "13.58",
-      "s15": "17.08",
-      "s20": "20.87",
-      "s30": "25.45",
-      "s60": "32.40"
+      "n10": 2295,
+      "s5": "9.43",
+      "s10": "13.55",
+      "s15": "17.03",
+      "s20": "20.81",
+      "s30": "25.37",
+      "s60": "32.31"
     },
     {
       "pair_id": "NVDAx",
       "session": "all",
-      "n10": 2739,
-      "s5": "14.09",
-      "s10": "18.77",
-      "s15": "23.97",
-      "s20": "26.07",
-      "s30": "29.98",
-      "s60": "34.14"
+      "n10": 2749,
+      "s5": "14.05",
+      "s10": "18.74",
+      "s15": "23.91",
+      "s20": "26.00",
+      "s30": "29.90",
+      "s60": "34.06"
     },
     {
       "pair_id": "TSLAx",
@@ -274,24 +274,24 @@
     {
       "pair_id": "TSLAx",
       "session": "closed",
-      "n10": 2104,
-      "s5": "8.00",
-      "s10": "11.73",
-      "s15": "15.05",
-      "s20": "17.40",
-      "s30": "21.54",
-      "s60": "27.45"
+      "n10": 2120,
+      "s5": "7.98",
+      "s10": "11.70",
+      "s15": "15.03",
+      "s20": "17.36",
+      "s30": "21.49",
+      "s60": "27.36"
     },
     {
       "pair_id": "TSLAx",
       "session": "all",
-      "n10": 2565,
-      "s5": "11.65",
-      "s10": "14.91",
-      "s15": "18.79",
-      "s20": "20.83",
-      "s30": "24.59",
-      "s60": "30.76"
+      "n10": 2581,
+      "s5": "11.62",
+      "s10": "14.87",
+      "s15": "18.76",
+      "s20": "20.78",
+      "s30": "24.53",
+      "s60": "30.68"
     },
     {
       "pair_id": "SPCXx",
@@ -307,24 +307,24 @@
     {
       "pair_id": "SPCXx",
       "session": "closed",
-      "n10": 2168,
-      "s5": "26.21",
-      "s10": "37.67",
-      "s15": "48.80",
-      "s20": "58.74",
-      "s30": "69.36",
-      "s60": "87.34"
+      "n10": 2183,
+      "s5": "26.12",
+      "s10": "37.55",
+      "s15": "48.62",
+      "s20": "58.56",
+      "s30": "69.06",
+      "s60": "87.11"
     },
     {
       "pair_id": "SPCXx",
       "session": "all",
-      "n10": 2634,
-      "s5": "35.59",
-      "s10": "45.96",
-      "s15": "54.76",
-      "s20": "63.85",
-      "s30": "75.08",
-      "s60": "90.95"
+      "n10": 2649,
+      "s5": "35.49",
+      "s10": "45.84",
+      "s15": "54.60",
+      "s20": "63.68",
+      "s30": "74.79",
+      "s60": "90.74"
     }
   ],
   "dist_open": [
@@ -2177,7 +2177,7 @@
     {
       "pair_id": "AAPLx",
       "session": "closed",
-      "sigma_bps": "9.90",
+      "sigma_bps": "9.86",
       "k90": "n/a",
       "wr90": "n/a",
       "n90": 0,
@@ -2195,7 +2195,7 @@
           "k": null,
           "n_admitted": 0,
           "realised_win_rate": null,
-          "sigma_bps": "9.899096961569168",
+          "sigma_bps": "9.859527830305007",
           "reachable": false
         },
         {
@@ -2203,7 +2203,7 @@
           "k": null,
           "n_admitted": 0,
           "realised_win_rate": null,
-          "sigma_bps": "9.899096961569168",
+          "sigma_bps": "9.859527830305007",
           "reachable": false
         },
         {
@@ -2211,7 +2211,7 @@
           "k": null,
           "n_admitted": 0,
           "realised_win_rate": null,
-          "sigma_bps": "9.899096961569168",
+          "sigma_bps": "9.859527830305007",
           "reachable": false
         }
       ]
@@ -2261,7 +2261,7 @@
     {
       "pair_id": "CRCLx",
       "session": "closed",
-      "sigma_bps": "53.42",
+      "sigma_bps": "53.27",
       "k90": "n/a",
       "wr90": "40.0%",
       "n90": 5,
@@ -2279,7 +2279,7 @@
           "k": "0",
           "n_admitted": 5,
           "realised_win_rate": "0.4",
-          "sigma_bps": "53.423294817368905",
+          "sigma_bps": "53.27270296971115",
           "reachable": false
         },
         {
@@ -2287,7 +2287,7 @@
           "k": "0",
           "n_admitted": 5,
           "realised_win_rate": "0.4",
-          "sigma_bps": "53.423294817368905",
+          "sigma_bps": "53.27270296971115",
           "reachable": false
         },
         {
@@ -2295,7 +2295,7 @@
           "k": "0",
           "n_admitted": 5,
           "realised_win_rate": "0.4",
-          "sigma_bps": "53.423294817368905",
+          "sigma_bps": "53.27270296971115",
           "reachable": false
         }
       ]
@@ -2345,7 +2345,7 @@
     {
       "pair_id": "GOOGLx",
       "session": "closed",
-      "sigma_bps": "23.01",
+      "sigma_bps": "22.95",
       "k90": "n/a",
       "wr90": "n/a",
       "n90": 0,
@@ -2363,7 +2363,7 @@
           "k": null,
           "n_admitted": 0,
           "realised_win_rate": null,
-          "sigma_bps": "23.01050156147781",
+          "sigma_bps": "22.951545670951397",
           "reachable": false
         },
         {
@@ -2371,7 +2371,7 @@
           "k": null,
           "n_admitted": 0,
           "realised_win_rate": null,
-          "sigma_bps": "23.01050156147781",
+          "sigma_bps": "22.951545670951397",
           "reachable": false
         },
         {
@@ -2379,7 +2379,7 @@
           "k": null,
           "n_admitted": 0,
           "realised_win_rate": null,
-          "sigma_bps": "23.01050156147781",
+          "sigma_bps": "22.951545670951397",
           "reachable": false
         }
       ]
@@ -2429,7 +2429,7 @@
     {
       "pair_id": "HOODx",
       "session": "closed",
-      "sigma_bps": "24.39",
+      "sigma_bps": "24.36",
       "k90": "0.90",
       "wr90": "100.0%",
       "n90": 5,
@@ -2447,7 +2447,7 @@
           "k": "0.9",
           "n_admitted": 5,
           "realised_win_rate": "1",
-          "sigma_bps": "24.388589450068384",
+          "sigma_bps": "24.35855033155358",
           "reachable": true
         },
         {
@@ -2455,7 +2455,7 @@
           "k": "0.9",
           "n_admitted": 5,
           "realised_win_rate": "1",
-          "sigma_bps": "24.388589450068384",
+          "sigma_bps": "24.35855033155358",
           "reachable": true
         },
         {
@@ -2463,7 +2463,7 @@
           "k": "0.9",
           "n_admitted": 5,
           "realised_win_rate": "1",
-          "sigma_bps": "24.388589450068384",
+          "sigma_bps": "24.35855033155358",
           "reachable": true
         }
       ]
@@ -2513,7 +2513,7 @@
     {
       "pair_id": "METAx",
       "session": "closed",
-      "sigma_bps": "12.17",
+      "sigma_bps": "12.12",
       "k90": "n/a",
       "wr90": "n/a",
       "n90": 0,
@@ -2531,7 +2531,7 @@
           "k": null,
           "n_admitted": 0,
           "realised_win_rate": null,
-          "sigma_bps": "12.173566380996926",
+          "sigma_bps": "12.117357330886373",
           "reachable": false
         },
         {
@@ -2539,7 +2539,7 @@
           "k": null,
           "n_admitted": 0,
           "realised_win_rate": null,
-          "sigma_bps": "12.173566380996926",
+          "sigma_bps": "12.117357330886373",
           "reachable": false
         },
         {
@@ -2547,7 +2547,7 @@
           "k": null,
           "n_admitted": 0,
           "realised_win_rate": null,
-          "sigma_bps": "12.173566380996926",
+          "sigma_bps": "12.117357330886373",
           "reachable": false
         }
       ]
@@ -2597,7 +2597,7 @@
     {
       "pair_id": "NVDAx",
       "session": "closed",
-      "sigma_bps": "13.58",
+      "sigma_bps": "13.55",
       "k90": "n/a",
       "wr90": "n/a",
       "n90": 0,
@@ -2615,7 +2615,7 @@
           "k": null,
           "n_admitted": 0,
           "realised_win_rate": null,
-          "sigma_bps": "13.580991048973646",
+          "sigma_bps": "13.552811844423793",
           "reachable": false
         },
         {
@@ -2623,7 +2623,7 @@
           "k": null,
           "n_admitted": 0,
           "realised_win_rate": null,
-          "sigma_bps": "13.580991048973646",
+          "sigma_bps": "13.552811844423793",
           "reachable": false
         },
         {
@@ -2631,7 +2631,7 @@
           "k": null,
           "n_admitted": 0,
           "realised_win_rate": null,
-          "sigma_bps": "13.580991048973646",
+          "sigma_bps": "13.552811844423793",
           "reachable": false
         }
       ]
@@ -2681,7 +2681,7 @@
     {
       "pair_id": "SPCXx",
       "session": "closed",
-      "sigma_bps": "37.67",
+      "sigma_bps": "37.55",
       "k90": "n/a",
       "wr90": "n/a",
       "n90": 0,
@@ -2699,7 +2699,7 @@
           "k": null,
           "n_admitted": 0,
           "realised_win_rate": null,
-          "sigma_bps": "37.67368284356221",
+          "sigma_bps": "37.549560418756364",
           "reachable": false
         },
         {
@@ -2707,7 +2707,7 @@
           "k": null,
           "n_admitted": 0,
           "realised_win_rate": null,
-          "sigma_bps": "37.67368284356221",
+          "sigma_bps": "37.549560418756364",
           "reachable": false
         },
         {
@@ -2715,7 +2715,7 @@
           "k": null,
           "n_admitted": 0,
           "realised_win_rate": null,
-          "sigma_bps": "37.67368284356221",
+          "sigma_bps": "37.549560418756364",
           "reachable": false
         }
       ]
@@ -2765,7 +2765,7 @@
     {
       "pair_id": "TSLAx",
       "session": "closed",
-      "sigma_bps": "11.73",
+      "sigma_bps": "11.70",
       "k90": "n/a",
       "wr90": "n/a",
       "n90": 0,
@@ -2783,7 +2783,7 @@
           "k": null,
           "n_admitted": 0,
           "realised_win_rate": null,
-          "sigma_bps": "11.731105211184207",
+          "sigma_bps": "11.696882634259692",
           "reachable": false
         },
         {
@@ -2791,7 +2791,7 @@
           "k": null,
           "n_admitted": 0,
           "realised_win_rate": null,
-          "sigma_bps": "11.731105211184207",
+          "sigma_bps": "11.696882634259692",
           "reachable": false
         },
         {
@@ -2799,13 +2799,13 @@
           "k": null,
           "n_admitted": 0,
           "realised_win_rate": null,
-          "sigma_bps": "11.731105211184207",
+          "sigma_bps": "11.696882634259692",
           "reachable": false
         }
       ]
     }
   ],
-  "drift_premium_note": "No open-session symbol reached a 90% realised win-rate target on the k-grid with \u22655 admitted samples. Either widen the span, lower the clip, or treat sequential trading as not yet admissible.",
+  "drift_premium_note": "**This span derives no open-session `drift_premium_k`.** No open symbol reached a 90% realised win-rate target on the k-grid with enough admitted samples. The bot must not live-trade until a re-run with thicker RTH produces reachable open-session k values (or an explicit owner waiver). Closed-session fits exist for diagnostics only (HOODx k90=0.90 (n=5)) \u2014 **do not** use them for RTH admission.",
   "clip_sweep": [
     {
       "pair_id": "AAPLx",
@@ -2816,7 +2816,7 @@
       "mean_usd": "n/a",
       "win_rate": "n/a",
       "fee_bps": "100.00",
-      "impact_bps": "17.53",
+      "impact_bps": "n/a",
       "optimum": ""
     },
     {
@@ -2828,7 +2828,7 @@
       "mean_usd": "n/a",
       "win_rate": "n/a",
       "fee_bps": "40.00",
-      "impact_bps": "43.90",
+      "impact_bps": "n/a",
       "optimum": ""
     },
     {
@@ -2840,7 +2840,7 @@
       "mean_usd": "n/a",
       "win_rate": "n/a",
       "fee_bps": "20.00",
-      "impact_bps": "87.57",
+      "impact_bps": "n/a",
       "optimum": ""
     },
     {
@@ -2864,7 +2864,7 @@
       "mean_usd": "-1.3817",
       "win_rate": "0.0%",
       "fee_bps": "100.00",
-      "impact_bps": "24.46",
+      "impact_bps": "24.24",
       "optimum": ""
     },
     {
@@ -2876,7 +2876,7 @@
       "mean_usd": "-1.8800",
       "win_rate": "0.0%",
       "fee_bps": "40.00",
-      "impact_bps": "60.74",
+      "impact_bps": "60.83",
       "optimum": ""
     },
     {
@@ -2888,7 +2888,7 @@
       "mean_usd": "1.9962",
       "win_rate": "100.0%",
       "fee_bps": "20.00",
-      "impact_bps": "119.35",
+      "impact_bps": "120.59",
       "optimum": "\u2713"
     },
     {
@@ -2900,7 +2900,7 @@
       "mean_usd": "n/a",
       "win_rate": "n/a",
       "fee_bps": "10.00",
-      "impact_bps": "236.49",
+      "impact_bps": "239.81",
       "optimum": ""
     },
     {
@@ -2912,7 +2912,7 @@
       "mean_usd": "-1.6341",
       "win_rate": "0.0%",
       "fee_bps": "100.00",
-      "impact_bps": "17.06",
+      "impact_bps": "17.04",
       "optimum": ""
     },
     {
@@ -2924,7 +2924,7 @@
       "mean_usd": "n/a",
       "win_rate": "n/a",
       "fee_bps": "40.00",
-      "impact_bps": "42.61",
+      "impact_bps": "n/a",
       "optimum": ""
     },
     {
@@ -2936,7 +2936,7 @@
       "mean_usd": "n/a",
       "win_rate": "n/a",
       "fee_bps": "20.00",
-      "impact_bps": "84.70",
+      "impact_bps": "n/a",
       "optimum": ""
     },
     {
@@ -2948,7 +2948,7 @@
       "mean_usd": "n/a",
       "win_rate": "n/a",
       "fee_bps": "10.00",
-      "impact_bps": "168.50",
+      "impact_bps": "n/a",
       "optimum": ""
     },
     {
@@ -2960,7 +2960,7 @@
       "mean_usd": "0.0412",
       "win_rate": "100.0%",
       "fee_bps": "100.00",
-      "impact_bps": "17.02",
+      "impact_bps": "17.11",
       "optimum": ""
     },
     {
@@ -2972,7 +2972,7 @@
       "mean_usd": "n/a",
       "win_rate": "n/a",
       "fee_bps": "40.00",
-      "impact_bps": "42.38",
+      "impact_bps": "42.55",
       "optimum": ""
     },
     {
@@ -2984,7 +2984,7 @@
       "mean_usd": "0.7549",
       "win_rate": "100.0%",
       "fee_bps": "20.00",
-      "impact_bps": "84.84",
+      "impact_bps": "85.08",
       "optimum": "\u2713"
     },
     {
@@ -2996,7 +2996,7 @@
       "mean_usd": "n/a",
       "win_rate": "n/a",
       "fee_bps": "10.00",
-      "impact_bps": "169.60",
+      "impact_bps": "n/a",
       "optimum": ""
     },
     {
@@ -3008,7 +3008,7 @@
       "mean_usd": "n/a",
       "win_rate": "n/a",
       "fee_bps": "100.00",
-      "impact_bps": "18.91",
+      "impact_bps": "n/a",
       "optimum": ""
     },
     {
@@ -3020,7 +3020,7 @@
       "mean_usd": "n/a",
       "win_rate": "n/a",
       "fee_bps": "40.00",
-      "impact_bps": "47.11",
+      "impact_bps": "n/a",
       "optimum": ""
     },
     {
@@ -3032,7 +3032,7 @@
       "mean_usd": "n/a",
       "win_rate": "n/a",
       "fee_bps": "20.00",
-      "impact_bps": "94.73",
+      "impact_bps": "n/a",
       "optimum": ""
     },
     {
@@ -3056,7 +3056,7 @@
       "mean_usd": "n/a",
       "win_rate": "n/a",
       "fee_bps": "100.00",
-      "impact_bps": "17.70",
+      "impact_bps": "17.62",
       "optimum": ""
     },
     {
@@ -3068,7 +3068,7 @@
       "mean_usd": "n/a",
       "win_rate": "n/a",
       "fee_bps": "40.00",
-      "impact_bps": "44.15",
+      "impact_bps": "44.19",
       "optimum": ""
     },
     {
@@ -3080,7 +3080,7 @@
       "mean_usd": "6.2106",
       "win_rate": "100.0%",
       "fee_bps": "20.00",
-      "impact_bps": "88.40",
+      "impact_bps": "88.00",
       "optimum": "\u2713"
     },
     {
@@ -3152,7 +3152,7 @@
       "mean_usd": "n/a",
       "win_rate": "n/a",
       "fee_bps": "100.00",
-      "impact_bps": "20.59",
+      "impact_bps": "n/a",
       "optimum": ""
     },
     {
@@ -3164,7 +3164,7 @@
       "mean_usd": "n/a",
       "win_rate": "n/a",
       "fee_bps": "40.00",
-      "impact_bps": "51.52",
+      "impact_bps": "n/a",
       "optimum": ""
     },
     {
@@ -3176,7 +3176,7 @@
       "mean_usd": "n/a",
       "win_rate": "n/a",
       "fee_bps": "20.00",
-      "impact_bps": "102.59",
+      "impact_bps": "n/a",
       "optimum": ""
     },
     {
@@ -3196,222 +3196,238 @@
     {
       "pair_id": "AAPLx",
       "size_usd": "n/a",
+      "n": 0,
       "mean_usd": "n/a",
       "mean_bps": "n/a",
-      "win_rate": "n/a"
+      "win_rate": "n/a",
+      "note": "no positive-mean size"
     },
     {
       "pair_id": "CRCLx",
       "size_usd": "500",
+      "n": 1,
       "mean_usd": "1.9962",
       "mean_bps": "39.92",
-      "win_rate": "100.0%"
+      "win_rate": "100.0%",
+      "note": "provisional (n<5)"
     },
     {
       "pair_id": "GOOGLx",
       "size_usd": "n/a",
+      "n": 0,
       "mean_usd": "n/a",
       "mean_bps": "n/a",
-      "win_rate": "n/a"
+      "win_rate": "n/a",
+      "note": "no positive-mean size"
     },
     {
       "pair_id": "HOODx",
       "size_usd": "500",
+      "n": 1,
       "mean_usd": "0.7549",
       "mean_bps": "15.10",
-      "win_rate": "100.0%"
+      "win_rate": "100.0%",
+      "note": "provisional (n<5)"
     },
     {
       "pair_id": "METAx",
       "size_usd": "n/a",
+      "n": 0,
       "mean_usd": "n/a",
       "mean_bps": "n/a",
-      "win_rate": "n/a"
+      "win_rate": "n/a",
+      "note": "no positive-mean size"
     },
     {
       "pair_id": "NVDAx",
       "size_usd": "500",
+      "n": 1,
       "mean_usd": "6.2106",
       "mean_bps": "124.21",
-      "win_rate": "100.0%"
+      "win_rate": "100.0%",
+      "note": "provisional (n<5)"
     },
     {
       "pair_id": "SPCXx",
       "size_usd": "n/a",
+      "n": 0,
       "mean_usd": "n/a",
       "mean_bps": "n/a",
-      "win_rate": "n/a"
+      "win_rate": "n/a",
+      "note": "no positive-mean size"
     },
     {
       "pair_id": "TSLAx",
       "size_usd": "n/a",
+      "n": 0,
       "mean_usd": "n/a",
       "mean_bps": "n/a",
-      "win_rate": "n/a"
+      "win_rate": "n/a",
+      "note": "no positive-mean size"
     }
   ],
   "universe": [
     {
       "pair_id": "CRCLx",
       "session": "open",
-      "sim_per_day": "0.1079",
-      "seq_per_day": "0.9967",
+      "sim_per_day": "0.1076",
+      "seq_per_day": "0.9936",
       "win_rate": "100.0%",
       "n_windows": 1,
       "clears": "no",
-      "seq_per_day_raw": "0.9967462718803540841882126888",
-      "sim_per_day_raw": "0.1079056786146352292067198918"
+      "seq_per_day_raw": "0.9936035172919581065655634901",
+      "sim_per_day_raw": "0.1075654505383963511501080027"
     },
     {
       "pair_id": "CRCLx",
       "session": "closed",
-      "sim_per_day": "2.8534",
-      "seq_per_day": "-0.8390",
+      "sim_per_day": "2.8444",
+      "seq_per_day": "-0.8364",
       "win_rate": "40.0%",
       "n_windows": 5,
       "clears": "no",
-      "seq_per_day_raw": "-0.8390413592871225530878338191",
-      "sim_per_day_raw": "2.853397146524300688807696035"
+      "seq_per_day_raw": "-0.8363958504388385168223527474",
+      "sim_per_day_raw": "2.844400346408020277927880263"
     },
     {
       "pair_id": "GOOGLx",
       "session": "closed",
-      "sim_per_day": "0.8212",
-      "seq_per_day": "-0.0904",
+      "sim_per_day": "0.8187",
+      "seq_per_day": "-0.0902",
       "win_rate": "50.0%",
       "n_windows": 2,
       "clears": "no",
-      "seq_per_day_raw": "-0.09044774850374979601700644060",
-      "sim_per_day_raw": "0.8212479435458541754101628804"
+      "seq_per_day_raw": "-0.09016256551923358598756037181",
+      "sim_per_day_raw": "0.8186585375800605999568644157"
     },
     {
       "pair_id": "HOODx",
       "session": "open",
-      "sim_per_day": "0.0777",
-      "seq_per_day": "0.3769",
+      "sim_per_day": "0.0774",
+      "seq_per_day": "0.3757",
       "win_rate": "100.0%",
       "n_windows": 1,
       "clears": "no",
-      "seq_per_day_raw": "0.3769197389295660182674602706",
-      "sim_per_day_raw": "0.07765518217178665587850354035"
+      "seq_per_day_raw": "0.3757313058524668357396921698",
+      "sim_per_day_raw": "0.07741033432337413322158410655"
     },
     {
       "pair_id": "HOODx",
       "session": "closed",
-      "sim_per_day": "8.9370",
-      "seq_per_day": "0.4553",
+      "sim_per_day": "8.9088",
+      "seq_per_day": "0.4539",
       "win_rate": "83.3%",
       "n_windows": 6,
       "clears": "no",
-      "seq_per_day_raw": "0.4553135217166219594514546833",
-      "sim_per_day_raw": "8.936960160844854940567243448"
+      "seq_per_day_raw": "0.4538779119732976221347404887",
+      "sim_per_day_raw": "8.908781803579648487485138041"
     },
     {
       "pair_id": "NVDAx",
       "session": "open",
-      "sim_per_day": "0.5572",
-      "seq_per_day": "3.1011",
+      "sim_per_day": "0.5554",
+      "seq_per_day": "3.0913",
       "win_rate": "100.0%",
       "n_windows": 1,
       "clears": "yes",
-      "seq_per_day_raw": "3.101126781219144356609248910",
-      "sim_per_day_raw": "0.5571532454028026477951290070"
+      "seq_per_day_raw": "3.091348886186250769647881250",
+      "sim_per_day_raw": "0.5553965336218534921239136199"
     },
     {
       "pair_id": "NVDAx",
       "session": "closed",
-      "sim_per_day": "0.0220",
-      "seq_per_day": "-0.4976",
+      "sim_per_day": "0.0219",
+      "seq_per_day": "-0.4960",
       "win_rate": "0.0%",
       "n_windows": 2,
       "clears": "no",
-      "seq_per_day_raw": "-0.4975716113500284019902125347",
-      "sim_per_day_raw": "0.02196706312313217120139329622"
+      "seq_per_day_raw": "-0.4960027612737939675140055092",
+      "sim_per_day_raw": "0.02189780067352845231773754905"
     },
     {
       "pair_id": "TSLAx",
       "session": "closed",
       "sim_per_day": "0.0208",
-      "seq_per_day": "-0.6151",
+      "seq_per_day": "-0.6132",
       "win_rate": "0.0%",
       "n_windows": 1,
       "clears": "no",
-      "seq_per_day_raw": "-0.6151386232235089569062007377",
-      "sim_per_day_raw": "0.02083980171235837803620050516"
+      "seq_per_day_raw": "-0.6131990827555137825546009475",
+      "sim_per_day_raw": "0.02077409353335589027042220944"
     }
   ],
-  "universe_note": "Sequential vs simultaneous on this span: simultaneous portfolio 0.7427 \u2192 sequential 4.4748 USDT/day (ratio 6.025). Sequential books **all** admitted cycles' realised PnL (losses included) with flight = lag (10 min); simultaneous books decision-time paper edge with a short flight. Direction 1 only, primary clip $500, fire-on-open windows \u2014 not the M0 two-direction $1k headline. Compare methodology carefully against `m8-xstocks-edge-quant.md`.",
+  "universe_note": "Sequential vs simultaneous on this span: simultaneous portfolio 0.7404 \u2192 sequential 4.4607 USDT/day (ratio 6.025). Sequential books **all** admitted cycles' realised PnL (losses included) with flight = lag (10 min); simultaneous books decision-time paper edge with a short flight. Direction 1 only, primary clip $500, fire-on-open windows \u2014 not the M0 two-direction $1k headline. Compare methodology carefully against `m8-xstocks-edge-quant.md`.",
   "lag_sensitivity": [
     {
       "lag_min": 5,
-      "portfolio_per_day": "1.8638",
+      "portfolio_per_day": "1.8580",
       "win_rate": "100.0%",
       "mean_bps": "24.88",
       "n": 3,
       "paired_n": 3,
-      "paired_portfolio_per_day": "1.8638",
+      "paired_portfolio_per_day": "1.8580",
       "paired_win_rate": "100.0%",
       "paired_mean_bps": "24.88"
     },
     {
       "lag_min": 10,
-      "portfolio_per_day": "4.4748",
+      "portfolio_per_day": "4.4607",
       "win_rate": "100.0%",
       "mean_bps": "59.74",
       "n": 3,
       "paired_n": 3,
-      "paired_portfolio_per_day": "4.4748",
+      "paired_portfolio_per_day": "4.4607",
       "paired_win_rate": "100.0%",
       "paired_mean_bps": "59.74"
     },
     {
       "lag_min": 15,
-      "portfolio_per_day": "0.4506",
+      "portfolio_per_day": "0.4491",
       "win_rate": "50.0%",
       "mean_bps": "-46.29",
       "n": 2,
       "paired_n": 1,
-      "paired_portfolio_per_day": "0.4506",
+      "paired_portfolio_per_day": "0.4491",
       "paired_win_rate": "100.0%",
       "paired_mean_bps": "18.05"
     },
     {
       "lag_min": 20,
-      "portfolio_per_day": "1.2643",
+      "portfolio_per_day": "1.2604",
       "win_rate": "100.0%",
       "mean_bps": "50.64",
       "n": 1,
       "paired_n": 1,
-      "paired_portfolio_per_day": "1.2643",
+      "paired_portfolio_per_day": "1.2604",
       "paired_win_rate": "100.0%",
       "paired_mean_bps": "50.64"
     },
     {
       "lag_min": 30,
-      "portfolio_per_day": "2.5596",
+      "portfolio_per_day": "2.5516",
       "win_rate": "100.0%",
       "mean_bps": "102.52",
       "n": 1,
       "paired_n": 1,
-      "paired_portfolio_per_day": "2.5596",
+      "paired_portfolio_per_day": "2.5516",
       "paired_win_rate": "100.0%",
       "paired_mean_bps": "102.52"
     },
     {
       "lag_min": 60,
-      "portfolio_per_day": "-3.0645",
+      "portfolio_per_day": "-3.0548",
       "win_rate": "0.0%",
       "mean_bps": "-122.75",
       "n": 1,
       "paired_n": 1,
-      "paired_portfolio_per_day": "-3.0645",
+      "paired_portfolio_per_day": "-3.0548",
       "paired_win_rate": "0.0%",
       "paired_mean_bps": "-122.75"
     }
   ],
   "lag_sensitivity_note": "Each lag reports (a) **all** open windows that resolve at that lag (n may shrink \u2014 missing delayed books) and (b) the **paired** subset also present at the primary lag N=10 (fair degradation). Portfolio flight = lag. If N=30/60 paired $/day collapses, set `deposit_timeout_s` inside the still-viable horizon (bot DESIGN \u00a72.8).",
   "caveats": [
-    "Study window 2026-08-05 03:19:03 UTC \u2192 2026-08-07 03:22:56 UTC (2.003 calendar days). RTH hours in window: 13.00 h (excl. collector_down: 5.37 h). Closed: 35.06 h (excl. gap: 23.95 h). Collector downtime: 40.31 h.",
+    "Study window 2026-08-05 03:19:03 UTC \u2192 2026-08-07 03:32:03 UTC (2.009 calendar days). RTH hours in window: 13.00 h (excl. collector_down: 5.37 h). Closed: 35.22 h (excl. gap: 24.10 h). Collector downtime: 40.31 h.",
     "Flat withdraw fee assumed **$1** per cycle (bot DESIGN \u00a72.3 / \u00a73.1 A+D). Authenticated fee pull (WHI-907) should replace this constant when it lands.",
     "Bybit sell at t+N is a paper VWAP with the same depth model as PnL v2 \u2014 not a live fill. Thin books and crediting delays can be worse than measured.",
     "Direction 2 (`buy_bybit_sell_fluxion`) is out of scope (needs ~15 min Bybit xStock withdrawal before the DEX leg).",
@@ -3419,11 +3435,11 @@
     "Fit quality is limited by raw retention (~2d book/depth). Re-run after \u22655 clean RTH sessions before locking production k."
   ],
   "bot_consume": [
-    "Admission: `edge_bps \u2265 min_edge_bps[session][direction]` **and** `edge_bps \u2265 drift_premium_k[symbol] \u00d7 sigma_transit_bps[symbol, N]` with N\u224810 min until deposit latency is measured live.",
+    "Admission: `edge_bps \u2265 min_edge_bps[session][direction]` **and** `edge_bps \u2265 drift_premium_k[symbol] \u00d7 sigma_transit_bps[symbol, N]` with N\u224810 min \u2014 **but this span produced no open-session k**; block live trading until a re-run supplies one.",
     "Clip size: per-symbol optimum from the sweep (often below $1000); flat fee pushes up, Fluxion impact + transit premium push down.",
     "Symbol universe: open-session sequential go-list above; drop symbols whose sequential $/day is ~0 even before the premium.",
     "Deposit timeout: set from the lag-sensitivity table so that waiting inside the timeout remains positive-EV on average; beyond that, take the exposure-breaker path.",
     "Update bot `docs/DESIGN.md` \u00a78 delay-decay bullet to cite this report (companion commit in mantle-stocks-arbitrage-bots)."
   ],
-  "elapsed_s": 52.6
+  "elapsed_s": 53.7
 }

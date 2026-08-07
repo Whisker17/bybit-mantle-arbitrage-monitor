@@ -26,7 +26,7 @@ import time
 from collections import defaultdict
 from collections.abc import Sequence
 from dataclasses import dataclass
-from datetime import UTC, datetime
+from datetime import UTC, datetime, timedelta
 from decimal import Decimal
 from pathlib import Path
 from typing import Any
@@ -268,8 +268,6 @@ def rth_closed_hours(
     metrics_cfg: Any,
     gaps: Sequence[GapInterval],
 ) -> tuple[float, float, float, float]:
-    from datetime import timedelta
-
     cur = datetime.fromtimestamp(start_ms / 1000, tz=UTC)
     end = datetime.fromtimestamp(end_ms / 1000, tz=UTC)
     rth = closed = rth_ok = closed_ok = 0.0
@@ -653,6 +651,16 @@ def build_report(payload: dict[str, Any]) -> str:
     a("")
     a(h["verdict_detail"])
     a("")
+    a(
+        "> **Headline caveat:** the sequential/simultaneous ratio is **not** "
+        "an M0 apples-to-apples edge comparison. Simultaneous here is "
+        "direction-1 fire-on-open paper PnL on the **same sparse windows** "
+        "(n open windows is small on this span); sequential adds favourable "
+        "or adverse transit drift plus the flat withdraw fee. A ratio > 1 "
+        "usually means the delayed sell luckily improved a few cycles — "
+        "not that delay is free. See universe note below."
+    )
+    a("")
 
     a("## Measured transit-window σ (Bybit mid log-return, bps)")
     a("")
@@ -781,12 +789,17 @@ def build_report(payload: dict[str, Any]) -> str:
     a("")
     a("### Stated optimum per symbol (RTH open, primary lag)")
     a("")
-    a("| Symbol | Optimum size | Mean USD / cycle | Mean bps | Win% |")
-    a("|--------|-------------:|-----------------:|---------:|-----:|")
+    a(
+        "| Symbol | Optimum size | n | Mean USD / cycle | Mean bps | Win% | Note |"
+    )
+    a(
+        "|--------|-------------:|--:|-----------------:|---------:|-----:|------|"
+    )
     for row in payload["clip_optimum"]:
         a(
-            f"| {row['pair_id']} | ${row['size_usd']} | {row['mean_usd']} | "
-            f"{row['mean_bps']} | {row['win_rate']} |"
+            f"| {row['pair_id']} | ${row['size_usd']} | {row.get('n', 'n/a')} | "
+            f"{row['mean_usd']} | {row['mean_bps']} | {row['win_rate']} | "
+            f"{row.get('note', '')} |"
         )
     a("")
 
@@ -992,7 +1005,11 @@ def run(args: argparse.Namespace) -> int:
             )
             entries = fire_on_open_entries(entries_dense, max_gap_ms=max_gap_ms)
             for e in entries:
-                impact_by_pair_size[(pair.id, size)].append(e.fluxion_impact_bps)
+                # Clip sweep is RTH-open only — keep impact diagnostic matched.
+                if e.session == "open":
+                    impact_by_pair_size[(pair.id, size)].append(
+                        e.fluxion_impact_bps
+                    )
 
             all_outcomes[pair.id][size] = {}
             for lag_ms in lag_ms_list:
@@ -1161,13 +1178,16 @@ def run(args: argparse.Namespace) -> int:
                 }
             )
         if opt is not None:
+            note = "provisional (n<5)" if opt.n < 5 else ""
             clip_opt.append(
                 {
                     "pair_id": pair_id,
                     "size_usd": str(int(opt.size_usd)),
+                    "n": opt.n,
                     "mean_usd": _fmt_dec(opt.mean_realised_usd, 4),
                     "mean_bps": _fmt_dec(opt.mean_realised_bps, 2),
                     "win_rate": _fmt_pct(opt.win_rate),
+                    "note": note,
                 }
             )
         else:
@@ -1175,9 +1195,11 @@ def run(args: argparse.Namespace) -> int:
                 {
                     "pair_id": pair_id,
                     "size_usd": "n/a",
+                    "n": 0,
                     "mean_usd": "n/a",
                     "mean_bps": "n/a",
                     "win_rate": "n/a",
+                    "note": "no positive-mean size",
                 }
             )
 
@@ -1393,10 +1415,27 @@ def run(args: argparse.Namespace) -> int:
         )
     else:
         med_k = None
+        # Surface any closed-session fits for diagnostics only.
+        closed_ks = [
+            r
+            for r in drift_rows
+            if r["session"] == "closed" and r["k90"] != "n/a"
+        ]
+        closed_note = ""
+        if closed_ks:
+            bits = ", ".join(
+                f"{r['pair_id']} k90={r['k90']} (n={r['n90']})" for r in closed_ks
+            )
+            closed_note = (
+                f" Closed-session fits exist for diagnostics only ({bits}) — "
+                f"**do not** use them for RTH admission."
+            )
         drift_note = (
-            "No open-session symbol reached a 90% realised win-rate target on "
-            "the k-grid with ≥5 admitted samples. Either widen the span, lower "
-            "the clip, or treat sequential trading as not yet admissible."
+            "**This span derives no open-session `drift_premium_k`.** No "
+            "open symbol reached a 90% realised win-rate target on the k-grid "
+            "with enough admitted samples. The bot must not live-trade until "
+            "a re-run with thicker RTH produces reachable open-session k "
+            f"values (or an explicit owner waiver).{closed_note}"
         )
 
     universe_note = (
@@ -1447,7 +1486,8 @@ def run(args: argparse.Namespace) -> int:
         (
             "Admission: `edge_bps ≥ min_edge_bps[session][direction]` **and** "
             "`edge_bps ≥ drift_premium_k[symbol] × sigma_transit_bps[symbol, N]` "
-            f"with N≈{PRIMARY_LAG_MIN} min until deposit latency is measured live."
+            f"with N≈{PRIMARY_LAG_MIN} min — **but this span produced no "
+            "open-session k**; block live trading until a re-run supplies one."
         ),
         (
             f"Clip size: per-symbol optimum from the sweep (often below "
