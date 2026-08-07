@@ -289,9 +289,7 @@ def _window_metas(
 ) -> list[SampleMeta]:
     key = _meta_key(w.pair_id, w.direction, w.session)
     return [
-        m
-        for m in metas_by_key.get(key, [])
-        if w.start_ms <= m.ts_ms <= w.end_ms and m.direction == w.direction
+        m for m in metas_by_key.get(key, []) if w.start_ms <= m.ts_ms <= w.end_ms
     ]
 
 
@@ -390,6 +388,17 @@ def render_report(payload: dict[str, Any]) -> str:
         "$1,000 (paper opportunity never capturable at size)."
     )
     a("")
+    a(
+        "**Method note on class (c):** opportunity windows are built only from "
+        "samples that already cleared the PnL v2 $1,000 AMM fillability gate "
+        "(same UniV3 single-range path as the depth probe). Under this pipeline, "
+        "`untaken_too_thin` is **empty by construction** for any window that has "
+        "a surviving pool snapshot — a zero count is not independent evidence that "
+        "depth was adequate in the wild, only that paper samples required it. A "
+        "separate paper path that scores edge without the slip fill gate would be "
+        "needed to populate class (c)."
+    )
+    a("")
     a("### Data span note (retention)")
     a("")
     a(payload["data_span_note"])
@@ -449,8 +458,8 @@ def render_report(payload: dict[str, Any]) -> str:
     a("")
     a(
         "| # | Pair | Dir | Session | Start (UTC) | End (UTC) | "
-        "Start blk | End blk | Dur (s) | Peak edge (bps) | Trade PnL | Class | "
-        "Swaps (match/tot) | Virtual quote $ | Pool age med (ms) | Max abs basis (bps) |"
+        "Start blk† | End blk† | Dur (s) | Peak edge (bps) | Trade PnL | Class | "
+        "Swaps (match/tot) | Virtual quote $‡ | Pool age med (ms) | Max abs basis (bps) |"
     )
     a(
         "|--:|------|-----|---------|-------------|-----------|"
@@ -467,6 +476,17 @@ def render_report(payload: dict[str, Any]) -> str:
             f"{w['virtual_quote_usd']} | {w['pool_age_median_ms']} | "
             f"{w['max_abs_basis_bps']} |"
         )
+    a("")
+    a(
+        "† Start/end block = as-of `fluxion_pool_state.block_number` at the "
+        "window edge (pool tick may lag open by ≤ align_ms). Swap matching uses "
+        "`recv_ts_ms` only, not these blocks as a range."
+    )
+    a(
+        "‡ Virtual quote $ = UniV3 virtual USDC-side reserves from (L, √P) — "
+        "**not** tradeable depth; see `virtual_quote_side_usd` docstring. "
+        "`Depth OK` is the single-range $1,000 fill probe."
+    )
     a("")
     a("### Windows with on-chain swaps — full inventory")
     a("")
@@ -777,30 +797,20 @@ def run(args: argparse.Namespace) -> int:
             quote_decimals=quote_decimals,
             max_age_ms=None,  # block boundary only
         )
-        start_block = open_tick.block_number if open_tick is not None else "—"
-        end_block = end_tick.block_number if end_tick is not None else "—"
+        # As-of pool-tick blocks at window edges (may lag open by ≤ align_ms).
+        start_block: int | None = (
+            open_tick.block_number if open_tick is not None else None
+        )
+        end_block: int | None = end_tick.block_number if end_tick is not None else None
 
+        # Match swaps strictly on recv_ts inside the paper window. Block columns
+        # are diagnostic (as-of pool ticks), not an expanded match range — using
+        # them as a union can pull pre-window swaps into `taken`.
         in_swaps = swaps_in_window(
             swaps_by_pair.get(w.pair_id, []),
             start_ms=w.start_ms,
             end_ms=w.end_ms,
         )
-        # Also accept swaps whose block falls inside [start_block, end_block]
-        # when both bounds are known (covers recv_ts near edges).
-        if isinstance(start_block, int) and isinstance(end_block, int):
-            by_block = [
-                s
-                for s in swaps_by_pair.get(w.pair_id, [])
-                if start_block <= s.block_number <= end_block
-            ]
-            # Union by (tx, log_index).
-            seen = {(s.tx_hash, s.log_index) for s in in_swaps}
-            for s in by_block:
-                key = (s.tx_hash, s.log_index)
-                if key not in seen:
-                    in_swaps.append(s)
-                    seen.add(key)
-            in_swaps.sort(key=lambda s: (s.recv_ts_ms, s.log_index))
 
         match = classify_window(
             paper_direction=w.direction,
@@ -839,8 +849,10 @@ def run(args: argparse.Namespace) -> int:
                 "end": _ms_iso(w.end_ms),
                 "start_ms": w.start_ms,
                 "end_ms": w.end_ms,
-                "start_block": start_block,
-                "end_block": end_block,
+                "start_block": start_block if start_block is not None else "—",
+                "end_block": end_block if end_block is not None else "—",
+                "start_block_n": start_block,
+                "end_block_n": end_block,
                 "duration_s": round(w.duration_ms / 1000, 1),
                 "n_samples": w.n_samples,
                 "peak_edge_bps": _fmt(w.peak_edge_bps, 2),
@@ -917,16 +929,22 @@ def run(args: argparse.Namespace) -> int:
             }
         )
 
-    # Second pass for retained_pct against 500-bps row.
+    # Second pass for retained_pct against the 500-bps baseline row
+    # (M0 / config default gate; column label is "retained vs 500").
     base = next(
         (Decimal(r["profit_total_dec"]) for r in anomaly_rows if r["gate_bps"] == "500"),
         Decimal(0),
     )
     for r in anomaly_rows:
         p = Decimal(r.pop("profit_total_dec"))
-        r["retained_pct"] = (
-            _fmt(p / base * Decimal(100), 1) if base > 0 else ("100.0" if p == 0 else "0.0")
-        )
+        if base > 0:
+            retained_dec = p / base * Decimal(100)
+        elif p == 0:
+            retained_dec = Decimal(100)
+        else:
+            retained_dec = Decimal(0)
+        r["retained_pct"] = _fmt(retained_dec, 1)
+        r["retained_dec"] = retained_dec
 
     # Conclusion paragraphs.
     n_taken = class_n["taken"]
@@ -940,6 +958,10 @@ def run(args: argparse.Namespace) -> int:
     )
     retained_300 = next(
         (r["retained_pct"] for r in anomaly_rows if r["gate_bps"] == "300"), "—"
+    )
+    retained_200_dec = next(
+        (Decimal(r["retained_dec"]) for r in anomaly_rows if r["gate_bps"] == "200"),
+        Decimal(0),
     )
 
     # Staleness dig for class (b).
@@ -977,7 +999,7 @@ def run(args: argparse.Namespace) -> int:
         )
 
     # Interpret anomaly sensitivity (commit to a reading, not a template).
-    if Decimal(retained_200.replace("—", "0") if retained_200 != "—" else "0") == 0:
+    if retained_200_dec == 0:
         anomaly_reading = (
             f"Tightening `pricing_anomaly` from 500 → 300 / 200 / 100 bps retains "
             f"**{retained_300}% / {retained_200}% / {retained_100}%** of the "
@@ -995,6 +1017,39 @@ def run(args: argparse.Namespace) -> int:
             f"robust core; the drop from 500 is the portion sitting near the "
             f"anomaly gate."
         )
+
+    # Taken-fill notionals vs study size (do not overclaim $1k validation).
+    taken_notionals: list[Decimal] = []
+    for wrow in top_rows:
+        if wrow["classification"] != "taken":
+            continue
+        for sw in wrow["matching_swaps"]:
+            raw = sw["notional_usd"]
+            if raw in (None, "—"):
+                continue
+            taken_notionals.append(Decimal(str(raw)))
+    if taken_notionals:
+        max_taken_n = max(taken_notionals)
+        taken_n_str = ", ".join(_fmt(n) for n in sorted(taken_notionals, reverse=True))
+        size_caveat = (
+            f"Matching on-chain fills in the top {top_n} were notionals "
+            f"**{taken_n_str} USDT** (max {_fmt(max_taken_n)} vs study size "
+            f"{SIZE_USD}). **No observed fill reached the $1,000 study notional** — "
+            f"`taken` validates direction and firmness at the size that actually "
+            f"traded, not full study-size depth."
+        )
+    else:
+        size_caveat = (
+            f"No matching on-chain fills in the top {top_n}, so there is no "
+            f"observed fill size to compare against the ${SIZE_USD} study notional."
+        )
+
+    thin_note = (
+        f"Class (c) count is **{n_thin}** — under this pipeline that class is "
+        f"empty by construction whenever a window has an align-gated pool "
+        f"snapshot (samples already required $1,000 fillability). Do not read "
+        f"the zero as independent depth evidence."
+    )
 
     conclusion = [
         (
@@ -1015,25 +1070,31 @@ def run(args: argparse.Namespace) -> int:
             f"`trade_pnl_usd`, same caveat as the top-N share footnote). "
             f"Journal swap activity in-span is sparse ({n_swaps_total} swaps "
             f"total) — most large paper windows had **nobody** trading the pool "
-            f"in the profitable direction while the edge was open."
+            f"in the profitable direction while the edge was open. {size_caveat} "
+            f"{thin_note}"
         ),
         staleness_note,
         anomaly_reading,
         (
             "**Implication for the bot go-case:** only the **taken** share is hard "
             "evidence that large dislocations were real and firm enough for "
-            "someone to trade. Untaken-with-liquidity windows need a human "
-            "explanation (MM risk limits, gas, inventory, residual join risk) "
-            "before sizing — and given the anomaly-gate sensitivity, any live "
-            "size-up must also survive a tighter basis scrub. Untaken-too-thin "
-            "windows must not count toward live inventory allocation. Re-run "
-            "after ≥5 clean RTH sessions so the original M0 concentration claim "
-            "(two HOODx windows ≈ 98% of HOODx profit) can be re-checked on a "
-            "longer raw span — raw `bybit_book` / `bybit_depth` retention is "
-            "~2 days, so the original 2026-08-03→05 M0 study ticks are mostly "
+            "someone to trade — and even then only at the fill size observed, "
+            "not necessarily at $1,000. Untaken-with-liquidity windows need a "
+            "human explanation (MM risk limits, gas, inventory, residual join "
+            "risk) before sizing — and given the anomaly-gate sensitivity, any "
+            "live size-up must also survive a tighter basis scrub. Class (c) is "
+            "not informative under the current paper path (see method note). "
+            "Re-run after ≥5 clean RTH sessions so the original M0 concentration "
+            "claim (two HOODx windows ≈ 98% of HOODx profit) can be re-checked "
+            "on a longer raw span — raw `bybit_book` / `bybit_depth` retention "
+            "is ~2 days, so the original 2026-08-03→05 M0 study ticks are mostly "
             "pruned."
         ),
     ]
+
+    # Drop internal Decimal retained fields from JSON payload.
+    for r in anomaly_rows:
+        r.pop("retained_dec", None)
 
     data_span_note = (
         f"M0 (`m8-xstocks-edge-quant.md`) used raw ticks spanning "

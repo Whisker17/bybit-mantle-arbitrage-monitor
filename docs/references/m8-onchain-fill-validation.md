@@ -2,7 +2,7 @@
 
 Did anyone actually swap during the large paper dislocation windows that drive the M8 go-case — or are those windows measurement artifacts?
 
-**Generated:** 2026-08-07 03:17:43 UTC
+**Generated:** 2026-08-07 03:22:42 UTC
 
 ## Regeneration
 
@@ -38,14 +38,16 @@ Pure helpers: `monitor.analysis.fill_validation` (unit-tested). Windows / PnL: s
 - **untaken_with_liquidity** — no matching swap, but UniV3 single-range math fills the study notional ($1,000) at window-open pool state.
 - **untaken_too_thin** — no matching swap and the range cannot support $1,000 (paper opportunity never capturable at size).
 
+**Method note on class (c):** opportunity windows are built only from samples that already cleared the PnL v2 $1,000 AMM fillability gate (same UniV3 single-range path as the depth probe). Under this pipeline, `untaken_too_thin` is **empty by construction** for any window that has a surviving pool snapshot — a zero count is not independent evidence that depth was adequate in the wild, only that paper samples required it. A separate paper path that scores edge without the slip fill gate would be needed to populate class (c).
+
 ### Data span note (retention)
 
-M0 (`m8-xstocks-edge-quant.md`) used raw ticks spanning **2026-08-03 14:51 UTC → 2026-08-05 14:48 UTC**. Collector retention keeps raw `bybit_book` / `bybit_depth` for ~2 days, so that study window is **no longer fully present** in the journal. This note recomputes windows on the **currently retained** raw span (2026-08-05 03:19:03 UTC → 2026-08-07 03:16:40 UTC) with the same methodology (sample_ms=20000, align_ms=15000, size=$1000, T=0, pricing_anomaly gate=500 bps). `fluxion_pool_state` and `fluxion_swaps` still cover a longer history; swaps are joined on `recv_ts_ms` inside each detected window. Numbers are therefore a **method-matched re-run**, not a byte-for-byte replay of the M0 window list — the scientific question (are large paper dislocations taken on-chain?) is unchanged.
+M0 (`m8-xstocks-edge-quant.md`) used raw ticks spanning **2026-08-03 14:51 UTC → 2026-08-05 14:48 UTC**. Collector retention keeps raw `bybit_book` / `bybit_depth` for ~2 days, so that study window is **no longer fully present** in the journal. This note recomputes windows on the **currently retained** raw span (2026-08-05 03:19:03 UTC → 2026-08-07 03:21:47 UTC) with the same methodology (sample_ms=20000, align_ms=15000, size=$1000, T=0, pricing_anomaly gate=500 bps). `fluxion_pool_state` and `fluxion_swaps` still cover a longer history; swaps are joined on `recv_ts_ms` inside each detected window. Numbers are therefore a **method-matched re-run**, not a byte-for-byte replay of the M0 window list — the scientific question (are large paper dislocations taken on-chain?) is unchanged.
 
 ## Study span
 
-- Wall clock: **2026-08-05 03:19:03 UTC → 2026-08-07 03:16:40 UTC** (47.96 h)
-- Calendar days: **1.998**
+- Wall clock: **2026-08-05 03:19:03 UTC → 2026-08-07 03:21:47 UTC** (48.05 h)
+- Calendar days: **2.002**
 - Journal swaps in span: **18** (across 8 pairs)
 
 ## Headline (portfolio single-flight, AMM $1,000, T=0)
@@ -53,7 +55,7 @@ M0 (`m8-xstocks-edge-quant.md`) used raw ticks spanning **2026-08-03 14:51 UTC �
 | Metric | Value |
 |--------|------:|
 | Portfolio capturable profit (total) | 49.0568 USDT |
-| Average capturable profit / day | 24.5487 USDT/day |
+| Average capturable profit / day | 24.5052 USDT/day |
 | N windows (all symbols) | 39 |
 | Top-20 raw trade-PnL sum / portfolio | 101.0%¹ |
 | Top-20 profit that is **taken** | 2.2494 USDT |
@@ -73,7 +75,7 @@ M0 (`m8-xstocks-edge-quant.md`) used raw ticks spanning **2026-08-03 14:51 UTC �
 
 ## Top windows
 
-| # | Pair | Dir | Session | Start (UTC) | End (UTC) | Start blk | End blk | Dur (s) | Peak edge (bps) | Trade PnL | Class | Swaps (match/tot) | Virtual quote $ | Pool age med (ms) | Max abs basis (bps) |
+| # | Pair | Dir | Session | Start (UTC) | End (UTC) | Start blk† | End blk† | Dur (s) | Peak edge (bps) | Trade PnL | Class | Swaps (match/tot) | Virtual quote $‡ | Pool age med (ms) | Max abs basis (bps) |
 |--:|------|-----|---------|-------------|-----------|---------:|--------:|--------:|----------------:|----------:|-------|-----------------:|----------------:|------------------:|-------------------:|
 | 1 | CRCLx | buy_fluxion_sell | closed | 2026-08-05 10:17:19 UTC | 2026-08-05 10:18:59 UTC | 98897331 | 98897381 | 100.1 | 93.92 | 8.4845 | **untaken_with_liquidity** | 0/0 | 40602.8892 | 1244 | 383.5 |
 | 2 | HOODx | buy_fluxion_sell | closed | 2026-08-05 08:06:17 UTC | 2026-08-05 08:06:48 UTC | 98893403 | 98893425 | 30.9 | 55.06 | 5.5057 | **untaken_with_liquidity** | 0/0 | 57522.0196 | 1846 | 267.2 |
@@ -95,6 +97,9 @@ M0 (`m8-xstocks-edge-quant.md`) used raw ticks spanning **2026-08-03 14:51 UTC �
 | 18 | GOOGLx | buy_bybit_sell | open | 2026-08-05 16:00:59 UTC | 2026-08-05 16:04:39 UTC | 98907655 | 98907765 | 220.1 | 235.70 | 0.6089 | **untaken_with_liquidity** | 0/0 | 58057.8985 | 1717 | 465.1 |
 | 19 | NVDAx | buy_fluxion_sell | open | 2026-08-05 13:38:19 UTC | 2026-08-05 13:41:59 UTC | 98903370 | 98903484 | 220.0 | 64.48 | 0.5863 | **taken** | 1/1 | 55558.9373 | 1131 | 287.2 |
 | 20 | GOOGLx | buy_bybit_sell | open | 2026-08-06 15:10:58 UTC | 2026-08-06 15:10:58 UTC | 98949354 | 98949354 | 0.0 | 3.01 | 0.3011 | **untaken_with_liquidity** | 0/0 | 57036.9532 | 892 | 220.7 |
+
+† Start/end block = as-of `fluxion_pool_state.block_number` at the window edge (pool tick may lag open by ≤ align_ms). Swap matching uses `recv_ts_ms` only, not these blocks as a range.
+‡ Virtual quote $ = UniV3 virtual USDC-side reserves from (L, √P) — **not** tradeable depth; see `virtual_quote_side_usd` docstring. `Depth OK` is the single-range $1,000 fill probe.
 
 ### Windows with on-chain swaps — full inventory
 
@@ -147,22 +152,22 @@ Rebuild all AMM $1,000 samples under tighter |AMM−CEX| gates and recompute por
 
 | Gate (bps) | N samples | N windows | Portfolio profit (USDT) | $/day | Retained vs 500 |
 |----------:|----------:|----------:|------------------------:|------:|----------------:|
-| 500 | 61467 | 39 | 49.0568 | 24.5487 | 100.0% |
-| 300 | 61318 | 35 | 27.3479 | 13.6853 | 55.7% |
-| 200 | 59998 | 0 | 0.0000 | 0.0000 | 0.0% |
-| 100 | 49000 | 0 | 0.0000 | 0.0000 | 0.0% |
+| 500 | 61623 | 39 | 49.0568 | 24.5052 | 100.0% |
+| 300 | 61474 | 35 | 27.3479 | 13.6610 | 55.7% |
+| 200 | 60154 | 0 | 0.0000 | 0.0000 | 0.0% |
+| 100 | 49156 | 0 | 0.0000 | 0.0000 | 0.0% |
 
 ## Conclusion
 
-Over the available raw journal span (2026-08-05 03:19:03 UTC → 2026-08-07 03:16:40 UTC), portfolio single-flight capturable profit at AMM $1,000 / T=0 is **49.0568 USDT** (24.5487 USDT/day), across **39** windows. The top 20 windows' raw trade-PnL sum is **101.0%** of that portfolio total (can exceed 100% when high-PnL windows overlap; portfolio is single-flight).
+Over the available raw journal span (2026-08-05 03:19:03 UTC → 2026-08-07 03:21:47 UTC), portfolio single-flight capturable profit at AMM $1,000 / T=0 is **49.0568 USDT** (24.5052 USDT/day), across **39** windows. The top 20 windows' raw trade-PnL sum is **101.0%** of that portfolio total (can exceed 100% when high-PnL windows overlap; portfolio is single-flight).
 
-Classification of the top 20: **2 taken**, **18 untaken-with-liquidity**, **0 untaken-too-thin**. On-chain matching swaps validate **4.5%** of top-20 raw trade-PnL and **4.6%** of the portfolio single-flight headline (numerator is raw per-window `trade_pnl_usd`, same caveat as the top-N share footnote). Journal swap activity in-span is sparse (18 swaps total) — most large paper windows had **nobody** trading the pool in the profitable direction while the edge was open.
+Classification of the top 20: **2 taken**, **18 untaken-with-liquidity**, **0 untaken-too-thin**. On-chain matching swaps validate **4.5%** of top-20 raw trade-PnL and **4.6%** of the portfolio single-flight headline (numerator is raw per-window `trade_pnl_usd`, same caveat as the top-N share footnote). Journal swap activity in-span is sparse (18 swaps total) — most large paper windows had **nobody** trading the pool in the profitable direction while the edge was open. Matching on-chain fills in the top 20 were notionals **507.9916, 167.5710 USDT** (max 507.9916 vs study size 1000). **No observed fill reached the $1,000 study notional** — `taken` validates direction and firmness at the size that actually traded, not full study-size depth. Class (c) count is **0** — under this pipeline that class is empty by construction whenever a window has an align-gated pool snapshot (samples already required $1,000 fillability). Do not read the zero as independent depth evidence.
 
 Of 18 untaken-with-liquidity top windows, median pool-join ages (conditional on passing the 15000 ms align gate used at sample construction) range 434–3384 ms (max ages up to 8187 ms). Surviving samples sit well inside the align gate, so the untaken status is more consistent with a real but uncontested (or risk-blocked) dislocation than with a stale pool snapshot among the samples that passed the join filter. This dig cannot speak to joins older than the gate — those never entered a window.
 
 Tightening `pricing_anomaly` from 500 → 300 / 200 / 100 bps retains **55.7% / 0.0% / 0.0%** of the 500-bps portfolio profit. **At 200 bps the entire portfolio headline disappears** (0 windows) — every profitable window in this span has |AMM−CEX| basis large enough that a modestly tighter gate rejects it. The go-case therefore rests on quotes the tooling itself nearly flags as `pricing_anomaly` (default gate 500 bps).
 
-**Implication for the bot go-case:** only the **taken** share is hard evidence that large dislocations were real and firm enough for someone to trade. Untaken-with-liquidity windows need a human explanation (MM risk limits, gas, inventory, residual join risk) before sizing — and given the anomaly-gate sensitivity, any live size-up must also survive a tighter basis scrub. Untaken-too-thin windows must not count toward live inventory allocation. Re-run after ≥5 clean RTH sessions so the original M0 concentration claim (two HOODx windows ≈ 98% of HOODx profit) can be re-checked on a longer raw span — raw `bybit_book` / `bybit_depth` retention is ~2 days, so the original 2026-08-03→05 M0 study ticks are mostly pruned.
+**Implication for the bot go-case:** only the **taken** share is hard evidence that large dislocations were real and firm enough for someone to trade — and even then only at the fill size observed, not necessarily at $1,000. Untaken-with-liquidity windows need a human explanation (MM risk limits, gas, inventory, residual join risk) before sizing — and given the anomaly-gate sensitivity, any live size-up must also survive a tighter basis scrub. Class (c) is not informative under the current paper path (see method note). Re-run after ≥5 clean RTH sessions so the original M0 concentration claim (two HOODx windows ≈ 98% of HOODx profit) can be re-checked on a longer raw span — raw `bybit_book` / `bybit_depth` retention is ~2 days, so the original 2026-08-03→05 M0 study ticks are mostly pruned.
 
 ## References
 
