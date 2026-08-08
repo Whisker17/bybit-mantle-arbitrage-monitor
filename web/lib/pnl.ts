@@ -119,8 +119,14 @@ export function overviewNetCell(
   if (row.net_edge_bps == null) {
     const status = row.pnl_v2?.status ?? null;
     // Same map as overviewPnlCell — exhaustiveness via Record<PnlStatus, …>.
+    // status==ok with null bps is the rare unfillable-optimal case (server
+    // blanks Net via _has_numeric_optimal); match Bucket PnL's "unfillable".
     const statusLabel =
-      status != null && status !== "ok" ? STATUS_LABEL[status] : null;
+      status == null
+        ? null
+        : status === "ok"
+          ? STATUS_LABEL.no_fillable
+          : STATUS_LABEL[status];
     const base =
       emptyTitle ??
       (statusLabel != null

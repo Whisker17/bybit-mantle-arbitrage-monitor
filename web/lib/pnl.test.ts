@@ -192,6 +192,15 @@ describe("overviewNetCell empty title passthrough", () => {
     );
     assert.equal(cell.title, "empty pool");
   });
+
+  it("maps ok+null-bps blank Net to unfillable (parity with Bucket PnL)", () => {
+    const cell = overviewNetCell({
+      net_edge_bps: null,
+      net_size_usd: null,
+      pnl_v2: { status: "ok", quote_aged: false },
+    });
+    assert.equal(cell.emptyLabel, "unfillable");
+  });
 });
 
 describe("status labels", () => {
