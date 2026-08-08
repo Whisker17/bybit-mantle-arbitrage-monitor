@@ -260,6 +260,39 @@ describe("WHI-962 sequential drift bar", () => {
     );
   });
 
+  it("overviewNetCell sets capturable/failsDrift for AC2 muting", () => {
+    const fails = overviewNetCell({
+      net_edge_bps: "15",
+      net_size_usd: "500",
+      pnl_v2: {
+        meets_min_profit: true,
+        optimal_net_pnl_usd: "1.23",
+      },
+      clears_drift_optimal: false,
+      sigma_transit_bps: "68.83",
+      drift_premium_bps: "103.245",
+      drift_premium_k: "1.5",
+    });
+    assert.equal(fails.capturable, false);
+    assert.equal(fails.failsDrift, true);
+    assert.match(fails.title, /Fails sequential bar/);
+
+    const ok = overviewNetCell({
+      net_edge_bps: "120",
+      net_size_usd: "500",
+      pnl_v2: {
+        meets_min_profit: true,
+        optimal_net_pnl_usd: "6",
+      },
+      clears_drift_optimal: true,
+      sigma_transit_bps: "24.85",
+      drift_premium_bps: "37.275",
+      drift_premium_k: "1.5",
+    });
+    assert.equal(ok.capturable, true);
+    assert.equal(ok.failsDrift, false);
+  });
+
   it("overviewPnlCell mutes when drift fails", () => {
     const pnl: PnlOptimalSummary = {
       status: "ok",

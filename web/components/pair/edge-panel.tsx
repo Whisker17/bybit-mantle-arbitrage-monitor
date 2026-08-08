@@ -324,14 +324,11 @@ function DriftRequirementLine({
   const line = formatDriftRequirement(view, netBps);
   if (line == null) return null;
   const fails = view.clears_drift_optimal === false;
-  const clears = view.clears_drift_optimal === true;
   return (
     <p
       className={cn(
         "text-[11px]",
-        fails && "text-warning",
-        clears && "text-muted-foreground",
-        !fails && !clears && "text-muted-foreground",
+        fails ? "text-warning" : "text-muted-foreground",
       )}
       title="Bot admission requires net ≥ k × σ_transit (sequential transfer). WHI-915/WHI-962."
     >
@@ -371,12 +368,19 @@ function BucketPnlPanel({
   const thin = isThinDepth(table);
   const best = snap.best;
   const drift = snap.drift;
-  // Direction-aware drift gate (selected toggle), fall back to optimal.
-  const dirClear =
-    drift?.clears_drift?.[direction] ?? drift?.clears_drift_optimal ?? null;
-  const failsDrift = dirClear === false;
-  const capturable =
-    best.meets_min_profit !== false && !failsDrift && best.status === "ok";
+  // Best-optimal tone uses the *optimal* direction's gate (not the toggle).
+  const optimalClear =
+    (best.direction != null
+      ? drift?.clears_drift?.[best.direction]
+      : null) ??
+    drift?.clears_drift_optimal ??
+    null;
+  const bestFailsDrift = optimalClear === false;
+  const bestCapturable =
+    best.meets_min_profit !== false &&
+    !bestFailsDrift &&
+    best.status === "ok";
+  // Requirement line tracks the toggled direction.
   const dirNetBps =
     table?.optimal?.result.pnl_bps ??
     (best.direction === direction ? best.optimal_net_pnl_bps : null);
@@ -431,10 +435,10 @@ function BucketPnlPanel({
           <span
             className={cn(
               "tabular-nums font-semibold",
-              capturable &&
+              bestCapturable &&
                 usdTone(best.optimal_net_pnl_usd) === "pos" &&
                 "text-positive",
-              !capturable &&
+              !bestCapturable &&
                 usdTone(best.optimal_net_pnl_usd) === "pos" &&
                 "text-muted-foreground",
               usdTone(best.optimal_net_pnl_usd) === "neg" && "text-negative",
