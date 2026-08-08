@@ -298,7 +298,7 @@ def test_annotate_pricing_anomaly_fail_closed_on_nonpositive_cex() -> None:
 def test_spyb_shaped_spread_marks_pricing_anomaly_keeps_mid() -> None:
     """Live-shaped SPYB: L>0, huge basis — mid/spread visible, reason set, no edges."""
     cfg = load_metrics_config()
-    assert cfg.max_abs_amm_spread_bps == Decimal(500)
+    assert cfg.max_abs_amm_spread_bps == Decimal(300)
     ts = _open_ts_ms()
     # Issue sample: CEX 751.71, AMM 836.50 → +1127.9 bps
     bybit = BybitBookTick(
@@ -335,6 +335,31 @@ def test_spyb_shaped_spread_marks_pricing_anomaly_keeps_mid() -> None:
     assert snap.amm_mid == Decimal("836.50")
     assert snap.amm_quote_reason == "pricing_anomaly"
     assert snap.amm_spread_bps is not None
-    assert snap.amm_spread_bps > Decimal(500)
+    assert snap.amm_spread_bps > Decimal(300)
     # Tradable paper edge must not claim a fillable opportunity.
     assert edge.amm_edges == []
+
+
+def test_annotate_pricing_anomaly_400bps_trips_bot_aligned_gate() -> None:
+    """WHI-964: 400 bps sits above the 300 gate (bot-aligned) but under old 500."""
+    from monitor.metrics.amm_quote import annotate_pricing_anomaly
+
+    # CEX 100, AMM 104 → +400 bps. Bot refuses; panel must too.
+    mid, reason = annotate_pricing_anomaly(
+        Decimal("104"),
+        None,
+        cex_mid=Decimal("100"),
+        max_abs_spread_bps=Decimal(300),
+    )
+    assert mid == Decimal("104")
+    assert reason == "pricing_anomaly"
+    # Still under the legacy WHI-822 500 threshold — documents the band that
+    # was previously rendered as fillable.
+    mid_legacy, reason_legacy = annotate_pricing_anomaly(
+        Decimal("104"),
+        None,
+        cex_mid=Decimal("100"),
+        max_abs_spread_bps=Decimal(500),
+    )
+    assert mid_legacy == Decimal("104")
+    assert reason_legacy is None
