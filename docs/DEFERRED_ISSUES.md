@@ -87,19 +87,29 @@ soon — anything touching key handling, RPC credentials defaults to at least Hi
   refactor. Fix: move sample construction into `monitor.analysis` (or a shared
   script helper) and have both scripts call it.
 
-- **WHI-908: research scripts reach private JournalReader + sibling script
-  helpers** (Low, WHI-908). Extends the WHI-866 private-mapper pattern:
-  `scripts/xstocks_fill_validation.py` imports `_row_to_swap` and, via
-  `importlib`, `_eq._in_gap` / `_eq._as_of_idx` / `_eq.load_*` from
-  `xstocks_edge_quant`. Justified for offline analysis; no public bulk-load
-  API yet. Fix: promote typed bulk loaders on `JournalReader` (and pure join
-  helpers into `monitor.analysis`) and switch both M8 scripts.
+- **WHI-908: fill_validation still reaches private `_row_to_swap` + sibling
+  script helpers** (Low, WHI-908 → partial by WHI-963). WHI-963 promoted
+  `JournalReader` bulk loaders (`bucketed_bybit_books`, `pool_states_range`,
+  `bybit_depths_range`, `rfq_quotes_range`, `collector_down_gaps`) and switched
+  `xstocks_edge_quant.py` + capture assembly. Remaining: `xstocks_fill_validation.py`
+  still imports `_row_to_swap` and sibling-script private helpers via importlib;
+  `xstocks_edge_quant.py` / `xstocks_delay_decay.py` still keep local `_in_gap` /
+  `_as_of_idx` (capture has public `in_gap` / `as_of_idx` but scripts not fully
+  switched). Fix: add `swaps_range` public loader; collapse join helpers into
+  one module; switch fill_validation + remaining script copies.
 
-- **WHI-866: research script imports private JournalReader row mappers** (Low, WHI-866).
-  `scripts/xstocks_edge_quant.py` reaches `_row_to_bybit_book` / depth / pool /
-  RFQ helpers. First cross-package private use; justified for offline analysis
-  but no public bulk-load API. Fix: promote typed bulk loaders on
-  `JournalReader` (or a `monitor.storage.rows` module) and switch the script.
+- **WHI-963: VPS P95 re-measure + sparkline field name** (Low, WHI-963 → ops/polish).
+  Acceptance requires overview P95 inside DESIGN §2.6.7 budget measured on the
+  1 GB VPS after deploy (CI cannot host the live journal). Cold path is now
+  O(pairs × lookback/sample) with bucketed books/depth/pools + 30 s TTL, but
+  the number must be confirmed on the host. Also `CaptureSparkPoint.capturable_usd`
+  is fire-on-open sum (not occupancy-bounded); UI plots only `n_windows` so
+  rename to `window_pnl_usd` or apply single-flight per bucket is polish.
+
+- ~~**WHI-866: research script imports private JournalReader row mappers**~~
+  **Discharged by WHI-963** for the bulk row-mapper path — public loaders on
+  `JournalReader`; `xstocks_edge_quant.py` uses them + `monitor.metrics.capture`
+  sample builders. Join-helper consolidation remains under WHI-908 above.
 
 - **WHI-866: threshold_sweep profit not strictly monotone in theory** (Low, WHI-866).
   Filtering base windows by `peak_edge_bps` is monotone for series-level

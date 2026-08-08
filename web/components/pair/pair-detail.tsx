@@ -8,6 +8,7 @@
 import { useCallback, useEffect, useState, type ReactNode } from "react";
 
 import { AttributionPanel } from "@/components/pair/attribution-panel";
+import { CapturePanel } from "@/components/pair/capture-panel";
 import { EdgeStatsPanel } from "@/components/pair/edge-panel";
 import { MmPanel } from "@/components/pair/mm-panel";
 import { PremiumPanelView } from "@/components/pair/premium-panel";
@@ -398,6 +399,13 @@ export function PairDetail({ marketId, pairId }: Props) {
           marketId={marketId}
           referenceSizeUsd={o.reference_size_usd}
         />
+      </Panel>
+
+      <Panel
+        title="Capture rate"
+        subtitle="windows/day · occupancy-bounded $/day (single-flight)"
+      >
+        <CapturePanel capture={data.capture} marketId={marketId} />
       </Panel>
 
       <Panel title="Attribution" subtitle="M4 mechanism + labeled addresses">

@@ -13,6 +13,9 @@ import {
   cexPremiumBps,
   dexNonTradeableLabel,
   dexNonTradeableTitle,
+  captureStatusLabel,
+  captureStatusTitle,
+  fmtCaptureUsdPerDay,
   fmtDirection,
   fmtDirectionTitle,
   fmtNotional,
@@ -23,6 +26,7 @@ import {
   fmtUsd,
   fmtUtcHm,
   fmtVolumeRatio,
+  fmtWindowsPerDay,
   isRealUnderlyingPrint,
   priceTypeBadgeVariant,
   resolveVenues,
@@ -246,6 +250,15 @@ const COLS: Col[] = [
     align: "right",
   },
   {
+    id: "cap_per_day",
+    key: null,
+    label: "Cap $/d",
+    group: "result",
+    align: "right",
+    title:
+      "Occupancy-bounded capturable $/day under single-flight + re-entry cooldown (trailing window). Not instantaneous Net.",
+  },
+  {
     id: "mm",
     key: null,
     label: "MM",
@@ -285,7 +298,7 @@ function groupDisplayLabel(
     case "vol_gap":
       return "CEX÷DEX";
     case "result":
-      // Spec group name is Result (Bucket PnL + MM); "PnL" alone mislabels MM.
+      // Spec group name is Result (Bucket PnL + Cap $/d + MM).
       return "Result";
     case "reference":
       return "Underlying";
@@ -494,6 +507,53 @@ function MmActiveCell({ status }: { status: MmActiveStatus | null | undefined })
     <span className="text-muted-foreground" title={mmActiveTitle(s)}>
       {mmActiveLabel(s)}
     </span>
+  );
+}
+
+/** Occupancy-bounded Cap $/d (WHI-963). Subline shows windows/day. */
+function CaptureCell({ row }: { row: PairOverviewRow }) {
+  const cap = row.capture;
+  if (cap == null || cap.status !== "ok" || cap.capturable_usd_per_day == null) {
+    return (
+      <span
+        className="text-muted-foreground"
+        title={captureStatusTitle(cap?.status)}
+      >
+        {captureStatusLabel(cap?.status)}
+      </span>
+    );
+  }
+  const tone = usdTone(cap.capturable_usd_per_day);
+  const lookbackH = Math.round(cap.lookback_ms / 3_600_000);
+  const title = [
+    `Capturable $${cap.capturable_usd_per_day}/day under single-flight`,
+    cap.n_windows != null ? `${cap.n_windows} windows` : null,
+    cap.windows_per_day != null
+      ? `${fmtWindowsPerDay(cap.windows_per_day)} win/d`
+      : null,
+    `lookback ${lookbackH}h · size $${cap.size_usd}`,
+    cap.direction ?? null,
+  ]
+    .filter(Boolean)
+    .join(" · ");
+  return (
+    <div className="leading-tight" title={title}>
+      <span
+        className={cn(
+          "tabular-nums",
+          tone === "pos" && "font-medium text-positive",
+          tone === "neg" && "text-negative/60",
+          (tone === "flat" || tone === "empty") && "text-muted-foreground",
+        )}
+      >
+        {fmtCaptureUsdPerDay(cap.capturable_usd_per_day)}
+      </span>
+      {cap.windows_per_day != null ? (
+        <div className="text-[10px] text-muted-foreground tabular-nums">
+          {fmtWindowsPerDay(cap.windows_per_day)} w/d
+        </div>
+      ) : null}
+    </div>
   );
 }
 
@@ -975,7 +1035,7 @@ export function PairsTable({
                       </span>
                     ) : null}
                   </td>
-                  {/* Result: Bucket PnL, MM */}
+                  {/* Result: Bucket PnL, Cap $/d, MM */}
                   <td
                     className={cn("px-2 py-1.5 text-right", groupSep("result"))}
                   >
@@ -984,6 +1044,9 @@ export function PairsTable({
                       venues={venues}
                       marketId={marketId}
                     />
+                  </td>
+                  <td className="px-2 py-1.5 text-right">
+                    <CaptureCell row={row} />
                   </td>
                   <td className="px-2 py-1.5">
                     <MmActiveCell status={row.mm_active} />

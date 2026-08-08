@@ -1,5 +1,6 @@
 import type {
   AmmQuoteReason,
+  CaptureStatus,
   DexNonTradeableReason,
   Direction,
   SessionKind,
@@ -191,6 +192,63 @@ export function fmtVolumeRatio(
   if (n >= 1000) return `${(n / 1000).toFixed(1)}K×`;
   if (n >= 100) return `${n.toFixed(0)}×`;
   return `${n.toFixed(digits)}×`;
+}
+
+/**
+ * Windows/day for capture rate (WHI-963). Compact; 1 decimal under 10.
+ */
+export function fmtWindowsPerDay(
+  value: number | null | undefined,
+): string {
+  if (value === null || value === undefined || !Number.isFinite(value)) {
+    return DASH;
+  }
+  if (value >= 100) return value.toFixed(0);
+  if (value >= 10) return value.toFixed(1);
+  return value.toFixed(2);
+}
+
+/** Capturable $/day (WHI-963). Reuses compact USD formatting. */
+export function fmtCaptureUsdPerDay(
+  value: string | number | null | undefined,
+): string {
+  if (value === null || value === undefined || value === "") return DASH;
+  const n = typeof value === "number" ? value : Number(value);
+  if (!Number.isFinite(n)) return String(value);
+  // Same compact scale as fmtNotional for large days; signed via fmtUsd.
+  if (Math.abs(n) >= 1_000) return fmtUsd(n, 0);
+  return fmtUsd(n, 2);
+}
+
+/** Capture status labels / titles (WHI-963) — single switch for overview + detail. */
+const CAPTURE_STATUS_LABEL: Record<CaptureStatus, string> = {
+  ok: "ok",
+  disabled: "off",
+  insufficient: "accum…",
+  no_samples: "—",
+  no_pool: "no pool",
+};
+
+const CAPTURE_STATUS_TITLE: Record<CaptureStatus, string> = {
+  ok: "Occupancy-bounded capturable $/day under single-flight",
+  disabled: "capture.enabled=false in metrics config",
+  insufficient: "Not enough journal coverage in the trailing window yet",
+  no_samples: "No fillable windows in the trailing lookback",
+  no_pool: "No AMM pool — capture rate is AMM-primary",
+};
+
+export function captureStatusLabel(
+  status: CaptureStatus | null | undefined,
+): string {
+  if (status == null) return DASH;
+  return CAPTURE_STATUS_LABEL[status] ?? DASH;
+}
+
+export function captureStatusTitle(
+  status: CaptureStatus | null | undefined,
+): string | undefined {
+  if (status == null) return undefined;
+  return CAPTURE_STATUS_TITLE[status];
 }
 
 /** UTC HH:MM for truncated DEX volume labels (WHI-777). */

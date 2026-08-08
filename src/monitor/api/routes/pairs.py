@@ -23,6 +23,10 @@ from monitor.attribution.mm_panel import (
     pair_active_addresses,
 )
 from monitor.metrics.amm_pool import amm_pool_from_pair_tick
+from monitor.metrics.capture import (
+    CapturePairSnapshot,
+    build_capture_pair_snapshot,
+)
 from monitor.metrics.drift import (
     drift_wire_for_pair,
     net_bps_from_pnl_tables,
@@ -248,6 +252,32 @@ def _pnl_snapshot_for_pair(
     return snap
 
 
+def _capture_snapshot_for_pair(
+    runtime: MarketRuntime,
+    *,
+    pair: InventoryPair,
+    reader: JournalReader,
+) -> CapturePairSnapshot:
+    """Trailing-window capture rate with optional TTL cache (caller holds lock)."""
+    cache = runtime.capture_cache
+    if cache is not None:
+        hit = cache.get(pair.id)
+        if hit is not None:
+            return hit
+    # InventoryPair is Pair | BStocksPair; both are accepted by the builder.
+    snap = build_capture_pair_snapshot(
+        pair=pair,
+        reader=reader,
+        metrics=runtime.metrics,
+        quote_decimals=runtime.quote_decimals,
+        now_ms=now_ms(),
+        has_rfq=runtime.has_rfq,
+    )
+    if cache is not None:
+        cache.put(pair.id, snap)
+    return snap
+
+
 def _inventory_events(
     runtime: MarketRuntime, reader: JournalReader
 ) -> list[InventoryEvent]:
@@ -381,6 +411,9 @@ def _list_pairs_body(state: AppState, runtime: MarketRuntime) -> dict[str, Any]:
                 tables=snap.tables,
                 session_fallback=session_fallback,
             )
+            # WHI-963: occupancy-bounded Cap $/d (compact card; TTL-cached).
+            cap = _capture_snapshot_for_pair(runtime, pair=pair, reader=reader)
+            enriched["capture"] = cap.overview_wire()
             enriched["mm_active"] = _mm_active_for(
                 state,
                 pair_id=pair_id,
@@ -450,6 +483,11 @@ def _get_pair_body(
                 inv_events=inv,
                 now=now_ms(),
             )
+        # WHI-963: full capture card (series + sparkline) for detail page.
+        cap = _capture_snapshot_for_pair(runtime, pair=pair, reader=reader)
+        body["capture"] = cap.to_dict()
+        if "overview" in body and isinstance(body["overview"], dict):
+            body["overview"]["capture"] = cap.overview_wire()
         labels = labels_by_address(all_labels)
         active = pair_active_addresses(inv, pair_id) if inv else set()
         # Also mark addresses that appear as AMM top takers so they stay in panel.

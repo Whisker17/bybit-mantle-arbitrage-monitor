@@ -8,6 +8,8 @@ Public seams (tests and TUI/Web depend on these, not internals):
 - ``compute_pnl_usd`` / ``pnl_bucket_table`` / ``optimal_size`` — PnL v2 (WHI-756)
 - ``build_pnl_pair_snapshot`` — journal ticks → dual-direction tables (WHI-766)
 - ``annotate_drift`` / ``drift_wire_for_pair`` — sequential bar k×σ (WHI-962)
+- ``build_capture_pair_snapshot`` / ``compute_capture_from_samples`` — occupancy
+  capture rate (WHI-963)
 - ``is_us_rth_open`` / ``session_kind`` — NYSE open / closed / early-close
 - ``EdgeStats`` / ``OptimalPnlStats`` — time-weighted distributions + breaches
 - ``build_spread_snapshot`` / ``build_edge_snapshot`` — tick → panel model (M5 feeds)
@@ -29,7 +31,13 @@ from monitor.metrics.amm_quote import (
     is_tradable_amm_quote,
     quotable_amm_mid,
 )
+from monitor.metrics.capture import (
+    CapturePairSnapshot,
+    build_capture_pair_snapshot,
+    compute_capture_from_samples,
+)
 from monitor.metrics.config import (
+    CaptureConfig,
     MetricsConfig,
     MetricsConfigError,
     PnlV2Config,
@@ -107,6 +115,8 @@ __all__ = [
     "AmmPoolState",
     "AmmQuoteReason",
     "BreachStats",
+    "CaptureConfig",
+    "CapturePairSnapshot",
     "CostBreakdown",
     "Distribution",
     "DriftAnnotation",
@@ -138,11 +148,13 @@ __all__ = [
     "annotate_pricing_anomaly",
     "basis_wear_bps",
     "best_net_edge",
+    "build_capture_pair_snapshot",
     "build_edge_snapshot",
     "build_pnl_pair_snapshot",
     "build_premium_snapshot",
     "build_spread_snapshot",
     "clears_drift",
+    "compute_capture_from_samples",
     "compute_edge",
     "compute_edge_ladder",
     "compute_pnl_usd",

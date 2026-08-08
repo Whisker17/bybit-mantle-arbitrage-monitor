@@ -620,13 +620,19 @@ def run(args: argparse.Namespace) -> int:
     pairs_amm = ctx.pairs.pairs_with_amm()
     quote_decimals = ctx.dex.quote_decimals
 
+    # WHI-963: bulk loaders take JournalReader; table_span still uses raw RO conn.
+    from monitor.storage import JournalReader
+
+    reader = JournalReader(db_path)
     conn = sqlite3.connect(f"file:{db_path}?mode=ro", uri=True)
     conn.row_factory = sqlite3.Row
 
-    gaps = _eq.load_gaps(conn)
+    gaps = _eq.load_gaps(reader)
     book_span = _eq.table_span(conn, "bybit_book", "recv_ts_ms")
     if book_span.min_ms is None or book_span.max_ms is None:
         print("bybit_book is empty — cannot run study", file=sys.stderr)
+        reader.close()
+        conn.close()
         return 2
 
     since_ms = book_span.min_ms
@@ -667,13 +673,13 @@ def run(args: argparse.Namespace) -> int:
     for pair in pairs_amm:
         print(f"  loading {pair.id}…", flush=True)
         books = _eq.load_bucketed_books(
-            conn, pair.id, sample_ms=sample_ms, since_ms=since_ms, until_ms=until_ms
+            reader, pair.id, sample_ms=sample_ms, since_ms=since_ms, until_ms=until_ms
         )
         pools = _eq.load_pools(
-            conn, pair.id, since_ms=since_ms - align_ms, until_ms=until_ms
+            reader, pair.id, since_ms=since_ms - align_ms, until_ms=until_ms
         )
         depths = _eq.load_depths(
-            conn, pair.id, since_ms=since_ms - align_ms, until_ms=until_ms
+            reader, pair.id, since_ms=since_ms - align_ms, until_ms=until_ms
         )
         pools_by_pair[pair.id] = pools
         print(
@@ -742,6 +748,8 @@ def run(args: argparse.Namespace) -> int:
         swaps_by_pair[pair.id] = swaps
         n_swaps_total += len(swaps)
         print(f"    swaps={len(swaps)}", flush=True)
+
+    reader.close()
 
     # Detect windows per series at T=0.
     for _key, samples in samples_by_key.items():

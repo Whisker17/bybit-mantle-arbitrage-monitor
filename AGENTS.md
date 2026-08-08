@@ -275,6 +275,14 @@ placeholders. Agents must not assume a module exists until its issue lands. -->
     Bucket PnL mute + `drift` chip when net fails the bar; green only when
     min-profit floors **and** drift clear; `min_profit_usd: 1.5` (bot floor).
     Pure `monitor.metrics.drift`; TUI frozen.
+  - **Capture rate panel (WHI-963) landed:** occupancy-bounded windows/day +
+    capturable $/day via `monitor.metrics.capture` (reuses M8
+    `edge_quant` single-flight math); `JournalReader` public bulk loaders
+    (discharges WHI-866 deferred private-mapper debt for edge_quant);
+    config `capture:` (`trade_duration_ms` 390s / `reentry_cooldown_ms` 420s
+    bot-aligned); API `capture` on overview + detail with
+    `capture_cache_ttl_s` 30; Web Cap $/d column + detail sparkline.
+    TUI frozen.
 
 ## Build, test, run
 
