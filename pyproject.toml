@@ -46,7 +46,9 @@ line-length = 100
 # Pipeline still runs (python -m mba.m5_report) but is not part of the live
 # product surface — exclude so legacy lint debt cannot mask monitor regressions
 # (WHI-971). Do not "fix" mba to satisfy this gate.
-exclude = ["src/mba"]
+# extend-exclude keeps ruff defaults (.venv, build, dist, …); plain exclude
+# would replace them.
+extend-exclude = ["src/mba"]
 
 [tool.ruff.lint]
 select = ["E", "F", "I", "UP", "B"]

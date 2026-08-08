@@ -23,6 +23,7 @@ from monitor.fluxion.abi import WRAPPER_DECIMALS_DEFAULT
 from monitor.metrics.amm_pool import AmmPoolState
 from monitor.metrics.edge import Direction
 from monitor.metrics.pnl_v2 import pnl_bucket_table
+from monitor.metrics.withdrawal import withdrawal_params_from_pair
 from monitor.symbols.bstocks_models import BStocksPair
 from monitor.symbols.models import Pair
 
@@ -83,13 +84,13 @@ def _inventory_pool_fee_and_base_decimals(
         if pancake_amm is None:
             return None
         return pancake_amm.fee, pair.pancake.native_decimals
-    if isinstance(pair, Pair):
-        fluxion_amm = pair.fluxion.amm
-        if fluxion_amm is None:
-            return None
-        # Wrapper pool uses default base decimals (same as monitor.fluxion.pools).
-        return fluxion_amm.fee, WRAPPER_DECIMALS_DEFAULT
-    return None
+    # Closed union Pair | BStocksPair — BStocks handled above.
+    assert isinstance(pair, Pair)
+    fluxion_amm = pair.fluxion.amm
+    if fluxion_amm is None:
+        return None
+    # Wrapper pool uses default base decimals (same as monitor.fluxion.pools).
+    return fluxion_amm.fee, WRAPPER_DECIMALS_DEFAULT
 
 
 def main(argv: list[str] | None = None) -> int:
@@ -168,8 +169,6 @@ def main(argv: list[str] | None = None) -> int:
     if args.pair_id is not None:
         inv_pair = _inventory_pair(ctx, args.pair_id)
         if inv_pair is not None:
-            from monitor.metrics.withdrawal import withdrawal_params_from_pair
-
             wd = withdrawal_params_from_pair(inv_pair)
             fee_tokens = wd.asset_fee_tokens
             mult = wd.price_multiplier

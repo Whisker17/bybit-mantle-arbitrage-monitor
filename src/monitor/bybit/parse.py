@@ -157,17 +157,17 @@ def apply_l1_side(
     # delta — L1 may clear to None when the last size is deleted (size 0).
     if not ops:
         return current
-    side: Decimal | None = current
+    l1_price: Decimal | None = current
     for px, size in ops:
         if px <= 0:
             # Skip malformed price entry; keep prior L1.
             continue
         if size <= 0:
-            if side == px:
-                side = None
+            if l1_price == px:
+                l1_price = None
         else:
-            side = px
-    return side
+            l1_price = px
+    return l1_price
 
 
 def parse_public_trade_message(

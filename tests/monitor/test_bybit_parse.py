@@ -179,17 +179,19 @@ def test_apply_l1_side_delta_delete_clears_to_none() -> None:
     assert kept == current
 
 
-def test_optional_int_narrows_without_stringifying_floats() -> None:
-    """WHI-971: int(float) truncates; int(\"5.0\") must not become None."""
+def test_optional_int_narrows_concrete_types() -> None:
+    """WHI-971: isinstance branches preserve int(float) truncate; junk → None."""
     from monitor.bybit.parse import _optional_int
 
     assert _optional_int(5) == 5
-    assert _optional_int(5.9) == 5
+    assert _optional_int(5.9) == 5  # same as bare int(5.9)
     assert _optional_int("42") == 42
     assert _optional_int(True) == 1
     assert _optional_int(None) is None
     assert _optional_int("") is None
     assert _optional_int("nope") is None
+    # Decimal-looking strings are not ints; pre- and post-fix return None.
+    assert _optional_int("5.0") is None
 
 
 def test_l1_tracker_drops_stale_u() -> None:

@@ -35,14 +35,13 @@ from monitor.symbols.token_map import inventory_token_to_pair
 logger = logging.getLogger(__name__)
 
 
-def _row_int(row: dict[str, object], key: str) -> int:
-    """Narrow a journal row field to ``int`` without ``cast`` / ``int(object)``.
+def _coerce_int(value: object, *, field: str) -> int:
+    """Narrow a journal/JSON value to ``int`` without ``cast`` / ``int(object)``.
 
     Branch on concrete types so the ``int`` overload is well-defined under
-    strict mypy (WHI-971). Raises ``TypeError``/``ValueError`` on junk — same
-    failure mode as the pre-fix ``int(row[key])`` path for bad data.
+    strict mypy (WHI-971). bool before int (bool subclasses int). Floats
+    truncate toward zero like bare ``int(3.9)``.
     """
-    value = row[key]
     if isinstance(value, bool):
         return int(value)
     if isinstance(value, int):
@@ -51,45 +50,37 @@ def _row_int(row: dict[str, object], key: str) -> int:
         return int(value)
     if isinstance(value, (str, bytes, bytearray)):
         return int(value)
-    raise TypeError(f"row[{key!r}] is not int-coercible: {type(value).__name__}")
+    raise TypeError(f"{field} is not int-coercible: {type(value).__name__}")
+
+
+def _row_int(row: dict[str, object], key: str) -> int:
+    """``_coerce_int`` for a required journal column."""
+    return _coerce_int(row[key], field=f"row[{key!r}]")
 
 
 def _receipt_log_dicts(raw: object) -> list[dict[str, object]] | None:
     """Return typed receipt logs, or None when ``logs`` is not a list.
 
     None means malformed (caller marks attempted). Empty list is a valid
-    receipt with no log entries — still enrich.
+    receipt with no log entries — still enrich. Non-dict list entries are
+    skipped (JSON-RPC receipts only emit log objects).
     """
     if not isinstance(raw, list):
         return None
     return [item for item in raw if isinstance(item, dict)]
 
 
-def _row_int_or_str(row: dict[str, object], key: str) -> int:
-    """Like ``_row_int`` but also accepts numeric strings (sqlite TEXT/INTEGER)."""
-    value = row[key]
-    if isinstance(value, str):
-        return int(value)
-    return _row_int(row, key)
-
-
-def _fill_tick_from_row(
-    row: dict[str, object],
-    *,
-    tx_hash: str | None = None,
-) -> FluxionRfqFillTick:
+def _fill_tick_from_row(row: dict[str, object]) -> FluxionRfqFillTick:
     """Map an unenriched journal row onto a base RFQ fill tick."""
-    gap_raw = row.get("gap") or 0
-    gap_row = {"gap": gap_raw}
     return FluxionRfqFillTick(
         block_number=_row_int(row, "block_number"),
         block_ts=_row_int(row, "block_ts"),
         recv_ts_ms=_row_int(row, "recv_ts_ms"),
-        tx_hash=tx_hash if tx_hash is not None else str(row["tx_hash"]),
+        tx_hash=str(row["tx_hash"]),
         log_index=_row_int(row, "log_index"),
         order_hash=str(row["order_hash"]),
-        remaining_making_amount=_row_int_or_str(row, "remaining_making_amount"),
-        gap=bool(_row_int_or_str(gap_row, "gap")),
+        remaining_making_amount=_row_int(row, "remaining_making_amount"),
+        gap=bool(_coerce_int(row.get("gap") or 0, field="gap")),
     )
 
 
@@ -129,8 +120,8 @@ def run_backfill(
     rows = store.unenriched_rfq_fills(limit=limit)
     updated = 0
     for row in rows:
-        txh = str(row["tx_hash"])
-        base = _fill_tick_from_row(row, tx_hash=txh)
+        base = _fill_tick_from_row(row)
+        txh = base.tx_hash
         try:
             rcpt = rpc.get_transaction_receipt(txh)
         except Exception as exc:  # noqa: BLE001
