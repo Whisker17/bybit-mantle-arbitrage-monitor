@@ -1,5 +1,6 @@
 import type {
   AmmQuoteReason,
+  CaptureStatus,
   DexNonTradeableReason,
   Direction,
   SessionKind,
@@ -217,6 +218,37 @@ export function fmtCaptureUsdPerDay(
   // Same compact scale as fmtNotional for large days; signed via fmtUsd.
   if (Math.abs(n) >= 1_000) return fmtUsd(n, 0);
   return fmtUsd(n, 2);
+}
+
+/** Capture status labels / titles (WHI-963) — single switch for overview + detail. */
+const CAPTURE_STATUS_LABEL: Record<CaptureStatus, string> = {
+  ok: "ok",
+  disabled: "off",
+  insufficient: "accum…",
+  no_samples: "—",
+  no_pool: "no pool",
+};
+
+const CAPTURE_STATUS_TITLE: Record<CaptureStatus, string> = {
+  ok: "Occupancy-bounded capturable $/day under single-flight",
+  disabled: "capture.enabled=false in metrics config",
+  insufficient: "Not enough journal coverage in the trailing window yet",
+  no_samples: "No fillable windows in the trailing lookback",
+  no_pool: "No AMM pool — capture rate is AMM-primary",
+};
+
+export function captureStatusLabel(
+  status: CaptureStatus | null | undefined,
+): string {
+  if (status == null) return DASH;
+  return CAPTURE_STATUS_LABEL[status] ?? DASH;
+}
+
+export function captureStatusTitle(
+  status: CaptureStatus | null | undefined,
+): string | undefined {
+  if (status == null) return undefined;
+  return CAPTURE_STATUS_TITLE[status];
 }
 
 /** UTC HH:MM for truncated DEX volume labels (WHI-777). */

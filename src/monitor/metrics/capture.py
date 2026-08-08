@@ -508,12 +508,9 @@ def compute_capture_from_samples(
     ts_min = min(s.ts_ms for s in samples)
     ts_max = max(s.ts_ms for s in samples)
     span_ms = max(1, ts_max - ts_min)
-    # Wire since/until still reflect the requested lookback window edges,
-    # clamped to observed data so hover shows what was actually used.
+    # Wire since/until clamped to observed data so hover shows what was used.
     effective_since = max(cfg_since, ts_min)
-    effective_until = min(until_ms, ts_max) if until_ms >= ts_max else until_ms
-    if effective_until < effective_since:
-        effective_until = until_ms
+    effective_until = max(effective_since, min(until_ms, ts_max))
 
     groups: dict[tuple[str, str, str, str], list[EdgeSample]] = {}
     for s in samples:
@@ -659,6 +656,22 @@ def build_capture_pair_snapshot(
 
     until_ms = now_ms
     since_ms = max(0, until_ms - capture.lookback_ms)
+
+    # Skip bulk loads for dex:none inventory (34 of 55 bStocks) — no AMM path.
+    has_amm = False
+    if isinstance(pair, Pair):
+        has_amm = pair.fluxion.amm is not None
+    elif isinstance(pair, BStocksPair):
+        has_amm = pair.pancake.amm is not None
+    if not has_amm:
+        return _placeholder(
+            "no_pool",
+            pair_id=pair.id,
+            capture=capture,
+            since_ms=since_ms,
+            until_ms=until_ms,
+        )
+
     # Align pool/depth slightly earlier so the first book sample can join.
     load_since = max(0, since_ms - capture.align_ms)
 
@@ -687,15 +700,8 @@ def build_capture_pair_snapshot(
         )
 
     if not books or not pools:
-        # Distinguish no-pool inventory from simply empty journal coverage.
-        has_amm = False
-        if isinstance(pair, Pair):
-            has_amm = pair.fluxion.amm is not None
-        elif isinstance(pair, BStocksPair):
-            has_amm = pair.pancake.amm is not None
-        status: CaptureStatus = "no_pool" if not has_amm else "insufficient"
         return _placeholder(
-            status,
+            "insufficient",
             pair_id=pair.id,
             capture=capture,
             since_ms=since_ms,

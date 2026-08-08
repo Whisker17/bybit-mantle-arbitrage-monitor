@@ -13,6 +13,8 @@ import {
   cexPremiumBps,
   dexNonTradeableLabel,
   dexNonTradeableTitle,
+  captureStatusLabel,
+  captureStatusTitle,
   fmtCaptureUsdPerDay,
   fmtDirection,
   fmtDirectionTitle,
@@ -512,25 +514,12 @@ function MmActiveCell({ status }: { status: MmActiveStatus | null | undefined })
 function CaptureCell({ row }: { row: PairOverviewRow }) {
   const cap = row.capture;
   if (cap == null || cap.status !== "ok" || cap.capturable_usd_per_day == null) {
-    const label =
-      cap?.status === "no_pool"
-        ? "no pool"
-        : cap?.status === "insufficient"
-          ? "accum…"
-          : cap?.status === "disabled"
-            ? "off"
-            : "—";
-    const title =
-      cap?.status === "no_pool"
-        ? "No AMM pool — capture rate is AMM-primary"
-        : cap?.status === "insufficient"
-          ? "Not enough journal coverage in the trailing window yet"
-          : cap?.status === "disabled"
-            ? "capture.enabled=false in metrics config"
-            : "No fillable windows in the trailing lookback";
     return (
-      <span className="text-muted-foreground" title={title}>
-        {label}
+      <span
+        className="text-muted-foreground"
+        title={captureStatusTitle(cap?.status)}
+      >
+        {captureStatusLabel(cap?.status)}
       </span>
     );
   }

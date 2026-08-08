@@ -10,6 +10,7 @@ import uPlot from "uplot";
 import "uplot/dist/uPlot.min.css";
 
 import {
+  captureStatusTitle,
   fmtCaptureUsdPerDay,
   fmtDirection,
   fmtSession,
@@ -112,15 +113,9 @@ export function CapturePanel({
   }
 
   if (capture.status !== "ok") {
-    const msg: Record<string, string> = {
-      disabled: "capture.enabled=false in metrics config",
-      insufficient: "Journal coverage in the trailing window is still thin",
-      no_samples: "No fillable edge samples in the lookback",
-      no_pool: "No AMM pool — capture is AMM-primary",
-    };
     return (
       <p className="text-xs text-muted-foreground">
-        {msg[capture.status] ?? capture.status}
+        {captureStatusTitle(capture.status) ?? capture.status}
       </p>
     );
   }
