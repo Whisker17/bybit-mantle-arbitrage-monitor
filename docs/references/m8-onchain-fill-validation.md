@@ -32,7 +32,7 @@ Pure helpers: `monitor.analysis.fill_validation` (unit-tested). Windows / PnL: s
 | trade_duration_ms | 5000 |
 | reentry_cooldown_ms | 86400000 |
 | min_edge_bps | 0 |
-| pricing_anomaly_gate_default | 500 |
+| pricing_anomaly_gate_default | 500 (study-time; **WHI-964** shipped config is **300**) |
 | top_n | 20 |
 | inventory_usd | 5000 |
 | max_trade_usd | 1000 |
@@ -47,7 +47,7 @@ Pure helpers: `monitor.analysis.fill_validation` (unit-tested). Windows / PnL: s
 
 ### Data span note (retention)
 
-M0 (`m8-xstocks-edge-quant.md`) used raw ticks spanning **2026-08-03 14:51 UTC → 2026-08-05 14:48 UTC**. Collector retention keeps raw `bybit_book` / `bybit_depth` for ~2 days, so that study window is **no longer fully present** in the journal. This note recomputes windows on the **currently retained** raw span (2026-08-05 03:19:03 UTC → 2026-08-07 03:21:47 UTC) with the same methodology (sample_ms=20000, align_ms=15000, size=$1000, T=0, pricing_anomaly gate=500 bps). `fluxion_pool_state` and `fluxion_swaps` still cover a longer history; swaps are joined on `recv_ts_ms` inside each detected window. Numbers are therefore a **method-matched re-run**, not a byte-for-byte replay of the M0 window list — the scientific question (are large paper dislocations taken on-chain?) is unchanged.
+M0 (`m8-xstocks-edge-quant.md`) used raw ticks spanning **2026-08-03 14:51 UTC → 2026-08-05 14:48 UTC**. Collector retention keeps raw `bybit_book` / `bybit_depth` for ~2 days, so that study window is **no longer fully present** in the journal. This note recomputes windows on the **currently retained** raw span (2026-08-05 03:19:03 UTC → 2026-08-07 03:21:47 UTC) with the same methodology (sample_ms=20000, align_ms=15000, size=$1000, T=0, pricing_anomaly gate=500 bps at study time). `fluxion_pool_state` and `fluxion_swaps` still cover a longer history; swaps are joined on `recv_ts_ms` inside each detected window. Numbers are therefore a **method-matched re-run**, not a byte-for-byte replay of the M0 window list — the scientific question (are large paper dislocations taken on-chain?) is unchanged.
 
 ## Study span
 
@@ -153,7 +153,7 @@ Pool age = book sample time − as-of `fluxion_pool_state.recv_ts_ms`. Sample co
 
 ## `pricing_anomaly` gate sensitivity
 
-Rebuild all AMM $1,000 samples under tighter |AMM−CEX| gates and recompute portfolio single-flight capturable profit (same re-entry / trade duration as M0). Default gate in config is 500 bps.
+Rebuild all AMM $1,000 samples under tighter |AMM−CEX| gates and recompute portfolio single-flight capturable profit (same re-entry / trade duration as M0). Study-time config default was 500 bps; **WHI-964** shipped the panel default to **300** (bot-aligned).
 
 | Gate (bps) | N samples | N windows | Portfolio profit (USDT) | $/day | Retained vs 500 |
 |----------:|----------:|----------:|------------------------:|------:|----------------:|
@@ -170,7 +170,7 @@ Classification of the top 20: **2 taken**, **18 untaken-with-liquidity**, **0 un
 
 Of 18 untaken-with-liquidity top windows, median pool-join ages (conditional on passing the 15000 ms align gate used at sample construction) range 434–3384 ms (max ages up to 8187 ms). Surviving samples sit well inside the align gate, so the untaken status is more consistent with a real but uncontested (or risk-blocked) dislocation than with a stale pool snapshot among the samples that passed the join filter. This dig cannot speak to joins older than the gate — those never entered a window.
 
-Tightening `pricing_anomaly` from 500 → 300 / 200 / 100 bps retains **55.7% / 0.0% / 0.0%** of the 500-bps portfolio profit. **At 200 bps the entire portfolio headline disappears** (0 windows) — every profitable window in this span has |AMM−CEX| basis large enough that a modestly tighter gate rejects it. The go-case therefore rests on quotes the tooling itself nearly flags as `pricing_anomaly` (default gate 500 bps).
+Tightening `pricing_anomaly` from 500 → 300 / 200 / 100 bps retains **55.7% / 0.0% / 0.0%** of the 500-bps portfolio profit. **At 200 bps the entire portfolio headline disappears** (0 windows) — every profitable window in this span has |AMM−CEX| basis large enough that a modestly tighter gate rejects it. The go-case therefore rests on quotes the tooling itself nearly flags as `pricing_anomaly`. **WHI-964 note:** the panel now ships at the **300 bps** rung (~55.7% of this study's 500-bps headline); re-runs of the scripts read live `config/metrics.yaml`.
 
 **Implication for the bot go-case:** only the **taken** share is hard evidence that large dislocations were real and firm enough for someone to trade — and even then only at the fill size observed, not necessarily at $1,000. Untaken-with-liquidity windows need a human explanation (MM risk limits, gas, inventory, residual join risk) before sizing — and given the anomaly-gate sensitivity, any live size-up must also survive a tighter basis scrub. Class (c) is not informative under the current paper path (see method note). Re-run after ≥5 clean RTH sessions so the original M0 concentration claim (two HOODx windows ≈ 98% of HOODx profit) can be re-checked on a longer raw span — raw `bybit_book` / `bybit_depth` retention is ~2 days, so the original 2026-08-03→05 M0 study ticks are mostly pruned.
 

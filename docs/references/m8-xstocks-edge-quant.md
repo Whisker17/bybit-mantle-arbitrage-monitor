@@ -44,7 +44,7 @@ After all costs (Bybit taker 10 bps + Fluxion pool fee + bilateral slip + gas)
 | capture_fraction | 0.70 |
 | inventory_usd | 5000 |
 | max_trade_usd | 1000 |
-| pricing_anomaly_gate | 500 |
+| pricing_anomaly_gate | 500 (study-time default; **WHI-964** shipped config is **300**) |
 
 ### Capturable-profit model
 
@@ -96,7 +96,7 @@ Study window wall clock: **2026-08-03 14:51:38 UTC → 2026-08-05 14:48:15 UTC**
 - No automated corporate-action calendar is applied. The observation window is 2026-08-03 14:51:38 UTC → 2026-08-05 14:48:15 UTC; re-runs over a longer span must re-check dividends/splits/rebases and disclose any excluded days (bot DESIGN §8).
 - No bStocks-style share rebase segment break was introduced for Fluxion xStocks wrappers in this study.
 - Samples with `gap=1` on book/pool/depth rows are dropped at load.
-- Pairs failing `amm_quote_for_cex` (empty_pool / invalid_mid / pricing_anomaly, default |spread| > 500 bps) are excluded from AMM samples for that timestamp (SPCXx frequently hits this).
+- Pairs failing `amm_quote_for_cex` (empty_pool / invalid_mid / pricing_anomaly, study gate |spread| > 500 bps; **WHI-964** config default is 300) are excluded from AMM samples for that timestamp (SPCXx frequently hits this).
 - CEX-only inventory pairs (no Fluxion AMM) are out of scope for the bot v1 AMM path and appear only in the coverage table.
 - Headline portfolio mixes open+closed AMM $1000 windows at T=0 (one trade per window, single-flight). Go-list symbols are open-session fits only.
 
@@ -230,7 +230,7 @@ RFQ open-session sum of per-series capturable profit at T=0: 0.00 USDT (0.00/day
 
 - Re-run after ≥5 consecutive clean RTH sessions with `collector_down` RTH loss < 1 h/day — current fit quality is limited by downtime inside the 2-day raw retention window.
 - Wire the fit table into the bot repo M4 threshold config (WHI-876); start with CRCLx / HOODx / NVDAx (material open-session profit/day) and treat GOOGLx / TSLAx as optional add-ons.
-- Manually review large HOODx dislocations (gross basis near the 500 bps pricing_anomaly gate) on a fill before sizing up — paper fillable ≠ firm when AMM mid is slow to update.
+- Manually review large HOODx dislocations (gross basis near the study-time 500 bps pricing_anomaly gate; shipped gate is 300 since WHI-964) on a fill before sizing up — paper fillable ≠ firm when AMM mid is slow to update.
 - RFQ fill-firmness remains a separate gate before any RFQ leg.
 
 ---

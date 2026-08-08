@@ -1294,7 +1294,8 @@ def run(args: argparse.Namespace) -> int:
             "Fluxion xStocks wrappers in this study.",
             "Samples with `gap=1` on book/pool/depth rows are dropped at load.",
             "Pairs failing `amm_quote_for_cex` (empty_pool / invalid_mid / "
-            "pricing_anomaly, default |spread| > 500 bps) are excluded from "
+            f"pricing_anomaly, default |spread| > "
+            f"{metrics_cfg.max_abs_amm_spread_bps} bps) are excluded from "
             "AMM samples for that timestamp (SPCXx frequently hits this).",
             "CEX-only inventory pairs (no Fluxion AMM) are out of scope for "
             "the bot v1 AMM path and appear only in the coverage table.",
@@ -1337,8 +1338,9 @@ def run(args: argparse.Namespace) -> int:
             "(WHI-876); start with CRCLx / HOODx / NVDAx (material open-session "
             "profit/day) and treat GOOGLx / TSLAx as optional add-ons.",
             "Manually review large HOODx dislocations (gross basis near the "
-            "500 bps pricing_anomaly gate) on a fill before sizing up — paper "
-            "fillable ≠ firm when AMM mid is slow to update.",
+            f"{metrics_cfg.max_abs_amm_spread_bps} bps pricing_anomaly gate) "
+            "on a fill before sizing up — paper fillable ≠ firm when AMM mid "
+            "is slow to update.",
             "RFQ fill-firmness remains a separate gate before any RFQ leg.",
         ],
         # Compact series: drop full 0..60 sweeps (regenerate with script for
