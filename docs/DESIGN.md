@@ -298,8 +298,9 @@ window count × occupancy.
   Trailing `lookback_ms` default 24 h; `sample_ms` 30 s.
 - API: nested `capture` on overview rows (compact) + full snapshot (series +
   sparkline) on pair detail. TTL cache `capture_cache_ttl_s` default **30**
-  (longer than PnL — trailing window is heavy). Depth load uses
-  `sample_ms` (not 1 Hz) so cold recompute stays O(pairs × lookback/sample).
+  (longer than PnL — trailing window is heavy). Books, depth, **and pool
+  state** load at `sample_ms` (not raw ~2 s Mantle ticks / 1 Hz depth) so
+  cold recompute stays O(pairs × lookback/sample).
 - Rates normalize by **observed sample coverage** (`max(ts)−min(ts)`), not the
   configured lookback alone — short journals do not understate Cap $/d.
 - Parity: same `sample_ms` / `trade_duration_ms` / `reentry_cooldown_ms` /

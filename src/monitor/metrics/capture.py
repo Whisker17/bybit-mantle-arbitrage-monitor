@@ -657,13 +657,14 @@ def build_capture_pair_snapshot(
     until_ms = now_ms
     since_ms = max(0, until_ms - capture.lookback_ms)
 
-    # Skip bulk loads for dex:none inventory (34 of 55 bStocks) — no AMM path.
     has_amm = False
     if isinstance(pair, Pair):
         has_amm = pair.fluxion.amm is not None
     elif isinstance(pair, BStocksPair):
         has_amm = pair.pancake.amm is not None
-    if not has_amm:
+    want_rfq = capture.include_rfq and has_rfq
+    # dex:none with RFQ off → no capture path at all.
+    if not has_amm and not want_rfq:
         return _placeholder(
             "no_pool",
             pair_id=pair.id,
@@ -686,20 +687,7 @@ def build_capture_pair_snapshot(
         since_ms=since_ms,
         until_ms=until_ms,
     )
-    pools = reader.pool_states_range(
-        pair.id, since_ms=load_since, until_ms=until_ms
-    )
-    depths: list[BybitDepthTick] = []
-    if capture.use_depth:
-        # Match book sample_ms so depth load stays O(lookback/sample), not 1 Hz.
-        depths = reader.bybit_depths_range(
-            pair.id,
-            since_ms=load_since,
-            until_ms=until_ms,
-            sample_ms=capture.sample_ms,
-        )
-
-    if not books or not pools:
+    if not books:
         return _placeholder(
             "insufficient",
             pair_id=pair.id,
@@ -708,19 +696,40 @@ def build_capture_pair_snapshot(
             until_ms=until_ms,
         )
 
-    samples = build_amm_samples(
-        pair=pair,
-        books=books,
-        pools=pools,
-        depths=depths,
-        metrics_cfg=metrics,
-        quote_decimals=quote_decimals,
-        size_usd=capture.size_usd,
-        gaps=gaps,
-        align_ms=capture.align_ms,
-        max_abs_spread_bps=metrics.max_abs_amm_spread_bps,
-    )
-    if capture.include_rfq and has_rfq:
+    samples: list[EdgeSample] = []
+    if has_amm:
+        # Bucket pools to sample_ms (not raw ~2s Mantle ticks) — only as-of
+        # at book times is needed; keeps cold overview under the P95 budget.
+        pools = reader.pool_states_range(
+            pair.id,
+            since_ms=load_since,
+            until_ms=until_ms,
+            sample_ms=capture.sample_ms,
+        )
+        depths: list[BybitDepthTick] = []
+        if capture.use_depth:
+            depths = reader.bybit_depths_range(
+                pair.id,
+                since_ms=load_since,
+                until_ms=until_ms,
+                sample_ms=capture.sample_ms,
+            )
+        if pools:
+            samples.extend(
+                build_amm_samples(
+                    pair=pair,
+                    books=books,
+                    pools=pools,
+                    depths=depths,
+                    metrics_cfg=metrics,
+                    quote_decimals=quote_decimals,
+                    size_usd=capture.size_usd,
+                    gaps=gaps,
+                    align_ms=capture.align_ms,
+                    max_abs_spread_bps=metrics.max_abs_amm_spread_bps,
+                )
+            )
+    if want_rfq:
         rfq_ticks = reader.rfq_quotes_range(
             pair.id, since_ms=since_ms, until_ms=until_ms
         )
@@ -734,6 +743,14 @@ def build_capture_pair_snapshot(
                 align_ms=capture.align_ms,
                 max_trade_usd=capture.size_usd,
             )
+        )
+    if not samples:
+        return _placeholder(
+            "insufficient" if has_amm else "no_samples",
+            pair_id=pair.id,
+            capture=capture,
+            since_ms=since_ms,
+            until_ms=until_ms,
         )
     return compute_capture_from_samples(
         samples,

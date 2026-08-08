@@ -573,15 +573,7 @@ class JournalReader:
                 """,
                 (since_ms, source, limit),
             ).fetchall()
-        return [
-            CollectorGap(
-                source=str(r["source"]),
-                gap_start_ms=int(r["gap_start_ms"]),
-                gap_end_ms=int(r["gap_end_ms"]),
-                detail=str(r["detail"]),
-            )
-            for r in rows
-        ]
+        return [_row_to_collector_gap(r) for r in rows]
 
     def recent_swaps(self, *, limit: int = 50_000) -> list[FluxionSwapTick]:
         """Newest-first swaps for attribution refresh (WHI-768)."""
@@ -729,19 +721,46 @@ class JournalReader:
         *,
         since_ms: int,
         until_ms: int,
+        sample_ms: int | None = None,
     ) -> list[FluxionPoolStateTick]:
-        """Ascending pool states in ``[since_ms, until_ms]`` (gap=0 only)."""
-        rows = self._conn.execute(
-            """
-            SELECT * FROM fluxion_pool_state
-            WHERE pair_id = ?
-              AND recv_ts_ms >= ?
-              AND recv_ts_ms <= ?
-              AND gap = 0
-            ORDER BY recv_ts_ms ASC
-            """,
-            (pair_id, since_ms, until_ms),
-        ).fetchall()
+        """Ascending pool states in ``[since_ms, until_ms]`` (gap=0 only).
+
+        When ``sample_ms`` is set, one tick per bucket (latest recv) — same
+        idea as ``bucketed_bybit_books`` / ``bybit_depths_range``. Capture uses
+        this so a 24 h Mantle lookback is O(lookback/sample) not ~43k rows/pair.
+        """
+        if sample_ms is not None and sample_ms < 1:
+            raise ValueError("sample_ms must be >= 1")
+        if sample_ms is None:
+            rows = self._conn.execute(
+                """
+                SELECT * FROM fluxion_pool_state
+                WHERE pair_id = ?
+                  AND recv_ts_ms >= ?
+                  AND recv_ts_ms <= ?
+                  AND gap = 0
+                ORDER BY recv_ts_ms ASC
+                """,
+                (pair_id, since_ms, until_ms),
+            ).fetchall()
+        else:
+            rows = self._conn.execute(
+                """
+                SELECT p.*
+                FROM fluxion_pool_state p
+                INNER JOIN (
+                    SELECT (recv_ts_ms / ?) * ? AS bucket, MAX(id) AS mid
+                    FROM fluxion_pool_state
+                    WHERE pair_id = ?
+                      AND recv_ts_ms >= ?
+                      AND recv_ts_ms <= ?
+                      AND gap = 0
+                    GROUP BY bucket
+                ) t ON p.id = t.mid
+                ORDER BY p.recv_ts_ms ASC
+                """,
+                (sample_ms, sample_ms, pair_id, since_ms, until_ms),
+            ).fetchall()
         return [_row_to_pool_state(r) for r in rows]
 
     def bybit_depths_range(
@@ -833,15 +852,7 @@ class JournalReader:
                 """,
                 (since_ms, until_ms),
             ).fetchall()
-        return [
-            CollectorGap(
-                source=str(r["source"]),
-                gap_start_ms=int(r["gap_start_ms"]),
-                gap_end_ms=int(r["gap_end_ms"]),
-                detail=str(r["detail"]),
-            )
-            for r in rows
-        ]
+        return [_row_to_collector_gap(r) for r in rows]
 
 
 # --- row mappers ----------------------------------------------------------
@@ -849,6 +860,15 @@ class JournalReader:
 
 def _d(value: object) -> Decimal:
     return Decimal(str(value))
+
+
+def _row_to_collector_gap(row: sqlite3.Row) -> CollectorGap:
+    return CollectorGap(
+        source=str(row["source"]),
+        gap_start_ms=int(row["gap_start_ms"]),
+        gap_end_ms=int(row["gap_end_ms"]),
+        detail=str(row["detail"]),
+    )
 
 
 def _row_to_bybit_book(row: sqlite3.Row) -> BybitBookTick:
