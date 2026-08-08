@@ -255,6 +255,11 @@ placeholders. Agents must not assume a module exists until its issue lands. -->
     `scripts/xstocks_delay_decay.py`. Report
     `docs/references/m8-delay-decay.md` (+ companion JSON). Direction 1 only
     (`buy_fluxion_sell_bybit`); gates bot live trading / admission premium.
+  - **Overview Net @ Q\* (WHI-965 ADR-0002) decided, not wired:** product
+    decision that Web overview **Net** uses PnL v2 optimal size Q\* (same as
+    Bucket PnL), not fixed M3 $1K. ADR `docs/adr/0002-overview-net-at-qstar.md`;
+    DESIGN §2.3 / §2.6.3 updated. **Live code still emits Net at $1K** until
+    the implement follow-up; TUI frozen.
 
 ## Build, test, run
 
