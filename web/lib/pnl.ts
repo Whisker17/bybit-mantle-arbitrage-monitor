@@ -103,18 +103,6 @@ export type OverviewNetCell = {
   ageHint?: string;
 };
 
-/** Visible status labels aligned with overviewPnlCell STATUS_LABEL. */
-const NET_STATUS_LABEL: Partial<Record<PnlStatus, string>> = {
-  no_book: "no book",
-  no_pool: "no pool",
-  empty_pool: "empty pool",
-  invalid_mid: "invalid mid",
-  pricing_anomaly: "price anomaly",
-  no_depth: "no depth",
-  no_fillable: "unfillable",
-  stale: "quote aged",
-};
-
 export function overviewNetCell(
   row: {
     net_edge_bps?: string | null;
@@ -130,8 +118,9 @@ export function overviewNetCell(
   const ageHint = quoteAgedHint(ages);
   if (row.net_edge_bps == null) {
     const status = row.pnl_v2?.status ?? null;
+    // Same map as overviewPnlCell — exhaustiveness via Record<PnlStatus, …>.
     const statusLabel =
-      status != null ? (NET_STATUS_LABEL[status] ?? null) : null;
+      status != null && status !== "ok" ? STATUS_LABEL[status] : null;
     const base =
       emptyTitle ??
       (statusLabel != null
