@@ -24,7 +24,9 @@ long, after realistic costs, and who is moving the prices.
   still measured from on-chain LOP + Swap, not inferred from the wall clock.
 - **Data:** pure realtime, accumulate from zero — **no historical backfill**.
 - **Arb definition:** two-sided inventory paper arb. Wear =
-  Bybit taker **0.10%** + Fluxion pool fee + Mantle gas + bilateral slippage.
+  Bybit xStocks Adventure Zone taker **0.20%** (20 bps; maker = taker; measured
+  2026-08-07 via `GET /v5/account/fee-rate`) + Fluxion pool fee + Mantle gas +
+  bilateral slippage.
 - **Attribution:** mechanism layer (RFQ = MM-driven / AMM = active taker) +
   behavior layer (address heuristics; see §4.2 reuse of `m6_attribution`).
 - **Stats:** all metrics segmented by **US equity open vs closed** session.
@@ -74,7 +76,7 @@ For size ladder \(Q\) (USD notionals; M3 ships $1K / $5K / $20K in
 
 ```
 edge_bps = direction_aware_spread_bps
-         - bybit_taker_bps (10)
+         - bybit_taker_bps (20)  # Adventure Zone; config/markets/bybit-fluxion.yaml
          - fluxion_fee_bps
          - bybit_slip_bps(Q)
          - fluxion_slip_bps(Q)
@@ -123,7 +125,10 @@ bucket table. Methodology derivation and Hummingbot comparison:
 
 #### 2.6.2 Cash-flow formulas
 
-Bybit taker fee \(f_b = 10\,\mathrm{bps}\) (config). Spot fees are charged in the
+Bybit taker fee \(f_b = 20\,\mathrm{bps}\) (config; xStocks Adventure Zone —
+maker = taker = 20 bps, measured 2026-08-07 via authenticated
+`GET /v5/account/fee-rate` on HOODXUSDT / CRCLXUSDT / NVDAXUSDT). Spot fees are
+charged in the
 **received** asset (Bybit help center): buy → fee in base; sell → fee in quote.
 VWAP levels: \(p = p^{\mathrm{raw}}/m\), \(s = s^{\mathrm{raw}}\cdot m\) (notional
 invariant; matched base \(q\) shares that unit). Full algebra in research note
@@ -252,7 +257,7 @@ algorithms under `monitor.metrics` / `monitor.attribution` stay market-agnostic.
 
 | Concern | Source | Notes |
 |---------|--------|-------|
-| CEX taker fee | market `costs.cex_taker_fee_bps` → `MetricsConfig.bybit_taker_fee_bps` | Field name is historical; value is the active CEX venue fee (Bybit 10, Binance 10). |
+| CEX taker fee | market `costs.cex_taker_fee_bps` → `MetricsConfig.bybit_taker_fee_bps` | Field name is historical; value is the active CEX venue fee (Bybit xStocks Adventure Zone **20**, Binance spot **10**). |
 | Gas per AMM swap | market `costs.gas_usd_per_swap` | Mantle ~$0.01; BSC inventory default $0.05 (non-zero constant). |
 | Quote basis wear | market `costs.quote_basis_bps` → `usdt_usdc_basis_bps` | 0 when CEX and DEX share the same quote (Binance USDT ⇄ Pancake USDT). |
 | Pool fee | inventory per-pool `amm.fee` (UniV3 units) | Injected into `AmmPoolState.pool_fee` at tick lift — not a global YAML. |

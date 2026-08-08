@@ -22,7 +22,7 @@ def test_load_checked_in_metrics_config() -> None:
     cfg = load_metrics_config()
     assert cfg.version == 1
     assert cfg.size_ladder_usd == [Decimal(1000), Decimal(5000), Decimal(20000)]
-    assert cfg.bybit_taker_fee_bps == Decimal(10)
+    assert cfg.bybit_taker_fee_bps == Decimal(20)
     assert cfg.usdt_usdc_basis_bps == Decimal(0)
     assert cfg.gas_usd_per_swap == Decimal("0.01")
     assert cfg.breach_size_usd == Decimal(1000)

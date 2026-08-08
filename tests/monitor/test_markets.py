@@ -48,7 +48,7 @@ def test_list_and_load_checked_in_markets() -> None:
     assert bf.cex.multiplier_semantics is MultiplierSemantics.DIVIDE
     assert bf.dex.has_rfq is True
     assert bf.dex.quote_decimals == 6
-    assert bf.costs.cex_taker_fee_bps == Decimal(10)
+    assert bf.costs.cex_taker_fee_bps == Decimal(20)
     assert bf.costs.gas_usd_per_swap == Decimal("0.01")
 
     bp = load_market_file("binance-pancake")
@@ -186,7 +186,7 @@ def test_load_market_context_bybit_fluxion() -> None:
     assert len(ctx.pairs.pairs) == 11
     assert ctx.collector is not None
     assert ctx.attribution is not None
-    assert ctx.metrics.bybit_taker_fee_bps == Decimal(10)
+    assert ctx.metrics.bybit_taker_fee_bps == Decimal(20)
     # Convention path unless legacy fallback applies (checked separately).
     assert ctx.sqlite_path.name in {
         "monitor-bybit-fluxion.db",
