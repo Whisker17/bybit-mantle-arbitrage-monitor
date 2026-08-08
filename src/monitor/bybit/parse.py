@@ -33,10 +33,15 @@ def _symbol_from_topic(topic: str) -> str:
 
 
 def _optional_int(value: object) -> int | None:
+    """Narrow JSON ``object`` fields to ``int`` (or None) without ``cast``.
+
+    ``int(object)`` is rejected under strict mypy; stringify first so the
+    overload is ``int(str | …)``. Same pattern as ``cex_volume.parse``.
+    """
     if value is None or value == "":
         return None
     try:
-        return int(value)
+        return int(str(value))
     except (TypeError, ValueError):
         return None
 
@@ -126,31 +131,31 @@ def apply_l1_side(
 
     if is_snapshot:
         best: Decimal | None = None
-        for price, size in ops:
-            if size <= 0 or price <= 0:
+        for px, size in ops:
+            if size <= 0 or px <= 0:
                 continue
             if best is None:
-                best = price
+                best = px
             elif prefer_high:
-                best = max(best, price)
+                best = max(best, px)
             else:
-                best = min(best, price)
+                best = min(best, px)
         return best
 
-    # delta
+    # delta — L1 may clear to None when the last size is deleted (size 0).
     if not ops:
         return current
-    price = current
-    for p, s in ops:
-        if p <= 0:
+    side: Decimal | None = current
+    for px, size in ops:
+        if px <= 0:
             # Skip malformed price entry; keep prior L1.
             continue
-        if s <= 0:
-            if price == p:
-                price = None
+        if size <= 0:
+            if side == px:
+                side = None
         else:
-            price = p
-    return price
+            side = px
+    return side
 
 
 def parse_public_trade_message(

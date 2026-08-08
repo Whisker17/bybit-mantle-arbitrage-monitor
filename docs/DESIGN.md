@@ -435,7 +435,7 @@ filtered pair with structured status badges (`no pool` / `empty pool` /
 
 | Choice | Why |
 |--------|-----|
-| Python ≥3.11 + uv | matches phase-1; fast iteration for TUI |
+| Python ≥3.13 + uv | runtime target (dev venv + VPS); WHI-971 |
 | httpx | RPC + REST (existing `mba.rpc` pattern) |
 | polars / duckdb | local analytics if needed; TUI may stay in-memory |
 | **Textual** (TUI) | M5 chose Textual over rich for interactive two-level nav (DataTable + detail screen); pure view models stay library-free |

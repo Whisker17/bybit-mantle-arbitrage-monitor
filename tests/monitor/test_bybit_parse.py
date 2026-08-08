@@ -155,6 +155,30 @@ def test_apply_l1_side_snapshot_picks_best_bid() -> None:
     assert apply_l1_side(None, ops, is_snapshot=True, prefer_high=False) == Decimal("10")
 
 
+def test_apply_l1_side_delta_delete_clears_to_none() -> None:
+    """WHI-971: size-0 delete of the current L1 must yield None, not keep Decimal.
+
+    Pins the intentional Optional assignment that strict mypy flagged as a
+    None-leak — clearing L1 is correct when the book side has no level left.
+    """
+    current = Decimal("200")
+    cleared = apply_l1_side(
+        current,
+        [(Decimal("200"), Decimal(0))],
+        is_snapshot=False,
+        prefer_high=True,
+    )
+    assert cleared is None
+    # Delete of a different price leaves the current L1 alone.
+    kept = apply_l1_side(
+        current,
+        [(Decimal("199"), Decimal(0))],
+        is_snapshot=False,
+        prefer_high=True,
+    )
+    assert kept == current
+
+
 def test_l1_tracker_drops_stale_u() -> None:
     tracker = _tracker()
     snap = {

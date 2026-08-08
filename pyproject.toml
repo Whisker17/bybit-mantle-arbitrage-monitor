@@ -2,7 +2,10 @@
 name = "bybit-mantle-arbitrage-monitor"
 version = "0.1.0"
 description = "Bybit spot ⇄ Fluxion (Mantle) tokenized-stocks live panel; phase-1 WMNT/USDT0 backtest archived under src/mba"
-requires-python = ">=3.11"
+# Runtime target is CPython 3.13 (dev venv + VPS). Keep requires-python,
+# ruff target-version, and mypy python_version in lockstep (WHI-971).
+# Do not advertise 3.11 while typing against 3.13 stubs.
+requires-python = ">=3.13"
 dependencies = [
     "httpx[socks]>=0.27",
     "eth-abi>=5.1",
@@ -37,8 +40,13 @@ build-backend = "hatchling.build"
 packages = ["src/mba", "src/monitor"]
 
 [tool.ruff]
-target-version = "py311"
+target-version = "py313"
 line-length = 100
+# Phase-1 WMNT/USDT0 backtest under src/mba is archived (tag phase1-backtest).
+# Pipeline still runs (python -m mba.m5_report) but is not part of the live
+# product surface — exclude so legacy lint debt cannot mask monitor regressions
+# (WHI-971). Do not "fix" mba to satisfy this gate.
+exclude = ["src/mba"]
 
 [tool.ruff.lint]
 select = ["E", "F", "I", "UP", "B"]
@@ -49,7 +57,10 @@ asyncio_mode = "strict"
 pythonpath = ["src"]
 
 [tool.mypy]
-python_version = "3.11"
+python_version = "3.13"
 strict = true
-# Expand as phase-2 modules land (see docs/DESIGN.md §4.2):
-files = ["src/mba", "src/monitor"]
+# Live product surface only. src/mba is archived phase-1 backtest (CLAUDE.md /
+# Architecture: do not extend for xStocks) — excluding it from the type gate
+# is intentional so 300+ legacy errors cannot hide monitor regressions (WHI-971).
+# Runtime import of mba modules is unchanged.
+files = ["src/monitor"]

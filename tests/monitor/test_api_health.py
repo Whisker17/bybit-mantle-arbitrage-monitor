@@ -174,6 +174,32 @@ def test_build_health_stale_collector(tmp_path: Path) -> None:
     assert health.ok is False
 
 
+def test_build_health_empty_journal_tolerates_none_freshest(tmp_path: Path) -> None:
+    """WHI-971: empty journal → freshest_recv_ts_ms is None (not a silent 0).
+
+    build_health must accept the optional scan path without treating None as
+    an int age; age_ms / freshest stay None and the process is not "alive".
+    """
+    db = tmp_path / "empty.db"
+    store = SqliteStore(db)
+    store.set_meta("collector_started_ms", "1")
+    # No book ticks, no META_LAST_TICK_WRITE, no heartbeat.
+    store.close()
+
+    with JournalReader(db) as reader:
+        assert reader.freshest_recv_ts_ms() is None
+        health = build_health(
+            reader,
+            now=1_000_000,
+            stale_ms=30_000,
+            gap_window_ms=300_000,
+        )
+    assert health.freshest_recv_ts_ms is None
+    assert health.age_ms is None
+    assert health.collector_alive is False
+    assert health.ok is False
+
+
 def test_unavailable_health() -> None:
     h = HealthStatus.unavailable(db_path="/tmp/x.db", now=1, error="missing")
     assert h.ok is False

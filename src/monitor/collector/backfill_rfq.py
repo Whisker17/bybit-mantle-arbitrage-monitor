@@ -35,6 +35,27 @@ from monitor.symbols.token_map import inventory_token_to_pair
 logger = logging.getLogger(__name__)
 
 
+def _row_int(row: dict[str, object], key: str) -> int:
+    """Narrow a journal row field to ``int`` without ``cast`` / ``int(object)``.
+
+    SQLite rows are typed as ``dict[str, object]``; stringify first so the
+    ``int`` overload is well-defined under strict mypy (WHI-971).
+    """
+    return int(str(row[key]))
+
+
+def _receipt_logs(rcpt: dict[str, object]) -> list[dict[str, object]]:
+    """Extract typed receipt logs; empty when missing or malformed."""
+    raw = rcpt.get("logs") or []
+    if not isinstance(raw, list):
+        return []
+    out: list[dict[str, object]] = []
+    for item in raw:
+        if isinstance(item, dict):
+            out.append(item)
+    return out
+
+
 def enrich_fill_from_receipt(
     *,
     row: dict[str, object],
@@ -45,14 +66,14 @@ def enrich_fill_from_receipt(
 ) -> FluxionRfqFillTick:
     """Build an enriched tick from a stored row + receipt logs."""
     base = FluxionRfqFillTick(
-        block_number=int(row["block_number"]),
-        block_ts=int(row["block_ts"]),
-        recv_ts_ms=int(row["recv_ts_ms"]),
+        block_number=_row_int(row, "block_number"),
+        block_ts=_row_int(row, "block_ts"),
+        recv_ts_ms=_row_int(row, "recv_ts_ms"),
         tx_hash=str(row["tx_hash"]),
-        log_index=int(row["log_index"]),
+        log_index=_row_int(row, "log_index"),
         order_hash=str(row["order_hash"]),
         remaining_making_amount=int(str(row["remaining_making_amount"])),
-        gap=bool(int(row.get("gap") or 0)),
+        gap=bool(int(str(row.get("gap") or 0))),
     )
     decoded = decode_rfq_fill_from_receipt(
         tx_hash=base.tx_hash,
@@ -82,14 +103,14 @@ def run_backfill(
     for row in rows:
         txh = str(row["tx_hash"])
         base = FluxionRfqFillTick(
-            block_number=int(row["block_number"]),
-            block_ts=int(row["block_ts"]),
-            recv_ts_ms=int(row["recv_ts_ms"]),
+            block_number=_row_int(row, "block_number"),
+            block_ts=_row_int(row, "block_ts"),
+            recv_ts_ms=_row_int(row, "recv_ts_ms"),
             tx_hash=txh,
-            log_index=int(row["log_index"]),
+            log_index=_row_int(row, "log_index"),
             order_hash=str(row["order_hash"]),
             remaining_making_amount=int(str(row["remaining_making_amount"])),
-            gap=bool(int(row.get("gap") or 0)),
+            gap=bool(int(str(row.get("gap") or 0))),
         )
         try:
             rcpt = rpc.get_transaction_receipt(txh)
@@ -106,14 +127,15 @@ def run_backfill(
             if store.update_rfq_fill_enrichment(replace(base, enriched=True)):
                 updated += 1
             continue
-        logs = rcpt.get("logs") or []
-        if not isinstance(logs, list):
+        logs = _receipt_logs(rcpt)
+        if not logs and rcpt.get("logs") not in (None, []):
+            # Malformed logs payload — mark attempted so we do not spin.
             if store.update_rfq_fill_enrichment(replace(base, enriched=True)):
                 updated += 1
             continue
         tick = enrich_fill_from_receipt(
             row=row,
-            logs=logs,  # type: ignore[arg-type]
+            logs=logs,
             usdc=usdc,
             lop=lop,
             token_to_pair=token_to_pair,

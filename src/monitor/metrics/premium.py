@@ -108,7 +108,7 @@ def reclassify_underlying_for_display(
     """
     hint: PriceType | None
     if tick.price_type in ("pre", "post", "live", "close"):
-        hint = tick.price_type  # type: ignore[assignment]
+        hint = tick.price_type
     else:
         hint = None
     new_type = classify_price_type(
@@ -191,7 +191,7 @@ def build_premium_snapshot(
     pt: PriceType | None
     raw_pt = underlying.price_type
     if raw_pt in ("live", "pre", "post", "close", "stale"):
-        pt = raw_pt  # type: ignore[assignment]
+        pt = raw_pt
     else:
         pt = None
     return PremiumSnapshot(

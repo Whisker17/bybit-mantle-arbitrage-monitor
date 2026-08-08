@@ -266,6 +266,8 @@ def build_health(
     last_tick = _meta_int(reader, META_LAST_TICK_WRITE)
     # Prefer O(1) meta stamps. Scan only when meta is missing (legacy journal
     # written by a collector binary without WHI-825 last-tick stamp).
+    # Annotate as optional: the scan path legitimately returns None (empty journal).
+    freshest: int | None
     if last_tick is not None:
         freshest = last_tick
     else:
