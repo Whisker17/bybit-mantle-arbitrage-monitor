@@ -23,6 +23,8 @@ sudo mkdir -p /opt/xstocks/{app,www,app/data}
 sudo chown -R xstocks:xstocks /opt/xstocks
 
 # 2) Python env (as xstocks)
+# Requires CPython ≥3.13 (pyproject requires-python; pin in .python-version).
+# uv will fetch 3.13 if missing: `uv python install 3.13` once per host.
 sudo -u xstocks -H bash -lc '
   curl -LsSf https://astral.sh/uv/install.sh | sh
   cd /opt/xstocks/app

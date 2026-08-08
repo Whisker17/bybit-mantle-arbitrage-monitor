@@ -20,6 +20,7 @@ from monitor.quotes import (
 from monitor.storage import JournalReader, SqliteStore
 from monitor.symbols import load_pairs_config
 from monitor.tui.builder import (
+    _volume_compare_for_pair,
     build_overview,
     build_pair_detail,
     build_pair_overview_row,
@@ -555,3 +556,33 @@ def test_build_spread_series_premiums_vs_underlying() -> None:
     assert bare[0].cex_premium_bps is None
     assert bare[0].amm_premium_bps is None
     assert bare[0].rfq_premium_bps is None
+
+
+def test_overview_volume_truncated_window_start_is_int(tmp_path: Path) -> None:
+    """WHI-971: overview volume path always passes int window_start_ms to DexVolumeWindow.
+
+    When coverage starts after the requested window, truncated=True and
+    window_start_ms equals the coverage floor — never None (the None-leak
+    mypy caught when branching on a boolean without narrowing coverage_start).
+    """
+    pairs = load_pairs_config()
+    pair = pairs.pair_by_id("AAPLx")
+    metrics = load_metrics_config()
+    db = tmp_path / "vol.db"
+    store = SqliteStore(db)
+    # Young collector: coverage starts mid-window.
+    store.set_meta("collector_first_started_ms", "9000")
+    store.close()
+
+    with JournalReader(db) as reader:
+        vol = _volume_compare_for_pair(
+            pair,
+            reader=reader,
+            metrics=metrics,
+            since_ms=0,
+            now_ms=10_000,
+            full_session_split=False,
+        )
+    assert vol.dex.truncated is True
+    assert vol.dex.window_start_ms == 9000
+    assert isinstance(vol.dex.window_start_ms, int)

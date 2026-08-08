@@ -35,6 +35,56 @@ from monitor.symbols.token_map import inventory_token_to_pair
 logger = logging.getLogger(__name__)
 
 
+def _coerce_int(value: object, *, field: str) -> int:
+    """Narrow a journal/JSON value to ``int`` without ``cast`` / ``int(object)``.
+
+    Branch on concrete types so the ``int`` overload is well-defined under
+    strict mypy (WHI-971). bool before int (bool subclasses int). Floats
+    truncate toward zero like bare ``int(3.9)``.
+    """
+    if isinstance(value, bool):
+        return int(value)
+    if isinstance(value, int):
+        return value
+    if isinstance(value, float):
+        return int(value)
+    if isinstance(value, (str, bytes, bytearray)):
+        return int(value)
+    raise TypeError(f"{field} is not int-coercible: {type(value).__name__}")
+
+
+def _row_int(row: dict[str, object], key: str) -> int:
+    """``_coerce_int`` for a required journal column."""
+    return _coerce_int(row[key], field=f"row[{key!r}]")
+
+
+def _receipt_log_dicts(raw: object) -> list[dict[str, object]] | None:
+    """Return typed receipt logs, or None when ``logs`` is not a list.
+
+    Callers that want missing/null ``logs`` treated as empty should pass
+    ``rcpt.get("logs") or []`` so this returns ``[]`` (enrich) rather than
+    None (mark attempted). None is only for a non-list payload. Non-dict
+    list entries are skipped (JSON-RPC receipts only emit log objects).
+    """
+    if not isinstance(raw, list):
+        return None
+    return [item for item in raw if isinstance(item, dict)]
+
+
+def _fill_tick_from_row(row: dict[str, object]) -> FluxionRfqFillTick:
+    """Map an unenriched journal row onto a base RFQ fill tick."""
+    return FluxionRfqFillTick(
+        block_number=_row_int(row, "block_number"),
+        block_ts=_row_int(row, "block_ts"),
+        recv_ts_ms=_row_int(row, "recv_ts_ms"),
+        tx_hash=str(row["tx_hash"]),
+        log_index=_row_int(row, "log_index"),
+        order_hash=str(row["order_hash"]),
+        remaining_making_amount=_row_int(row, "remaining_making_amount"),
+        gap=bool(_coerce_int(row.get("gap") or 0, field="gap")),
+    )
+
+
 def enrich_fill_from_receipt(
     *,
     row: dict[str, object],
@@ -44,16 +94,7 @@ def enrich_fill_from_receipt(
     token_to_pair: dict[str, str],
 ) -> FluxionRfqFillTick:
     """Build an enriched tick from a stored row + receipt logs."""
-    base = FluxionRfqFillTick(
-        block_number=int(row["block_number"]),
-        block_ts=int(row["block_ts"]),
-        recv_ts_ms=int(row["recv_ts_ms"]),
-        tx_hash=str(row["tx_hash"]),
-        log_index=int(row["log_index"]),
-        order_hash=str(row["order_hash"]),
-        remaining_making_amount=int(str(row["remaining_making_amount"])),
-        gap=bool(int(row.get("gap") or 0)),
-    )
+    base = _fill_tick_from_row(row)
     decoded = decode_rfq_fill_from_receipt(
         tx_hash=base.tx_hash,
         logs=logs,
@@ -80,17 +121,8 @@ def run_backfill(
     rows = store.unenriched_rfq_fills(limit=limit)
     updated = 0
     for row in rows:
-        txh = str(row["tx_hash"])
-        base = FluxionRfqFillTick(
-            block_number=int(row["block_number"]),
-            block_ts=int(row["block_ts"]),
-            recv_ts_ms=int(row["recv_ts_ms"]),
-            tx_hash=txh,
-            log_index=int(row["log_index"]),
-            order_hash=str(row["order_hash"]),
-            remaining_making_amount=int(str(row["remaining_making_amount"])),
-            gap=bool(int(row.get("gap") or 0)),
-        )
+        base = _fill_tick_from_row(row)
+        txh = base.tx_hash
         try:
             rcpt = rpc.get_transaction_receipt(txh)
         except Exception as exc:  # noqa: BLE001
@@ -106,14 +138,16 @@ def run_backfill(
             if store.update_rfq_fill_enrichment(replace(base, enriched=True)):
                 updated += 1
             continue
-        logs = rcpt.get("logs") or []
-        if not isinstance(logs, list):
+        # Preserve pre-WHI-971 control flow: non-list logs → mark attempted;
+        # list (incl. empty) → enrich. Dict items only for the typed seam.
+        logs = _receipt_log_dicts(rcpt.get("logs") or [])
+        if logs is None:
             if store.update_rfq_fill_enrichment(replace(base, enriched=True)):
                 updated += 1
             continue
         tick = enrich_fill_from_receipt(
             row=row,
-            logs=logs,  # type: ignore[arg-type]
+            logs=logs,
             usdc=usdc,
             lop=lop,
             token_to_pair=token_to_pair,

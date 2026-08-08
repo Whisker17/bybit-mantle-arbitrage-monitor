@@ -11,6 +11,7 @@ import pytest
 
 from monitor.bybit.l1 import L1BookTracker
 from monitor.bybit.parse import (
+    _optional_int,
     apply_l1_side,
     build_subscribe_args,
     parse_orderbook_l1_update,
@@ -153,6 +154,43 @@ def test_apply_l1_side_snapshot_picks_best_bid() -> None:
     ops = [(Decimal("10"), Decimal("1")), (Decimal("12"), Decimal("1"))]
     assert apply_l1_side(None, ops, is_snapshot=True, prefer_high=True) == Decimal("12")
     assert apply_l1_side(None, ops, is_snapshot=True, prefer_high=False) == Decimal("10")
+
+
+def test_apply_l1_side_delta_delete_clears_to_none() -> None:
+    """WHI-971: size-0 delete of the current L1 must yield None, not keep Decimal.
+
+    Pins the intentional Optional assignment that strict mypy flagged as a
+    None-leak — clearing L1 is correct when the book side has no level left.
+    """
+    current = Decimal("200")
+    cleared = apply_l1_side(
+        current,
+        [(Decimal("200"), Decimal(0))],
+        is_snapshot=False,
+        prefer_high=True,
+    )
+    assert cleared is None
+    # Delete of a different price leaves the current L1 alone.
+    kept = apply_l1_side(
+        current,
+        [(Decimal("199"), Decimal(0))],
+        is_snapshot=False,
+        prefer_high=True,
+    )
+    assert kept == current
+
+
+def test_optional_int_narrows_concrete_types() -> None:
+    """WHI-971: isinstance branches preserve int(float) truncate; junk → None."""
+    assert _optional_int(5) == 5
+    assert _optional_int(5.9) == 5  # same as bare int(5.9)
+    assert _optional_int("42") == 42
+    assert _optional_int(True) == 1
+    assert _optional_int(None) is None
+    assert _optional_int("") is None
+    assert _optional_int("nope") is None
+    # Decimal-looking strings are not ints; pre- and post-fix return None.
+    assert _optional_int("5.0") is None
 
 
 def test_l1_tracker_drops_stale_u() -> None:

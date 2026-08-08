@@ -289,14 +289,20 @@ placeholders. Agents must not assume a module exists until its issue lands. -->
     bot-aligned); API `capture` on overview + detail with
     `capture_cache_ttl_s` 30; Web Cap $/d column + detail sparkline.
     TUI frozen.
+  - **Type/lint gates restored (WHI-971) landed:** project targets CPython
+    **3.13** (`requires-python` / ruff / mypy in lockstep); `uv run mypy`
+    checks `src/monitor` only (strict, exits 0); `uv run ruff check .`
+    excludes archived `src/mba`. Three None-leak sites fixed with
+    regression tests. Unattended CI is **WHI-972** (follow-up; not in
+    this issue).
 
 ## Build, test, run
 
 ```bash
 uv sync                                       # install deps (creates .venv)
 uv run pytest                                 # unit tests
-uv run ruff check .                           # lint
-uv run mypy                                   # type check
+uv run ruff check .                           # lint (live code; src/mba excluded, WHI-971)
+uv run mypy                                   # type check (src/monitor only; WHI-971)
 # Phase-1 pipeline (needs data/ parquet from a prior run):
 uv run python -u -m mba.m5_report             # regenerate report/ from local parquet
 # Phase-2 live collector (M2 / WHI-731); needs network + optional MANTLE_RPC_URL:

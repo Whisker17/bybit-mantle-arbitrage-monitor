@@ -14,7 +14,6 @@ from collections.abc import Callable, Mapping, Sequence
 from datetime import UTC, datetime
 from decimal import Decimal
 from functools import lru_cache
-from typing import TypeVar
 
 from monitor.attribution import (
     BehaviorLabel,
@@ -87,8 +86,6 @@ from monitor.underlying.tickers import (
     pair_id_to_underlying_ticker,
     underlying_tickers_for_pairs,
 )
-
-_T = TypeVar("_T")
 
 # How far back to load collector_down windows for EdgeStats exclusion (WHI-825).
 _EXCLUDE_GAPS_LOOKBACK_MS = 30 * 24 * 60 * 60 * 1000  # 30d — matches retention
@@ -375,13 +372,18 @@ def _volume_compare_for_pair(
     notional, count = reader.dex_volume_totals(
         pair.id, since_ms=since_ms, quote_is_token0=q0
     )
-    # Truncation metadata only (no swap list).
+    # Truncation metadata only (no swap list). Branch so window_start is always
+    # int: when truncated, coverage_start is known non-None (WHI-971).
     coverage_candidates = [
         t for t in (collector_started, earliest) if t is not None
     ]
     coverage_start = min(coverage_candidates) if coverage_candidates else None
-    truncated = coverage_start is not None and coverage_start > since_ms
-    window_start = coverage_start if truncated else since_ms
+    if coverage_start is not None and coverage_start > since_ms:
+        truncated = True
+        window_start = coverage_start
+    else:
+        truncated = False
+        window_start = since_ms
     zero = SessionVolumeSlice(volume_usd=Decimal(0), trade_count=0)
     dex = DexVolumeWindow(
         volume_usd=notional,
@@ -714,14 +716,14 @@ def _ensure_stats(
     return st
 
 
-def _as_of(
-    items: Sequence[_T],
+def _as_of[T](
+    items: Sequence[T],
     ts_ms: int,
     *,
-    get_ts: Callable[[_T], int],
-) -> _T | None:
+    get_ts: Callable[[T], int],
+) -> T | None:
     """Latest item with get_ts(item) <= ts_ms (items sorted ascending by that key)."""
-    cur: _T | None = None
+    cur: T | None = None
     for item in items:
         if get_ts(item) > ts_ms:
             break

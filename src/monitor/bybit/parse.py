@@ -33,12 +33,30 @@ def _symbol_from_topic(topic: str) -> str:
 
 
 def _optional_int(value: object) -> int | None:
+    """Narrow JSON ``object`` fields to ``int`` (or None) without ``cast``.
+
+    Branch on concrete types so ``int(...)`` hits a known overload (WHI-971).
+    bool is checked before int (bool subclasses int). Floats truncate toward zero
+    the same way bare ``int(3.9)`` does. Non-JSON types (e.g. Decimal) return
+    None — Bybit WS fields arrive as int/float/str only.
+    """
     if value is None or value == "":
         return None
-    try:
+    if isinstance(value, bool):
         return int(value)
-    except (TypeError, ValueError):
-        return None
+    if isinstance(value, int):
+        return value
+    if isinstance(value, float):
+        try:
+            return int(value)
+        except (OverflowError, ValueError):
+            return None
+    if isinstance(value, (str, bytes, bytearray)):
+        try:
+            return int(value)
+        except ValueError:
+            return None
+    return None
 
 
 def parse_level_ops(levels: object) -> list[tuple[Decimal, Decimal]]:
@@ -126,31 +144,31 @@ def apply_l1_side(
 
     if is_snapshot:
         best: Decimal | None = None
-        for price, size in ops:
-            if size <= 0 or price <= 0:
+        for px, size in ops:
+            if size <= 0 or px <= 0:
                 continue
             if best is None:
-                best = price
+                best = px
             elif prefer_high:
-                best = max(best, price)
+                best = max(best, px)
             else:
-                best = min(best, price)
+                best = min(best, px)
         return best
 
-    # delta
+    # delta — L1 may clear to None when the last size is deleted (size 0).
     if not ops:
         return current
-    price = current
-    for p, s in ops:
-        if p <= 0:
+    l1_price: Decimal | None = current
+    for px, size in ops:
+        if px <= 0:
             # Skip malformed price entry; keep prior L1.
             continue
-        if s <= 0:
-            if price == p:
-                price = None
+        if size <= 0:
+            if l1_price == px:
+                l1_price = None
         else:
-            price = p
-    return price
+            l1_price = px
+    return l1_price
 
 
 def parse_public_trade_message(

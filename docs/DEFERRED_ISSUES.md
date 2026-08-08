@@ -31,6 +31,12 @@ soon — anything touching key handling, RPC credentials defaults to at least Hi
 
 ## Open
 
+- **No unattended CI for pytest / ruff / mypy** (Medium, WHI-971 → WHI-972).
+  Gates are green when run by hand (`uv run pytest` / `ruff check .` /
+  `mypy`), but nothing enforces them on PRs — which is how mypy silently
+  checked nothing and ruff stayed red. WHI-972 tracks adding a GitHub
+  Actions workflow; until it lands the gates are advisory.
+
 - **Max-USD `optimal_size` is invariant to a flat withdrawal fee** (Medium, WHI-961).
   Spec AC asked that adding the flat fee move direction-2 Q\* **up**. The engine
   maximizes `pnl_usd`; subtracting a constant from every fillable sample cannot
