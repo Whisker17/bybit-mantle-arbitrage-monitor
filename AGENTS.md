@@ -295,6 +295,13 @@ placeholders. Agents must not assume a module exists until its issue lands. -->
     excludes archived `src/mba`. Three None-leak sites fixed with
     regression tests. Unattended CI is **WHI-972** (follow-up; not in
     this issue).
+  - **Web build gate (WHI-973) landed:** `next build` was failing on `dev` —
+    `isCapturableOpportunity`'s `pnl_v2` param used `Pick<>` (fields required)
+    while both call sites pass the wire shape (fields optional), so no static
+    export could be produced. Param widened to `Partial<Pick<…>>` (the body
+    always handled absent fields). Root cause was gate coverage: `tsx --test`
+    strips types, so `npm test` could not catch it — `npm test` now runs
+    `tsc --noEmit` first, and the web build is listed as a gate.
 
 ## Build, test, run
 
@@ -303,6 +310,11 @@ uv sync                                       # install deps (creates .venv)
 uv run pytest                                 # unit tests
 uv run ruff check .                           # lint (live code; src/mba excluded, WHI-971)
 uv run mypy                                   # type check (src/monitor only; WHI-971)
+# Web gates — `npm test` typechecks first (WHI-973). Run these before any PR
+# that touches web/: tsx strips types, so tests alone cannot catch a bad
+# signature; only tsc can. Deps: `cd web && npm ci` once.
+cd web && npm test                            # tsc --noEmit + pure-helper tests
+cd web && npm run build                       # static export must compile → web/out
 # Phase-1 pipeline (needs data/ parquet from a prior run):
 uv run python -u -m mba.m5_report             # regenerate report/ from local parquet
 # Phase-2 live collector (M2 / WHI-731); needs network + optional MANTLE_RPC_URL:

@@ -124,7 +124,13 @@ export type OverviewNetCell = {
  * the sequential drift bar. Unknown drift (no σ) does not block min_profit.
  */
 export function isCapturableOpportunity(row: {
-  pnl_v2?: Pick<PnlOptimalSummary, "meets_min_profit" | "optimal_net_pnl_usd"> | null;
+  // Partial<>: overview rows carry these fields *optionally* (see
+  // overviewNetCell's row type). A bare Pick<> keeps them required and does not
+  // accept the real call sites — WHI-973. The body below already treats both as
+  // possibly-absent, so the wider type is the honest one.
+  pnl_v2?: Partial<
+    Pick<PnlOptimalSummary, "meets_min_profit" | "optimal_net_pnl_usd">
+  > | null;
   clears_drift_optimal?: boolean | null;
 }): boolean {
   const pnl = row.pnl_v2;
