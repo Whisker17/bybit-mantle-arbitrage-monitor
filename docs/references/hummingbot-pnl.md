@@ -260,8 +260,8 @@ examples: buy BTC → fee in BTC; sell BTC → fee in USDT). With rate \(f_b\):
 | **Buy** base (want **net** base \(q\)) | Walk asks for gross base \(q_{\mathrm{g}} = q / (1 - f_b)\); pay \(q_{\mathrm{g}} \cdot P_{\mathrm{ask}}^{\mathrm{vwap}}\) USDT | Receive \(q\) base after fee |
 | **Sell** base \(q\) | Walk bids for base \(q\); gross USDT \(= q \cdot P_{\mathrm{bid}}^{\mathrm{vwap}}\) | Receive \(q \cdot P_{\mathrm{bid}}^{\mathrm{vwap}} \cdot (1 - f_b)\) USDT |
 
-First-order, \(1/(1-f_b) \approx 1+f_b\) (error \(\sim f_b^2\), ~0.01 bps at
-10 bps). **Implement the exact received-asset form** so the matched-base
+First-order, \(1/(1-f_b) \approx 1+f_b\) (error \(\sim f_b^2\), ~0.04 bps at
+20 bps). **Implement the exact received-asset form** so the matched-base
 invariant stays honest; do not bill buy fees as pure quote markup without
 adjusting gross base.
 
