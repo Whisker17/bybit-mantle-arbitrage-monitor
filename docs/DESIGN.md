@@ -82,6 +82,7 @@ edge_bps = direction_aware_spread_bps
          - fluxion_slip_bps(Q)
          - gas_bps(Q)
          - signed_basis_bps      # USDC premium; + when paying USDC (WHI-960)
+         - withdrawal_fee_bps(Q) # dir1 stable USD; dir2 tokens×listed mid (WHI-961)
 ```
 
 Inventory is pre-positioned on both sides (same model as phase-1); carry is an
@@ -288,6 +289,8 @@ algorithms under `monitor.metrics` / `monitor.attribution` stay market-agnostic.
 | CEX taker fee | market `costs.cex_taker_fee_bps` → `MetricsConfig.bybit_taker_fee_bps` | Field name is historical; value is the active CEX venue fee (Bybit xStocks Adventure Zone **20**, Binance spot **10**). |
 | Gas per AMM swap | market `costs.gas_usd_per_swap` | Mantle ~$0.01; BSC inventory default $0.05 (non-zero constant). |
 | Quote basis wear | market `costs.quote_basis_bps` → `usdt_usdc_basis_bps` | Signed USDC premium (bps); bybit-fluxion **7.5**, binance-pancake **0** (same quote). Engine signs by direction (WHI-960). |
+| Stable withdrawal fee | market `costs.stable_withdrawal_fee_usd` → `MetricsConfig.stable_withdrawal_fee_usd` | Dir1 capital-return fee (USD). Measured **0** for USDC/USDT Mantle (WHI-961). |
+| Asset withdrawal fee | per-pair `asset_withdrawal_fee_tokens` (inventory) | Dir2: `tokens × listed mid` (`dm_mid × bybit.multiplier`). Measured HOODX/CRCLX/NVDAX; else `withdrawal_fee_kind=unknown` (never silent 0). |
 | Pool fee | inventory per-pool `amm.fee` (UniV3 units) | Injected into `AmmPoolState.pool_fee` at tick lift — not a global YAML. |
 | Quote token decimals | market `dex.quote_decimals` | Mantle USDC=6; BSC USDT=18. API/CLI pass this into `amm_pool_from_pair_tick`. Pure `amm_pool_from_tick` always requires explicit decimals. Pair-wrapper defaults (6/18) remain only for frozen TUI call sites that omit the arg (Bybit-only until M7-5). |
 | CEX depth VWAP | journal `bybit_depth` (table name reused per ADR-0001) | M7-3 Binance depth20 precomputes the same bucket curve shape. |

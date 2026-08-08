@@ -41,6 +41,13 @@ soon — anything touching key handling, RPC credentials defaults to at least Hi
   only if admission-premium sizing (bot parity) becomes an overview product
   requirement.
 
+- **binance-pancake dir1 labels stable withdrawal $0 as `stable` not `unknown`**
+  (Low, WHI-961). Same-quote market has no measured transfer schedule; default
+  `stable_withdrawal_fee_usd=0` renders "Withdrawal (stable) $0". Spec's
+  "never silent 0" applies to unmeasured **asset** fees (dir2). Treating same-
+  quote markets as measured-free stables is intentional; flip to `unknown` only
+  if product wants an accumulating-empty cue for that market.
+
 - **Live per-timestamp USDT/USDC basis feed** (Medium, WHI-960 → later).
   Panel ships a signed constant (`quote_basis_bps: 7.5` on bybit-fluxion).
   Owner-measured Bybit daily klines show meaningful range (median daily 4 bps,
