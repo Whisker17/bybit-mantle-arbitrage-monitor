@@ -151,13 +151,24 @@ def main(argv: list[str] | None = None) -> int:
 
     fee_tokens = None
     mult = Decimal(1)
-    if args.pair_id is not None and ctx.pairs is not None:
-        try:
-            inv_pair = ctx.pairs.pair_by_id(args.pair_id)
-            fee_tokens = inv_pair.asset_withdrawal_fee_tokens
-            mult = inv_pair.bybit.multiplier
-        except KeyError:
-            pass
+    if args.pair_id is not None:
+        inv_pair = None
+        if ctx.pairs is not None:
+            try:
+                inv_pair = ctx.pairs.pair_by_id(args.pair_id)
+            except KeyError:
+                inv_pair = None
+        if inv_pair is None and ctx.bstocks is not None:
+            try:
+                inv_pair = ctx.bstocks.pair_by_id(args.pair_id)
+            except KeyError:
+                inv_pair = None
+        if inv_pair is not None:
+            from monitor.metrics.withdrawal import withdrawal_params_from_pair
+
+            wd = withdrawal_params_from_pair(inv_pair)
+            fee_tokens = wd.asset_fee_tokens
+            mult = wd.price_multiplier
 
     table = pnl_bucket_table(
         pair_id=pair_id,
