@@ -2,7 +2,7 @@
 
 Go/no-go report for the sibling execution project `mantle-stocks-arbitrage-bots` under the **corrected cost stack** (WHI-909). Headline numbers are **AMM-only** (bot v1); RFQ is reported separately as a v2 candidate.
 
-**Generated:** 2026-08-08 14:47:22 UTC
+**Generated:** 2026-08-08 14:57:15 UTC
 
 > **Supersedes WHI-866.** Prior report retained at `docs/references/m8-xstocks-edge-quant-v1-whi866.md` (10 bps taker, 0 basis, 0 rebalance, 0..60 sweep). This re-run uses live USDCUSDT premium, 20 bps Adventure Zone taker (primary), rebalance amortization, and an extended 0..200 bps threshold sweep.
 
@@ -85,37 +85,37 @@ Retention (`config/collector.yaml` → `retention`) prunes raw Bybit L1 at ~2 da
 
 | Table | Rows | Min (UTC) | Max (UTC) | Role |
 |-------|-----:|-----------|-----------|------|
-| `bybit_book` | 1,128,366 | 2026-08-06 14:52:35 UTC | 2026-08-08 14:45:58 UTC | CEX L1 (primary timeline; ~2d raw retention) |
-| `bybit_depth` | 880,554 | 2026-08-06 14:52:35 UTC | 2026-08-08 14:45:58 UTC | CEX VWAP curve for $500/$1k slip (~2d retention) |
-| `fluxion_pool_state` | 1,289,608 | 2026-08-02 03:18:24 UTC | 2026-08-08 14:45:59 UTC | AMM geometry (as-of join; ~7d retention) |
-| `fluxion_rfq_quotes` | 81,838 | 2026-08-05 14:31:07 UTC | 2026-08-08 14:45:58 UTC | RFQ polls (separate column; ~3d retention) |
+| `bybit_book` | 1,129,412 | 2026-08-06 14:52:35 UTC | 2026-08-08 14:54:12 UTC | CEX L1 (primary timeline; ~2d raw retention) |
+| `bybit_depth` | 882,125 | 2026-08-06 14:52:35 UTC | 2026-08-08 14:54:13 UTC | CEX VWAP curve for $500/$1k slip (~2d retention) |
+| `fluxion_pool_state` | 1,291,464 | 2026-08-02 03:18:24 UTC | 2026-08-08 14:54:13 UTC | AMM geometry (as-of join; ~7d retention) |
+| `fluxion_rfq_quotes` | 82,140 | 2026-08-05 14:31:07 UTC | 2026-08-08 14:54:14 UTC | RFQ polls (separate column; ~3d retention) |
 | `bybit_book_1m` | 39,829 | 2026-08-02 03:18:00 UTC | 2026-08-06 13:22:00 UTC | Survives longer (~14d) but **not used** (no depth) |
-| `collector_gaps` | 5,421 | 2026-08-02 03:18:32 UTC | 2026-08-08 14:45:39 UTC | Downtime exclusion (`source=collector_down`) |
+| `collector_gaps` | 5,429 | 2026-08-02 03:18:32 UTC | 2026-08-08 14:53:27 UTC | Downtime exclusion (`source=collector_down`) |
 | `USDCUSDT klines (external)` | 2,863 | 2026-08-06 14:51:00 UTC | 2026-08-08 14:33:00 UTC | Live basis series (Bybit public 1m; as-of join) |
 
 ### Per-symbol coverage (raw `bybit_book`)
 
-Study window wall clock: **2026-08-06 14:52:35 UTC → 2026-08-08 14:45:58 UTC** (47.9 h). RTH hours in window: **11.63 h** (excl. collector_down: **9.62 h**). Closed hours: **36.26 h** (excl. gap: **31.19 h**).
+Study window wall clock: **2026-08-06 14:52:35 UTC → 2026-08-08 14:54:12 UTC** (48.0 h). RTH hours in window: **11.63 h** (excl. collector_down: **9.62 h**). Closed hours: **36.39 h** (excl. gap: **31.33 h**).
 
 **Collector downtime:** 5 `collector_down` intervals totaling **7.07 h** (of which **2.02 h** fell inside RTH). Samples inside those intervals are excluded.
 
 | Pair | Book rows | First | Last | AMM pool? | Notes |
 |------|----------:|-------|------|-----------|-------|
-| AAPLx | 109,507 | 2026-08-06 14:52:35 UTC | 2026-08-08 14:44:53 UTC | yes | — |
-| AMZNx | 47,120 | 2026-08-06 14:52:35 UTC | 2026-08-08 14:45:52 UTC | no | CEX-only (no Fluxion pool) |
-| COINx | 74,272 | 2026-08-06 14:52:35 UTC | 2026-08-08 14:45:03 UTC | no | CEX-only (no Fluxion pool) |
-| CRCLx | 88,380 | 2026-08-06 14:52:35 UTC | 2026-08-08 14:44:21 UTC | yes | — |
-| GOOGLx | 46,229 | 2026-08-06 14:52:35 UTC | 2026-08-08 14:45:58 UTC | yes | — |
-| HOODx | 51,232 | 2026-08-06 14:52:35 UTC | 2026-08-08 14:45:56 UTC | yes | — |
-| MCDx | 67,130 | 2026-08-06 14:52:35 UTC | 2026-08-08 14:39:02 UTC | no | CEX-only (no Fluxion pool) |
-| METAx | 94,557 | 2026-08-06 14:52:35 UTC | 2026-08-08 14:45:34 UTC | yes | — |
-| NVDAx | 109,531 | 2026-08-06 14:52:35 UTC | 2026-08-08 14:44:57 UTC | yes | — |
-| SPCXx | 217,715 | 2026-08-06 14:52:35 UTC | 2026-08-08 14:45:50 UTC | yes | frequent pricing_anomaly / thin pool — often excluded by gate |
-| TSLAx | 222,693 | 2026-08-06 14:52:35 UTC | 2026-08-08 14:45:55 UTC | yes | — |
+| AAPLx | 109,523 | 2026-08-06 14:52:35 UTC | 2026-08-08 14:54:06 UTC | yes | — |
+| AMZNx | 47,128 | 2026-08-06 14:52:35 UTC | 2026-08-08 14:53:19 UTC | no | CEX-only (no Fluxion pool) |
+| COINx | 74,298 | 2026-08-06 14:52:35 UTC | 2026-08-08 14:53:00 UTC | no | CEX-only (no Fluxion pool) |
+| CRCLx | 88,451 | 2026-08-06 14:52:35 UTC | 2026-08-08 14:53:14 UTC | yes | — |
+| GOOGLx | 46,293 | 2026-08-06 14:52:35 UTC | 2026-08-08 14:53:58 UTC | yes | — |
+| HOODx | 51,251 | 2026-08-06 14:52:35 UTC | 2026-08-08 14:54:13 UTC | yes | — |
+| MCDx | 67,636 | 2026-08-06 14:52:35 UTC | 2026-08-08 14:54:14 UTC | no | CEX-only (no Fluxion pool) |
+| METAx | 94,570 | 2026-08-06 14:52:35 UTC | 2026-08-08 14:48:04 UTC | yes | — |
+| NVDAx | 109,578 | 2026-08-06 14:52:35 UTC | 2026-08-08 14:54:02 UTC | yes | — |
+| SPCXx | 217,856 | 2026-08-06 14:52:35 UTC | 2026-08-08 14:54:10 UTC | yes | frequent pricing_anomaly / thin pool — often excluded by gate |
+| TSLAx | 222,833 | 2026-08-06 14:52:35 UTC | 2026-08-08 14:53:44 UTC | yes | — |
 
 ## Hygiene / exclusions
 
-- No automated corporate-action calendar is applied. The observation window is 2026-08-06 14:52:35 UTC → 2026-08-08 14:45:58 UTC; re-runs over a longer span must re-check dividends/splits/rebases and disclose any excluded days (bot DESIGN §8).
+- No automated corporate-action calendar is applied. The observation window is 2026-08-06 14:52:35 UTC → 2026-08-08 14:54:12 UTC; re-runs over a longer span must re-check dividends/splits/rebases and disclose any excluded days (bot DESIGN §8).
 - No bStocks-style share rebase segment break was introduced for Fluxion xStocks wrappers in this study.
 - Samples with `gap=1` on book/pool/depth rows are dropped at load.
 - Pairs failing `amm_quote_for_cex` (empty_pool / invalid_mid / pricing_anomaly, default |spread| > 300 bps) are excluded from AMM samples for that timestamp (SPCXx frequently hits this).
@@ -129,18 +129,18 @@ Primary cost stack: **taker 20 bps** (believed correct) + **live basis** + **reb
 
 | Metric | Value |
 |--------|------:|
-| Study calendar days (span/86400s) | 1.995 |
+| Study calendar days (span/86400s) | 2.001 |
 | Portfolio capturable profit (total, $1000 rung) | 1.3992 USDT |
-| **Average capturable profit / day** | **0.7012 USDT/day** |
+| **Average capturable profit / day** | **0.6992 USDT/day** |
 | §1.4 $/day gate (≥15) | FAIL |
 | Symbols with fitted stable windows (open, $1000) | 2 |
 | §1.4 ≥3-symbol gate | FAIL |
 | Go-list | CRCLx, GOOGLx |
 | Core go-list (≥1 USDT/day open fit) | — |
-| Portfolio $/day excluding HOODx | 0.7012 |
+| Portfolio $/day excluding HOODx | 0.6992 |
 | **Verdict (both legs)** | **NO-GO** |
 
-Portfolio average **0.7012 USDT/day** is below the 5 USDT/day no-go floor. Stable symbols: 2 (need ≥3). Do not size beyond a minimum proving stage.
+Portfolio average **0.6992 USDT/day** is below the 5 USDT/day no-go floor. Stable symbols: 2 (need ≥3). Do not size beyond a minimum proving stage.
 
 ## Cost-stack sensitivity matrix
 
@@ -148,12 +148,12 @@ Portfolio AMM $1000 single-flight $/day and stable open-session symbol count und
 
 | Taker bps | Rebalance bps | $/day | Stable symbols | $/day gate | Symbol gate | Verdict |
 |----------:|--------------:|------:|---------------:|:----------:|:-----------:|---------|
-| 10 | 1 | 3.0234 | 3 | FAIL | PASS | NO-GO |
-| 10 | 5 | 1.9792 | 2 | FAIL | FAIL | NO-GO |
-| 10 | 13.5 | 0.2444 | 2 | FAIL | FAIL | NO-GO |
-| **20** | **1** | **0.7012** | 2 | FAIL | FAIL | NO-GO |
-| 20 | 5 | 0.2229 | 2 | FAIL | FAIL | NO-GO |
-| 20 | 13.5 | 0.2137 | 1 | FAIL | FAIL | NO-GO |
+| 10 | 1 | 3.0147 | 3 | FAIL | PASS | NO-GO |
+| 10 | 5 | 1.9736 | 2 | FAIL | FAIL | NO-GO |
+| 10 | 13.5 | 0.2437 | 2 | FAIL | FAIL | NO-GO |
+| **20** | **1** | **0.6992** | 2 | FAIL | FAIL | NO-GO |
+| 20 | 5 | 0.2223 | 2 | FAIL | FAIL | NO-GO |
+| 20 | 13.5 | 0.2130 | 1 | FAIL | FAIL | NO-GO |
 
 ## Per-symbol survival (corrected primary stack)
 
@@ -161,13 +161,13 @@ Which symbols still clear positive open-session capturable profit at the primary
 
 | Symbol | Survive $500? | $500 $/day | Survive $1k? | $1k $/day | Fit bps | Direction |
 |--------|:-------------:|-----------:|:------------:|-----------:|--------:|-----------|
-| AAPLx | yes | 0.5461 | no | 0 | 0 | buy_bybit_sell_fluxion |
-| CRCLx | yes | 5.7246 | yes | 0.4876 | 2 | buy_fluxion_sell_bybit |
-| GOOGLx | yes | 2.5415 | yes | 0.2137 | 0 | buy_bybit_sell_fluxion |
-| HOODx | yes | 2.1254 | no | 0 | 0 | buy_bybit_sell_fluxion |
-| METAx | yes | 0.3582 | no | 0 | 0 | buy_bybit_sell_fluxion |
-| NVDAx | yes | 0.3334 | no | 0 | 0 | buy_bybit_sell_fluxion |
-| TSLAx | yes | 2.5082 | no | 0 | 0 | buy_bybit_sell_fluxion |
+| AAPLx | yes | 0.5446 | no | 0 | 0 | buy_bybit_sell_fluxion |
+| CRCLx | yes | 5.7082 | yes | 0.4862 | 2 | buy_fluxion_sell_bybit |
+| GOOGLx | yes | 2.5342 | yes | 0.2130 | 0 | buy_bybit_sell_fluxion |
+| HOODx | yes | 2.1193 | no | 0 | 0 | buy_bybit_sell_fluxion |
+| METAx | yes | 0.3572 | no | 0 | 0 | buy_bybit_sell_fluxion |
+| NVDAx | yes | 0.3324 | no | 0 | 0 | buy_bybit_sell_fluxion |
+| TSLAx | yes | 2.5010 | no | 0 | 0 | buy_bybit_sell_fluxion |
 
 ## Fitted `min_edge_bps` (AMM, for bot config)
 
@@ -177,9 +177,9 @@ Per (symbol × session) at the **$1,000** rung, best direction by zero-threshold
 |--------|---------|-----------|--------:|------|------------:|------------------:|---------|----------:|
 | AAPLx | open | buy_bybit_sell_fluxion | 0 | — | 0.00 | 0 | False | 1586 |
 | AAPLx | closed | buy_bybit_sell_fluxion | 0 | — | 0.00 | 0 | False | 4539 |
-| CRCLx | open | buy_fluxion_sell_bybit | 2 | — | 1.50 | 0.4876 | True | 1699 |
+| CRCLx | open | buy_fluxion_sell_bybit | 2 | — | 1.50 | 0.4862 | True | 1699 |
 | CRCLx | closed | buy_bybit_sell_fluxion | 0 | — | 0.00 | 0 | False | 3382 |
-| GOOGLx | open | buy_bybit_sell_fluxion | 0 | — | 1.00 | 0.2137 | True | 1636 |
+| GOOGLx | open | buy_bybit_sell_fluxion | 0 | — | 1.00 | 0.2130 | True | 1636 |
 | GOOGLx | closed | buy_bybit_sell_fluxion | 0 | — | 0.00 | 0 | False | 3255 |
 | HOODx | open | buy_bybit_sell_fluxion | 0 | — | 0.00 | 0 | False | 1716 |
 | HOODx | closed | buy_bybit_sell_fluxion | 0 | — | 0.00 | 0 | False | 2444 |
@@ -201,8 +201,8 @@ Selected thresholds 0 / 10 / 20 / 40 / 60 / 100 bps are tabulated below; the com
 | AAPLx | buy_bybit_sell_f | 0.00 | 0 | 0.00 | 0 | 0.00 | 0 | 0.00 | 0 | 0.00 | 0 |
 | AAPLx | buy_fluxion_sell | 0.00 | 0 | 0.00 | 0 | 0.00 | 0 | 0.00 | 0 | 0.00 | 0 |
 | CRCLx | buy_bybit_sell_f | 0.00 | 0 | 0.00 | 0 | 0.00 | 0 | 0.00 | 0 | 0.00 | 0 |
-| CRCLx | buy_fluxion_sell | 1.50 | 0.4876 | 0.00 | 0 | 0.00 | 0 | 0.00 | 0 | 0.00 | 0 |
-| GOOGLx | buy_bybit_sell_f | 1.00 | 0.2137 | 0.00 | 0 | 0.00 | 0 | 0.00 | 0 | 0.00 | 0 |
+| CRCLx | buy_fluxion_sell | 1.50 | 0.4862 | 0.00 | 0 | 0.00 | 0 | 0.00 | 0 | 0.00 | 0 |
+| GOOGLx | buy_bybit_sell_f | 1.00 | 0.2130 | 0.00 | 0 | 0.00 | 0 | 0.00 | 0 | 0.00 | 0 |
 | GOOGLx | buy_fluxion_sell | 0.00 | 0 | 0.00 | 0 | 0.00 | 0 | 0.00 | 0 | 0.00 | 0 |
 | HOODx | buy_bybit_sell_f | 0.00 | 0 | 0.00 | 0 | 0.00 | 0 | 0.00 | 0 | 0.00 | 0 |
 | HOODx | buy_fluxion_sell | 0.00 | 0 | 0.00 | 0 | 0.00 | 0 | 0.00 | 0 | 0.00 | 0 |
@@ -236,20 +236,20 @@ Selected thresholds 0 / 10 / 20 / 40 / 60 / 100 bps are tabulated below; the com
 
 | Symbol | Dir | Windows/day | Profit/day (USDT) | N samples |
 |--------|-----|------------:|------------------:|----------:|
-| AAPLx | buy_bybit_sell_f | 5.51 | 0.5461 | 1586 |
+| AAPLx | buy_bybit_sell_f | 5.50 | 0.5446 | 1586 |
 | AAPLx | buy_fluxion_sell | 0.00 | 0 | 1586 |
-| CRCLx | buy_bybit_sell_f | 6.51 | 1.4119 | 1699 |
-| CRCLx | buy_fluxion_sell | 3.01 | 5.7246 | 1699 |
-| GOOGLx | buy_bybit_sell_f | 2.51 | 2.5415 | 1636 |
+| CRCLx | buy_bybit_sell_f | 6.50 | 1.4079 | 1699 |
+| CRCLx | buy_fluxion_sell | 3.00 | 5.7082 | 1699 |
+| GOOGLx | buy_bybit_sell_f | 2.50 | 2.5342 | 1636 |
 | GOOGLx | buy_fluxion_sell | 0.00 | 0 | 1636 |
-| HOODx | buy_bybit_sell_f | 2.51 | 0.8661 | 1716 |
-| HOODx | buy_fluxion_sell | 4.01 | 2.1254 | 1716 |
-| METAx | buy_bybit_sell_f | 2.51 | 0.3582 | 1642 |
+| HOODx | buy_bybit_sell_f | 2.50 | 0.8637 | 1716 |
+| HOODx | buy_fluxion_sell | 4.00 | 2.1193 | 1716 |
+| METAx | buy_bybit_sell_f | 2.50 | 0.3572 | 1642 |
 | METAx | buy_fluxion_sell | 0.00 | 0 | 1642 |
 | NVDAx | buy_bybit_sell_f | 0.00 | 0 | 1717 |
-| NVDAx | buy_fluxion_sell | 2.00 | 0.3334 | 1717 |
-| TSLAx | buy_bybit_sell_f | 2.51 | 0.2142 | 1719 |
-| TSLAx | buy_fluxion_sell | 8.02 | 2.5082 | 1719 |
+| NVDAx | buy_fluxion_sell | 2.00 | 0.3324 | 1717 |
+| TSLAx | buy_bybit_sell_f | 2.50 | 0.2136 | 1719 |
+| TSLAx | buy_fluxion_sell | 8.00 | 2.5010 | 1719 |
 
 ### RFQ — RTH open (poll-native size, capped at $1,000)
 
@@ -280,7 +280,7 @@ RFQ open-session sum of per-series capturable profit at T=0: 0.00 USDT (0.00/day
 
 ## Fit quality & next steps
 
-- Primary verdict **NO-GO** under taker 20 / rebalance 1 / live basis (0.7012 USDT/day, 2 stable symbols).
+- Primary verdict **NO-GO** under taker 20 / rebalance 1 / live basis (0.6992 USDT/day, 2 stable symbols).
 - No fit pinned at the 200 bps sweep ceiling (extended grid bracketed the knee).
 - WHI-866 comparison: prior GO at 66 USDT/day / 5 symbols used 10 bps taker + 0 basis + 0 rebalance and only 5.69 h clean RTH.
 - Wire any surviving go-list thresholds into bot M4 (WHI-876) only after both §1.4 legs pass on a longer clean span.

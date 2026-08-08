@@ -105,10 +105,11 @@ DEFAULT_JSON = _REPO / "docs" / "references" / "m8-xstocks-edge-quant.json"
 DEFAULT_BASIS_CACHE = (
     _REPO / "docs" / "references" / "m8-xstocks-edge-quant-usdcusdt-klines.json"
 )
-# Cost-stack sensitivity (WHI-909). Primary = 20 bps taker + 1 bps rebalance.
-TAKER_TIERS_BPS = (Decimal(10), Decimal(20))
+# Cost-stack sensitivity (WHI-909). Primary taker = market file
+# (bybit-fluxion cex_taker_fee_bps / WHI-959 Adventure Zone); alternate
+# sensitivity leg is the pre-correction 10 bps stack. Rebalance primary 1 bps.
+SENSITIVITY_TAKER_BPS = Decimal(10)  # pre-WHI-959 stack for comparison only
 REBALANCE_TIERS_BPS = (Decimal("1"), Decimal("5"), Decimal("13.5"))
-PRIMARY_TAKER_BPS = Decimal(20)
 PRIMARY_REBALANCE_BPS = Decimal("1")
 SCHEMA_VERSION = 2
 # Study-only: max age of USDCUSDT 1m bar vs sample timestamp.
@@ -713,7 +714,8 @@ def render_report(payload: dict[str, Any]) -> str:
     a(
         "Portfolio AMM $1000 single-flight $/day and stable open-session symbol "
         "count under each (taker × rebalance) cell. Live basis in every cell. "
-        f"**Bold** = primary ({PRIMARY_TAKER_BPS} / {PRIMARY_REBALANCE_BPS})."
+        f"**Bold** = primary ({payload['cost_stack']['primary_taker_bps']} / "
+        f"{PRIMARY_REBALANCE_BPS})."
     )
     a("")
     a("| Taker bps | Rebalance bps | $/day | Stable symbols | $/day gate | Symbol gate | Verdict |")
@@ -732,7 +734,7 @@ def render_report(payload: dict[str, Any]) -> str:
     a("")
     a(
         "Which symbols still clear positive open-session capturable profit "
-        f"at the primary stack (taker {PRIMARY_TAKER_BPS}, rebalance "
+        f"at the primary stack (taker {payload['cost_stack']['primary_taker_bps']}, rebalance "
         f"{PRIMARY_REBALANCE_BPS}, live basis) on the $500 and $1,000 rungs. "
         "Fit bps is the knee at $1,000 for the best direction."
     )
@@ -1416,10 +1418,11 @@ def run(args: argparse.Namespace) -> int:
     )
     if basis.n == 0:
         print(
-            "WARNING: empty USDCUSDT series — falling back to config constant "
-            f"{metrics_cfg.usdt_usdc_basis_bps} bps",
+            "ERROR: empty USDCUSDT basis series — refuse to run with a silent "
+            "constant fallback (WHI-909 requires live per-timestamp premium).",
             file=sys.stderr,
         )
+        return 2
 
     # Load journal feeds once per pair.
     pair_feeds: dict[str, dict[str, Any]] = {}
@@ -1450,9 +1453,14 @@ def run(args: argparse.Namespace) -> int:
     reader.close()
     conn.close()
 
+    # Primary taker from market file (Adventure Zone 20 bps after WHI-959);
+    # sensitivity also includes the pre-correction 10 bps leg.
+    primary_taker_bps = metrics_cfg.bybit_taker_fee_bps
+    taker_tiers = sorted({primary_taker_bps, SENSITIVITY_TAKER_BPS})
+
     # Build samples per taker tier (live basis baked into each sample).
     series_by_taker: dict[Decimal, dict[tuple[str, str, str, str, str], list[EdgeSample]]] = {}
-    for taker in TAKER_TIERS_BPS:
+    for taker in taker_tiers:
         print(f"scoring samples at taker={taker} bps…", flush=True)
         series_by_taker[taker] = _build_series_for_taker(
             pairs_amm=pairs_amm,
@@ -1471,7 +1479,7 @@ def run(args: argparse.Namespace) -> int:
     # Sensitivity matrix + primary detailed scenario.
     sensitivity: list[dict[str, Any]] = []
     primary: dict[str, Any] | None = None
-    for taker in TAKER_TIERS_BPS:
+    for taker in taker_tiers:
         for reb in REBALANCE_TIERS_BPS:
             print(
                 f"analyzing taker={taker} rebalance={reb}…",
@@ -1486,7 +1494,9 @@ def run(args: argparse.Namespace) -> int:
                 max_gap=max_gap,
                 rebalance_bps=reb,
             )
-            is_primary = taker == PRIMARY_TAKER_BPS and reb == PRIMARY_REBALANCE_BPS
+            is_primary = (
+                taker == primary_taker_bps and reb == PRIMARY_REBALANCE_BPS
+            )
             sensitivity.append(
                 {
                     "taker_bps": str(taker),
@@ -1538,7 +1548,7 @@ def run(args: argparse.Namespace) -> int:
     next_steps = [
         (
             f"Primary verdict **{primary['verdict']}** under taker "
-            f"{PRIMARY_TAKER_BPS} / rebalance {PRIMARY_REBALANCE_BPS} / live basis "
+            f"{primary_taker_bps} / rebalance {PRIMARY_REBALANCE_BPS} / live basis "
             f"({primary['profit_per_day']:.4f} USDT/day, "
             f"{primary['n_stable']} stable symbols)."
         ),
@@ -1592,17 +1602,17 @@ def run(args: argparse.Namespace) -> int:
             "inventory_usd": str(INVENTORY_USD),
             "max_trade_usd": str(MAX_TRADE_USD),
             "pricing_anomaly_gate": str(metrics_cfg.max_abs_amm_spread_bps),
-            "bybit_taker_fee_bps_primary": str(PRIMARY_TAKER_BPS),
+            "bybit_taker_fee_bps_primary": str(primary_taker_bps),
             "rebalance_amortized_bps_primary": str(PRIMARY_REBALANCE_BPS),
             "basis": "live USDCUSDT 1m mid → premium bps (as-of join)",
         },
         "cost_stack": {
-            "primary_taker_bps": str(PRIMARY_TAKER_BPS),
-            "taker_tiers_bps": [str(t) for t in TAKER_TIERS_BPS],
-            "taker_believed": str(PRIMARY_TAKER_BPS),
+            "primary_taker_bps": str(primary_taker_bps),
+            "taker_tiers_bps": [str(t) for t in taker_tiers],
+            "taker_believed": str(primary_taker_bps),
             "taker_reason": (
-                "WHI-959 / bot authenticated GET /v5/account/fee-rate — "
-                "xStocks Adventure Zone maker=taker=20 bps"
+                "market costs.cex_taker_fee_bps (bybit-fluxion; WHI-959 "
+                "Adventure Zone maker=taker=20 bps via bot fee-rate pull)"
             ),
             "primary_rebalance_bps": str(PRIMARY_REBALANCE_BPS),
             "rebalance_tiers_bps": [str(t) for t in REBALANCE_TIERS_BPS],
@@ -1719,7 +1729,7 @@ def run(args: argparse.Namespace) -> int:
             "buy_fluxion_sell_bybit.",
         ],
         "headline": {
-            "taker_bps": str(PRIMARY_TAKER_BPS),
+            "taker_bps": str(primary_taker_bps),
             "rebalance_bps": str(PRIMARY_REBALANCE_BPS),
             "calendar_days": float(calendar_days),
             "profit_total_usd": f"{primary['port_profit']:.4f}",

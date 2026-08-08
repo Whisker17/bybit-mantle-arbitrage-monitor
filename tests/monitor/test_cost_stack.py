@@ -33,6 +33,30 @@ class TestKlineParse:
         assert rows[0][1] == Decimal("1.0006")  # (1.0007+1.0005)/2
 
 
+class TestDowntimeByDay:
+    def test_clips_to_window(self) -> None:
+        from monitor.analysis.cost_stack import downtime_by_day
+        from monitor.metrics.config import load_metrics_config
+
+        cfg = load_metrics_config()
+        # Gap fully outside window must not count; partial overlap must.
+        # 2026-08-07 is a Friday — NYSE open exists under default session.
+        from datetime import UTC, datetime
+
+        start = int(datetime(2026, 8, 7, 0, 0, tzinfo=UTC).timestamp() * 1000)
+        end = int(datetime(2026, 8, 8, 0, 0, tzinfo=UTC).timestamp() * 1000)
+        # Gap entirely before window.
+        gaps = [
+            (start - 3_600_000, start - 1_800_000),
+            # 2h gap fully inside window.
+            (start + 3_600_000, start + 3_600_000 + 7_200_000),
+        ]
+        rows = downtime_by_day(gaps, since_ms=start, until_ms=end, metrics_cfg=cfg)
+        assert len(rows) == 1
+        assert rows[0].day == "2026-08-07"
+        assert abs(rows[0].total_gap_hours - 2.0) < 0.05
+
+
 class TestBasisSeriesSignConvention:
     """Paying USDC is charged; receiving USDC is credited (WHI-960/909)."""
 

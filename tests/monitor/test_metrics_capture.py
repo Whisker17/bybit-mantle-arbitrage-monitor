@@ -231,3 +231,51 @@ def test_capture_config_defaults_load() -> None:
     assert cfg.capture.trade_duration_ms == 390_000
     assert cfg.capture.reentry_cooldown_ms == 420_000
     assert cfg.capture.size_usd == Decimal(1000)
+
+
+class TestLiveBasisJoin:
+    """WHI-909: live basis series must not silently fall back to constant."""
+
+    def test_config_with_live_basis_requires_join(self) -> None:
+        from monitor.metrics.capture import _config_with_live_basis
+        from monitor.metrics.config import load_metrics_config
+
+        cfg = load_metrics_config()
+        # Series present but sample too far after last bar → None (skip sample).
+        out = _config_with_live_basis(
+            cfg,
+            1_000_000,
+            basis_ts_ms=(0,),
+            basis_bps_series=(Decimal("7.5"),),
+            basis_max_age_ms=60_000,
+        )
+        assert out is None
+
+    def test_config_with_live_basis_applies_as_of(self) -> None:
+        from monitor.metrics.capture import _config_with_live_basis
+        from monitor.metrics.config import load_metrics_config
+
+        cfg = load_metrics_config()
+        out = _config_with_live_basis(
+            cfg,
+            50_000,
+            basis_ts_ms=(0, 60_000),
+            basis_bps_series=(Decimal("5"), Decimal("8")),
+            basis_max_age_ms=120_000,
+        )
+        assert out is not None
+        assert out.usdt_usdc_basis_bps == Decimal("5")
+
+    def test_config_without_series_uses_constant(self) -> None:
+        from monitor.metrics.capture import _config_with_live_basis
+        from monitor.metrics.config import load_metrics_config
+
+        cfg = load_metrics_config()
+        out = _config_with_live_basis(
+            cfg,
+            1,
+            basis_ts_ms=None,
+            basis_bps_series=None,
+            basis_max_age_ms=None,
+        )
+        assert out is cfg
