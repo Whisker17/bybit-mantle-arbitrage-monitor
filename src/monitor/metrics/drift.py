@@ -1,12 +1,16 @@
 """Sequential-execution drift bar (WHI-962).
 
 Live panel prices both legs off one snapshot. Real arb is sequential (buy →
-transfer ~10 min → sell). The bot admits only when
-``net_edge ≥ k × σ_transit`` (``drift_premium_k``; bot default 1.5).
+transfer ~10 min → sell). The executing bot admits only when
+``net_edge ≥ k × σ_transit`` (``drift_premium_k``).
 
 σ is **stale-by-design** inventory from WHI-915
 (``docs/references/m8-delay-decay.md``, lag=10m, session-split). Not
 recomputed live. Premium is a hard bar, not an expected drift.
+
+``k`` defaults to **1.5** from the sibling bot
+(``mantle-stocks-arbitrage-bots`` thresholds / decide.py) — **not** a fitted
+value from the WHI-915 span (that report derived no open-session k).
 """
 
 from __future__ import annotations
@@ -17,6 +21,7 @@ from decimal import Decimal
 from typing import Any, Literal
 
 from monitor.metrics.edge import Direction
+from monitor.metrics.pnl_v2 import PnlBucketTable
 from monitor.metrics.session import SessionKind
 from monitor.symbols.bstocks_models import BStocksPair
 from monitor.symbols.models import Pair, SigmaTransitBps
@@ -75,8 +80,8 @@ def clears_drift(
     return net_bps >= premium_bps
 
 
-def sigma_from_pair(pair: Pair | BStocksPair | object) -> SigmaTransitBps | None:
-    """Inventory σ for Fluxion pairs; bStocks has no measured transit σ."""
+def sigma_from_pair(pair: Pair | BStocksPair | None) -> SigmaTransitBps | None:
+    """Inventory σ for Fluxion pairs; bStocks / missing pair → no σ."""
     if isinstance(pair, Pair):
         return pair.sigma_transit_bps
     return None
@@ -98,7 +103,9 @@ class DriftAnnotation:
     def to_dict(self) -> dict[str, Any]:
         return {
             "sigma_transit_bps": (
-                None if self.sigma_transit_bps is None else format(self.sigma_transit_bps, "f")
+                None
+                if self.sigma_transit_bps is None
+                else format(self.sigma_transit_bps, "f")
             ),
             "drift_premium_k": format(self.drift_premium_k, "f"),
             "drift_premium_bps": (
@@ -107,11 +114,17 @@ class DriftAnnotation:
                 else format(self.drift_premium_bps, "f")
             ),
             "session": self.session,
-            "clears_drift": {
-                d: self.clears_drift.get(d) for d in _DIRECTIONS
-            },
+            "clears_drift": {d: self.clears_drift.get(d) for d in _DIRECTIONS},
             "clears_drift_optimal": self.clears_drift_optimal,
         }
+
+
+def _as_direction(value: Direction | str | None) -> Direction | None:
+    if value is None:
+        return None
+    if value in _DIRECTIONS:
+        return value  # pyright: ignore[reportReturnType]
+    return None
 
 
 def annotate_drift(
@@ -119,41 +132,37 @@ def annotate_drift(
     sigma: SigmaTransitBps | None,
     session: SessionKind | str | None,
     k: Decimal,
-    net_bps_by_direction: Mapping[str, Decimal | None] | None = None,
+    net_bps_by_direction: Mapping[Direction, Decimal | None] | None = None,
     optimal_direction: Direction | str | None = None,
     optimal_net_bps: Decimal | None = None,
 ) -> DriftAnnotation:
     """Build drift annotation from inventory σ + session + net edges.
 
-    ``net_bps_by_direction`` keys are Direction strings. When only the
-    overview optimal is known, pass ``optimal_direction`` + ``optimal_net_bps``
-    (merged into the per-direction map).
+    When only the overview optimal is known, pass ``optimal_direction`` +
+    ``optimal_net_bps`` (merged into the per-direction map).
     """
     sess = session_key(session)
     sigma_bps = select_sigma_bps(sigma, sess)
     premium = drift_premium_bps(sigma_bps, k)
 
-    nets: dict[str, Decimal | None] = {
-        d: None for d in _DIRECTIONS
-    }
+    nets: dict[Direction, Decimal | None] = {d: None for d in _DIRECTIONS}
     if net_bps_by_direction:
         for d, v in net_bps_by_direction.items():
             if d in nets:
                 nets[d] = v
-    if optimal_direction is not None and optimal_direction in nets:
+    opt_dir = _as_direction(optimal_direction)
+    if opt_dir is not None:
         # Prefer explicit optimal net when provided (same Q* as overview Net).
-        if optimal_net_bps is not None or nets[str(optimal_direction)] is None:
-            nets[str(optimal_direction)] = optimal_net_bps
+        if optimal_net_bps is not None or nets[opt_dir] is None:
+            nets[opt_dir] = optimal_net_bps
 
     clears: dict[Direction, bool | None] = {
         d: clears_drift(nets[d], premium) for d in _DIRECTIONS
     }
     opt_clear: bool | None = None
-    if optimal_direction is not None:
-        opt_key = str(optimal_direction)
-        if opt_key in clears:
-            opt_clear = clears[opt_key]  # Direction keys are the Direction literals
-    if opt_clear is None and optimal_net_bps is not None:
+    if opt_dir is not None:
+        opt_clear = clears[opt_dir]
+    elif optimal_net_bps is not None:
         opt_clear = clears_drift(optimal_net_bps, premium)
 
     return DriftAnnotation(
@@ -168,12 +177,12 @@ def annotate_drift(
 
 def drift_wire_for_pair(
     *,
-    pair: Pair | BStocksPair | object,
+    pair: Pair | BStocksPair | None,
     session: SessionKind | str | None,
     k: Decimal,
     optimal_direction: Direction | str | None = None,
     optimal_net_bps: Decimal | None = None,
-    net_bps_by_direction: Mapping[str, Decimal | None] | None = None,
+    net_bps_by_direction: Mapping[Direction, Decimal | None] | None = None,
 ) -> dict[str, Any]:
     """JSON-ready drift fields for overview row / pair detail (WHI-962)."""
     return annotate_drift(
@@ -187,49 +196,17 @@ def drift_wire_for_pair(
 
 
 def net_bps_from_pnl_tables(
-    tables: Mapping[Any, Any] | None,
-) -> dict[str, Decimal | None]:
-    """Extract fillable optimal pnl_bps per direction from PnL bucket tables.
-
-    Accepts either live ``PnlBucketTable`` objects or already-serialized dicts
-    (``optimal.result.pnl_bps`` / ``optimal.pnl_usd`` path).
-    """
-    out: dict[str, Decimal | None] = {d: None for d in _DIRECTIONS}
+    tables: Mapping[Direction, PnlBucketTable] | None,
+) -> dict[Direction, Decimal | None]:
+    """Extract optimal ``result.pnl_bps`` per direction from live bucket tables."""
+    out: dict[Direction, Decimal | None] = {d: None for d in _DIRECTIONS}
     if not tables:
         return out
     for d in _DIRECTIONS:
         table = tables.get(d)
-        if table is None:
+        if table is None or table.optimal is None:
             continue
-        # Live object path
-        optimal = getattr(table, "optimal", None)
-        if optimal is not None:
-            result = getattr(optimal, "result", None)
-            if result is not None:
-                bps = getattr(result, "pnl_bps", None)
-                if bps is not None:
-                    out[d] = bps if isinstance(bps, Decimal) else Decimal(str(bps))
-                    continue
-            # OptimalSizeResult.pnl_usd / q_star
-            q = getattr(optimal, "q_star_usd", None)
-            pnl = getattr(optimal, "pnl_usd", None)
-            if q is not None and pnl is not None and q > 0:
-                out[d] = (pnl / q) * Decimal(10_000)
-                continue
-        # Serialized dict path
-        if isinstance(table, dict):
-            opt = table.get("optimal")
-            if not isinstance(opt, dict):
-                continue
-            result = opt.get("result")
-            if isinstance(result, dict) and result.get("pnl_bps") is not None:
-                out[d] = Decimal(str(result["pnl_bps"]))
-                continue
-            q_s, p_s = opt.get("q_star_usd"), opt.get("pnl_usd")
-            if q_s is not None and p_s is not None:
-                q = Decimal(str(q_s))
-                if q > 0:
-                    out[d] = (Decimal(str(p_s)) / q) * Decimal(10_000)
+        out[d] = table.optimal.result.pnl_bps
     return out
 
 

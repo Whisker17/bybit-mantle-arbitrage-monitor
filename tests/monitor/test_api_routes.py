@@ -261,6 +261,45 @@ def test_pairs_overview_with_depth_exposes_optimal(client_with_depth: TestClient
     assert (net == 0) == (bucket == 0)
 
 
+def test_pairs_overview_and_detail_expose_drift_bar(
+    client_with_depth: TestClient,
+) -> None:
+    """WHI-962: pair snapshot carries σ, k×σ premium, per-direction clears_drift."""
+    r = client_with_depth.get("/api/pairs")
+    assert r.status_code == 200
+    aapl = next(row for row in r.json()["rows"] if row["pair_id"] == "AAPLx")
+    # Inventory σ @10m open/closed from m8-delay-decay (session-selected).
+    assert aapl["sigma_transit_bps"] is not None
+    assert aapl["drift_premium_k"] == "1.5"
+    assert aapl["drift_premium_bps"] is not None
+    # k × σ
+    assert Decimal(aapl["drift_premium_bps"]) == Decimal(aapl["sigma_transit_bps"]) * Decimal(
+        "1.5"
+    )
+    assert "buy_fluxion_sell_bybit" in aapl["clears_drift"]
+    assert "buy_bybit_sell_fluxion" in aapl["clears_drift"]
+    assert "clears_drift_optimal" in aapl
+
+    # CRCLx has high open σ (68.83) — wire must expose it when present.
+    crcl = next(row for row in r.json()["rows"] if row["pair_id"] == "CRCLx")
+    assert crcl.get("session") is not None, crcl
+    assert crcl["sigma_transit_bps"] in ("68.83", "58.57"), crcl  # open or closed
+    detail = client_with_depth.get("/api/pairs/AAPLx")
+    assert detail.status_code == 200
+    body = detail.json()
+    assert "drift" in body["pnl_v2"]
+    drift = body["pnl_v2"]["drift"]
+    assert drift["sigma_transit_bps"] == aapl["sigma_transit_bps"]
+    assert drift["drift_premium_bps"] == aapl["drift_premium_bps"]
+    assert set(drift["clears_drift"].keys()) == {
+        "buy_fluxion_sell_bybit",
+        "buy_bybit_sell_fluxion",
+    }
+    # Overview enrichment reuses the same drift fields.
+    assert body["overview"]["sigma_transit_bps"] == drift["sigma_transit_bps"]
+    assert body["overview"]["clears_drift"] == drift["clears_drift"]
+
+
 def test_pairs_overview_flat_pnl_null_when_no_depth(client: TestClient) -> None:
     """WHI-824: non-ok pnl_v2 leaves flat sort fields None (nulls last / no Top-N)."""
     r = client.get("/api/pairs")

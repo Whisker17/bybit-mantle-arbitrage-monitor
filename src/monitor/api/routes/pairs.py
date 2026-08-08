@@ -2,6 +2,7 @@
 
 from __future__ import annotations
 
+from collections.abc import Mapping
 from decimal import Decimal
 from typing import Any
 
@@ -126,28 +127,42 @@ def _enrich_overview_row(
     row: dict[str, Any],
     *,
     summary: PnlOptimalSummary,
-    pair: InventoryPair | object,
+    pair: InventoryPair | None,
     k: Decimal,
-    tables: dict[Any, Any] | None = None,
+    tables: Mapping[Any, Any] | None = None,
+    drift: dict[str, Any] | None = None,
+    session_fallback: str | None = None,
 ) -> dict[str, Any]:
     """PnL flat keys + Net@Q* + sequential drift bar (WHI-966 + WHI-962).
 
     Single seam for list + detail overview enrichment so a new wire field
     cannot land on one path and miss the other (see
-    ``PnlOptimalSummary.overview_enrichment_wire``).
+    ``PnlOptimalSummary.overview_enrichment_wire``). Pass ``drift`` when the
+    annotation was already built for ``pnl_v2.drift`` (avoid double compute).
+
+    ``session_fallback`` is overview ``session_now`` when the row has no
+    per-pair session (no ticks yet) so inventory σ still selects open/closed.
     """
     enriched = dict(row)
     enriched.update(summary.overview_enrichment_wire())
-    enriched.update(
-        drift_wire_for_pair(
-            pair=pair,
-            session=row.get("session"),
-            k=k,
-            optimal_direction=summary.direction,
-            optimal_net_bps=summary.optimal_net_pnl_bps,
-            net_bps_by_direction=net_bps_from_pnl_tables(tables),
+    if drift is not None:
+        enriched.update(drift)
+    else:
+        inv_pair = pair if isinstance(pair, (Pair, BStocksPair)) else None
+        nets = None
+        if tables is not None:
+            nets = net_bps_from_pnl_tables(tables)
+        sess = row.get("session") or session_fallback
+        enriched.update(
+            drift_wire_for_pair(
+                pair=inv_pair,
+                session=sess,
+                k=k,
+                optimal_direction=summary.direction,
+                optimal_net_bps=summary.optimal_net_pnl_bps,
+                net_bps_by_direction=nets,
+            )
         )
-    )
     return enriched
 
 
@@ -332,6 +347,11 @@ def _list_pairs_body(state: AppState, runtime: MarketRuntime) -> dict[str, Any]:
         )
         ts = now_ms()
         k = runtime.metrics.pnl_v2.drift_premium_k
+        session_now = body.get("session_now")
+        if isinstance(session_now, str):
+            session_fallback: str | None = session_now
+        else:
+            session_fallback = None
         rows_out: list[dict[str, Any]] = []
         for row in body["rows"]:
             pair_id = row["pair_id"]
@@ -341,7 +361,11 @@ def _list_pairs_body(state: AppState, runtime: MarketRuntime) -> dict[str, Any]:
                 # Builder rows should always be configured pairs; never 404 the list.
                 empty = PnlOptimalSummary(status="no_pool", has_depth=False)
                 enriched = _enrich_overview_row(
-                    row, summary=empty, pair=object(), k=k
+                    row,
+                    summary=empty,
+                    pair=None,
+                    k=k,
+                    session_fallback=session_fallback,
                 )
                 enriched["mm_active"] = "unknown"
                 rows_out.append(enriched)
@@ -355,6 +379,7 @@ def _list_pairs_body(state: AppState, runtime: MarketRuntime) -> dict[str, Any]:
                 pair=pair,
                 k=k,
                 tables=snap.tables,
+                session_fallback=session_fallback,
             )
             enriched["mm_active"] = _mm_active_for(
                 state,
@@ -384,16 +409,19 @@ def _get_pair_body(
     session = None
     if "overview" in body and isinstance(body["overview"], dict):
         session = body["overview"].get("session")
+    if not session:
+        session = body.get("session_now")
+    inv_pair = pair if isinstance(pair, (Pair, BStocksPair)) else None
     drift = drift_wire_for_pair(
-        pair=pair,
-        session=session,
+        pair=inv_pair,
+        session=session if isinstance(session, str) else None,
         k=k,
         optimal_direction=ov_summary.direction,
         optimal_net_bps=ov_summary.optimal_net_pnl_bps,
         net_bps_by_direction=net_bps_from_pnl_tables(pnl.tables),
     )
-    # Nested under pnl_v2 for the detail requirement breakdown; also flat on
-    # overview for parity with the list path.
+    # Nested under pnl_v2 for the detail requirement breakdown; reuse the
+    # same dict on overview enrichment (no double annotate_drift).
     body["pnl_v2"] = {**body["pnl_v2"], "drift": drift}
 
     with runtime.lock:
@@ -410,9 +438,9 @@ def _get_pair_body(
             body["overview"] = _enrich_overview_row(
                 body["overview"],
                 summary=ov_summary,
-                pair=pair,
+                pair=inv_pair,
                 k=k,
-                tables=pnl.tables,
+                drift=drift,
             )
             body["overview"]["mm_active"] = _mm_active_for(
                 state,
