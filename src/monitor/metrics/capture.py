@@ -40,6 +40,7 @@ from monitor.quotes import (
     FluxionPoolStateTick,
     FluxionRfqQuoteTick,
 )
+from monitor.storage.reader import JournalReader
 from monitor.symbols.bstocks_models import BStocksPair
 from monitor.symbols.models import Pair
 
@@ -211,10 +212,11 @@ def series_stats(
     trade_duration_ms: int,
     min_edge_bps: Decimal = Decimal(0),
     max_trade_usd: Decimal | None = None,
-) -> CaptureSeriesStats | None:
+) -> tuple[CaptureSeriesStats, list[OpportunityWindow]] | None:
     """Window + single-flight stats for one homogeneous series.
 
-    Returns None when samples is empty (caller skips empty series).
+    Returns ``(stats, windows)`` so callers can reuse windows for sparklines
+    without re-running ``detect_windows``. None when samples is empty.
     """
     if not samples:
         return None
@@ -235,7 +237,7 @@ def series_stats(
     per_day = float(n) / float(days) if days > 0 else 0.0
     profit_day = profit / days if days > 0 else Decimal(0)
     s0 = ordered[0]
-    return CaptureSeriesStats(
+    stats = CaptureSeriesStats(
         pair_id=s0.pair_id,
         direction=s0.direction,  # type: ignore[arg-type]
         session=s0.session,
@@ -248,6 +250,7 @@ def series_stats(
         capturable_usd_per_day=profit_day,
         span_ms=span_ms,
     )
+    return stats, wins
 
 
 def sparkline_from_windows(
@@ -448,6 +451,29 @@ def _group_key(
     return (s.pair_id, s.direction, s.session, s.venue)
 
 
+def _placeholder(
+    status: CaptureStatus,
+    *,
+    pair_id: str,
+    capture: CaptureConfig,
+    since_ms: int,
+    until_ms: int,
+    span_ms: int | None = None,
+) -> CapturePairSnapshot:
+    """Shared empty / disabled / insufficient card (same base fields)."""
+    return CapturePairSnapshot(
+        status=status,
+        pair_id=pair_id,
+        lookback_ms=capture.lookback_ms,
+        span_ms=span_ms if span_ms is not None else max(1, until_ms - since_ms),
+        since_ms=since_ms,
+        until_ms=until_ms,
+        trade_duration_ms=capture.trade_duration_ms,
+        reentry_cooldown_ms=capture.reentry_cooldown_ms,
+        size_usd=capture.size_usd,
+    )
+
+
 def compute_capture_from_samples(
     samples: Sequence[EdgeSample],
     *,
@@ -455,27 +481,39 @@ def compute_capture_from_samples(
     since_ms: int,
     until_ms: int,
     capture: CaptureConfig,
+    lookback_since_ms: int | None = None,
 ) -> CapturePairSnapshot:
     """Aggregate EdgeSamples into a pair-level capture snapshot.
 
-    Picks the best (direction, venue, session) series by capturable $/day
-    for the overview headline; sparkline uses that direction's windows
+    Picks the best (direction, venue) by capturable $/day for the overview
+    headline (open+closed summed). Sparkline uses that direction's windows
     across sessions (same venue).
+
+    ``span_ms`` for rates is **actual sample coverage**
+    ``[min(ts), max(ts)]`` when samples exist — not the configured lookback —
+    so a 3 h journal under a 24 h lookback does not understate Cap $/d by 8×.
+    ``lookback_since_ms`` is recorded on the wire as the configured floor.
     """
-    span_ms = max(1, until_ms - since_ms)
-    empty = CapturePairSnapshot(
-        status="no_samples",
-        pair_id=pair_id,
-        lookback_ms=capture.lookback_ms,
-        span_ms=span_ms,
-        since_ms=since_ms,
-        until_ms=until_ms,
-        trade_duration_ms=capture.trade_duration_ms,
-        reentry_cooldown_ms=capture.reentry_cooldown_ms,
-        size_usd=capture.size_usd,
-    )
+    cfg_since = lookback_since_ms if lookback_since_ms is not None else since_ms
     if not samples:
-        return empty
+        return _placeholder(
+            "no_samples",
+            pair_id=pair_id,
+            capture=capture,
+            since_ms=cfg_since,
+            until_ms=until_ms,
+        )
+
+    # Coverage span from observed samples (matches edge_quant book_span style).
+    ts_min = min(s.ts_ms for s in samples)
+    ts_max = max(s.ts_ms for s in samples)
+    span_ms = max(1, ts_max - ts_min)
+    # Wire since/until still reflect the requested lookback window edges,
+    # clamped to observed data so hover shows what was actually used.
+    effective_since = max(cfg_since, ts_min)
+    effective_until = min(until_ms, ts_max) if until_ms >= ts_max else until_ms
+    if effective_until < effective_since:
+        effective_until = until_ms
 
     groups: dict[tuple[str, str, str, str], list[EdgeSample]] = {}
     for s in samples:
@@ -484,7 +522,7 @@ def compute_capture_from_samples(
     series_list: list[CaptureSeriesStats] = []
     windows_by_key: dict[tuple[str, str, str, str], list[OpportunityWindow]] = {}
     for key, group in groups.items():
-        st = series_stats(
+        result = series_stats(
             group,
             span_ms=span_ms,
             max_gap_ms=capture.max_gap_ms,
@@ -493,18 +531,21 @@ def compute_capture_from_samples(
             min_edge_bps=capture.min_edge_bps,
             max_trade_usd=capture.size_usd,
         )
-        if st is None:
+        if result is None:
             continue
+        st, wins = result
         series_list.append(st)
-        ordered = sorted(group, key=lambda s: s.ts_ms)
-        windows_by_key[key] = detect_windows(
-            ordered,
-            min_edge_bps=capture.min_edge_bps,
-            max_gap_ms=capture.max_gap_ms,
-        )
+        windows_by_key[key] = wins
 
     if not series_list:
-        return empty
+        return _placeholder(
+            "no_samples",
+            pair_id=pair_id,
+            capture=capture,
+            since_ms=cfg_since,
+            until_ms=until_ms,
+            span_ms=span_ms,
+        )
 
     # Best series by capturable $/day, then windows/day as tiebreak.
     best = max(
@@ -520,8 +561,8 @@ def compute_capture_from_samples(
             spark_wins.extend(wins)
     spark = sparkline_from_windows(
         spark_wins,
-        since_ms=since_ms,
-        until_ms=until_ms,
+        since_ms=effective_since,
+        until_ms=max(effective_until, effective_since),
         bucket_ms=capture.sparkline_bucket_ms,
     )
 
@@ -529,21 +570,30 @@ def compute_capture_from_samples(
     # a full day of capture is not undercounted by session split.
     headline_windows = 0
     headline_profit = Decimal(0)
+    sessions_in_headline: set[str] = set()
     for st in series_list:
         if st.direction == best.direction and st.venue == best.venue:
             headline_windows += st.n_windows
             headline_profit += st.capturable_usd
+            sessions_in_headline.add(st.session)
     days = Decimal(span_ms) / Decimal(DAY_MS)
     headline_wpd = float(headline_windows) / float(days) if days > 0 else 0.0
     headline_ppd = headline_profit / days if days > 0 else Decimal(0)
+    # session is only set when the headline is a single session; when open+closed
+    # are summed, leave null so the wire does not imply "all N windows were open".
+    headline_session: Literal["open", "closed"] | None = None
+    if len(sessions_in_headline) == 1:
+        only = next(iter(sessions_in_headline))
+        if only in ("open", "closed"):
+            headline_session = only  # type: ignore[assignment]
 
     return CapturePairSnapshot(
         status="ok",
         pair_id=pair_id,
         lookback_ms=capture.lookback_ms,
         span_ms=span_ms,
-        since_ms=since_ms,
-        until_ms=until_ms,
+        since_ms=effective_since,
+        until_ms=max(effective_until, effective_since),
         trade_duration_ms=capture.trade_duration_ms,
         reentry_cooldown_ms=capture.reentry_cooldown_ms,
         size_usd=capture.size_usd,
@@ -551,7 +601,7 @@ def compute_capture_from_samples(
         capturable_usd_per_day=headline_ppd,
         n_windows=headline_windows,
         direction=best.direction,
-        session=best.session,
+        session=headline_session,
         venue=best.venue,
         series=tuple(
             sorted(
@@ -577,28 +627,19 @@ def disabled_snapshot(
     """Placeholder when capture is turned off in config."""
     until = now_ms
     since = max(0, until - capture.lookback_ms)
-    return CapturePairSnapshot(
-        status="disabled",
+    return _placeholder(
+        "disabled",
         pair_id=pair_id,
-        lookback_ms=capture.lookback_ms,
-        span_ms=max(1, until - since),
+        capture=capture,
         since_ms=since,
         until_ms=until,
-        trade_duration_ms=capture.trade_duration_ms,
-        reentry_cooldown_ms=capture.reentry_cooldown_ms,
-        size_usd=capture.size_usd,
     )
-
-
-def capture_cfg(metrics: MetricsConfig) -> CaptureConfig:
-    """Capture tunables (always present after WHI-963 config load)."""
-    return metrics.capture
 
 
 def build_capture_pair_snapshot(
     *,
     pair: Pair | BStocksPair,
-    reader: Any,
+    reader: JournalReader,
     metrics: MetricsConfig,
     quote_decimals: int,
     now_ms: int,
@@ -606,8 +647,11 @@ def build_capture_pair_snapshot(
 ) -> CapturePairSnapshot:
     """Load journal ticks for ``pair`` and compute capture stats (I/O seam).
 
-    ``reader`` is a ``JournalReader`` (typed as Any to avoid a metrics→storage
-    import cycle at module load — callers pass the real reader).
+    Parity with ``scripts/xstocks_edge_quant.py`` on the same span:
+    pass the same ``sample_ms`` / ``align_ms`` / ``max_gap_ms`` /
+    ``trade_duration_ms`` / ``reentry_cooldown_ms`` / ``size_usd`` and
+    compare ``series_stats`` to the script's T=0 ``threshold_sweep`` row
+    (``capturable_profit_per_day`` / ``windows_per_day``).
     """
     capture = metrics.capture
     if not capture.enabled:
@@ -634,12 +678,15 @@ def build_capture_pair_snapshot(
     )
     depths: list[BybitDepthTick] = []
     if capture.use_depth:
+        # Match book sample_ms so depth load stays O(lookback/sample), not 1 Hz.
         depths = reader.bybit_depths_range(
-            pair.id, since_ms=load_since, until_ms=until_ms
+            pair.id,
+            since_ms=load_since,
+            until_ms=until_ms,
+            sample_ms=capture.sample_ms,
         )
 
     if not books or not pools:
-        span_ms = max(1, until_ms - since_ms)
         # Distinguish no-pool inventory from simply empty journal coverage.
         has_amm = False
         if isinstance(pair, Pair):
@@ -647,16 +694,12 @@ def build_capture_pair_snapshot(
         elif isinstance(pair, BStocksPair):
             has_amm = pair.pancake.amm is not None
         status: CaptureStatus = "no_pool" if not has_amm else "insufficient"
-        return CapturePairSnapshot(
-            status=status,
+        return _placeholder(
+            status,
             pair_id=pair.id,
-            lookback_ms=capture.lookback_ms,
-            span_ms=span_ms,
+            capture=capture,
             since_ms=since_ms,
             until_ms=until_ms,
-            trade_duration_ms=capture.trade_duration_ms,
-            reentry_cooldown_ms=capture.reentry_cooldown_ms,
-            size_usd=capture.size_usd,
         )
 
     samples = build_amm_samples(
@@ -692,4 +735,5 @@ def build_capture_pair_snapshot(
         since_ms=since_ms,
         until_ms=until_ms,
         capture=capture,
+        lookback_since_ms=since_ms,
     )

@@ -26,7 +26,6 @@ from monitor.metrics.amm_pool import amm_pool_from_pair_tick
 from monitor.metrics.capture import (
     CapturePairSnapshot,
     build_capture_pair_snapshot,
-    disabled_snapshot,
 )
 from monitor.metrics.drift import (
     drift_wire_for_pair,
@@ -265,21 +264,15 @@ def _capture_snapshot_for_pair(
         hit = cache.get(pair.id)
         if hit is not None:
             return hit
-    if not isinstance(pair, (Pair, BStocksPair)):
-        snap = disabled_snapshot(
-            str(getattr(pair, "id", "unknown")),
-            capture=runtime.metrics.capture,
-            now_ms=now_ms(),
-        )
-    else:
-        snap = build_capture_pair_snapshot(
-            pair=pair,
-            reader=reader,
-            metrics=runtime.metrics,
-            quote_decimals=runtime.quote_decimals,
-            now_ms=now_ms(),
-            has_rfq=runtime.has_rfq,
-        )
+    # InventoryPair is Pair | BStocksPair; both are accepted by the builder.
+    snap = build_capture_pair_snapshot(
+        pair=pair,
+        reader=reader,
+        metrics=runtime.metrics,
+        quote_decimals=runtime.quote_decimals,
+        now_ms=now_ms(),
+        has_rfq=runtime.has_rfq,
+    )
     if cache is not None:
         cache.put(pair.id, snap)
     return snap

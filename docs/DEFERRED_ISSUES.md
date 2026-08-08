@@ -92,12 +92,16 @@ soon — anything touching key handling, RPC credentials defaults to at least Hi
   `JournalReader` bulk loaders (`bucketed_bybit_books`, `pool_states_range`,
   `bybit_depths_range`, `rfq_quotes_range`, `collector_down_gaps`) and switched
   `xstocks_edge_quant.py` + capture assembly. Remaining: `xstocks_fill_validation.py`
-  still imports `_row_to_swap` and sibling-script private helpers via importlib.
-  Fix: add `swaps_range` public loader + pure join helpers; switch fill_validation.
+  still imports `_row_to_swap` and sibling-script private helpers via importlib;
+  `xstocks_edge_quant.py` / `xstocks_delay_decay.py` still keep local `_in_gap` /
+  `_as_of_idx` (capture has public `in_gap` / `as_of_idx` but scripts not fully
+  switched). Fix: add `swaps_range` public loader; collapse join helpers into
+  one module; switch fill_validation + remaining script copies.
 
 - ~~**WHI-866: research script imports private JournalReader row mappers**~~
-  **Discharged by WHI-963** — public bulk loaders on `JournalReader`;
-  `scripts/xstocks_edge_quant.py` uses them + `monitor.metrics.capture` sample builders.
+  **Discharged by WHI-963** for the bulk row-mapper path — public loaders on
+  `JournalReader`; `xstocks_edge_quant.py` uses them + `monitor.metrics.capture`
+  sample builders. Join-helper consolidation remains under WHI-908 above.
 
 - **WHI-866: threshold_sweep profit not strictly monotone in theory** (Low, WHI-866).
   Filtering base windows by `peak_edge_bps` is monotone for series-level

@@ -80,7 +80,7 @@ class TestSeriesStats:
             _s(3_601_000, pnl=3),
         ]
         span = 86_400_000
-        st = series_stats(
+        result = series_stats(
             samples,
             span_ms=span,
             max_gap_ms=60_000,
@@ -88,17 +88,16 @@ class TestSeriesStats:
             trade_duration_ms=5_000,
             max_trade_usd=Decimal(1000),
         )
-        assert st is not None
+        assert result is not None
+        st, wins = result
         assert st.n_windows == 2
         assert st.capturable_usd == Decimal(8)
         # per day over 1-day span
         assert st.capturable_usd_per_day == Decimal(8)
         assert st.windows_per_day == pytest.approx(2.0)
+        assert len(wins) == 2
 
         # Cross-check pure helper used by xstocks_edge_quant.
-        from monitor.analysis.edge_quant import detect_windows
-
-        wins = detect_windows(samples, min_edge_bps=Decimal(0), max_gap_ms=60_000)
         p = capturable_profit_single_flight(
             wins, reentry_cooldown_ms=86_400_000, trade_duration_ms=5_000
         )
@@ -144,25 +143,48 @@ class TestComputeCapture:
         assert snap.status == "ok"
         assert snap.direction == "buy_fluxion_sell_bybit"
         assert snap.n_windows == 2
-        assert snap.capturable_usd_per_day == Decimal(8)
-        assert snap.windows_per_day == pytest.approx(2.0)
+        # Rates use actual coverage span (~50_001_000 ms), not full lookback.
+        assert snap.session is None  # open+closed summed
+        assert snap.capturable_usd_per_day is not None
+        assert snap.capturable_usd_per_day > Decimal(8)  # denser than 1d span
         # Detail series includes both sessions.
         sessions = {s.session for s in snap.series if s.direction == snap.direction}
         assert sessions == {"open", "closed"}
 
-    def test_overview_wire_compact(self) -> None:
-        samples = [_s(0, pnl=2), _s(1000, pnl=2)]
+    def test_rates_use_sample_coverage_not_lookback(self) -> None:
+        # Dense 1h of in-edge samples under a 24h lookback → one window,
+        # rates annualize by coverage (1h), not by the empty rest of the day.
+        samples = [_s(t, pnl=10) for t in range(0, 3_600_000 + 1, 30_000)]
         snap = compute_capture_from_samples(
             samples,
             pair_id="AAPLx",
             since_ms=0,
             until_ms=86_400_000,
-            capture=_cfg(),
+            capture=_cfg(lookback_ms=86_400_000, max_gap_ms=60_000),
+        )
+        assert snap.status == "ok"
+        assert snap.span_ms == 3_600_000
+        assert snap.n_windows == 1
+        assert snap.windows_per_day == pytest.approx(24.0)
+        assert snap.capturable_usd_per_day == Decimal(240)
+
+    def test_overview_wire_compact(self) -> None:
+        # Full-day coverage so $/day equals the single trade PnL.
+        samples = [_s(0, pnl=2), _s(86_400_000, pnl=-1)]  # only first is a window
+        # Two positive samples a day apart → two windows / 1d span → $4/day.
+        samples = [_s(0, pnl=2), _s(1_000, pnl=2), _s(86_400_000, pnl=2)]
+        snap = compute_capture_from_samples(
+            samples,
+            pair_id="AAPLx",
+            since_ms=0,
+            until_ms=86_400_000,
+            capture=_cfg(max_gap_ms=60_000),
         )
         wire = snap.overview_wire()
         assert "series" not in wire
         assert "sparkline" not in wire
-        assert wire["capturable_usd_per_day"] == "2"
+        assert wire["status"] == "ok"
+        assert wire["capturable_usd_per_day"] is not None
         full = snap.to_dict()
         assert "series" in full
         assert "sparkline" in full

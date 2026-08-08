@@ -298,10 +298,19 @@ window count × occupancy.
   Trailing `lookback_ms` default 24 h; `sample_ms` 30 s.
 - API: nested `capture` on overview rows (compact) + full snapshot (series +
   sparkline) on pair detail. TTL cache `capture_cache_ttl_s` default **30**
-  (longer than PnL — trailing window is heavy).
+  (longer than PnL — trailing window is heavy). Depth load uses
+  `sample_ms` (not 1 Hz) so cold recompute stays O(pairs × lookback/sample).
+- Rates normalize by **observed sample coverage** (`max(ts)−min(ts)`), not the
+  configured lookback alone — short journals do not understate Cap $/d.
+- Parity: same `sample_ms` / `trade_duration_ms` / `reentry_cooldown_ms` /
+  `size_usd` / span as `scripts/xstocks_edge_quant.py` → T=0
+  `capturable_profit_per_day` / `windows_per_day` within rounding (live defaults
+  use bot occupancy 390s/420s; the offline script's primary go/no-go uses
+  5s flight + 1-day re-entry — pass matching flags to compare).
 - Web: overview **Cap $/d** column (subline windows/day); detail Capture rate
   panel with hourly windows sparkline.
-- Out of scope: forecasting; per-address competition.
+- Out of scope: forecasting; per-address competition. VPS P95 re-measure after
+  deploy (acceptance gate; not automated in CI).
 
 ### 2.7 Multi-market metrics & attribution (WHI-773 / M7-4)
 
