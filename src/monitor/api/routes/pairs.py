@@ -122,6 +122,35 @@ def _market_fields(runtime: MarketRuntime) -> dict[str, Any]:
     }
 
 
+def _enrich_overview_row(
+    row: dict[str, Any],
+    *,
+    summary: PnlOptimalSummary,
+    pair: InventoryPair | object,
+    k: Decimal,
+    tables: dict[Any, Any] | None = None,
+) -> dict[str, Any]:
+    """PnL flat keys + Net@Q* + sequential drift bar (WHI-966 + WHI-962).
+
+    Single seam for list + detail overview enrichment so a new wire field
+    cannot land on one path and miss the other (see
+    ``PnlOptimalSummary.overview_enrichment_wire``).
+    """
+    enriched = dict(row)
+    enriched.update(summary.overview_enrichment_wire())
+    enriched.update(
+        drift_wire_for_pair(
+            pair=pair,
+            session=row.get("session"),
+            k=k,
+            optimal_direction=summary.direction,
+            optimal_net_bps=summary.optimal_net_pnl_bps,
+            net_bps_by_direction=net_bps_from_pnl_tables(tables),
+        )
+    )
+    return enriched
+
+
 def _empty_overview(state: AppState, runtime: MarketRuntime, *, error: str) -> dict[str, Any]:
     """Explicit accumulating overview (no dashed placeholder)."""
     from datetime import UTC, datetime
@@ -310,34 +339,22 @@ def _list_pairs_body(state: AppState, runtime: MarketRuntime) -> dict[str, Any]:
                 pair = inv.pair_by_id(pair_id)
             except KeyError:
                 # Builder rows should always be configured pairs; never 404 the list.
-                enriched = dict(row)
                 empty = PnlOptimalSummary(status="no_pool", has_depth=False)
-                enriched.update(empty.overview_enrichment_wire())
-                enriched.update(
-                    drift_wire_for_pair(
-                        pair=object(),
-                        session=row.get("session"),
-                        k=k,
-                    )
+                enriched = _enrich_overview_row(
+                    row, summary=empty, pair=object(), k=k
                 )
                 enriched["mm_active"] = "unknown"
                 rows_out.append(enriched)
                 continue
             snap = _pnl_snapshot_for_pair(runtime, state, pair=pair, reader=reader)
             summary = overview_pnl_summary(snap)
-            enriched = dict(row)
-            # WHI-824 + WHI-966: flat sort keys + Net@Q* from the same summary.
-            enriched.update(summary.overview_enrichment_wire())
-            # WHI-962: sequential-execution bar (k × σ) + per-direction clears.
-            enriched.update(
-                drift_wire_for_pair(
-                    pair=pair,
-                    session=row.get("session"),
-                    k=k,
-                    optimal_direction=summary.direction,
-                    optimal_net_bps=summary.optimal_net_pnl_bps,
-                    net_bps_by_direction=net_bps_from_pnl_tables(snap.tables),
-                )
+            # WHI-824/966 + WHI-962: flat sort + Net@Q* + drift in one seam.
+            enriched = _enrich_overview_row(
+                row,
+                summary=summary,
+                pair=pair,
+                k=k,
+                tables=snap.tables,
             )
             enriched["mm_active"] = _mm_active_for(
                 state,
@@ -389,10 +406,14 @@ def _get_pair_body(
             else []
         )
         if "overview" in body and isinstance(body["overview"], dict):
-            body["overview"] = dict(body["overview"])
-            # WHI-824 + WHI-966: flat sort keys + Net@Q* (same as list path).
-            body["overview"].update(ov_summary.overview_enrichment_wire())
-            body["overview"].update(drift)
+            # WHI-824/966 + WHI-962: same enrichment seam as list path.
+            body["overview"] = _enrich_overview_row(
+                body["overview"],
+                summary=ov_summary,
+                pair=pair,
+                k=k,
+                tables=pnl.tables,
+            )
             body["overview"]["mm_active"] = _mm_active_for(
                 state,
                 pair_id=pair_id,

@@ -156,17 +156,20 @@ export function driftBarTitle(row: {
   if (row.drift_premium_bps == null && row.sigma_transit_bps == null) {
     return null;
   }
-  const k = row.drift_premium_k ?? "1.5";
+  const kPart =
+    row.drift_premium_k != null && row.drift_premium_k !== ""
+      ? `${row.drift_premium_k}×σ`
+      : "k×σ";
   const sigma = row.sigma_transit_bps ?? "—";
   const prem = row.drift_premium_bps ?? "—";
   const net = row.net_edge_bps ?? "—";
   if (row.clears_drift_optimal === false) {
-    return `Fails sequential bar: net ${net} bps < ${k}×σ=${prem} bps (σ=${sigma})`;
+    return `Fails sequential bar: net ${net} bps < ${kPart}=${prem} bps (σ=${sigma})`;
   }
   if (row.clears_drift_optimal === true) {
-    return `Clears sequential bar: net ${net} bps ≥ ${k}×σ=${prem} bps (σ=${sigma})`;
+    return `Clears sequential bar: net ${net} bps ≥ ${kPart}=${prem} bps (σ=${sigma})`;
   }
-  return `Sequential bar ${k}×σ=${prem} bps (σ=${sigma})`;
+  return `Sequential bar ${kPart}=${prem} bps (σ=${sigma})`;
 }
 
 export function overviewNetCell(

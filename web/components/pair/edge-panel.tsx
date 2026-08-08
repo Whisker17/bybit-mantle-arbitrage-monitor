@@ -303,14 +303,28 @@ function Bps({
 function DriftRequirementLine({
   drift,
   netBps,
+  direction,
 }: {
   drift: DriftAnnotation | null | undefined;
   netBps?: string | null;
+  /** Selected bucket direction — use that leg's clears_drift when present. */
+  direction?: Direction | null;
 }) {
-  const line = formatDriftRequirement(drift, netBps);
+  if (drift == null) return null;
+  // Prefer the toggled direction's gate so the line tracks the direction control.
+  const dirClear =
+    direction != null ? (drift.clears_drift?.[direction] ?? null) : null;
+  const view: DriftAnnotation = {
+    ...drift,
+    clears_drift_optimal:
+      dirClear !== null && dirClear !== undefined
+        ? dirClear
+        : drift.clears_drift_optimal,
+  };
+  const line = formatDriftRequirement(view, netBps);
   if (line == null) return null;
-  const fails = drift?.clears_drift_optimal === false;
-  const clears = drift?.clears_drift_optimal === true;
+  const fails = view.clears_drift_optimal === false;
+  const clears = view.clears_drift_optimal === true;
   return (
     <p
       className={cn(
@@ -357,9 +371,15 @@ function BucketPnlPanel({
   const thin = isThinDepth(table);
   const best = snap.best;
   const drift = snap.drift;
-  const failsDrift = drift?.clears_drift_optimal === false;
+  // Direction-aware drift gate (selected toggle), fall back to optimal.
+  const dirClear =
+    drift?.clears_drift?.[direction] ?? drift?.clears_drift_optimal ?? null;
+  const failsDrift = dirClear === false;
   const capturable =
     best.meets_min_profit !== false && !failsDrift && best.status === "ok";
+  const dirNetBps =
+    table?.optimal?.result.pnl_bps ??
+    (best.direction === direction ? best.optimal_net_pnl_bps : null);
 
   return (
     <div className="rounded-md border border-border bg-card px-3 py-2.5 space-y-2">
@@ -443,7 +463,8 @@ function BucketPnlPanel({
 
       <DriftRequirementLine
         drift={drift}
-        netBps={best.optimal_net_pnl_bps}
+        netBps={dirNetBps ?? best.optimal_net_pnl_bps}
+        direction={direction}
       />
 
       {!table ? (
