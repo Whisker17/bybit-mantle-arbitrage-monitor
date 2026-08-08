@@ -242,12 +242,12 @@ placeholders. Agents must not assume a module exists until its issue lands. -->
     bybit-fluxion journal (PnL v2 engine, $500/$1k rungs, AMM vs RFQ).
     Report `docs/references/m8-xstocks-edge-quant.md` (+ companion JSON).
     Headline is AMM-only portfolio single-flight at ≤$1k/trade; gates the
-    sibling `mantle-stocks-arbitrage-bots` M0.
+    sibling `mantle-stocks-arbitrage-bots` M0. Study used `pricing_anomaly` gate **500**; **WHI-964** ships panel default **300**.
   - **M8 on-chain fill validation (WHI-908) landed:** pure
     `monitor.analysis.fill_validation` + `scripts/xstocks_fill_validation.py`
     ranks top paper windows, matches journal `fluxion_swaps`, classifies
     taken / untaken-with-liquidity / untaken-too-thin, reports as-of join
-    staleness and `pricing_anomaly` gate sensitivity. Note
+    staleness and `pricing_anomaly` gate sensitivity (500→300 retains ~55.7% of that study's portfolio headline). Note
     `docs/references/m8-onchain-fill-validation.md` (+ companion JSON).
   - **M8 delay-decay / sequential cycle (WHI-915) landed:** pure
     `monitor.analysis.delay_decay` (realised PnL distributions, transit σ,
