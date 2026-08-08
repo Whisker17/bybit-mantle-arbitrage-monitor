@@ -129,10 +129,11 @@ class MetricsConfig(BaseModel):
     max_breach_gap_ms: int = Field(default=300_000, ge=1)
     # PnL v2 cash-flow engine (WHI-756). Required — fail-fast at load (config/README).
     pnl_v2: PnlV2Config
-    # WHI-822: |AMM mid − CEX mid| / CEX in bps. Above this, mid/spread still
-    # surface with reason ``pricing_anomaly`` but PnL optimal + paper edge +
-    # Top-N seats are suppressed. None disables the guard.
-    max_abs_amm_spread_bps: Decimal | None = Field(default=Decimal(500), ge=0)
+    # WHI-822 / WHI-964: |AMM mid − CEX mid| / CEX in bps. Above this, mid/spread
+    # still surface with reason ``pricing_anomaly`` but PnL optimal + paper edge
+    # + Top-N seats are suppressed (DESIGN §2.9). Default 300 tracks the
+    # executing bot's tradability gate. None disables the guard.
+    max_abs_amm_spread_bps: Decimal | None = Field(default=Decimal(300), ge=0)
 
     @field_validator(
         "size_ladder_usd",

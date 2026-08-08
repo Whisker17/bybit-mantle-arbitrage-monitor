@@ -31,7 +31,7 @@ Venue math: `monitor.metrics.pnl_v2.compute_pnl_usd` + delayed Bybit sell.
 | reentry_cooldown_ms | 86400000 |
 | trade_duration_ms | 5000 |
 | max_gap_ms | 120000 |
-| pricing_anomaly_gate | 500 |
+| pricing_anomaly_gate | 500 (study-time default; **WHI-964** shipped config is **300**) |
 | sigma_align_ms | max(align_ms, sample_ms) |
 
 ### Cycle reconstruction

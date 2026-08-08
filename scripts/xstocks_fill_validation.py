@@ -568,10 +568,12 @@ def render_report(payload: dict[str, Any]) -> str:
         a("")
     a("## `pricing_anomaly` gate sensitivity")
     a("")
+    gate_default = payload["method"]["pricing_anomaly_gate_default"]
     a(
         "Rebuild all AMM $1,000 samples under tighter |AMM−CEX| gates and recompute "
         "portfolio single-flight capturable profit (same re-entry / trade duration "
-        "as M0). Default gate in config is 500 bps."
+        f"as M0). Live config default gate is {gate_default} bps "
+        "(panel ships bot-aligned; see WHI-964)."
     )
     a("")
     a("| Gate (bps) | N samples | N windows | Portfolio profit (USDT) | $/day | Retained vs 500 |")
@@ -697,7 +699,7 @@ def run(args: argparse.Namespace) -> int:
             key = _meta_key(s.pair_id, s.direction, s.session)
             samples_by_key[key].append(s)
             metas_by_key[key].append(meta)
-        # Also stash under the gate that matches default (usually 500).
+        # Also stash under the gate that matches the live config default.
         if default_gate in samples_by_gate:
             samples_by_gate[default_gate].extend(samples)
 
@@ -1007,7 +1009,8 @@ def run(args: argparse.Namespace) -> int:
             f"headline disappears** (0 windows) — every profitable window in this "
             f"span has |AMM−CEX| basis large enough that a modestly tighter gate "
             f"rejects it. The go-case therefore rests on quotes the tooling itself "
-            f"nearly flags as `pricing_anomaly` (default gate 500 bps)."
+            f"nearly flags as `pricing_anomaly` (live config default gate "
+            f"{default_gate} bps)."
         )
     else:
         anomaly_reading = (
@@ -1015,7 +1018,7 @@ def run(args: argparse.Namespace) -> int:
             f"**{retained_300}% / {retained_200}% / {retained_100}%** of the "
             f"500-bps portfolio profit. The retained share at 200 bps is the "
             f"robust core; the drop from 500 is the portion sitting near the "
-            f"anomaly gate."
+            f"anomaly gate (live config default {default_gate} bps)."
         )
 
     # Taken-fill notionals vs study size (do not overclaim $1k validation).

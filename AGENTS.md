@@ -207,9 +207,10 @@ placeholders. Agents must not assume a module exists until its issue lands. -->
   - **SPYB pricing-anomaly guard (WHI-822) landed:** investigation note
     `docs/references/whi-822-spyb-pricing-anomaly.md` — SPYB pool/token/decimals/
     uiMultiplier verified on-chain (not 张冠李戴); CEX tracks SPY, AMM is the
-    deviant leg. Guard `max_abs_amm_spread_bps` (default 500) → reason/status
-    `pricing_anomaly` (mid/spread kept); blocks paper edge, PnL v2 optimal, and
-    Top-N seats. Seam `annotate_pricing_anomaly` after `quotable_amm_mid`.
+    deviant leg. Guard `max_abs_amm_spread_bps` (default 300, WHI-964 bot-aligned)
+    → reason/status `pricing_anomaly` (mid/spread kept); blocks paper edge,
+    PnL v2 optimal, and Top-N seats. Seam `annotate_pricing_anomaly` after
+    `quotable_amm_mid`.
   - **Bucket PnL sort (WHI-824) landed:** overview Result-group column is a
     first-class sort key — `pnl_optimal_usd` (default, visible column unit) and
     `pnl_optimal_bps` (size-normalized). Header click cycles
@@ -241,12 +242,12 @@ placeholders. Agents must not assume a module exists until its issue lands. -->
     bybit-fluxion journal (PnL v2 engine, $500/$1k rungs, AMM vs RFQ).
     Report `docs/references/m8-xstocks-edge-quant.md` (+ companion JSON).
     Headline is AMM-only portfolio single-flight at ≤$1k/trade; gates the
-    sibling `mantle-stocks-arbitrage-bots` M0.
+    sibling `mantle-stocks-arbitrage-bots` M0. Study used `pricing_anomaly` gate **500**; **WHI-964** ships panel default **300**.
   - **M8 on-chain fill validation (WHI-908) landed:** pure
     `monitor.analysis.fill_validation` + `scripts/xstocks_fill_validation.py`
     ranks top paper windows, matches journal `fluxion_swaps`, classifies
     taken / untaken-with-liquidity / untaken-too-thin, reports as-of join
-    staleness and `pricing_anomaly` gate sensitivity. Note
+    staleness and `pricing_anomaly` gate sensitivity (500→300 retains ~55.7% of that study's portfolio headline). Note
     `docs/references/m8-onchain-fill-validation.md` (+ companion JSON).
   - **M8 delay-decay / sequential cycle (WHI-915) landed:** pure
     `monitor.analysis.delay_decay` (realised PnL distributions, transit σ,

@@ -323,11 +323,12 @@ either path:
 1. **AMM path:** quotable AMM mid (WHI-795 `quotable_amm_mid` → wire
    `amm_mid != null`) **and** `!low_liquidity` (live or inventory TVL ≥
    `low_liquidity_threshold_usd`, default **$50k**) **and** no
-   `pricing_anomaly` reason (WHI-822). Empty pools with residual slot0 mids
-   and non-positive mids are excluded. Extreme `|AMM − CEX|` (default
-   `max_abs_amm_spread_bps: 500` in `config/metrics.yaml`) keeps mid/spread
-   visible for investigation but denies seats, paper edge, and PnL v2 optimal
-   — prefer a false negative over a fake fillable claim
+   `pricing_anomaly` reason (WHI-822 / WHI-964). Empty pools with residual
+   slot0 mids and non-positive mids are excluded. Extreme `|AMM − CEX|`
+   (default `max_abs_amm_spread_bps: 300` in `config/metrics.yaml`, aligned
+   with the executing bot's tradability gate) keeps mid/spread visible for
+   investigation but denies seats, paper edge, and PnL v2 optimal — prefer a
+   false negative over a fake fillable claim
    (`docs/references/whi-822-spyb-pricing-anomaly.md`).
 2. **RFQ path:** two-sided RFQ quote with **positive** prices (`rfq_buy` and
    `rfq_sell` both present and &gt; 0). Covers Fluxion inventory with
