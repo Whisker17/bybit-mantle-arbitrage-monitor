@@ -1561,6 +1561,7 @@ def run(args: argparse.Namespace) -> int:
             "reentry_cooldown_ms": reentry_ms,
             "trade_duration_ms": trade_ms,
             "max_gap_ms": max_gap_ms,
+            "bybit_taker_fee_bps": str(metrics_cfg.bybit_taker_fee_bps),
             "pricing_anomaly_gate": (
                 str(max_abs) if max_abs is not None else "off"
             ),

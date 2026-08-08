@@ -581,7 +581,7 @@ def render_report(payload: dict[str, Any]) -> str:
     a("")
     a("## Decision rule (bot DESIGN §1.4)")
     a("")
-    taker_bps = payload["method"].get("bybit_taker_fee_bps", "20")
+    taker_bps = payload["method"]["bybit_taker_fee_bps"]
     a(
         f"After all costs (Bybit taker {taker_bps} bps + Fluxion pool fee "
         f"+ bilateral slip + gas):"

@@ -429,7 +429,7 @@ With \(G = 0.01\):
 | \(Q\) | gas bps | Implication |
 |------:|--------:|-------------|
 | $10 | 10.0 | Needs \>10 bps gross-after-fees just to break even on gas alone |
-| $50 | 2.0 | Material vs 10 bps Bybit fee |
+| $50 | 2.0 | Material vs 20 bps Bybit fee |
 | $100 | 1.0 | Still visible |
 | $500 | 0.2 | Small |
 | $1 000 | 0.1 | Negligible vs fee/slip |
@@ -608,16 +608,16 @@ input and we binary-search quote_in for base_out = 10:
 
 ```text
 USDC_spent ≈ 1000 / (1 - 0.003) ≈ 1003.01
-PnL ≈ 999 - 1003.01 = -4.01 USD
+PnL ≈ 998 - 1003.01 = -5.01 USD
 ```
 
 **`buy_bybit_sell_fluxion`** same mids:
 
 ```text
-q_gross    = 10 / (1 - 0.001) ≈ 10.01001      # fee in base on buy
-USDT_spent = 10.01001 * 100 ≈ 1001.001
+q_gross    = 10 / (1 - 0.002) ≈ 10.02004      # fee in base on buy
+USDT_spent = 10.02004 * 100 ≈ 1002.004
 USDC_recv  = 10 * 100 = 1000.0
-PnL ≈ 1000 - 1001.001 = -1.001 USD
+PnL ≈ 1000 - 1002.004 = -2.004 USD
 ```
 
 Hummingbot-style % of buy notional remains available from the same cash-flows;
