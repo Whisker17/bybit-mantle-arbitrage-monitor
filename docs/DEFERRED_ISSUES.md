@@ -48,11 +48,12 @@ soon — anything touching key handling, RPC credentials defaults to at least Hi
   quote markets as measured-free stables is intentional; flip to `unknown` only
   if product wants an accumulating-empty cue for that market.
 
-- **Live per-timestamp USDT/USDC basis feed** (Medium, WHI-960 → later).
-  Panel ships a signed constant (`quote_basis_bps: 7.5` on bybit-fluxion).
-  Owner-measured Bybit daily klines show meaningful range (median daily 4 bps,
-  p90 7, p99 50; year extremes 0.9911–1.0059). Live `USDCUSDT` mid per sample
-  is the eventual right answer; out of scope for WHI-960. DESIGN §8 residual.
+- **Live per-timestamp USDT/USDC basis feed in the panel** (Medium, WHI-960 → later).
+  Panel still ships a signed constant (`quote_basis_bps: 7.5` on bybit-fluxion).
+  WHI-909 analysis path pulls Bybit public USDCUSDT 1m klines and as-of joins
+  them into PnL v2 per sample (`monitor.analysis.cost_stack` +
+  `build_amm_samples` basis series). Panel/collector still need a journalled
+  series for live display. DESIGN §8 residual for the product surface.
 
 - **No abs bound on signed `usdt_usdc_basis_bps` / `quote_basis_bps`** (Low, WHI-960).
   `ge=0` was dropped so the field can be signed; a fat-fingered 750 or −7500

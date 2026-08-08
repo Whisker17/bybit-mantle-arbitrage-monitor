@@ -269,3 +269,111 @@ class TestThresholdFit:
         fit = fit_min_edge_bps(sweep)
         assert fit.fitted is False
         assert fit.profit_at_zero == 0
+
+
+class TestUsdcPremiumBps:
+    """WHI-909: live USDCUSDT mid → signed premium bps."""
+
+    def test_known_premium(self) -> None:
+        from monitor.analysis.edge_quant import usdc_premium_bps_from_mid
+
+        assert usdc_premium_bps_from_mid(Decimal("1.00075")) == Decimal("7.5")
+
+    def test_parity_zero(self) -> None:
+        from monitor.analysis.edge_quant import usdc_premium_bps_from_mid
+
+        assert usdc_premium_bps_from_mid(Decimal("1")) == Decimal(0)
+
+    def test_discount_negative(self) -> None:
+        from monitor.analysis.edge_quant import usdc_premium_bps_from_mid
+
+        assert usdc_premium_bps_from_mid(Decimal("0.999")) == Decimal("-10")
+
+    def test_rejects_non_positive(self) -> None:
+        from monitor.analysis.edge_quant import usdc_premium_bps_from_mid
+
+        with pytest.raises(ValueError, match="> 0"):
+            usdc_premium_bps_from_mid(Decimal(0))
+
+
+class TestRebalanceAmortization:
+    """WHI-909: skew-building direction only; reverse is free."""
+
+    def test_charges_skew_direction(self) -> None:
+        from monitor.analysis.edge_quant import apply_rebalance_amortization
+
+        s = _s(0, edge=20, pnl=2, size=1000)  # 20 bps on $1k = $2
+        adj = apply_rebalance_amortization(
+            s, rebalance_amortized_bps=Decimal("10")
+        )
+        # 10 bps of $1000 = $1 cost → pnl $1, edge 10 bps
+        assert adj.pnl_usd == Decimal(1)
+        assert adj.edge_bps == Decimal(10)
+
+    def test_skips_unwind_direction(self) -> None:
+        from monitor.analysis.edge_quant import apply_rebalance_amortization
+
+        s = _s(
+            0,
+            edge=20,
+            pnl=2,
+            direction="buy_bybit_sell_fluxion",
+        )
+        adj = apply_rebalance_amortization(
+            s, rebalance_amortized_bps=Decimal("13.5")
+        )
+        assert adj is s or (
+            adj.pnl_usd == s.pnl_usd and adj.edge_bps == s.edge_bps
+        )
+
+    def test_zero_is_noop(self) -> None:
+        from monitor.analysis.edge_quant import apply_rebalance_amortization
+
+        s = _s(0, edge=20, pnl=2)
+        adj = apply_rebalance_amortization(
+            s, rebalance_amortized_bps=Decimal(0)
+        )
+        assert adj.pnl_usd == s.pnl_usd
+
+    def test_many_filters_non_positive(self) -> None:
+        from monitor.analysis.edge_quant import apply_rebalance_amortization_many
+
+        # 5 bps edge on $1000 = $0.50; 10 bps rebalance kills it.
+        samples = [_s(0, edge=5, pnl=Decimal("0.5"), size=1000)]
+        out = apply_rebalance_amortization_many(
+            samples, rebalance_amortized_bps=Decimal(10)
+        )
+        assert out == []
+
+
+class TestExtendedThresholdGrid:
+    def test_default_shape(self) -> None:
+        from monitor.analysis.edge_quant import extended_threshold_grid_bps
+
+        grid = extended_threshold_grid_bps()
+        assert grid[0] == Decimal(0)
+        assert Decimal(60) in grid
+        assert Decimal(2) in grid
+        assert Decimal(61) not in grid  # fine step stops at 60
+        assert Decimal(65) in grid or Decimal(70) in grid
+        assert grid[-1] == Decimal(200)
+        # Sorted unique.
+        assert grid == sorted(set(grid))
+
+    def test_covers_prior_ceiling(self) -> None:
+        from monitor.analysis.edge_quant import extended_threshold_grid_bps
+
+        grid = extended_threshold_grid_bps()
+        # Fits that used to pin at 60 can now walk higher.
+        assert any(t > 60 for t in grid)
+
+
+class TestAsOfValue:
+    def test_as_of_and_age(self) -> None:
+        from monitor.analysis.edge_quant import as_of_value
+
+        ts = [0, 1000, 2000]
+        vals = [Decimal("1"), Decimal("2"), Decimal("3")]
+        assert as_of_value(ts, vals, 1500) == Decimal("2")
+        assert as_of_value(ts, vals, 1500, max_age_ms=400) is None
+        assert as_of_value(ts, vals, -1) is None

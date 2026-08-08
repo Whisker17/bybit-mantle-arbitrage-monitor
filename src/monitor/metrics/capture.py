@@ -24,6 +24,7 @@ from typing import Any, Literal
 from monitor.analysis.edge_quant import (
     EdgeSample,
     OpportunityWindow,
+    as_of_value,
     capturable_profit_single_flight,
     detect_windows,
 )
@@ -302,10 +303,24 @@ def build_amm_samples(
     gaps: Sequence[GapInterval],
     align_ms: int,
     max_abs_spread_bps: Decimal | None,
+    basis_ts_ms: Sequence[int] | None = None,
+    basis_bps_series: Sequence[Decimal] | None = None,
+    basis_max_age_ms: int | None = 120_000,
 ) -> list[EdgeSample]:
-    """Score AMM samples at book times (same algorithm as xstocks_edge_quant)."""
+    """Score AMM samples at book times (same algorithm as xstocks_edge_quant).
+
+    Optional ``basis_ts_ms`` / ``basis_bps_series`` (parallel, ascending) override
+    ``metrics_cfg.usdt_usdc_basis_bps`` per timestamp via as-of join (WHI-909
+    live USDCUSDT premium). When omitted, the config constant is used.
+    """
     if not books or not pools:
         return []
+    if (basis_ts_ms is None) ^ (basis_bps_series is None):
+        raise ValueError(
+            "basis_ts_ms and basis_bps_series must both be set or both omitted"
+        )
+    if basis_ts_ms is not None and len(basis_ts_ms) != len(basis_bps_series or ()):
+        raise ValueError("basis_ts_ms and basis_bps_series length mismatch")
     pool_ts = [p.recv_ts_ms for p in pools]
     depth_ts = [d.recv_ts_ms for d in depths]
     out: list[EdgeSample] = []
@@ -340,6 +355,16 @@ def build_amm_samples(
         sess = session_kind(
             datetime.fromtimestamp(ts / 1000, tz=UTC), config=metrics_cfg
         ).value
+        cfg = metrics_cfg
+        if basis_ts_ms is not None and basis_bps_series is not None:
+            live = as_of_value(
+                basis_ts_ms,
+                basis_bps_series,
+                ts,
+                max_age_ms=basis_max_age_ms,
+            )
+            if live is not None:
+                cfg = metrics_cfg.model_copy(update={"usdt_usdc_basis_bps": live})
         for direction in DIRECTIONS:
             r = compute_pnl_usd(
                 pair_id=pair.id,
@@ -348,7 +373,7 @@ def build_amm_samples(
                 size_usd=size_usd,
                 direction=direction,
                 venue="amm",
-                config=metrics_cfg,
+                config=cfg,
                 amm=amm,
                 bybit_bids=bids,
                 bybit_asks=asks,
@@ -379,10 +404,19 @@ def build_rfq_samples(
     gaps: Sequence[GapInterval],
     align_ms: int,
     max_trade_usd: Decimal,
+    basis_ts_ms: Sequence[int] | None = None,
+    basis_bps_series: Sequence[Decimal] | None = None,
+    basis_max_age_ms: int | None = 120_000,
 ) -> list[EdgeSample]:
     """Score RFQ samples at poll times (poll-native size, capped for single-flight)."""
     if not books or not rfq_ticks:
         return []
+    if (basis_ts_ms is None) ^ (basis_bps_series is None):
+        raise ValueError(
+            "basis_ts_ms and basis_bps_series must both be set or both omitted"
+        )
+    if basis_ts_ms is not None and len(basis_ts_ms) != len(basis_bps_series or ()):
+        raise ValueError("basis_ts_ms and basis_bps_series length mismatch")
     book_ts = [b.recv_ts_ms for b in books]
     out: list[EdgeSample] = []
     if isinstance(pair, BStocksPair):
@@ -406,6 +440,16 @@ def build_rfq_samples(
             direction: Direction = "buy_fluxion_sell_bybit"
         else:
             direction = "buy_bybit_sell_fluxion"
+        cfg = metrics_cfg
+        if basis_ts_ms is not None and basis_bps_series is not None:
+            live = as_of_value(
+                basis_ts_ms,
+                basis_bps_series,
+                ts,
+                max_age_ms=basis_max_age_ms,
+            )
+            if live is not None:
+                cfg = metrics_cfg.model_copy(update={"usdt_usdc_basis_bps": live})
         r = compute_pnl_usd(
             pair_id=pair.id,
             bybit_bid=book.bid_de_multiplied,
@@ -413,7 +457,7 @@ def build_rfq_samples(
             size_usd=Decimal(1),  # ignored for RFQ path
             direction=direction,
             venue="rfq",
-            config=metrics_cfg,
+            config=cfg,
             rfq=poll,
         )
         if not r.fillable or r.pnl_bps is None or r.size_usd <= 0:
