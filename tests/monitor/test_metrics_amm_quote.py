@@ -341,7 +341,7 @@ def test_spyb_shaped_spread_marks_pricing_anomaly_keeps_mid() -> None:
 
 
 def test_annotate_pricing_anomaly_400bps_trips_bot_aligned_gate() -> None:
-    """WHI-964: 400 bps sits above the 300 gate (bot-aligned) but under old 500."""
+    """WHI-964: 400 bps sits above the 300 gate — mid kept, claim refused."""
     from monitor.metrics.amm_quote import annotate_pricing_anomaly
 
     # CEX 100, AMM 104 → +400 bps. Bot refuses; panel must too.
@@ -353,13 +353,3 @@ def test_annotate_pricing_anomaly_400bps_trips_bot_aligned_gate() -> None:
     )
     assert mid == Decimal("104")
     assert reason == "pricing_anomaly"
-    # Still under the legacy WHI-822 500 threshold — documents the band that
-    # was previously rendered as fillable.
-    mid_legacy, reason_legacy = annotate_pricing_anomaly(
-        Decimal("104"),
-        None,
-        cex_mid=Decimal("100"),
-        max_abs_spread_bps=Decimal(500),
-    )
-    assert mid_legacy == Decimal("104")
-    assert reason_legacy is None

@@ -42,11 +42,12 @@ max_breach_gap_ms: 300000
 
 # WHI-822 / WHI-964: |AMM mid − CEX mid| / CEX mid in bps. Beyond this the pair
 # is marked pricing_anomaly — mid/spread stay visible for investigation, but
-# PnL v2 must not claim a fillable optimal and Top-N seats are denied.
-# Aligned with the executing bot's tradability gate
-# (mantle-stocks-arbitrage-bots config/thresholds.yaml costs.max_abs_amm_spread_bps
-# = 300) and DESIGN §2.6.5 — prefer a false negative over a fake tradable
-# opportunity the bot categorically refuses. null = disable.
+# PnL v2 must not claim a fillable optimal and Top-N seats are denied
+# (DESIGN §2.9). Value 300 tracks the executing bot's tradability gate
+# (mantle-stocks-arbitrage-bots config/thresholds.yaml
+# costs.max_abs_amm_spread_bps) — bot is the source of truth; when that moves,
+# move this. Guard remains process-global across markets (WHI-822); no
+# per-market override. null = disable.
 max_abs_amm_spread_bps: 300
 
 # PnL v2 cash-flow engine (WHI-756 / DESIGN §2.6). Separate from M3 TUI ladder.

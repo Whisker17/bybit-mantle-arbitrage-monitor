@@ -6,7 +6,8 @@
 **Verdict:** Inventory / decimals / multiplier are **correct**. The AMM mid is
 the deviant leg. Panel must not claim a fillable paper arb when
 `|AMM − CEX| / CEX` exceeds the configured guard
-(`max_abs_amm_spread_bps`, default 500).
+(`max_abs_amm_spread_bps`, default **300** since WHI-964; shipped as 500 in
+WHI-822, then aligned with the executing bot's tradability gate).
 
 ## Observed panel (issue sample)
 
@@ -115,7 +116,8 @@ separate reason code: `pricing_anomaly`.
 
 ## 7. Product fix (this PR)
 
-1. Config `max_abs_amm_spread_bps: 500` (`config/metrics.yaml`).
+1. Config `max_abs_amm_spread_bps` in `config/metrics.yaml` (WHI-822 shipped
+   **500**; **WHI-964** tightened to **300** to match the bot gate).
 2. Seam `annotate_pricing_anomaly` after `quotable_amm_mid`.
 3. Keep mid + spread visible; set `amm_quote_reason=pricing_anomaly`.
 4. Suppress paper edge ladder, PnL v2 optimal (`status=pricing_anomaly`),
