@@ -37,7 +37,8 @@ def _optional_int(value: object) -> int | None:
 
     Branch on concrete types so ``int(...)`` hits a known overload (WHI-971).
     bool is checked before int (bool subclasses int). Floats truncate toward zero
-    the same way bare ``int(3.9)`` does.
+    the same way bare ``int(3.9)`` does. Non-JSON types (e.g. Decimal) return
+    None — Bybit WS fields arrive as int/float/str only.
     """
     if value is None or value == "":
         return None

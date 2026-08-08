@@ -11,6 +11,7 @@ import pytest
 
 from monitor.bybit.l1 import L1BookTracker
 from monitor.bybit.parse import (
+    _optional_int,
     apply_l1_side,
     build_subscribe_args,
     parse_orderbook_l1_update,
@@ -181,8 +182,6 @@ def test_apply_l1_side_delta_delete_clears_to_none() -> None:
 
 def test_optional_int_narrows_concrete_types() -> None:
     """WHI-971: isinstance branches preserve int(float) truncate; junk → None."""
-    from monitor.bybit.parse import _optional_int
-
     assert _optional_int(5) == 5
     assert _optional_int(5.9) == 5  # same as bare int(5.9)
     assert _optional_int("42") == 42

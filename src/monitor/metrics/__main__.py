@@ -85,7 +85,8 @@ def _inventory_pool_fee_and_base_decimals(
             return None
         return pancake_amm.fee, pair.pancake.native_decimals
     # Closed union Pair | BStocksPair — BStocks handled above.
-    assert isinstance(pair, Pair)
+    if not isinstance(pair, Pair):
+        return None
     fluxion_amm = pair.fluxion.amm
     if fluxion_amm is None:
         return None

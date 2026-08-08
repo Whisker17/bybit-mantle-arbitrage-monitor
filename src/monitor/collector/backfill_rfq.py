@@ -61,9 +61,10 @@ def _row_int(row: dict[str, object], key: str) -> int:
 def _receipt_log_dicts(raw: object) -> list[dict[str, object]] | None:
     """Return typed receipt logs, or None when ``logs`` is not a list.
 
-    None means malformed (caller marks attempted). Empty list is a valid
-    receipt with no log entries — still enrich. Non-dict list entries are
-    skipped (JSON-RPC receipts only emit log objects).
+    Callers that want missing/null ``logs`` treated as empty should pass
+    ``rcpt.get("logs") or []`` so this returns ``[]`` (enrich) rather than
+    None (mark attempted). None is only for a non-list payload. Non-dict
+    list entries are skipped (JSON-RPC receipts only emit log objects).
     """
     if not isinstance(raw, list):
         return None
