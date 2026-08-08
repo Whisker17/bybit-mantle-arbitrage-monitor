@@ -120,8 +120,14 @@ bucket table. Methodology derivation and Hummingbot comparison:
 
 #### 2.6.1 Product invariants
 
-- **Two-sided inventory paper arb** (same as §1.2 / §2.3): no transfer cost,
-  no wallet budget checker. Thin book / AMM range exhaust → `fillable=false`.
+- **Two-sided inventory paper arb** (same as §1.2 / §2.3): **transfer cost is
+  modelled per direction** from a measured fee schedule (WHI-961) — dir1
+  (stable return) charges `stable_withdrawal_fee_usd` (measured 0 for
+  USDC/USDT Mantle); dir2 (xStock Bybit→Mantle) charges
+  `asset_withdrawal_fee_tokens × listed Bybit mid` where listed mid =
+  de-multiplied mid × `bybit.multiplier`. Pairs without a measured token fee
+  annotate `withdrawal_fee_kind=unknown` (never a silent 0). **No wallet
+  budget checker.** Thin book / AMM range exhaust → `fillable=false`.
 - **Size variable \(Q\)** (AMM path) = single-trade USD notional at
   **de-multiplied** Bybit mid. Matched base \(q\) is identical on both legs
   **after** Bybit fee rules (§2.6.2); see research note §4.2–4.4.
@@ -144,8 +150,8 @@ invariant; matched base \(q\) shares that unit). Full algebra in research note
 
 | Direction | Buy leg (trader pays) | Sell leg (trader receives) | PnL (USD) |
 |-----------|----------------------|----------------------------|-----------|
-| `buy_fluxion_sell_bybit` | Fluxion: USDC spent to acquire net base \(q\) (fee-inclusive AMM; or RFQ `amountIn`) | Bybit: sell \(q\) at bid VWAP; USDT received after fee | \(\mathrm{USDT_{recv}} - \mathrm{USDC_{spent}} - G - \mathrm{basis\_usd}\) |
-| `buy_bybit_sell_fluxion` | Bybit: buy gross base so **net** base \(= q\) after fee; USDT spent | Fluxion: sell \(q\) for USDC received (fee-inclusive AMM; or RFQ `amountOut`) | \(\mathrm{USDC_{recv}} - \mathrm{USDT_{spent}} - G - \mathrm{basis\_usd}\) |
+| `buy_fluxion_sell_bybit` | Fluxion: USDC spent to acquire net base \(q\) (fee-inclusive AMM; or RFQ `amountIn`) | Bybit: sell \(q\) at bid VWAP; USDT received after fee | \(\mathrm{USDT_{recv}} - \mathrm{USDC_{spent}} - G - \mathrm{basis\_usd} - \mathrm{withdrawal\_fee\_usd}\) (stable schedule) |
+| `buy_bybit_sell_fluxion` | Bybit: buy gross base so **net** base \(= q\) after fee; USDT spent | Fluxion: sell \(q\) for USDC received (fee-inclusive AMM; or RFQ `amountOut`) | \(\mathrm{USDC_{recv}} - \mathrm{USDT_{spent}} - G - \mathrm{basis\_usd} - \mathrm{withdrawal\_fee\_usd}\) (asset tokens × listed mid) |
 
 - \(G =\) `gas_usd_per_swap` (default $0.01), charged **once** per Fluxion leg
   (AMM and RFQ; default charge gas on RFQ too — conservative).

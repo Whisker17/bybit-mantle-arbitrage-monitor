@@ -36,6 +36,10 @@ costs:
   # book 1.0007–1.0008). Engine signs by direction (WHI-960): + when paying
   # USDC, − when receiving. Live per-timestamp feed still open.
   quote_basis_bps: 7.5
+  # Direction-1 capital return is stables on Mantle — measured free
+  # (GET /v5/asset/coin/query-info, 2026-08-07). Direction-2 uses per-pair
+  # asset_withdrawal_fee_tokens (WHI-961).
+  stable_withdrawal_fee_usd: 0
 # WHI-821: omit quote_max_age_ms → inherit config/api.yaml default (300s).
 # Override only when a market needs a different quiet-book window (see
 # binance-pancake.yaml for closed-session bStocks).
@@ -83,6 +87,8 @@ inventory:
   - id: CRCLx
     name: Circle xStock
     low_liquidity: false
+    # Measured 2026-08-07 GET /v5/asset/coin/query-info Mantle (WHI-961).
+    asset_withdrawal_fee_tokens: '0.005'
     bybit:
       symbol: CRCLXUSDT
       base_coin: CRCLX
@@ -121,6 +127,8 @@ inventory:
   - id: HOODx
     name: Robinhood xStock
     low_liquidity: false
+    # Measured 2026-08-07 GET /v5/asset/coin/query-info Mantle (WHI-961).
+    asset_withdrawal_fee_tokens: '0.01'
     bybit:
       symbol: HOODXUSDT
       base_coin: HOODX
@@ -159,6 +167,8 @@ inventory:
   - id: NVDAx
     name: NVIDIA xStock
     low_liquidity: false
+    # Measured 2026-08-07 GET /v5/asset/coin/query-info Mantle (WHI-961).
+    asset_withdrawal_fee_tokens: '0.005'
     bybit:
       symbol: NVDAXUSDT
       base_coin: NVDAX

@@ -449,6 +449,7 @@ export function totalWearBps(costs: {
   fluxion_slip_bps: string;
   gas_bps: string;
   basis_bps: string;
+  withdrawal_fee_bps?: string;
 } | null | undefined): string | null {
   if (!costs) return null;
   const parts = [
@@ -458,6 +459,7 @@ export function totalWearBps(costs: {
     costs.fluxion_slip_bps,
     costs.gas_bps,
     costs.basis_bps,
+    costs.withdrawal_fee_bps ?? "0",
   ].map(parseNum);
   if (parts.some((p) => p === null)) return null;
   const nums = parts as number[];

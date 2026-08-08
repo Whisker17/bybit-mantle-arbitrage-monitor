@@ -244,6 +244,19 @@ describe("fmtPct / totalWearBps", () => {
         fluxion_slip_bps: "2",
         gas_bps: "0.5",
         basis_bps: "0",
+        withdrawal_fee_bps: "1.5",
+      }),
+      "20",
+    );
+    // Missing withdrawal line defaults to 0 (back-compat).
+    assert.equal(
+      totalWearBps({
+        bybit_taker_bps: "10",
+        fluxion_fee_bps: "5",
+        bybit_slip_bps: "1",
+        fluxion_slip_bps: "2",
+        gas_bps: "0.5",
+        basis_bps: "0",
       }),
       "18.5",
     );

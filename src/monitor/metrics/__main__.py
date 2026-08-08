@@ -149,6 +149,16 @@ def main(argv: list[str] | None = None) -> int:
     )
     direction: Direction = args.direction
 
+    fee_tokens = None
+    mult = Decimal(1)
+    if args.pair_id is not None and ctx.pairs is not None:
+        try:
+            inv_pair = ctx.pairs.pair_by_id(args.pair_id)
+            fee_tokens = inv_pair.asset_withdrawal_fee_tokens
+            mult = inv_pair.bybit.multiplier
+        except KeyError:
+            pass
+
     table = pnl_bucket_table(
         pair_id=pair_id,
         bybit_bid=cex_mid,
@@ -157,6 +167,8 @@ def main(argv: list[str] | None = None) -> int:
         config=cfg,
         amm=amm,
         include_optimal=True,
+        asset_withdrawal_fee_tokens=fee_tokens,
+        price_multiplier=mult,
     )
 
     if args.json:

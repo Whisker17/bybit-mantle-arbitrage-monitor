@@ -96,6 +96,17 @@ def _native_decimals(pair: InventoryPair) -> int:
     return pair.fluxion.native_decimals
 
 
+def _withdrawal_params(pair: InventoryPair) -> tuple[Decimal | None, Decimal]:
+    """Per-pair Bybit withdrawal fee tokens + listed-price multiplier (WHI-961).
+
+    binance-pancake has no measured schedule — returns ``(None, 1)`` so dir2
+    annotates fee_unknown rather than guessing.
+    """
+    if isinstance(pair, BStocksPair):
+        return None, Decimal(1)
+    return pair.asset_withdrawal_fee_tokens, pair.bybit.multiplier
+
+
 def _quote_is_token0_map(inv: InventoryConfig) -> dict[str, bool]:
     """USDC/USDT is token0 when its address sorts before the base token."""
     if isinstance(inv, PairsConfig):
@@ -171,6 +182,7 @@ def _pnl_snapshot_for_pair(
         if amm_tick is not None
         else None
     )
+    fee_tokens, mult = _withdrawal_params(pair)
     snap = build_pnl_pair_snapshot(
         pair_id=pair.id,
         bybit=bybit,
@@ -190,6 +202,8 @@ def _pnl_snapshot_for_pair(
             if runtime.quote_max_age_ms is not None
             else state.api.quote_max_age_ms
         ),
+        asset_withdrawal_fee_tokens=fee_tokens,
+        price_multiplier=mult,
     )
     if cache is not None:
         cache.put(pair.id, snap)

@@ -260,6 +260,12 @@ placeholders. Agents must not assume a module exists until its issue lands. -->
     Bucket PnL), not fixed M3 $1K. ADR `docs/adr/0002-overview-net-at-qstar.md`;
     DESIGN §2.3 / §2.6.3 updated. **Live code still emits Net at $1K** until
     the implement follow-up; TUI frozen.
+  - **Withdrawal fee cost line (WHI-961) landed:** direction-aware transfer
+    cost in PnL v2 + M3 edge — dir1 `stable_withdrawal_fee_usd` (0 measured),
+    dir2 `asset_withdrawal_fee_tokens × listed mid` (mid × multiplier);
+    HOODX/CRCLX/NVDAX populated; unmeasured pairs annotate
+    `withdrawal_fee_kind=unknown` (never silent 0). Web cost waterfall surfaces
+    the line. DESIGN §2.6.1 amended.
 
 ## Build, test, run
 

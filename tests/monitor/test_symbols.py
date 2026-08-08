@@ -83,9 +83,19 @@ def test_load_checked_in_pairs_config() -> None:
     aapl = cfg.pair_by_id("AAPLx")
     assert aapl.bybit.multiplier == Decimal("1.0026642075893797")
     assert aapl.low_liquidity is False
+    # Unmeasured until WHI-961 schedule expands — must stay None (not silent 0).
+    assert aapl.asset_withdrawal_fee_tokens is None
+
+    hood = cfg.pair_by_id("HOODx")
+    assert hood.asset_withdrawal_fee_tokens == Decimal("0.01")
+    crcl = cfg.pair_by_id("CRCLx")
+    assert crcl.asset_withdrawal_fee_tokens == Decimal("0.005")
+    nvda = cfg.pair_by_id("NVDAx")
+    assert nvda.asset_withdrawal_fee_tokens == Decimal("0.005")
 
     spcx = cfg.pair_by_id("SPCXx")
     assert spcx.low_liquidity is True
+    assert spcx.asset_withdrawal_fee_tokens is None
 
 
 def test_required_pair_fields_present() -> None:

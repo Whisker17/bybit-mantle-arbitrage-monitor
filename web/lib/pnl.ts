@@ -199,17 +199,30 @@ const USD_COST_ROWS: Array<{ key: keyof PnlCostBreakdownUsd; label: string }> = 
   { key: "fluxion_slip_usd", label: "Fluxion slip" },
   { key: "gas_usd", label: "Gas" },
   { key: "basis_usd", label: "USDT/USDC basis" },
+  { key: "withdrawal_fee_usd", label: "Withdrawal" },
 ];
 
 export function usdCostRows(
   costs: PnlCostBreakdownUsd | null | undefined,
 ): Array<{ key: string; label: string; value: number }> {
   if (!costs) return [];
-  return USD_COST_ROWS.map((r) => ({
-    key: r.key,
-    label: r.label,
-    value: parseNum(costs[r.key]) ?? 0,
-  }));
+  return USD_COST_ROWS.map((r) => {
+    let label = r.label;
+    if (r.key === "withdrawal_fee_usd") {
+      if (costs.withdrawal_fee_kind === "unknown") {
+        label = "Withdrawal (unknown)";
+      } else if (costs.withdrawal_fee_kind === "stable") {
+        label = "Withdrawal (stable)";
+      } else if (costs.withdrawal_fee_kind === "asset") {
+        label = "Withdrawal (asset)";
+      }
+    }
+    return {
+      key: r.key,
+      label,
+      value: parseNum(costs[r.key] as string) ?? 0,
+    };
+  });
 }
 
 export function totalCostUsd(

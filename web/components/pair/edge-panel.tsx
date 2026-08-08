@@ -207,7 +207,18 @@ const WEAR_ROWS: Array<{
   { key: "fluxion_slip_bps", label: "Fluxion slip" },
   { key: "gas_bps", label: "Gas" },
   { key: "basis_bps", label: "USDT/USDC basis" },
+  { key: "withdrawal_fee_bps", label: "Withdrawal" },
 ];
+
+function wearLabel(key: keyof CostBreakdown, costs: CostBreakdown): string {
+  if (key !== "withdrawal_fee_bps") {
+    return WEAR_ROWS.find((r) => r.key === key)?.label ?? String(key);
+  }
+  if (costs.withdrawal_fee_kind === "unknown") return "Withdrawal (unknown)";
+  if (costs.withdrawal_fee_kind === "stable") return "Withdrawal (stable)";
+  if (costs.withdrawal_fee_kind === "asset") return "Withdrawal (asset)";
+  return "Withdrawal";
+}
 
 function CostWaterfall({ costs }: { costs: CostBreakdown | null }) {
   if (!costs) {
@@ -233,7 +244,9 @@ function CostWaterfall({ costs }: { costs: CostBreakdown | null }) {
         const pct = Math.min(100, (Math.abs(v) / maxBar) * 100);
         return (
           <div key={r.key} className="grid grid-cols-[7.5rem_1fr_2.5rem] items-center gap-1.5 text-[10px]">
-            <span className="text-muted-foreground truncate">{r.label}</span>
+            <span className="text-muted-foreground truncate">
+              {wearLabel(r.key, costs)}
+            </span>
             <div className="h-1.5 rounded-sm bg-muted overflow-hidden">
               <div
                 className="h-full rounded-sm bg-warning/70"

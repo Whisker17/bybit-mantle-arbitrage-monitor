@@ -249,3 +249,92 @@ def test_basis_wear_signed_by_direction_on_edge() -> None:
     # Zero gross + zero other wear → net = −signed basis.
     assert dir1.net_edge_bps == -basis
     assert dir2.net_edge_bps == basis
+
+
+def test_withdrawal_fee_on_edge_direction_aware() -> None:
+    """WHI-961: M3 wear includes dir-aware withdrawal (bps of Q)."""
+    from monitor.metrics.config import MetricsConfig, PnlV2Config, SessionConfig
+    from monitor.metrics.edge import withdrawal_fee_bps, withdrawal_fee_usd_for_direction
+
+    mid = Decimal(100)
+    fee_tokens = Decimal("0.01")
+    listed = mid * Decimal(1)
+    fee_usd, kind = withdrawal_fee_usd_for_direction(
+        direction="buy_bybit_sell_fluxion",
+        stable_fee_usd=Decimal(0),
+        asset_fee_tokens=fee_tokens,
+        listed_token_price_usd=listed,
+    )
+    assert kind == "asset"
+    assert fee_usd == Decimal(1)
+    size = Decimal(1000)
+    assert withdrawal_fee_bps(fee_usd, size) == Decimal(10)
+
+    cfg = MetricsConfig(
+        version=1,
+        size_ladder_usd=[Decimal(1000), Decimal(5000), Decimal(20000)],
+        bybit_taker_fee_bps=Decimal(0),
+        usdt_usdc_basis_bps=Decimal(0),
+        stable_withdrawal_fee_usd=Decimal(0),
+        gas_usd_per_swap=Decimal(0),
+        session=SessionConfig(
+            timezone="America/New_York",
+            open="09:30",
+            close="16:00",
+            early_close="13:00",
+        ),
+        breach_size_usd=Decimal(1000),
+        max_breach_gap_ms=300_000,
+        pnl_v2=PnlV2Config.model_validate(
+            {
+                "buckets_usd": [10, 50, 100, 500, 1000, 10000],
+                "q_min_usd": 10,
+                "config_cap_usd": 10000,
+            }
+        ),
+    )
+    dir1 = compute_edge(
+        pair_id="HOODx",
+        bybit_bid=mid,
+        bybit_ask=mid,
+        fluxion_mid=mid,
+        size_usd=size,
+        direction="buy_fluxion_sell_bybit",
+        venue="rfq",
+        config=cfg,
+        asset_withdrawal_fee_tokens=fee_tokens,
+        price_multiplier=Decimal(1),
+    )
+    dir2 = compute_edge(
+        pair_id="HOODx",
+        bybit_bid=mid,
+        bybit_ask=mid,
+        fluxion_mid=mid,
+        size_usd=size,
+        direction="buy_bybit_sell_fluxion",
+        venue="rfq",
+        config=cfg,
+        asset_withdrawal_fee_tokens=fee_tokens,
+        price_multiplier=Decimal(1),
+    )
+    assert dir1.costs.withdrawal_fee_usd == Decimal(0)
+    assert dir1.costs.withdrawal_fee_kind == "stable"
+    assert dir1.costs.withdrawal_fee_bps == Decimal(0)
+    assert dir2.costs.withdrawal_fee_usd == Decimal(1)
+    assert dir2.costs.withdrawal_fee_kind == "asset"
+    assert dir2.costs.withdrawal_fee_bps == Decimal(10)
+    assert dir2.net_edge_bps == -Decimal(10)
+
+    unknown = compute_edge(
+        pair_id="TSLAx",
+        bybit_bid=mid,
+        bybit_ask=mid,
+        fluxion_mid=mid,
+        size_usd=size,
+        direction="buy_bybit_sell_fluxion",
+        venue="rfq",
+        config=cfg,
+        asset_withdrawal_fee_tokens=None,
+    )
+    assert unknown.costs.withdrawal_fee_kind == "unknown"
+    assert unknown.costs.withdrawal_fee_usd == Decimal(0)

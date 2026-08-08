@@ -124,6 +124,10 @@ class MetricsConfig(BaseModel):
     # (WHI-960; see edge.basis_wear_bps). Per-market override via
     # costs.quote_basis_bps (bybit-fluxion measured ~7.5; binance-pancake 0).
     usdt_usdc_basis_bps: Decimal = Field(default=Decimal(0))
+    # Direction-1 stable-rail withdrawal fee in USD (WHI-961). Market file
+    # costs.stable_withdrawal_fee_usd overrides via apply_market_costs.
+    # Measured 0 for USDC/USDT Mantle; direction-2 uses per-pair token fee.
+    stable_withdrawal_fee_usd: Decimal = Field(default=Decimal(0), ge=0)
     gas_usd_per_swap: Decimal = Field(ge=0)
     session: SessionConfig
     breach_size_usd: Decimal = Field(gt=0)
@@ -142,6 +146,7 @@ class MetricsConfig(BaseModel):
         "size_ladder_usd",
         "bybit_taker_fee_bps",
         "usdt_usdc_basis_bps",
+        "stable_withdrawal_fee_usd",
         "gas_usd_per_swap",
         "breach_size_usd",
         "max_abs_amm_spread_bps",

@@ -162,6 +162,7 @@ def test_apply_market_costs_overrides_metrics() -> None:
     assert merged.bybit_taker_fee_bps == mf.costs.cex_taker_fee_bps
     assert merged.gas_usd_per_swap == mf.costs.gas_usd_per_swap
     assert merged.usdt_usdc_basis_bps == mf.costs.quote_basis_bps
+    assert merged.stable_withdrawal_fee_usd == mf.costs.stable_withdrawal_fee_usd
     # Algorithm knobs unchanged.
     assert merged.size_ladder_usd == base.size_ladder_usd
     assert merged.pnl_v2.buckets_usd == base.pnl_v2.buckets_usd
@@ -187,6 +188,8 @@ def test_load_market_context_bybit_fluxion() -> None:
     assert ctx.collector is not None
     assert ctx.attribution is not None
     assert ctx.metrics.bybit_taker_fee_bps == Decimal(20)
+    assert ctx.costs.stable_withdrawal_fee_usd == Decimal(0)
+    assert ctx.metrics.stable_withdrawal_fee_usd == Decimal(0)
     # WHI-960: measured ~7.5 bps USDC premium (signed by direction in engine).
     assert ctx.metrics.usdt_usdc_basis_bps == Decimal("7.5")
     # Convention path unless legacy fallback applies (checked separately).

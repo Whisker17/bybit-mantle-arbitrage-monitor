@@ -103,6 +103,26 @@ class Pair(BaseModel):
     low_liquidity: bool
     bybit: BybitSymbol
     fluxion: FluxionSide
+    # Bybit Mantle-chain withdrawal fee in **token units** (not USD). Measured
+    # via GET /v5/asset/coin/query-info. None = unmeasured → PnL/edge annotate
+    # fee_unknown on direction 2 (never silent 0). WHI-961.
+    asset_withdrawal_fee_tokens: Decimal | None = None
+
+    @field_validator("asset_withdrawal_fee_tokens", mode="before")
+    @classmethod
+    def _parse_asset_withdrawal_fee(cls, value: object) -> object:
+        if value is None or value == "":
+            return None
+        if isinstance(value, (int, float, str)):
+            return Decimal(str(value))
+        return value
+
+    @field_validator("asset_withdrawal_fee_tokens")
+    @classmethod
+    def _nonneg_asset_withdrawal_fee(cls, value: Decimal | None) -> Decimal | None:
+        if value is not None and value < 0:
+            raise ValueError("asset_withdrawal_fee_tokens must be >= 0 when set")
+        return value
 
 
 class PairsConfig(BaseModel):

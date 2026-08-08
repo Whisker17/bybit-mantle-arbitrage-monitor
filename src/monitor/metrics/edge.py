@@ -9,6 +9,7 @@ Two-sided inventory paper arb:
              - fluxion_slip_bps(Q)      (AMM exact; RFQ 0 at quoted size)
              - gas_bps(Q)
              - signed_basis_bps         (USDC premium; + when paying USDC)
+             - withdrawal_fee_bps(Q)    (dir1 stable USD; dir2 token×listed mid)
 
 Directions (relative to base xStock):
 
@@ -36,6 +37,9 @@ from monitor.metrics.config import MetricsConfig
 
 VenueKind = Literal["amm", "rfq"]
 Direction = Literal["buy_fluxion_sell_bybit", "buy_bybit_sell_fluxion"]
+# Which return-leg withdraw schedule produced the fee line (WHI-961).
+# ``unknown`` = dir2 with no measured asset_withdrawal_fee_tokens (never silent 0).
+WithdrawalFeeKind = Literal["stable", "asset", "unknown"]
 
 
 @dataclass(frozen=True, slots=True)
@@ -46,6 +50,10 @@ class CostBreakdown:
     fluxion_slip_bps: Decimal
     gas_bps: Decimal
     basis_bps: Decimal
+    withdrawal_fee_bps: Decimal
+    # Absolute USD fee before bps conversion (stable schedule or token×price).
+    withdrawal_fee_usd: Decimal
+    withdrawal_fee_kind: WithdrawalFeeKind
 
     @property
     def total_wear_bps(self) -> Decimal:
@@ -56,6 +64,7 @@ class CostBreakdown:
             + self.fluxion_slip_bps
             + self.gas_bps
             + self.basis_bps
+            + self.withdrawal_fee_bps
         )
 
 
@@ -116,6 +125,47 @@ def basis_wear_bps(
     return -usdt_usdc_basis_bps
 
 
+def withdrawal_fee_usd_for_direction(
+    *,
+    direction: Direction,
+    stable_fee_usd: Decimal,
+    asset_fee_tokens: Decimal | None,
+    listed_token_price_usd: Decimal,
+) -> tuple[Decimal, WithdrawalFeeKind]:
+    """Absolute USD withdraw fee for the cycle's charged transfer (WHI-961).
+
+    * ``buy_fluxion_sell_bybit`` (dir1) — capital returns as stable; charge
+      ``stable_fee_usd`` (measured 0 for USDC/USDT Mantle).
+    * ``buy_bybit_sell_fluxion`` (dir2) — outbound xStock Bybit→Mantle; charge
+      ``asset_fee_tokens × listed_token_price_usd``. When the token fee is
+      unmeasured (``None``), return ``(0, "unknown")`` — never a silent 0
+      without the kind annotation (display-only annotate-and-degrade).
+
+    ``listed_token_price_usd`` is the **Bybit listed** mid (de-multiplied mid ×
+    ``bybit.multiplier``), not the de-multiplied comparison mid alone.
+    """
+    if stable_fee_usd < 0:
+        raise ValueError("stable_fee_usd must be >= 0")
+    if asset_fee_tokens is not None and asset_fee_tokens < 0:
+        raise ValueError("asset_fee_tokens must be >= 0 when set")
+    if direction == "buy_fluxion_sell_bybit":
+        return stable_fee_usd, "stable"
+    if asset_fee_tokens is None:
+        return Decimal(0), "unknown"
+    if listed_token_price_usd <= 0:
+        raise ValueError("listed_token_price_usd must be positive")
+    return asset_fee_tokens * listed_token_price_usd, "asset"
+
+
+def withdrawal_fee_bps(withdrawal_fee_usd: Decimal, size_usd: Decimal) -> Decimal:
+    """Withdraw fee as bps of notional (DESIGN §2.3 / WHI-961)."""
+    if size_usd <= 0:
+        return Decimal(0)
+    if withdrawal_fee_usd < 0:
+        raise ValueError("withdrawal_fee_usd must be >= 0")
+    return withdrawal_fee_usd / size_usd * BPS
+
+
 def _costs(
     config: MetricsConfig,
     *,
@@ -124,7 +174,17 @@ def _costs(
     fluxion_fee: Decimal,
     fluxion_slip: Decimal,
     direction: Direction,
+    bybit_mid: Decimal,
+    asset_withdrawal_fee_tokens: Decimal | None,
+    price_multiplier: Decimal,
 ) -> CostBreakdown:
+    listed = bybit_mid * price_multiplier
+    fee_usd, fee_kind = withdrawal_fee_usd_for_direction(
+        direction=direction,
+        stable_fee_usd=config.stable_withdrawal_fee_usd,
+        asset_fee_tokens=asset_withdrawal_fee_tokens,
+        listed_token_price_usd=listed if listed > 0 else Decimal(1),
+    )
     return CostBreakdown(
         bybit_taker_bps=config.bybit_taker_fee_bps,
         fluxion_fee_bps=fluxion_fee,
@@ -132,6 +192,9 @@ def _costs(
         fluxion_slip_bps=fluxion_slip,
         gas_bps=gas_bps(config.gas_usd_per_swap, size_usd),
         basis_bps=basis_wear_bps(config.usdt_usdc_basis_bps, direction),
+        withdrawal_fee_bps=withdrawal_fee_bps(fee_usd, size_usd),
+        withdrawal_fee_usd=fee_usd,
+        withdrawal_fee_kind=fee_kind,
     )
 
 
@@ -147,6 +210,8 @@ def compute_edge(
     config: MetricsConfig,
     amm: AmmPoolState | None = None,
     bybit_depth: list[tuple[Decimal, Decimal]] | None = None,
+    asset_withdrawal_fee_tokens: Decimal | None = None,
+    price_multiplier: Decimal = Decimal(1),
 ) -> EdgeResult:
     """Compute net paper edge for one pair × venue × direction × size.
 
@@ -155,6 +220,8 @@ def compute_edge(
     """
     bybit_mid = mid_from_bid_ask(bybit_bid, bybit_ask)
     gross = direction_aware_gross_bps(bybit_mid, fluxion_mid, direction)
+    if price_multiplier <= 0:
+        raise ValueError("price_multiplier must be positive")
 
     bybit_dir: BybitLeg
     fluxion_dir: FluxionLeg
@@ -180,6 +247,9 @@ def compute_edge(
             fluxion_fee=Decimal(0),
             fluxion_slip=Decimal(0),
             direction=direction,
+            bybit_mid=bybit_mid,
+            asset_withdrawal_fee_tokens=asset_withdrawal_fee_tokens,
+            price_multiplier=price_multiplier,
         )
         return EdgeResult(
             pair_id=pair_id,
@@ -219,6 +289,9 @@ def compute_edge(
         fluxion_fee=fee,
         fluxion_slip=f_slip,
         direction=direction,
+        bybit_mid=bybit_mid,
+        asset_withdrawal_fee_tokens=asset_withdrawal_fee_tokens,
+        price_multiplier=price_multiplier,
     )
     return EdgeResult(
         pair_id=pair_id,
@@ -249,6 +322,8 @@ def compute_edge_ladder(
         "buy_fluxion_sell_bybit",
         "buy_bybit_sell_fluxion",
     ),
+    asset_withdrawal_fee_tokens: Decimal | None = None,
+    price_multiplier: Decimal = Decimal(1),
 ) -> list[EdgeResult]:
     """All directions × size ladder for one venue snapshot."""
     out: list[EdgeResult] = []
@@ -266,6 +341,8 @@ def compute_edge_ladder(
                     config=config,
                     amm=amm,
                     bybit_depth=bybit_depth,
+                    asset_withdrawal_fee_tokens=asset_withdrawal_fee_tokens,
+                    price_multiplier=price_multiplier,
                 )
             )
     return out

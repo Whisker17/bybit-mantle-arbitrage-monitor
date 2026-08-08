@@ -47,6 +47,8 @@ function bucket(
       fluxion_slip_usd: "0",
       gas_usd: "0.01",
       basis_usd: "0",
+      withdrawal_fee_usd: "0",
+      withdrawal_fee_kind: "stable",
     },
   };
 }
