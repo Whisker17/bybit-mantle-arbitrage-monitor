@@ -348,6 +348,52 @@ function BpsCell({
   );
 }
 
+/** Overview Net @ Q* cell (ADR-0002 / WHI-966). */
+function NetQStarCell({
+  row,
+  groupSep: groupSepClass,
+}: {
+  row: PairOverviewRow;
+  groupSep: string;
+}) {
+  const net = overviewNetCell(
+    row,
+    ammQuoteReasonTitle(row.amm_quote_reason) ?? null,
+  );
+  const emptyLabel =
+    net.emptyLabel ?? ammQuoteReasonLabel(row.amm_quote_reason);
+  return (
+    <td
+      className={cn(
+        "px-2 py-1.5 text-right font-medium",
+        groupSepClass,
+        net.quoteAged && "opacity-80",
+      )}
+      title={net.title}
+    >
+      <div className="flex flex-col items-end gap-0 leading-tight">
+        <BpsCell
+          value={row.net_edge_bps}
+          emptyLabel={emptyLabel}
+          emptyTitle={net.title}
+        />
+        {net.sizeLabel != null ? (
+          <span className="text-[10px] font-normal text-muted-foreground tabular-nums">
+            {net.sizeLabel}
+            {net.quoteAged && net.ageHint ? (
+              <span className="ml-1">{net.ageHint}</span>
+            ) : null}
+          </span>
+        ) : net.quoteAged && net.ageHint ? (
+          <span className="text-[10px] font-normal text-muted-foreground">
+            {net.ageHint}
+          </span>
+        ) : null}
+      </div>
+    </td>
+  );
+}
+
 /** AMM mid / price cell with empty-pool / anomaly annotation (WHI-795 / WHI-822). */
 function AmmMidCell({ row }: { row: PairOverviewRow }) {
   const reason = ammQuoteReasonLabel(row.amm_quote_reason);
@@ -868,45 +914,7 @@ export function PairsTable({
                     ) : null}
                   </td>
                   {/* Edge — Net @ Q* (ADR-0002 / WHI-966) */}
-                  {(() => {
-                    const net = overviewNetCell(
-                      row,
-                      ammQuoteReasonTitle(row.amm_quote_reason) ??
-                        "No Q* yet (needs depth + fillable AMM optimal)",
-                    );
-                    return (
-                      <td
-                        className={cn(
-                          "px-2 py-1.5 text-right font-medium",
-                          groupSep("edge"),
-                          net.quoteAged && "opacity-80",
-                        )}
-                        title={net.title}
-                      >
-                        <div className="flex flex-col items-end gap-0 leading-tight">
-                          <BpsCell
-                            value={row.net_edge_bps}
-                            emptyLabel={ammQuoteReasonLabel(
-                              row.amm_quote_reason,
-                            )}
-                            emptyTitle={net.title}
-                          />
-                          {net.sizeLabel != null ? (
-                            <span className="text-[10px] font-normal text-muted-foreground tabular-nums">
-                              {net.sizeLabel}
-                              {net.quoteAged && net.ageHint ? (
-                                <span className="ml-1">{net.ageHint}</span>
-                              ) : null}
-                            </span>
-                          ) : net.quoteAged && net.ageHint ? (
-                            <span className="text-[10px] font-normal text-muted-foreground">
-                              {net.ageHint}
-                            </span>
-                          ) : null}
-                        </div>
-                      </td>
-                    );
-                  })()}
+                  <NetQStarCell row={row} groupSep={groupSep("edge")} />
                   <td
                     className="px-2 py-1.5 text-muted-foreground"
                     title={

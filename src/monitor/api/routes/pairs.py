@@ -307,20 +307,15 @@ def _list_pairs_body(state: AppState, runtime: MarketRuntime) -> dict[str, Any]:
                 # Builder rows should always be configured pairs; never 404 the list.
                 enriched = dict(row)
                 empty = PnlOptimalSummary(status="no_pool", has_depth=False)
-                enriched["pnl_v2"] = empty.to_dict()
-                enriched.update(empty.flat_sort_wire())
-                enriched.update(empty.overview_net_wire())
+                enriched.update(empty.overview_enrichment_wire())
                 enriched["mm_active"] = "unknown"
                 rows_out.append(enriched)
                 continue
             snap = _pnl_snapshot_for_pair(runtime, state, pair=pair, reader=reader)
             summary = overview_pnl_summary(snap)
             enriched = dict(row)
-            enriched["pnl_v2"] = summary.to_dict()
-            # WHI-824: mirror numeric optimal onto flat keys (status==ok only).
-            enriched.update(summary.flat_sort_wire())
-            # WHI-966 / ADR-0002: overview Net = PnL v2 Q* (same as Bucket PnL).
-            enriched.update(summary.overview_net_wire())
+            # WHI-824 + WHI-966: flat sort keys + Net@Q* from the same summary.
+            enriched.update(summary.overview_enrichment_wire())
             enriched["mm_active"] = _mm_active_for(
                 state,
                 pair_id=pair_id,
@@ -355,10 +350,8 @@ def _get_pair_body(
         if "overview" in body and isinstance(body["overview"], dict):
             body["overview"] = dict(body["overview"])
             ov_summary = overview_pnl_summary(pnl)
-            body["overview"]["pnl_v2"] = ov_summary.to_dict()
-            body["overview"].update(ov_summary.flat_sort_wire())
-            # WHI-966 / ADR-0002: detail overview Net at Q* (Web surface).
-            body["overview"].update(ov_summary.overview_net_wire())
+            # WHI-824 + WHI-966: flat sort keys + Net@Q* (same as list path).
+            body["overview"].update(ov_summary.overview_enrichment_wire())
             body["overview"]["mm_active"] = _mm_active_for(
                 state,
                 pair_id=pair_id,

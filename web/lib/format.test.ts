@@ -17,6 +17,7 @@ import {
   fmtDirection,
   fmtDirectionTitle,
   fmtNotional,
+  fmtReferenceSize,
   fmtOrAmmReason,
   fmtPct,
   fmtPrice,
@@ -135,6 +136,14 @@ describe("fmtNotional", () => {
     assert.equal(fmtNotional("1500"), "1.5K");
     assert.equal(fmtNotional("2500000"), "2.50M");
     assert.equal(fmtNotional("42"), "42");
+  });
+});
+
+describe("fmtReferenceSize (WHI-966)", () => {
+  it("formats config reference size or falls back", () => {
+    assert.equal(fmtReferenceSize("1000"), "$1,000");
+    assert.equal(fmtReferenceSize(null), "reference size");
+    assert.equal(fmtReferenceSize(""), "reference size");
   });
 });
 

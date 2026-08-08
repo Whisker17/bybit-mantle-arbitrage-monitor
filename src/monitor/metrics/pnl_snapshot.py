@@ -112,15 +112,29 @@ class PnlOptimalSummary:
             "depth_quote_age_ms": self.depth_quote_age_ms,
         }
 
+    def _has_numeric_optimal(self) -> bool:
+        """True when overview can treat this summary as a usable Q* result.
+
+        Shared by flat sort keys and Net@Q* so sign agreement cannot drift
+        when one gate tightens without the other (WHI-824 / WHI-966).
+        """
+        return (
+            self.status == "ok"
+            and self.optimal_net_pnl_usd is not None
+            and self.optimal_net_pnl_bps is not None
+            and self.direction is not None
+            and self.optimal_notional_usd is not None
+        )
+
     def flat_sort_fields(self) -> tuple[Decimal | None, Decimal | None]:
         """USD / bps for overview sort keys (WHI-824).
 
-        Only ``status == "ok"`` (including ``quote_aged`` ok) participates in
-        numeric sort. Other statuses return ``(None, None)`` so callers park
-        the row last and Top-N skips it. Does not special-case ``stale`` —
-        when a row recovers to ok with numbers it sorts normally.
+        Only numeric-ok optimals (including ``quote_aged`` ok) participate in
+        sort. Other statuses return ``(None, None)`` so callers park the row
+        last and Top-N skips it. Does not special-case ``stale`` — when a
+        row recovers to ok with numbers it sorts normally.
         """
-        if self.status != "ok":
+        if not self._has_numeric_optimal():
             return None, None
         return self.optimal_net_pnl_usd, self.optimal_net_pnl_bps
 
@@ -141,11 +155,7 @@ class PnlOptimalSummary:
         which reintroduces structural sign disagreement with Bucket PnL.
         Venue is always AMM (Q* search is AMM-only).
         """
-        if (
-            self.status != "ok"
-            or self.optimal_net_pnl_bps is None
-            or self.direction is None
-        ):
+        if not self._has_numeric_optimal():
             return {
                 "net_edge_bps": None,
                 "net_edge_venue": None,
@@ -158,6 +168,17 @@ class PnlOptimalSummary:
             "net_edge_direction": self.direction,
             "net_size_usd": _dec_str(self.optimal_notional_usd),
         }
+
+    def overview_enrichment_wire(self) -> dict[str, Any]:
+        """Single dict for API row enrichment: pnl_v2 + flat sort + Net@Q*.
+
+        Call sites must apply this together so a new overview wire field
+        cannot be forgotten on one of the three enrichment paths (WHI-966).
+        """
+        out: dict[str, Any] = {"pnl_v2": self.to_dict()}
+        out.update(self.flat_sort_wire())
+        out.update(self.overview_net_wire())
+        return out
 
 
 @dataclass(frozen=True, slots=True)

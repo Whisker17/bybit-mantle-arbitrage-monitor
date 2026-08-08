@@ -87,13 +87,32 @@ export function quoteAgedHint(ages: QuoteAgeFields): string | undefined {
 
 /**
  * Overview Net @ Q* cell helpers (ADR-0002 / WHI-966).
- * Mirrors Bucket PnL quote_aged annotations so adjacent columns stay consistent.
+ * Mirrors Bucket PnL quote_aged annotations + blank-status labels so
+ * adjacent Net / Bucket PnL columns stay consistent.
  */
 export type OverviewNetCell = {
   title: string;
+  /** Visible Q* chip when numeric; null when Net is blank. */
   sizeLabel: string | null;
+  /**
+   * Visible empty-state label when Net is blank (e.g. "no depth") so the
+   * cell does not show a bare dash next to Bucket PnL's status text.
+   */
+  emptyLabel: string | null;
   quoteAged: boolean;
   ageHint?: string;
+};
+
+/** Visible status labels aligned with overviewPnlCell STATUS_LABEL. */
+const NET_STATUS_LABEL: Partial<Record<PnlStatus, string>> = {
+  no_book: "no book",
+  no_pool: "no pool",
+  empty_pool: "empty pool",
+  invalid_mid: "invalid mid",
+  pricing_anomaly: "price anomaly",
+  no_depth: "no depth",
+  no_fillable: "unfillable",
+  stale: "quote aged",
 };
 
 export function overviewNetCell(
@@ -101,7 +120,7 @@ export function overviewNetCell(
     net_edge_bps?: string | null;
     net_size_usd?: string | null;
     amm_quote_reason?: string | null;
-    pnl_v2?: QuoteAgeFields | null;
+    pnl_v2?: (QuoteAgeFields & { status?: PnlStatus | null }) | null;
   },
   emptyTitle?: string | null,
 ): OverviewNetCell {
@@ -110,11 +129,18 @@ export function overviewNetCell(
   const agedTitle = aged ? quoteAgeTitle(ages) : null;
   const ageHint = quoteAgedHint(ages);
   if (row.net_edge_bps == null) {
+    const status = row.pnl_v2?.status ?? null;
+    const statusLabel =
+      status != null ? (NET_STATUS_LABEL[status] ?? null) : null;
     const base =
-      emptyTitle ?? "No Q* yet (needs depth + fillable AMM optimal)";
+      emptyTitle ??
+      (statusLabel != null
+        ? `No Q* (${statusLabel})`
+        : "No Q* yet (needs depth + fillable AMM optimal)");
     return {
       title: agedTitle ? `${base} · ${agedTitle}` : base,
       sizeLabel: null,
+      emptyLabel: statusLabel,
       quoteAged: aged,
       ageHint,
     };
@@ -128,6 +154,7 @@ export function overviewNetCell(
     title,
     sizeLabel:
       row.net_size_usd != null ? `Q* $${fmtNotional(row.net_size_usd)}` : null,
+    emptyLabel: null,
     quoteAged: aged,
     ageHint,
   };

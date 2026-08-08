@@ -175,11 +175,12 @@ describe("overviewPnlCell", () => {
     const blank = overviewNetCell({
       net_edge_bps: null,
       net_size_usd: null,
-      pnl_v2: { quote_aged: false },
+      pnl_v2: { status: "no_depth", quote_aged: false },
     });
     assert.equal(blank.sizeLabel, null);
+    assert.equal(blank.emptyLabel, "no depth");
     assert.equal(blank.quoteAged, false);
-    assert.match(blank.title, /No Q\*/);
+    assert.match(blank.title, /no depth/);
   });
 });
 

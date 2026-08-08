@@ -9,6 +9,7 @@ import {
   fmtDirection,
   fmtDirectionTitle,
   fmtNotional,
+  fmtReferenceSize,
   fmtSignedBps,
   fmtUsd,
   parseNum,
@@ -76,10 +77,7 @@ export function EdgeStatsPanel({
   const [direction, setDirection] = useState<Direction>(
     "buy_fluxion_sell_bybit",
   );
-  const breachLabel =
-    referenceSizeUsd != null && referenceSizeUsd !== ""
-      ? `$${Number(referenceSizeUsd).toLocaleString()}`
-      : "reference size";
+  const breachLabel = fmtReferenceSize(referenceSizeUsd);
 
   // Prefer best optimal direction once the API payload arrives / updates.
   useEffect(() => {
