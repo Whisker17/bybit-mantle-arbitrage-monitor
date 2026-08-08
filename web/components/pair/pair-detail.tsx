@@ -376,6 +376,7 @@ export function PairDetail({ marketId, pairId }: Props) {
           hasRfq={hasRfq}
           venues={venues}
           marketId={marketId}
+          referenceSizeUsd={o.reference_size_usd}
         />
       </Panel>
 

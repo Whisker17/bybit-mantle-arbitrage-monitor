@@ -5,6 +5,7 @@ from __future__ import annotations
 from decimal import Decimal
 
 from monitor.metrics import (
+    PnlOptimalSummary,
     build_pnl_pair_snapshot,
     levels_from_depth_curve,
     load_metrics_config,
@@ -617,8 +618,6 @@ def test_empty_reconstructed_depth_is_no_depth() -> None:
 
 def test_overview_net_wire_ok_matches_optimal() -> None:
     """ADR-0002: ok summary drives Net from the same Q* bps / direction / size."""
-    from monitor.metrics.pnl_snapshot import PnlOptimalSummary
-
     summary = PnlOptimalSummary(
         status="ok",
         has_depth=True,
@@ -643,8 +642,6 @@ def test_overview_net_wire_ok_matches_optimal() -> None:
 
 def test_overview_net_wire_blank_when_non_ok() -> None:
     """Non-ok PnL must not fall back to M3 $1K Net (structural sign trap)."""
-    from monitor.metrics.pnl_snapshot import PnlOptimalSummary
-
     for status in (
         "no_depth",
         "no_pool",
@@ -664,8 +661,6 @@ def test_overview_net_wire_blank_when_non_ok() -> None:
 
 def test_overview_net_wire_negative_ok_keeps_sign() -> None:
     """Negative optimal PnL remains first-class on Net (same as Bucket PnL)."""
-    from monitor.metrics.pnl_snapshot import PnlOptimalSummary
-
     summary = PnlOptimalSummary(
         status="ok",
         has_depth=True,

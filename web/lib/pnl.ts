@@ -85,6 +85,54 @@ export function quoteAgedHint(ages: QuoteAgeFields): string | undefined {
   return "aged";
 }
 
+/**
+ * Overview Net @ Q* cell helpers (ADR-0002 / WHI-966).
+ * Mirrors Bucket PnL quote_aged annotations so adjacent columns stay consistent.
+ */
+export type OverviewNetCell = {
+  title: string;
+  sizeLabel: string | null;
+  quoteAged: boolean;
+  ageHint?: string;
+};
+
+export function overviewNetCell(
+  row: {
+    net_edge_bps?: string | null;
+    net_size_usd?: string | null;
+    amm_quote_reason?: string | null;
+    pnl_v2?: QuoteAgeFields | null;
+  },
+  emptyTitle?: string | null,
+): OverviewNetCell {
+  const ages = row.pnl_v2 ?? {};
+  const aged = Boolean(ages.quote_aged);
+  const agedTitle = aged ? quoteAgeTitle(ages) : null;
+  const ageHint = quoteAgedHint(ages);
+  if (row.net_edge_bps == null) {
+    const base =
+      emptyTitle ?? "No Q* yet (needs depth + fillable AMM optimal)";
+    return {
+      title: agedTitle ? `${base} · ${agedTitle}` : base,
+      sizeLabel: null,
+      quoteAged: aged,
+      ageHint,
+    };
+  }
+  const size =
+    row.net_size_usd != null ? `Q*=$${fmtNotional(row.net_size_usd)}` : "Q*";
+  // bps already a fixed-point wire string; keep as-is for stable titles.
+  let title = `Net ${row.net_edge_bps} bps @ ${size} (PnL v2 optimal; same size as Bucket PnL)`;
+  if (agedTitle) title = `${title} · ${agedTitle}`;
+  return {
+    title,
+    sizeLabel:
+      row.net_size_usd != null ? `Q* $${fmtNotional(row.net_size_usd)}` : null,
+    quoteAged: aged,
+    ageHint,
+  };
+}
+
 export function overviewPnlCell(
   pnl: PnlOptimalSummary | null | undefined,
   venues?: DirectionVenues | null,

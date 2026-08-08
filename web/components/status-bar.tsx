@@ -114,7 +114,13 @@ export function StatusBar({
           </span>
         </span>
 
-        <span title="Overview Net is at PnL v2 optimal size Q* per row (ADR-0002). Detail EdgeStats still use fixed M3 $1K.">
+        <span
+          title={
+            overview?.reference_size_usd != null
+              ? `Overview Net is at PnL v2 optimal size Q* per row (ADR-0002). Detail EdgeStats remain secondary at fixed M3 $${Number(overview.reference_size_usd).toLocaleString()}.`
+              : "Overview Net is at PnL v2 optimal size Q* per row (ADR-0002)."
+          }
+        >
           net@{" "}
           <span className="tabular-nums text-foreground">Q*</span>
         </span>

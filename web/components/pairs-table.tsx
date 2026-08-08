@@ -32,7 +32,7 @@ import {
 } from "@/lib/format";
 import { marketPairPath } from "@/lib/markets";
 import { mmActiveLabel, mmActiveTitle } from "@/lib/mm";
-import { overviewPnlCell } from "@/lib/pnl";
+import { overviewNetCell, overviewPnlCell } from "@/lib/pnl";
 import {
   bucketPnlHeaderLabel,
   bucketPnlSortTitle,
@@ -868,33 +868,45 @@ export function PairsTable({
                     ) : null}
                   </td>
                   {/* Edge — Net @ Q* (ADR-0002 / WHI-966) */}
-                  <td
-                    className={cn(
-                      "px-2 py-1.5 text-right font-medium",
-                      groupSep("edge"),
-                    )}
-                    title={
-                      row.net_edge_bps != null && row.net_size_usd != null
-                        ? `Net ${fmtSignedBps(row.net_edge_bps)} bps @ Q*=$${fmtNotional(row.net_size_usd)} (PnL v2 optimal; same size as Bucket PnL)`
-                        : row.net_edge_bps != null
-                          ? `Net ${fmtSignedBps(row.net_edge_bps)} bps at Q* (size n/a)`
-                          : (ammQuoteReasonTitle(row.amm_quote_reason) ??
-                            "No Q* yet (needs depth + fillable AMM optimal)")
-                    }
-                  >
-                    <div className="flex flex-col items-end gap-0 leading-tight">
-                      <BpsCell
-                        value={row.net_edge_bps}
-                        emptyLabel={ammQuoteReasonLabel(row.amm_quote_reason)}
-                        emptyTitle={ammQuoteReasonTitle(row.amm_quote_reason)}
-                      />
-                      {row.net_edge_bps != null && row.net_size_usd != null ? (
-                        <span className="text-[10px] font-normal text-muted-foreground tabular-nums">
-                          Q* ${fmtNotional(row.net_size_usd)}
-                        </span>
-                      ) : null}
-                    </div>
-                  </td>
+                  {(() => {
+                    const net = overviewNetCell(
+                      row,
+                      ammQuoteReasonTitle(row.amm_quote_reason) ??
+                        "No Q* yet (needs depth + fillable AMM optimal)",
+                    );
+                    return (
+                      <td
+                        className={cn(
+                          "px-2 py-1.5 text-right font-medium",
+                          groupSep("edge"),
+                          net.quoteAged && "opacity-80",
+                        )}
+                        title={net.title}
+                      >
+                        <div className="flex flex-col items-end gap-0 leading-tight">
+                          <BpsCell
+                            value={row.net_edge_bps}
+                            emptyLabel={ammQuoteReasonLabel(
+                              row.amm_quote_reason,
+                            )}
+                            emptyTitle={net.title}
+                          />
+                          {net.sizeLabel != null ? (
+                            <span className="text-[10px] font-normal text-muted-foreground tabular-nums">
+                              {net.sizeLabel}
+                              {net.quoteAged && net.ageHint ? (
+                                <span className="ml-1">{net.ageHint}</span>
+                              ) : null}
+                            </span>
+                          ) : net.quoteAged && net.ageHint ? (
+                            <span className="text-[10px] font-normal text-muted-foreground">
+                              {net.ageHint}
+                            </span>
+                          ) : null}
+                        </div>
+                      </td>
+                    );
+                  })()}
                   <td
                     className="px-2 py-1.5 text-muted-foreground"
                     title={

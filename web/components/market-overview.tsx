@@ -408,7 +408,11 @@ export function MarketOverview({ marketId }: Props) {
           : "Prices are CEX L1 vs AMM (this market has no RFQ). "}
         Net is AMM cash-flow bps at PnL v2 optimal size <strong>Q*</strong>{" "}
         (same notional and direction as Bucket PnL; Q* chip under the bps).
-        Detail EdgeStats / cost floor remain at fixed M3 $1K (secondary).{" "}
+        Detail EdgeStats / cost floor remain secondary at fixed M3{" "}
+        {overview?.reference_size_usd != null
+          ? `$${Number(overview.reference_size_usd).toLocaleString()}`
+          : "reference size"}
+        .{" "}
         Overview defaults to Top {TOP_N_DEFAULT} by the active sort column
         among <strong>DEX-tradeable</strong> pairs only (quotable AMM mid +
         above inventory TVL floor; n/a and no-pool/empty-pool/dust never fill

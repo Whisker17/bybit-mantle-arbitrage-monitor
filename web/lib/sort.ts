@@ -115,7 +115,7 @@ export function filterRows(
 }
 
 export const SORT_KEYS: { key: SortKey; label: string }[] = [
-  { key: "net_edge", label: "Net edge" },
+  { key: "net_edge", label: "Net @ Q*" },
   { key: "amm_spread", label: "vs CEX" },
   { key: "rfq_spread", label: "RFQ vs CEX" },
   { key: "premium_bps", label: "CEX vs Und" },
