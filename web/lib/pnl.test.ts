@@ -473,3 +473,56 @@ describe("isThinDepth / pickBucketTable", () => {
     assert.equal(isOptimalBucket(bucket("10", "-0.1"), table), false);
   });
 });
+
+describe("WHI-973 isCapturableOpportunity accepts the real overview row shape", () => {
+  /**
+   * The overview wire row declares the PnL v2 optimal fields **optional**
+   * (see `overviewNetCell`'s row type). A narrower `Pick<>` parameter still
+   * satisfies hand-written literals like the WHI-962 cases above, so those
+   * tests passed while `next build` failed at the real call site.
+   *
+   * `tsx --test` strips types without checking them, so the guard here is the
+   * explicit annotation plus `npm run typecheck` — narrowing the signature
+   * again fails typecheck on this file.
+   *
+   * Deliberately **not** `PnlOptimalFloorFields`: this is the independent
+   * oracle. Production code shares that alias so the row types and the
+   * predicate cannot drift apart; spelling the contract out by hand here is
+   * what catches someone narrowing the alias itself. Do not "de-duplicate"
+   * this into the alias — that removes the only outside check.
+   */
+  type WireOptimal = {
+    meets_min_profit?: boolean;
+    optimal_net_pnl_usd?: string | null;
+  };
+
+  it("absent optimal fields are not capturable", () => {
+    const pnl_v2: WireOptimal = {};
+    assert.equal(
+      isCapturableOpportunity({ pnl_v2, clears_drift_optimal: true }),
+      false,
+    );
+  });
+
+  it("undefined optimal_net_pnl_usd is not capturable even when floors say ok", () => {
+    const pnl_v2: WireOptimal = {
+      meets_min_profit: true,
+      optimal_net_pnl_usd: undefined,
+    };
+    assert.equal(
+      isCapturableOpportunity({ pnl_v2, clears_drift_optimal: true }),
+      false,
+    );
+  });
+
+  it("a populated optional-shaped row is still capturable", () => {
+    const pnl_v2: WireOptimal = {
+      meets_min_profit: true,
+      optimal_net_pnl_usd: "2.5",
+    };
+    assert.equal(
+      isCapturableOpportunity({ pnl_v2, clears_drift_optimal: true }),
+      true,
+    );
+  });
+});
