@@ -380,9 +380,12 @@ def test_snapshot_pricing_anomaly_blocks_optimal() -> None:
 
 
 def test_snapshot_400bps_pricing_anomaly_suppresses_pnl() -> None:
-    """WHI-964 AC: 400 bps → pricing_anomaly; mid kept on quote seam; PnL off."""
-    from monitor.metrics.amm_quote import annotate_pricing_anomaly
+    """WHI-964 AC: 400 bps → pricing_anomaly; PnL optimal suppressed.
 
+    Mid-kept-with-reason is covered by
+    ``test_annotate_pricing_anomaly_400bps_trips_bot_aligned_gate``; this
+    test only checks the PnL assembly path.
+    """
     pair = _load_aapl_pair()
     # CEX 100, AMM 104 → +400 bps.
     pool_tick = _pool_tick(mid=Decimal("104"))
@@ -405,15 +408,6 @@ def test_snapshot_400bps_pricing_anomaly_suppresses_pnl() -> None:
     assert amm is not None
     cfg = _cfg()
     assert cfg.max_abs_amm_spread_bps == Decimal(300)
-    # Mid still visible on the quote seam (kept with pricing_anomaly reason).
-    kept_mid, quote_reason = annotate_pricing_anomaly(
-        pool_tick.mid_usdc_per_native,
-        None,
-        cex_mid=Decimal("100"),
-        max_abs_spread_bps=cfg.max_abs_amm_spread_bps,
-    )
-    assert kept_mid == Decimal("104")
-    assert quote_reason == "pricing_anomaly"
     snap = build_pnl_pair_snapshot(
         pair_id=pair.id,
         bybit=_book(bid=Decimal("100"), ask=Decimal("100")),
