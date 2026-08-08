@@ -88,14 +88,17 @@ edge_bps = direction_aware_spread_bps
 Inventory is pre-positioned on both sides (same model as phase-1); carry is an
 aggregate cost, not per-fill amortization, unless revised with evidence.
 
-**Overview headline Net (product, ADR-0002 / WHI-965):** the Web overview
-**Net** column is defined at PnL v2 **Q\*** (same optimal notional and
-direction as Bucket PnL), **not** at the fixed M3 $1 000 reference. The M3
-formula above remains the wear algebra at a chosen \(Q\); what changed is
-**which \(Q\)** the headline uses. Wiring is a follow-up implement issue;
-until that lands, live code may still emit Net at `reference_size_usd`
-($1 000). **TUI is frozen** and may keep the $1 000 Net until explicitly
-updated or retired.
+**Overview headline Net (product, ADR-0002 / WHI-965; wired WHI-966):** the
+Web overview **Net** column is defined at PnL v2 **Q\*** (same optimal
+notional and direction as Bucket PnL), **not** at the fixed M3 $1 000
+reference. API enrichment (`PnlOptimalSummary.overview_net_wire`) sets
+`net_edge_bps` / `net_edge_direction` / `net_size_usd` from the optimal
+cash-flow bps when `pnl_v2.status == ok` (incl. quote_aged); non-ok blanks
+Net rather than falling back to $1 000. The M3 formula above remains the
+wear algebra at a chosen \(Q\) for detail ladders. **TUI is frozen** and
+still shows $1 000 Net until explicitly updated or retired.
+`EdgeStats` / `breach_size_usd` stay on the fixed $1 000 rung (secondary
+diagnostic; see ADR-0002 EdgeStats epoch policy).
 
 **PnL v2** (below) is the cash-flow form of the same paper arb. Implementers
 must not assume `PnL_USD ≈ edge_bps/1e4 * Q` once multi-level VWAP / exact AMM
@@ -181,17 +184,17 @@ invariant; matched base \(q\) shares that unit). Full algebra in research note
 
 | Path | Sizes | Owner |
 |------|-------|-------|
-| **Overview Net** (Web headline) | **Q\*** from PnL v2 optimal search | **ADR-0002** (WHI-965 decision; implement follow-up) |
-| M3 fixed ladder `edge_bps` (§2.3) | **$1 000 / $5 000 / $20 000** (`config/metrics.yaml`) | Detail / wear waterfall / optional EdgeStats at fixed rung |
+| **Overview Net** (Web headline) | **Q\*** from PnL v2 optimal search | **ADR-0002** + **WHI-966** (wired) |
+| M3 fixed ladder `edge_bps` (§2.3) | **$1 000 / $5 000 / $20 000** (`config/metrics.yaml`) | Detail / wear waterfall / EdgeStats at fixed rung |
 | PnL v2 AMM buckets + search (this section) | **$10 / $50 / $100 / $500 / $1 000 / $10 000** + continuous Q\* | WHI-756 engine; Web/API WHI-766 |
 | PnL v2 RFQ | Collector poll notionals only (not the AMM bucket list) | WHI-756 / WHI-766 |
 
-**ADR-0002:** overview Net and Bucket PnL share Q\* size semantics so they do
-not disagree in sign for structural size reasons. The fixed M3 ladder is
-**secondary** (diagnostics), not the overview Net definition. Pre-ADR code
-and frozen TUI may still show Net at $1 000 until the implement issue lands.
-`EdgeStats` / `breach_size_usd` epoch policy is decided in that follow-up —
-do not silently retarget cumulative series.
+**ADR-0002 / WHI-966:** overview Net and Bucket PnL share Q\* size semantics
+so they do not disagree in sign for structural size reasons. The fixed M3
+ladder is **secondary** (diagnostics), not the overview Net definition.
+Frozen TUI may still show Net at $1 000. **EdgeStats epoch policy:** keep
+cumulative breach / distribution series on `breach_size_usd` ($1 000);
+label detail panels as secondary — do not silently retarget.
 
 #### 2.6.4 Optimal size (AMM only)
 

@@ -114,14 +114,10 @@ export function StatusBar({
           </span>
         </span>
 
-        {overview?.reference_size_usd != null && (
-          <span>
-            net@{" "}
-            <span className="tabular-nums text-foreground">
-              ${Number(overview.reference_size_usd).toLocaleString()}
-            </span>
-          </span>
-        )}
+        <span title="Overview Net is at PnL v2 optimal size Q* per row (ADR-0002). Detail EdgeStats still use fixed M3 $1K.">
+          net@{" "}
+          <span className="tabular-nums text-foreground">Q*</span>
+        </span>
       </div>
     </div>
   );

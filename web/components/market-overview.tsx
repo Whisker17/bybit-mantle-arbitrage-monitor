@@ -404,8 +404,11 @@ export function MarketOverview({ marketId }: Props) {
 
       <p className="mt-3 text-[10px] text-muted-foreground">
         {hasRfq
-          ? "Prices are de-multiplied CEX L1 vs DEX AMM/RFQ. Net edge is AMM-only at the reference notional (see status bar). "
-          : "Prices are CEX L1 vs AMM (this market has no RFQ). Net edge is AMM-only at the reference notional. "}
+          ? "Prices are de-multiplied CEX L1 vs DEX AMM/RFQ. "
+          : "Prices are CEX L1 vs AMM (this market has no RFQ). "}
+        Net is AMM cash-flow bps at PnL v2 optimal size <strong>Q*</strong>{" "}
+        (same notional and direction as Bucket PnL; Q* chip under the bps).
+        Detail EdgeStats / cost floor remain at fixed M3 $1K (secondary).{" "}
         Overview defaults to Top {TOP_N_DEFAULT} by the active sort column
         among <strong>DEX-tradeable</strong> pairs only (quotable AMM mid +
         above inventory TVL floor; n/a and no-pool/empty-pool/dust never fill

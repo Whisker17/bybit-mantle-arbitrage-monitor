@@ -1,8 +1,8 @@
 # ADR-0002: Overview Net anchored at PnL v2 Q*
 
-* Status: Accepted
+* Status: Accepted (wired by WHI-966)
 * Date: 2026-08-08
-* Issue: WHI-965 (M9 cost-model truth-up)
+* Issue: WHI-965 (decision); WHI-966 (implementation)
 * Owner decision: option **B** (re-anchor overview Net to Q*)
 
 ## Context
@@ -59,9 +59,19 @@ Product meaning after this ADR:
    `EdgeStats` at a documented epoch) until a follow-up retires or
    renames them — but they are not the headline.
 
-This ADR **records the product decision only**. Wiring overview builders,
-API fields, Web labels, and any EdgeStats epoch is a **follow-up
-implementation issue** (out of scope for WHI-965).
+This ADR **records the product decision**. Wiring landed in **WHI-966**:
+API overview Net is driven from `PnlOptimalSummary.overview_net_wire()`
+(same Q* bps / direction / notional as Bucket PnL); Web shows a Q* chip
+beside Net; TUI remains frozen at $1K Net.
+
+### EdgeStats / breach epoch policy (WHI-966)
+
+**Keep** cumulative `EdgeStats` / cost-floor breach series on fixed
+`breach_size_usd` ($1 000). Do **not** retarget `breach_size_usd` or start
+a Q*-keyed series in this change. Detail EdgeStats panels are labeled as
+**secondary** diagnostics at the fixed M3 rung; overview headline Net is
+Q*-native. A future issue may introduce a Q*-keyed series with an
+explicit epoch break if product needs it.
 
 ## Consequences
 

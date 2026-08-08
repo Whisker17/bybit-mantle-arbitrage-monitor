@@ -255,11 +255,13 @@ placeholders. Agents must not assume a module exists until its issue lands. -->
     `scripts/xstocks_delay_decay.py`. Report
     `docs/references/m8-delay-decay.md` (+ companion JSON). Direction 1 only
     (`buy_fluxion_sell_bybit`); gates bot live trading / admission premium.
-  - **Overview Net @ Q\* (WHI-965 ADR-0002) decided, not wired:** product
-    decision that Web overview **Net** uses PnL v2 optimal size Q\* (same as
-    Bucket PnL), not fixed M3 $1K. ADR `docs/adr/0002-overview-net-at-qstar.md`;
-    DESIGN §2.3 / §2.6.3 updated. **Live code still emits Net at $1K** until
-    the implement follow-up; TUI frozen.
+  - **Overview Net @ Q\* (WHI-965 ADR-0002 + WHI-966) landed:** Web/API
+    overview **Net** uses PnL v2 optimal size Q\* (same bps / direction /
+    notional as Bucket PnL) via `PnlOptimalSummary.overview_net_wire`;
+    `net_size_usd` + Q\* chip under Net; non-ok blanks Net (no $1K fallback).
+    EdgeStats / `breach_size_usd` stay on fixed $1K (secondary). TUI frozen
+    at $1K Net. ADR `docs/adr/0002-overview-net-at-qstar.md`; DESIGN §2.3 /
+    §2.6.3.
   - **Withdrawal fee cost line (WHI-961) landed:** direction-aware transfer
     cost in PnL v2 + M3 edge — dir1 `stable_withdrawal_fee_usd` (0 measured),
     dir2 `asset_withdrawal_fee_tokens × listed mid` (mid × multiplier);

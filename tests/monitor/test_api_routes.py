@@ -248,6 +248,17 @@ def test_pairs_overview_with_depth_exposes_optimal(client_with_depth: TestClient
     # WHI-824: flat sort keys mirror ok numeric optimal (fixed-point strings).
     assert aapl["pnl_optimal_net_usd"] == pnl["optimal_net_pnl_usd"]
     assert aapl["pnl_optimal_net_bps"] == pnl["optimal_net_pnl_bps"]
+    # WHI-966 / ADR-0002: Net at Q* — same bps/direction/size as Bucket PnL.
+    assert aapl["net_edge_bps"] == pnl["optimal_net_pnl_bps"]
+    assert aapl["net_edge_direction"] == pnl["direction"]
+    assert aapl["net_edge_venue"] == "amm"
+    assert aapl["net_size_usd"] == pnl["optimal_notional_usd"]
+    # Sign agreement invariant (dual-ok tick).
+    net = Decimal(aapl["net_edge_bps"])
+    bucket = Decimal(aapl["pnl_optimal_net_bps"])
+    assert (net > 0) == (bucket > 0)
+    assert (net < 0) == (bucket < 0)
+    assert (net == 0) == (bucket == 0)
 
 
 def test_pairs_overview_flat_pnl_null_when_no_depth(client: TestClient) -> None:
@@ -258,6 +269,11 @@ def test_pairs_overview_flat_pnl_null_when_no_depth(client: TestClient) -> None:
     assert aapl["pnl_v2"]["status"] == "no_depth"
     assert aapl["pnl_optimal_net_usd"] is None
     assert aapl["pnl_optimal_net_bps"] is None
+    # WHI-966: no Q* → blank Net (do not fall back to M3 $1K).
+    assert aapl["net_edge_bps"] is None
+    assert aapl["net_edge_direction"] is None
+    assert aapl["net_edge_venue"] is None
+    assert aapl["net_size_usd"] is None
 
 
 def test_pair_detail_pnl_buckets_with_depth(client_with_depth: TestClient) -> None:

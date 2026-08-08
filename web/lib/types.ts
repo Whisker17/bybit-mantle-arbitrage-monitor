@@ -143,6 +143,12 @@ export type PairOverviewRow = {
   net_edge_bps: string | null;
   net_edge_venue: VenueKind | null;
   net_edge_direction: Direction | null;
+  /**
+   * WHI-966 / ADR-0002: Q* notional that Net is evaluated at (same as
+   * pnl_v2.optimal_notional_usd when status==ok). Null when Net is blank.
+   * Distinct from reference_size_usd (M3 $1K EdgeStats / detail ladder).
+   */
+  net_size_usd?: string | null;
   reference_size_usd: string;
   volume_24h: string;
   trades_24h: number;

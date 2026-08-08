@@ -216,7 +216,8 @@ const COLS: Col[] = [
     label: "Net",
     group: "edge",
     align: "right",
-    title: "Net edge at ref size (AMM)",
+    title:
+      "Net paper edge at PnL v2 optimal size Q* (AMM cash-flow bps; same size/direction as Bucket PnL). Hover cell for Q*.",
   },
   {
     id: "dir",
@@ -866,18 +867,33 @@ export function PairsTable({
                       </span>
                     ) : null}
                   </td>
-                  {/* Edge */}
+                  {/* Edge — Net @ Q* (ADR-0002 / WHI-966) */}
                   <td
                     className={cn(
                       "px-2 py-1.5 text-right font-medium",
                       groupSep("edge"),
                     )}
+                    title={
+                      row.net_edge_bps != null && row.net_size_usd != null
+                        ? `Net ${fmtSignedBps(row.net_edge_bps)} bps @ Q*=$${fmtNotional(row.net_size_usd)} (PnL v2 optimal; same size as Bucket PnL)`
+                        : row.net_edge_bps != null
+                          ? `Net ${fmtSignedBps(row.net_edge_bps)} bps at Q* (size n/a)`
+                          : (ammQuoteReasonTitle(row.amm_quote_reason) ??
+                            "No Q* yet (needs depth + fillable AMM optimal)")
+                    }
                   >
-                    <BpsCell
-                      value={row.net_edge_bps}
-                      emptyLabel={ammQuoteReasonLabel(row.amm_quote_reason)}
-                      emptyTitle={ammQuoteReasonTitle(row.amm_quote_reason)}
-                    />
+                    <div className="flex flex-col items-end gap-0 leading-tight">
+                      <BpsCell
+                        value={row.net_edge_bps}
+                        emptyLabel={ammQuoteReasonLabel(row.amm_quote_reason)}
+                        emptyTitle={ammQuoteReasonTitle(row.amm_quote_reason)}
+                      />
+                      {row.net_edge_bps != null && row.net_size_usd != null ? (
+                        <span className="text-[10px] font-normal text-muted-foreground tabular-nums">
+                          Q* ${fmtNotional(row.net_size_usd)}
+                        </span>
+                      ) : null}
+                    </div>
                   </td>
                   <td
                     className="px-2 py-1.5 text-muted-foreground"

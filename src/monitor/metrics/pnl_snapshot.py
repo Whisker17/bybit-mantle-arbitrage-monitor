@@ -132,6 +132,33 @@ class PnlOptimalSummary:
             "pnl_optimal_net_bps": _dec_str(bps),
         }
 
+    def overview_net_wire(self) -> dict[str, str | None]:
+        """Overview Net fields at PnL v2 Q* (ADR-0002 / WHI-966).
+
+        When status is ``ok`` (including ``quote_aged`` annotation), Net uses
+        the same optimal net bps / direction / notional as Bucket PnL. Non-ok
+        statuses blank Net — never fall back to M3 ``reference_size_usd`` $1K,
+        which reintroduces structural sign disagreement with Bucket PnL.
+        Venue is always AMM (Q* search is AMM-only).
+        """
+        if (
+            self.status != "ok"
+            or self.optimal_net_pnl_bps is None
+            or self.direction is None
+        ):
+            return {
+                "net_edge_bps": None,
+                "net_edge_venue": None,
+                "net_edge_direction": None,
+                "net_size_usd": None,
+            }
+        return {
+            "net_edge_bps": _dec_str(self.optimal_net_pnl_bps),
+            "net_edge_venue": "amm",
+            "net_edge_direction": self.direction,
+            "net_size_usd": _dec_str(self.optimal_notional_usd),
+        }
+
 
 @dataclass(frozen=True, slots=True)
 class PnlPairSnapshot:

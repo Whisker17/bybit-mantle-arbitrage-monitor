@@ -86,9 +86,12 @@ export function EdgeStatsPanel({
   return (
     <div className="space-y-3">
       <p className="text-[10px] text-muted-foreground">
-        Net paper edge (M3) — cumulative over recent journal book samples
-        (each distribution row prints its own n=). PnL v2 below is cash-flow
-        at fixed USD buckets + sample-best optimal size.
+        M3 paper edge + cumulative EdgeStats at fixed{" "}
+        <strong>breach size $1,000</strong> (secondary diagnostic; not the
+        overview headline). Overview <strong>Net</strong> uses PnL v2{" "}
+        <strong>Q*</strong> (ADR-0002). Each distribution row prints its own
+        n=. PnL v2 below is cash-flow at fixed USD buckets + sample-best
+        optimal size.
       </p>
       <div
         className={cn(

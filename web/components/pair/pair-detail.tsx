@@ -263,13 +263,27 @@ export function PairDetail({ marketId, pairId }: Props) {
             }
           />
           <Field
-            label="Net edge"
+            label="Net @ Q*"
             value={fmtOrAmmReason(
               fmtSignedBps(o.net_edge_bps),
               o.net_edge_bps,
               o.amm_quote_reason,
             )}
             tone={bpsTone(o.net_edge_bps)}
+            title={
+              o.net_size_usd != null
+                ? `PnL v2 cash-flow net at optimal Q*=$${fmtNotional(o.net_size_usd)} (same as Bucket PnL)`
+                : "Overview Net at Q* when depth+optimal available (ADR-0002)"
+            }
+          />
+          <Field
+            label="Q*"
+            value={
+              o.net_size_usd != null
+                ? `$${fmtNotional(o.net_size_usd)}`
+                : "—"
+            }
+            title="PnL v2 optimal notional for Net / Bucket PnL"
           />
           <Field
             label="Direction"
