@@ -46,6 +46,22 @@ soon — anything touching key handling, RPC credentials defaults to at least Hi
   and `fillable=False`. Cosmetic phantom credit on dir2; UI already treats
   non-ok rows as non-tradable. Zeroing basis on unfillable would be cleaner.
 
+- **Web cost waterfall paints signed credits as cost bars** (Low, WHI-960 → Web).
+  After signed basis, dir2 `basis_bps`/`basis_usd` are negative. Both
+  `web/components/pair/edge-panel.tsx` waterfalls size bars with `Math.abs`
+  and always use `bg-warning/70`, so a credit looks like a cost bar; only the
+  numeric label shows the sign. Pre-existing rendering; negative basis was
+  unreachable under `ge=0`. Fix: signed fill color / direction, or a credit
+  style class. Out of scope for the metrics engine change.
+
+- **Package cycle forces lazy `depth_math` imports in tests** (Low, WHI-960
+  review surface). Chain: `monitor.bybit.depth_math` → `symbols.__init__` →
+  `bstocks_load` → `markets` → `attribution` → `metrics` → `bybit_slip` →
+  `depth_math` (partial). Tests (`test_metrics_pnl_v2`, `test_metrics_pnl_snapshot`)
+  import `depth_math` lazily after metrics. Pre-existing architecture; fix by
+  making `depth_math` import `monitor.symbols.multipliers` without pulling
+  package `__init__` side effects (or slimming `symbols.__init__`).
+
 - **WHI-908: fill-validation script duplicates M0 sample builder** (Low, WHI-908).
   `scripts/xstocks_fill_validation.py::build_amm_samples_with_meta` is a near-
   copy of `scripts/xstocks_edge_quant.py::build_amm_samples`, adding only the

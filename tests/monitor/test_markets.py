@@ -250,6 +250,8 @@ def test_load_market_context_binance_has_inventory_no_pairs_shape() -> None:
     assert len(ctx.bstocks.pairs) == 55  # WHI-790 full bStocks universe
     assert ctx.cex.multiplier_semantics is MultiplierSemantics.MULTIPLY
     assert ctx.metrics.gas_usd_per_swap == Decimal("0.05")
+    # WHI-960: both legs USDT — basis stays 0 (bybit-fluxion is 7.5).
+    assert ctx.metrics.usdt_usdc_basis_bps == Decimal(0)
     assert "binance-pancake" in str(ctx.sqlite_path)
 
 
