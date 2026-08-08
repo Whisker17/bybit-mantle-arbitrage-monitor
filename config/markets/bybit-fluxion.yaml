@@ -64,10 +64,18 @@ inventory:
     rate_limit_per_minute: 60
     min_poll_interval_s: 11
     settlement: limit_order_protocol
+  # sigma_transit_bps: Bybit mid log-return sample std @10m lag, session-split
+  # (open = RTH / closed = after-hours). Source of record:
+  # docs/references/m8-delay-decay.md (WHI-915, generated 2026-08-07).
+  # Stale-by-design — refresh when WHI-915 re-runs. Panel bar is
+  # k × σ (config/metrics.yaml pnl_v2.drift_premium_k, bot default 1.5).
   pairs:
   - id: AAPLx
     name: Apple xStock
     low_liquidity: false
+    sigma_transit_bps:
+      open: '24.85'
+      closed: '9.84'
     bybit:
       symbol: AAPLXUSDT
       base_coin: AAPLX
@@ -89,6 +97,9 @@ inventory:
     low_liquidity: false
     # Measured 2026-08-07 GET /v5/asset/coin/query-info Mantle (WHI-961).
     asset_withdrawal_fee_tokens: '0.005'
+    sigma_transit_bps:
+      open: '68.83'
+      closed: '58.57'
     bybit:
       symbol: CRCLXUSDT
       base_coin: CRCLX
@@ -108,6 +119,9 @@ inventory:
   - id: GOOGLx
     name: Alphabet xStock
     low_liquidity: false
+    sigma_transit_bps:
+      open: '74.27'
+      closed: '22.18'
     bybit:
       symbol: GOOGLXUSDT
       base_coin: GOOGLX
@@ -129,6 +143,9 @@ inventory:
     low_liquidity: false
     # Measured 2026-08-07 GET /v5/asset/coin/query-info Mantle (WHI-961).
     asset_withdrawal_fee_tokens: '0.01'
+    sigma_transit_bps:
+      open: '44.03'
+      closed: '25.08'
     bybit:
       symbol: HOODXUSDT
       base_coin: HOODX
@@ -148,6 +165,9 @@ inventory:
   - id: METAx
     name: Meta xStock
     low_liquidity: false
+    sigma_transit_bps:
+      open: '22.36'
+      closed: '13.18'
     bybit:
       symbol: METAXUSDT
       base_coin: METAX
@@ -169,6 +189,9 @@ inventory:
     low_liquidity: false
     # Measured 2026-08-07 GET /v5/asset/coin/query-info Mantle (WHI-961).
     asset_withdrawal_fee_tokens: '0.005'
+    sigma_transit_bps:
+      open: '26.50'
+      closed: '14.19'
     bybit:
       symbol: NVDAXUSDT
       base_coin: NVDAX
@@ -188,6 +211,9 @@ inventory:
   - id: TSLAx
     name: Tesla xStock
     low_liquidity: false
+    sigma_transit_bps:
+      open: '25.13'
+      closed: '11.86'
     bybit:
       symbol: TSLAXUSDT
       base_coin: TSLAX
@@ -207,6 +233,9 @@ inventory:
   - id: SPCXx
     name: SpaceX xStock
     low_liquidity: true
+    sigma_transit_bps:
+      open: '78.51'
+      closed: '42.75'
     bybit:
       symbol: SPCXXUSDT
       base_coin: SPCXX

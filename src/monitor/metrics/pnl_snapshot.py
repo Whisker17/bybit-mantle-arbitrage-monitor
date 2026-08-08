@@ -89,6 +89,9 @@ class PnlOptimalSummary:
     optimal_net_pnl_usd: Decimal | None = None
     optimal_net_pnl_bps: Decimal | None = None
     bybit_depth_source: DepthSource | None = None
+    # Highlight gate (min_profit_usd / min_profit_bps). False when floors
+    # set and not met; True when floors cleared or unset-and-positive.
+    meets_min_profit: bool = False
     # WHI-821: quiet event-driven CEX ≠ dead feed — annotate, don't blank.
     quote_aged: bool = False
     cex_quote_age_ms: int | None = None
@@ -106,6 +109,7 @@ class PnlOptimalSummary:
             "optimal_net_pnl_usd": _dec_str(self.optimal_net_pnl_usd),
             "optimal_net_pnl_bps": _dec_str(self.optimal_net_pnl_bps),
             "bybit_depth_source": self.bybit_depth_source,
+            "meets_min_profit": self.meets_min_profit,
             "quote_aged": self.quote_aged,
             "cex_quote_age_ms": self.cex_quote_age_ms,
             "amm_quote_age_ms": self.amm_quote_age_ms,
@@ -324,6 +328,7 @@ def _summary_from_optimal(
         optimal_net_pnl_usd=opt.pnl_usd,
         optimal_net_pnl_bps=pnl_bps,
         bybit_depth_source=opt.result.bybit_depth_source,
+        meets_min_profit=opt.result.meets_min_profit,
         quote_aged=ages.quote_aged,
         cex_quote_age_ms=ages.cex_ms,
         amm_quote_age_ms=ages.amm_ms,

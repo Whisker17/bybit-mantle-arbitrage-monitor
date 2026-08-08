@@ -60,8 +60,13 @@ class PnlV2Config(BaseModel):
     amm_solve_max_iters: int = Field(default=64, ge=1)
     amm_cap_max_iters: int = Field(default=24, ge=1)
     # Highlight / breach only — raw PnL is always emitted.
+    # Bot floor is 1.5 USDT (mantle-stocks-arbitrage-bots thresholds); set in
+    # config/metrics.yaml so +$0.40 optima do not highlight (WHI-962).
     min_profit_usd: Decimal | None = Field(default=None)
     min_profit_bps: Decimal | None = Field(default=None)
+    # Sequential-execution bar multiplier: required_edge ≥ k × σ_transit.
+    # Bot default 1.5 (decide.py / thresholds drift_premium_k). WHI-962.
+    drift_premium_k: Decimal = Field(default=Decimal("1.5"), ge=0)
     gas_on_rfq: bool = True
     # Optional L1 soft depth cap (USD). None ⇒ depth_cap = +∞ on L1 path.
     l1_assumed_size_usd: Decimal | None = Field(default=None)
@@ -73,6 +78,7 @@ class PnlV2Config(BaseModel):
         "q_tol_rel",
         "min_profit_usd",
         "min_profit_bps",
+        "drift_premium_k",
         "l1_assumed_size_usd",
         mode="before",
     )

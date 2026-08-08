@@ -20,6 +20,7 @@ import {
   type DirectionVenues,
 } from "@/lib/format";
 import {
+  formatDriftRequirement,
   isOptimalBucket,
   isThinDepth,
   pickBucketTable,
@@ -31,6 +32,7 @@ import {
 import type {
   CostBreakdown,
   Direction,
+  DriftAnnotation,
   Distribution,
   EdgePanel,
   PnlBucketTable,
@@ -298,6 +300,32 @@ function Bps({
   );
 }
 
+function DriftRequirementLine({
+  drift,
+  netBps,
+}: {
+  drift: DriftAnnotation | null | undefined;
+  netBps?: string | null;
+}) {
+  const line = formatDriftRequirement(drift, netBps);
+  if (line == null) return null;
+  const fails = drift?.clears_drift_optimal === false;
+  const clears = drift?.clears_drift_optimal === true;
+  return (
+    <p
+      className={cn(
+        "text-[11px]",
+        fails && "text-warning",
+        clears && "text-muted-foreground",
+        !fails && !clears && "text-muted-foreground",
+      )}
+      title="Bot admission requires net ≥ k × σ_transit (sequential transfer). WHI-915/WHI-962."
+    >
+      {line}
+    </p>
+  );
+}
+
 function BucketPnlPanel({
   snap,
   direction,
@@ -328,6 +356,10 @@ function BucketPnlPanel({
 
   const thin = isThinDepth(table);
   const best = snap.best;
+  const drift = snap.drift;
+  const failsDrift = drift?.clears_drift_optimal === false;
+  const capturable =
+    best.meets_min_profit !== false && !failsDrift && best.status === "ok";
 
   return (
     <div className="rounded-md border border-border bg-card px-3 py-2.5 space-y-2">
@@ -379,7 +411,12 @@ function BucketPnlPanel({
           <span
             className={cn(
               "tabular-nums font-semibold",
-              usdTone(best.optimal_net_pnl_usd) === "pos" && "text-positive",
+              capturable &&
+                usdTone(best.optimal_net_pnl_usd) === "pos" &&
+                "text-positive",
+              !capturable &&
+                usdTone(best.optimal_net_pnl_usd) === "pos" &&
+                "text-muted-foreground",
               usdTone(best.optimal_net_pnl_usd) === "neg" && "text-negative",
             )}
           >
@@ -403,6 +440,11 @@ function BucketPnlPanel({
           )}
         </p>
       )}
+
+      <DriftRequirementLine
+        drift={drift}
+        netBps={best.optimal_net_pnl_bps}
+      />
 
       {!table ? (
         <p className="text-[11px] text-muted-foreground">

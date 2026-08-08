@@ -314,6 +314,8 @@ function BpsCell({
   emptyLabel,
   emptyTitle,
   title,
+  capturable,
+  failsDrift,
 }: {
   value: string | null;
   /** When value is null, show this instead of em-dash (e.g. empty pool). */
@@ -321,6 +323,9 @@ function BpsCell({
   emptyTitle?: string | null;
   /** Hover when a value is present (e.g. pricing_anomaly keeps the bps). */
   title?: string | null;
+  /** WHI-962: suppress positive green when not capturable under sequential bar. */
+  capturable?: boolean;
+  failsDrift?: boolean;
 }) {
   if (value == null && emptyLabel) {
     return (
@@ -333,17 +338,25 @@ function BpsCell({
     );
   }
   const tone = bpsTone(value);
+  // Positive only when capturable (min profit + drift). Fail-drift mutes.
+  const showPos = tone === "pos" && capturable !== false && !failsDrift;
   return (
     <span
       className={cn(
         "tabular-nums",
-        tone === "pos" && "text-positive",
+        showPos && "text-positive",
+        tone === "pos" && !showPos && "text-muted-foreground",
         tone === "neg" && "text-negative",
         tone === "empty" && "text-muted-foreground",
       )}
       title={title ?? undefined}
     >
       {fmtSignedBps(value)}
+      {failsDrift ? (
+        <span className="ml-1 text-[9px] font-normal text-muted-foreground">
+          drift
+        </span>
+      ) : null}
     </span>
   );
 }
@@ -368,6 +381,7 @@ function NetQStarCell({
         "px-2 py-1.5 text-right font-medium",
         groupSepClass,
         net.quoteAged && "opacity-80",
+        net.failsDrift && "opacity-80",
       )}
       title={net.title}
     >
@@ -376,6 +390,9 @@ function NetQStarCell({
           value={row.net_edge_bps}
           emptyLabel={emptyLabel}
           emptyTitle={net.title}
+          title={net.title}
+          capturable={net.capturable}
+          failsDrift={net.failsDrift}
         />
         {net.sizeLabel != null ? (
           <span className="text-[10px] font-normal text-muted-foreground tabular-nums">
@@ -422,25 +439,33 @@ function BucketPnlCell({
   venues: DirectionVenues;
   marketId: string;
 }) {
-  const cell = overviewPnlCell(row.pnl_v2, venues, marketId);
+  const cell = overviewPnlCell(row.pnl_v2, venues, marketId, row);
   if (cell.kind === "ok") {
     const tone = usdTone(cell.pnlUsd);
-    // WHI-824: positive = highlight opportunity; negative = weakened red
-    // (still distinct from status/empty muted labels; desc board is often
-    // "least loss", not free money).
+    // WHI-824 + WHI-962: green only when capturable (min profit + drift bar).
+    // Positive-but-not-capturable is muted so CRCLx-style rows don't read as free money.
+    const showPos =
+      tone === "pos" && cell.capturable !== false && !cell.failsDrift;
     return (
       <span
         className={cn(
           "tabular-nums",
-          tone === "pos" && "font-medium text-positive",
+          showPos && "font-medium text-positive",
+          tone === "pos" && !showPos && "text-muted-foreground",
           // Soften loss vs detail panel's full text-negative — still red-tinted.
           tone === "neg" && "text-negative/60",
           (tone === "flat" || tone === "empty") && "text-muted-foreground",
           cell.quoteAged && "opacity-80",
+          cell.failsDrift && "opacity-80",
         )}
         title={cell.title}
       >
         {fmtUsd(cell.pnlUsd)}
+        {cell.failsDrift ? (
+          <span className="ml-1 text-[9px] font-normal text-muted-foreground">
+            drift
+          </span>
+        ) : null}
         {cell.quoteAged && cell.ageHint && (
           <span className="ml-1 text-[10px] font-normal text-muted-foreground">
             {cell.ageHint}

@@ -22,6 +22,10 @@ from monitor.attribution.mm_panel import (
     pair_active_addresses,
 )
 from monitor.metrics.amm_pool import amm_pool_from_pair_tick
+from monitor.metrics.drift import (
+    drift_wire_for_pair,
+    net_bps_from_pnl_tables,
+)
 from monitor.metrics.pnl_snapshot import (
     PnlOptimalSummary,
     PnlPairSnapshot,
@@ -298,6 +302,7 @@ def _list_pairs_body(state: AppState, runtime: MarketRuntime) -> dict[str, Any]:
             else []
         )
         ts = now_ms()
+        k = runtime.metrics.pnl_v2.drift_premium_k
         rows_out: list[dict[str, Any]] = []
         for row in body["rows"]:
             pair_id = row["pair_id"]
@@ -308,6 +313,13 @@ def _list_pairs_body(state: AppState, runtime: MarketRuntime) -> dict[str, Any]:
                 enriched = dict(row)
                 empty = PnlOptimalSummary(status="no_pool", has_depth=False)
                 enriched.update(empty.overview_enrichment_wire())
+                enriched.update(
+                    drift_wire_for_pair(
+                        pair=object(),
+                        session=row.get("session"),
+                        k=k,
+                    )
+                )
                 enriched["mm_active"] = "unknown"
                 rows_out.append(enriched)
                 continue
@@ -316,6 +328,17 @@ def _list_pairs_body(state: AppState, runtime: MarketRuntime) -> dict[str, Any]:
             enriched = dict(row)
             # WHI-824 + WHI-966: flat sort keys + Net@Q* from the same summary.
             enriched.update(summary.overview_enrichment_wire())
+            # WHI-962: sequential-execution bar (k × σ) + per-direction clears.
+            enriched.update(
+                drift_wire_for_pair(
+                    pair=pair,
+                    session=row.get("session"),
+                    k=k,
+                    optimal_direction=summary.direction,
+                    optimal_net_bps=summary.optimal_net_pnl_bps,
+                    net_bps_by_direction=net_bps_from_pnl_tables(snap.tables),
+                )
+            )
             enriched["mm_active"] = _mm_active_for(
                 state,
                 pair_id=pair_id,
@@ -334,9 +357,27 @@ def _get_pair_body(
 ) -> dict[str, Any]:
     model, pnl = _detail_model(state, runtime, pair_id)
     reader = _require_reader(runtime)
+    pair = _pair_or_404(runtime, pair_id)
     body = to_json_dict(model)
     body["pnl_v2"] = pnl.to_dict()
     body.update(_market_fields(runtime))
+
+    k = runtime.metrics.pnl_v2.drift_premium_k
+    ov_summary = overview_pnl_summary(pnl)
+    session = None
+    if "overview" in body and isinstance(body["overview"], dict):
+        session = body["overview"].get("session")
+    drift = drift_wire_for_pair(
+        pair=pair,
+        session=session,
+        k=k,
+        optimal_direction=ov_summary.direction,
+        optimal_net_bps=ov_summary.optimal_net_pnl_bps,
+        net_bps_by_direction=net_bps_from_pnl_tables(pnl.tables),
+    )
+    # Nested under pnl_v2 for the detail requirement breakdown; also flat on
+    # overview for parity with the list path.
+    body["pnl_v2"] = {**body["pnl_v2"], "drift": drift}
 
     with runtime.lock:
         label_count = reader.address_label_count()
@@ -349,9 +390,9 @@ def _get_pair_body(
         )
         if "overview" in body and isinstance(body["overview"], dict):
             body["overview"] = dict(body["overview"])
-            ov_summary = overview_pnl_summary(pnl)
             # WHI-824 + WHI-966: flat sort keys + Net@Q* (same as list path).
             body["overview"].update(ov_summary.overview_enrichment_wire())
+            body["overview"].update(drift)
             body["overview"]["mm_active"] = _mm_active_for(
                 state,
                 pair_id=pair_id,

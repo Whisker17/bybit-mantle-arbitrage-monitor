@@ -7,6 +7,7 @@ Public seams (tests and TUI/Web depend on these, not internals):
 - ``compute_edge`` / ``compute_edge_ladder`` — M3 net paper edge + cost breakdown
 - ``compute_pnl_usd`` / ``pnl_bucket_table`` / ``optimal_size`` — PnL v2 (WHI-756)
 - ``build_pnl_pair_snapshot`` — journal ticks → dual-direction tables (WHI-766)
+- ``annotate_drift`` / ``drift_wire_for_pair`` — sequential bar k×σ (WHI-962)
 - ``is_us_rth_open`` / ``session_kind`` — NYSE open / closed / early-close
 - ``EdgeStats`` / ``OptimalPnlStats`` — time-weighted distributions + breaches
 - ``build_spread_snapshot`` / ``build_edge_snapshot`` — tick → panel model (M5 feeds)
@@ -34,6 +35,14 @@ from monitor.metrics.config import (
     PnlV2Config,
     default_metrics_path,
     load_metrics_config,
+)
+from monitor.metrics.drift import (
+    DriftAnnotation,
+    annotate_drift,
+    clears_drift,
+    drift_premium_bps,
+    drift_wire_for_pair,
+    select_sigma_bps,
 )
 from monitor.metrics.edge import (
     CostBreakdown,
@@ -94,6 +103,13 @@ from monitor.metrics.stats import (
 from monitor.metrics.withdrawal import withdrawal_params_from_pair
 
 __all__ = [
+    "DriftAnnotation",
+    "annotate_drift",
+    "clears_drift",
+    "drift_premium_bps",
+    "drift_wire_for_pair",
+    "select_sigma_bps",
+
     "AmmPoolState",
     "AmmQuoteReason",
     "BreachStats",

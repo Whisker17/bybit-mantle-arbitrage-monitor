@@ -36,6 +36,9 @@ def test_load_checked_in_metrics_config() -> None:
     assert cfg.pnl_v2.buckets_usd[0] == Decimal(10)
     assert cfg.pnl_v2.buckets_usd[-1] == Decimal(10000)
     assert cfg.pnl_v2.coarse_points == 24
+    # WHI-962: bot floor 1.5 USDT + sequential bar k=1.5.
+    assert cfg.pnl_v2.min_profit_usd == Decimal("1.5")
+    assert cfg.pnl_v2.drift_premium_k == Decimal("1.5")
 
 
 def test_metrics_config_accepts_negative_basis() -> None:
