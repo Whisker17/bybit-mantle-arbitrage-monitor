@@ -31,6 +31,21 @@ soon — anything touching key handling, RPC credentials defaults to at least Hi
 
 ## Open
 
+- **Live per-timestamp USDT/USDC basis feed** (Medium, WHI-960 → later).
+  Panel ships a signed constant (`quote_basis_bps: 7.5` on bybit-fluxion).
+  Owner-measured Bybit daily klines show meaningful range (median daily 4 bps,
+  p90 7, p99 50; year extremes 0.9911–1.0059). Live `USDCUSDT` mid per sample
+  is the eventual right answer; out of scope for WHI-960. DESIGN §8 residual.
+
+- **No abs bound on signed `usdt_usdc_basis_bps` / `quote_basis_bps`** (Low, WHI-960).
+  `ge=0` was dropped so the field can be signed; a fat-fingered 750 or −7500
+  now validates. Consider `|x| ≤ 100` (or similar) when a live feed lands.
+
+- **Unfillable PnL rows still stamp signed basis in the cost breakdown** (Low, WHI-960).
+  `_unfillable_result` keeps direction-aware `basis_usd` even when `pnl_usd=0`
+  and `fillable=False`. Cosmetic phantom credit on dir2; UI already treats
+  non-ok rows as non-tradable. Zeroing basis on unfillable would be cleaner.
+
 - **WHI-908: fill-validation script duplicates M0 sample builder** (Low, WHI-908).
   `scripts/xstocks_fill_validation.py::build_amm_samples_with_meta` is a near-
   copy of `scripts/xstocks_edge_quant.py::build_amm_samples`, adding only the

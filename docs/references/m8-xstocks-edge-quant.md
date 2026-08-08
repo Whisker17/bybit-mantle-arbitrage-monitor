@@ -7,9 +7,9 @@ Go/no-go report for the sibling execution project `mantle-stocks-arbitrage-bots`
 > **Stale cost basis (WHI-959 + WHI-960):** this report was generated under the
 > old 10 bps Bybit taker and **0** USDT/USDC basis. Live config is **20 bps**
 > Adventure Zone taker and **signed 7.5 bps** USDC premium (dir1 charged, dir2
-> credited). Headline is dir1-only (`buy_fluxion_sell_bybit`), so capturable
-> profit overstates net edge by ~10 bps taker + ~7.5 bps basis per trade until
-> re-run under WHI-909.
+> credited). Profit-bearing rows are dir1 (`buy_fluxion_sell_bybit`), so
+> capturable profit overstates net edge by ~10 bps taker + ~7.5 bps basis per
+> trade until re-run under WHI-909.
 
 ## Regeneration
 

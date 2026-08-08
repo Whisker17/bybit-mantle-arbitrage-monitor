@@ -156,10 +156,13 @@ invariant; matched base \(q\) shares that unit). Full algebra in research note
   - `buy_fluxion_sell_bybit` **pays** USDC → \(\mathrm{basis\_usd} = +\beta Q\) (cost).
   - `buy_bybit_sell_fluxion` **receives** USDC → \(\mathrm{basis\_usd} = -\beta Q\) (credit).
   bybit-fluxion ships \(\beta = 7.5\,\mathrm{bps}\) (Bybit `USDCUSDT` ~1.0007–1.0008;
-  bot repo DESIGN §2.3 + `m1-stable-rail-and-xstocks-latency.md` snapshot).
+  sibling bot repo `mantle-stocks-arbitrage-bots` DESIGN §2.3 + that repo's
+  `docs/references/m1-stable-rail-and-xstocks-latency.md` snapshot).
   binance-pancake stays at 0 (both legs USDT). Breakdown keeps the signed
-  line so UI can render a credit as negative wear. Live per-timestamp feed
-  is out of scope here.
+  line so UI can render a credit as negative wear. The dir2 credit assumes
+  USDC is valued 1:1 against USDT after receipt (converting back to USDT
+  incurs its own USDCUSDT fee/spread — not modeled here). Live per-timestamp
+  feed is out of scope here (tracked in `docs/DEFERRED_ISSUES.md`).
 - AMM fee: fee-inclusive amounts in cash-flow; UI wear breakdown may split fee
   vs impact **without** double-subtracting in \(\mathrm{PnL}\).
 - RFQ: no separate pool-fee line. Rows are keyed by **poll size** (USDC

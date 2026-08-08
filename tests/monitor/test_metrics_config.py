@@ -42,6 +42,7 @@ def test_metrics_config_accepts_negative_basis() -> None:
     """WHI-960: signed USDC premium may be negative (USDT richer)."""
     from decimal import Decimal
 
+    from monitor.markets.models import MarketCosts
     from monitor.metrics.config import MetricsConfig, PnlV2Config, SessionConfig
 
     cfg = MetricsConfig(
@@ -67,6 +68,15 @@ def test_metrics_config_accepts_negative_basis() -> None:
         ),
     )
     assert cfg.usdt_usdc_basis_bps == Decimal("-3.5")
+    # Market file path also accepts a signed premium (YAML → MarketCosts).
+    costs = MarketCosts.model_validate(
+        {
+            "cex_taker_fee_bps": 20,
+            "gas_usd_per_swap": "0.01",
+            "quote_basis_bps": "-3.5",
+        }
+    )
+    assert costs.quote_basis_bps == Decimal("-3.5")
 
 
 def test_reject_breach_size_not_on_ladder(tmp_path: Path) -> None:
