@@ -18,6 +18,7 @@ import {
   fmtNotional,
   fmtUsd,
   parseNum,
+  withdrawalFeeLabel,
   type DirectionVenues,
 } from "./format";
 
@@ -199,17 +200,24 @@ const USD_COST_ROWS: Array<{ key: keyof PnlCostBreakdownUsd; label: string }> = 
   { key: "fluxion_slip_usd", label: "Fluxion slip" },
   { key: "gas_usd", label: "Gas" },
   { key: "basis_usd", label: "USDT/USDC basis" },
+  { key: "withdrawal_fee_usd", label: "Withdrawal" },
 ];
 
 export function usdCostRows(
   costs: PnlCostBreakdownUsd | null | undefined,
 ): Array<{ key: string; label: string; value: number }> {
   if (!costs) return [];
-  return USD_COST_ROWS.map((r) => ({
-    key: r.key,
-    label: r.label,
-    value: parseNum(costs[r.key]) ?? 0,
-  }));
+  return USD_COST_ROWS.map((r) => {
+    const label =
+      r.key === "withdrawal_fee_usd"
+        ? withdrawalFeeLabel(costs.withdrawal_fee_kind)
+        : r.label;
+    return {
+      key: r.key,
+      label,
+      value: parseNum(costs[r.key] as string) ?? 0,
+    };
+  });
 }
 
 export function totalCostUsd(

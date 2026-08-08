@@ -22,7 +22,14 @@ from monitor.metrics.amm_slip import (
 )
 from monitor.metrics.bybit_slip import BPS
 from monitor.metrics.config import MetricsConfig, PnlV2Config
-from monitor.metrics.edge import Direction, VenueKind, basis_wear_bps, mid_from_bid_ask
+from monitor.metrics.edge import (
+    Direction,
+    VenueKind,
+    WithdrawalFeeKind,
+    basis_wear_bps,
+    mid_from_bid_ask,
+    withdrawal_fee_usd_for_direction,
+)
 
 DepthSource = Literal["l1", "book"]
 
@@ -40,6 +47,10 @@ class PnlCostBreakdownUsd:
     fluxion_slip_usd: Decimal
     gas_usd: Decimal
     basis_usd: Decimal
+    withdrawal_fee_usd: Decimal
+    # Which schedule produced withdrawal_fee_usd (WHI-961). ``unknown`` means
+    # dir2 with no measured asset fee — fee line is 0 but must not look silent.
+    withdrawal_fee_kind: WithdrawalFeeKind
 
     @property
     def total_usd(self) -> Decimal:
@@ -50,6 +61,7 @@ class PnlCostBreakdownUsd:
             + self.fluxion_slip_usd
             + self.gas_usd
             + self.basis_usd
+            + self.withdrawal_fee_usd
         )
 
     def to_dict(self) -> dict[str, str]:
@@ -182,7 +194,35 @@ def _basis_usd(
     return signed_bps / BPS * size_usd
 
 
-def _zero_costs(*, gas: Decimal = Decimal(0), basis: Decimal = Decimal(0)) -> PnlCostBreakdownUsd:
+def _withdrawal_usd(
+    config: MetricsConfig,
+    *,
+    direction: Direction,
+    bybit_mid: Decimal,
+    asset_withdrawal_fee_tokens: Decimal | None,
+    price_multiplier: Decimal,
+) -> tuple[Decimal, WithdrawalFeeKind]:
+    """Direction-aware withdrawal fee in USD (WHI-961).
+
+    Listed mid = de-multiplied Bybit mid × price_multiplier (AAPLx / NVDAx / …).
+    Non-positive listed mid on dir2 degrades to ``unknown`` (never silent asset 0).
+    """
+    listed = bybit_mid * price_multiplier if bybit_mid > 0 else Decimal(0)
+    return withdrawal_fee_usd_for_direction(
+        direction=direction,
+        stable_fee_usd=config.stable_withdrawal_fee_usd,
+        asset_fee_tokens=asset_withdrawal_fee_tokens,
+        listed_token_price_usd=listed,
+    )
+
+
+def _zero_costs(
+    *,
+    gas: Decimal = Decimal(0),
+    basis: Decimal = Decimal(0),
+    withdrawal: Decimal = Decimal(0),
+    withdrawal_kind: WithdrawalFeeKind = "stable",
+) -> PnlCostBreakdownUsd:
     return PnlCostBreakdownUsd(
         bybit_fee_usd=Decimal(0),
         bybit_slip_usd=Decimal(0),
@@ -190,6 +230,8 @@ def _zero_costs(*, gas: Decimal = Decimal(0), basis: Decimal = Decimal(0)) -> Pn
         fluxion_slip_usd=Decimal(0),
         gas_usd=gas,
         basis_usd=basis,
+        withdrawal_fee_usd=withdrawal,
+        withdrawal_fee_kind=withdrawal_kind,
     )
 
 
@@ -396,12 +438,19 @@ def compute_pnl_usd(
     bybit_bids: list[tuple[Decimal, Decimal]] | None = None,
     bybit_asks: list[tuple[Decimal, Decimal]] | None = None,
     rfq: RfqPollQuote | None = None,
+    asset_withdrawal_fee_tokens: Decimal | None = None,
+    price_multiplier: Decimal = Decimal(1),
 ) -> PnlResult:
     """Cash-flow PnL for one paper arb at ``size_usd`` (AMM) or RFQ poll size.
 
     Depth lists must be de-multiplied ``(price, size)`` ordered best-first.
     Without depth, L1 bid/ask are used (infinite size at top).
+
+    ``asset_withdrawal_fee_tokens`` / ``price_multiplier`` feed the direction-aware
+    withdrawal line (WHI-961). Listed mid = de-multiplied mid × multiplier.
     """
+    if price_multiplier <= 0:
+        raise ValueError("price_multiplier must be positive")
     pnl_cfg = config.pnl_v2
     if bybit_bid <= 0 or bybit_ask <= 0:
         return _unfillable_result(
@@ -414,6 +463,8 @@ def compute_pnl_usd(
             reason="missing_quote",
             depth_source="l1",
             config=config,
+            asset_withdrawal_fee_tokens=asset_withdrawal_fee_tokens,
+            price_multiplier=price_multiplier,
         )
     bybit_mid = mid_from_bid_ask(bybit_bid, bybit_ask)
     gas = config.gas_usd_per_swap
@@ -433,6 +484,8 @@ def compute_pnl_usd(
             bybit_bids=bybit_bids,
             bybit_asks=bybit_asks,
             rfq=rfq,
+            asset_withdrawal_fee_tokens=asset_withdrawal_fee_tokens,
+            price_multiplier=price_multiplier,
         )
 
     if size_usd <= 0:
@@ -443,6 +496,13 @@ def compute_pnl_usd(
     q = size_usd / bybit_mid
     f_b = _fee_fraction(config)
     basis = _basis_usd(config, size_usd, direction)
+    withdrawal, withdrawal_kind = _withdrawal_usd(
+        config,
+        direction=direction,
+        bybit_mid=bybit_mid,
+        asset_withdrawal_fee_tokens=asset_withdrawal_fee_tokens,
+        price_multiplier=price_multiplier,
+    )
 
     if direction == "buy_fluxion_sell_bybit":
         return _pnl_buy_fluxion_sell_bybit(
@@ -454,11 +514,15 @@ def compute_pnl_usd(
             q=q,
             f_b=f_b,
             basis=basis,
+            withdrawal=withdrawal,
+            withdrawal_kind=withdrawal_kind,
             gas=gas,
             config=config,
             pnl_cfg=pnl_cfg,
             amm=amm,
             bybit_bids=bybit_bids,
+            asset_withdrawal_fee_tokens=asset_withdrawal_fee_tokens,
+            price_multiplier=price_multiplier,
         )
     return _pnl_buy_bybit_sell_fluxion(
         pair_id=pair_id,
@@ -469,11 +533,15 @@ def compute_pnl_usd(
         q=q,
         f_b=f_b,
         basis=basis,
+        withdrawal=withdrawal,
+        withdrawal_kind=withdrawal_kind,
         gas=gas,
         config=config,
         pnl_cfg=pnl_cfg,
         amm=amm,
         bybit_asks=bybit_asks,
+        asset_withdrawal_fee_tokens=asset_withdrawal_fee_tokens,
+        price_multiplier=price_multiplier,
     )
 
 
@@ -489,10 +557,21 @@ def _unfillable_result(
     depth_source: DepthSource,
     config: MetricsConfig,
     gas: Decimal | None = None,
+    asset_withdrawal_fee_tokens: Decimal | None = None,
+    price_multiplier: Decimal = Decimal(1),
 ) -> PnlResult:
     g = config.gas_usd_per_swap if gas is None else gas
     basis = _basis_usd(config, size_usd, direction) if size_usd > 0 else Decimal(0)
-    costs = _zero_costs(gas=g, basis=basis)
+    withdrawal, withdrawal_kind = _withdrawal_usd(
+        config,
+        direction=direction,
+        bybit_mid=bybit_mid if bybit_mid > 0 else Decimal(0),
+        asset_withdrawal_fee_tokens=asset_withdrawal_fee_tokens,
+        price_multiplier=price_multiplier,
+    )
+    costs = _zero_costs(
+        gas=g, basis=basis, withdrawal=withdrawal, withdrawal_kind=withdrawal_kind
+    )
     return PnlResult(
         pair_id=pair_id,
         venue=venue,
@@ -521,11 +600,15 @@ def _pnl_buy_fluxion_sell_bybit(
     q: Decimal,
     f_b: Decimal,
     basis: Decimal,
+    withdrawal: Decimal,
+    withdrawal_kind: WithdrawalFeeKind,
     gas: Decimal,
     config: MetricsConfig,
     pnl_cfg: PnlV2Config,
     amm: AmmPoolState,
     bybit_bids: list[tuple[Decimal, Decimal]] | None,
+    asset_withdrawal_fee_tokens: Decimal | None,
+    price_multiplier: Decimal,
 ) -> PnlResult:
     amm_cash = _amm_buy_cash(amm, q, pnl_cfg)
     if amm_cash is None:
@@ -540,6 +623,8 @@ def _pnl_buy_fluxion_sell_bybit(
             depth_source="book" if bybit_bids else "l1",
             config=config,
             gas=gas,
+            asset_withdrawal_fee_tokens=asset_withdrawal_fee_tokens,
+            price_multiplier=price_multiplier,
         )
     usdc_spent, flux_fee, flux_slip = amm_cash
 
@@ -563,9 +648,11 @@ def _pnl_buy_fluxion_sell_bybit(
             depth_source="book" if bybit_bids else "l1",
             config=config,
             gas=gas,
+            asset_withdrawal_fee_tokens=asset_withdrawal_fee_tokens,
+            price_multiplier=price_multiplier,
         )
 
-    pnl_usd = bybit.cash_usd - usdc_spent - gas - basis
+    pnl_usd = bybit.cash_usd - usdc_spent - gas - basis - withdrawal
     costs = PnlCostBreakdownUsd(
         bybit_fee_usd=bybit.fee_usd,
         bybit_slip_usd=bybit.slip_usd,
@@ -573,6 +660,8 @@ def _pnl_buy_fluxion_sell_bybit(
         fluxion_slip_usd=flux_slip,
         gas_usd=gas,
         basis_usd=basis,
+        withdrawal_fee_usd=withdrawal,
+        withdrawal_fee_kind=withdrawal_kind,
     )
     return PnlResult(
         pair_id=pair_id,
@@ -604,11 +693,15 @@ def _pnl_buy_bybit_sell_fluxion(
     q: Decimal,
     f_b: Decimal,
     basis: Decimal,
+    withdrawal: Decimal,
+    withdrawal_kind: WithdrawalFeeKind,
     gas: Decimal,
     config: MetricsConfig,
     pnl_cfg: PnlV2Config,
     amm: AmmPoolState,
     bybit_asks: list[tuple[Decimal, Decimal]] | None,
+    asset_withdrawal_fee_tokens: Decimal | None,
+    price_multiplier: Decimal,
 ) -> PnlResult:
     bybit = _bybit_buy_cash(
         bid=bybit_bid,
@@ -631,6 +724,8 @@ def _pnl_buy_bybit_sell_fluxion(
             depth_source="book" if bybit_asks else "l1",
             config=config,
             gas=gas,
+            asset_withdrawal_fee_tokens=asset_withdrawal_fee_tokens,
+            price_multiplier=price_multiplier,
         )
 
     amm_cash = _amm_sell_cash(amm, q)
@@ -646,9 +741,11 @@ def _pnl_buy_bybit_sell_fluxion(
             depth_source=bybit.depth_source,
             config=config,
             gas=gas,
+            asset_withdrawal_fee_tokens=asset_withdrawal_fee_tokens,
+            price_multiplier=price_multiplier,
         )
     usdc_recv, flux_fee, flux_slip = amm_cash
-    pnl_usd = usdc_recv - bybit.cash_usd - gas - basis
+    pnl_usd = usdc_recv - bybit.cash_usd - gas - basis - withdrawal
     costs = PnlCostBreakdownUsd(
         bybit_fee_usd=bybit.fee_usd,
         bybit_slip_usd=bybit.slip_usd,
@@ -656,6 +753,8 @@ def _pnl_buy_bybit_sell_fluxion(
         fluxion_slip_usd=flux_slip,
         gas_usd=gas,
         basis_usd=basis,
+        withdrawal_fee_usd=withdrawal,
+        withdrawal_fee_kind=withdrawal_kind,
     )
     return PnlResult(
         pair_id=pair_id,
@@ -690,6 +789,8 @@ def _pnl_rfq(
     bybit_bids: list[tuple[Decimal, Decimal]] | None,
     bybit_asks: list[tuple[Decimal, Decimal]] | None,
     rfq: RfqPollQuote | None,
+    asset_withdrawal_fee_tokens: Decimal | None,
+    price_multiplier: Decimal,
 ) -> PnlResult:
     if rfq is None:
         return _unfillable_result(
@@ -703,6 +804,8 @@ def _pnl_rfq(
             depth_source="l1",
             config=config,
             gas=gas,
+            asset_withdrawal_fee_tokens=asset_withdrawal_fee_tokens,
+            price_multiplier=price_multiplier,
         )
     f_b = _fee_fraction(config)
 
@@ -719,11 +822,20 @@ def _pnl_rfq(
                 depth_source="l1",
                 config=config,
                 gas=gas,
+                asset_withdrawal_fee_tokens=asset_withdrawal_fee_tokens,
+                price_multiplier=price_multiplier,
             )
         usdc_spent = rfq.amount_in
         q = rfq.amount_out
         size_usd = q * bybit_mid
         basis = _basis_usd(config, size_usd, direction)
+        withdrawal, withdrawal_kind = _withdrawal_usd(
+            config,
+            direction=direction,
+            bybit_mid=bybit_mid,
+            asset_withdrawal_fee_tokens=asset_withdrawal_fee_tokens,
+            price_multiplier=price_multiplier,
+        )
         bybit = _bybit_sell_cash(
             bid=bybit_bid,
             ask=bybit_ask,
@@ -744,8 +856,10 @@ def _pnl_rfq(
                 depth_source="book" if bybit_bids else "l1",
                 config=config,
                 gas=gas,
+                asset_withdrawal_fee_tokens=asset_withdrawal_fee_tokens,
+                price_multiplier=price_multiplier,
             )
-        pnl_usd = bybit.cash_usd - usdc_spent - gas - basis
+        pnl_usd = bybit.cash_usd - usdc_spent - gas - basis - withdrawal
         costs = PnlCostBreakdownUsd(
             bybit_fee_usd=bybit.fee_usd,
             bybit_slip_usd=bybit.slip_usd,
@@ -753,6 +867,8 @@ def _pnl_rfq(
             fluxion_slip_usd=Decimal(0),
             gas_usd=gas,
             basis_usd=basis,
+            withdrawal_fee_usd=withdrawal,
+            withdrawal_fee_kind=withdrawal_kind,
         )
         return PnlResult(
             pair_id=pair_id,
@@ -785,11 +901,20 @@ def _pnl_rfq(
             depth_source="l1",
             config=config,
             gas=gas,
+            asset_withdrawal_fee_tokens=asset_withdrawal_fee_tokens,
+            price_multiplier=price_multiplier,
         )
     q = rfq.amount_in
     usdc_recv = rfq.amount_out
     size_usd = q * bybit_mid
     basis = _basis_usd(config, size_usd, direction)
+    withdrawal, withdrawal_kind = _withdrawal_usd(
+        config,
+        direction=direction,
+        bybit_mid=bybit_mid,
+        asset_withdrawal_fee_tokens=asset_withdrawal_fee_tokens,
+        price_multiplier=price_multiplier,
+    )
     bybit = _bybit_buy_cash(
         bid=bybit_bid,
         ask=bybit_ask,
@@ -811,8 +936,10 @@ def _pnl_rfq(
             depth_source="book" if bybit_asks else "l1",
             config=config,
             gas=gas,
+            asset_withdrawal_fee_tokens=asset_withdrawal_fee_tokens,
+            price_multiplier=price_multiplier,
         )
-    pnl_usd = usdc_recv - bybit.cash_usd - gas - basis
+    pnl_usd = usdc_recv - bybit.cash_usd - gas - basis - withdrawal
     costs = PnlCostBreakdownUsd(
         bybit_fee_usd=bybit.fee_usd,
         bybit_slip_usd=bybit.slip_usd,
@@ -820,6 +947,8 @@ def _pnl_rfq(
         fluxion_slip_usd=Decimal(0),
         gas_usd=gas,
         basis_usd=basis,
+        withdrawal_fee_usd=withdrawal,
+        withdrawal_fee_kind=withdrawal_kind,
     )
     return PnlResult(
         pair_id=pair_id,
@@ -852,6 +981,8 @@ def pnl_bucket_table(
     bybit_asks: list[tuple[Decimal, Decimal]] | None = None,
     rfq_quotes: list[RfqPollQuote] | None = None,
     include_optimal: bool = True,
+    asset_withdrawal_fee_tokens: Decimal | None = None,
+    price_multiplier: Decimal = Decimal(1),
 ) -> PnlBucketTable:
     """Fixed AMM bucket PnL rows (+ optional RFQ poll rows and optimal size)."""
     pnl_cfg = config.pnl_v2
@@ -870,6 +1001,8 @@ def pnl_bucket_table(
             amm=amm,
             bybit_bids=bybit_bids,
             bybit_asks=bybit_asks,
+            asset_withdrawal_fee_tokens=asset_withdrawal_fee_tokens,
+            price_multiplier=price_multiplier,
         )
         for size in pnl_cfg.buckets_usd
     ]
@@ -893,6 +1026,8 @@ def pnl_bucket_table(
                 bybit_bids=bybit_bids,
                 bybit_asks=bybit_asks,
                 rfq=quote,
+                asset_withdrawal_fee_tokens=asset_withdrawal_fee_tokens,
+                price_multiplier=price_multiplier,
             )
         )
 
@@ -907,6 +1042,8 @@ def pnl_bucket_table(
             amm=amm,
             bybit_bids=bybit_bids,
             bybit_asks=bybit_asks,
+            asset_withdrawal_fee_tokens=asset_withdrawal_fee_tokens,
+            price_multiplier=price_multiplier,
         )
 
     return PnlBucketTable(
@@ -1034,10 +1171,15 @@ def optimal_size(
     amm: AmmPoolState,
     bybit_bids: list[tuple[Decimal, Decimal]] | None = None,
     bybit_asks: list[tuple[Decimal, Decimal]] | None = None,
+    asset_withdrawal_fee_tokens: Decimal | None = None,
+    price_multiplier: Decimal = Decimal(1),
 ) -> OptimalSizeResult | None:
     """Sample-best Q* maximizing PnL (log grid + peak refine + endpoints).
 
     Does **not** assume concavity. Claim: best among evaluated samples only.
+    Flat withdrawal fee is subtracted inside ``compute_pnl_usd`` (WHI-961);
+    max-USD argmax is invariant to a pure constant, but bps amortization still
+    turns against small clips on the ladder rows.
     """
     pnl_cfg = config.pnl_v2
     if bybit_bid <= 0 or bybit_ask <= 0:
@@ -1079,6 +1221,8 @@ def optimal_size(
             amm=amm,
             bybit_bids=bybit_bids,
             bybit_asks=bybit_asks,
+            asset_withdrawal_fee_tokens=asset_withdrawal_fee_tokens,
+            price_multiplier=price_multiplier,
         )
 
     # 1. Coarse log grid

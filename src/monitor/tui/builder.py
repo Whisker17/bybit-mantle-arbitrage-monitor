@@ -55,6 +55,7 @@ from monitor.metrics.premium import (
 from monitor.metrics.snapshot import rfq_price
 from monitor.metrics.stats import Distribution
 from monitor.metrics.volume import VolumeCompare, build_volume_compare
+from monitor.metrics.withdrawal import withdrawal_params_from_pair
 from monitor.quotes import (
     BybitBookTick,
     DexPoolTvlTick,
@@ -520,6 +521,7 @@ def build_pair_overview_row(
         )
 
     pool = amm_pool_from_tick(pair, amm) if amm is not None else None
+    wd = withdrawal_params_from_pair(pair)
     edge_snap = build_edge_snapshot(
         bybit=bybit,
         config=metrics,
@@ -528,6 +530,8 @@ def build_pair_overview_row(
         rfq_buy=rfq_buy,
         rfq_sell=rfq_sell,
         ts_ms=ts_ms,
+        asset_withdrawal_fee_tokens=wd.asset_fee_tokens,
+        price_multiplier=wd.price_multiplier,
     )
     spreads = edge_snap.spreads
     # Overview Net column: AMM-only at reference size (see _pick_reference_edge).
@@ -624,6 +628,7 @@ def build_overview(
             # EdgeStats with synthetic 1.5s samples of the same book.
             sample_ts = bybit.exchange_ts_ms
             pool = amm_pool_from_tick(pair, amm) if amm is not None else None
+            wd = withdrawal_params_from_pair(pair)
             snap = build_edge_snapshot(
                 bybit=bybit,
                 config=metrics,
@@ -632,6 +637,8 @@ def build_overview(
                 rfq_buy=rfq_buy,
                 rfq_sell=rfq_sell,
                 ts_ms=sample_ts,
+                asset_withdrawal_fee_tokens=wd.asset_fee_tokens,
+                price_multiplier=wd.price_multiplier,
             )
             observe_edges(
                 edge_state,
@@ -789,6 +796,7 @@ def rebuild_edge_history(
             rfq_sell_hist, book.exchange_ts_ms, get_ts=lambda q: q.poll_ts_ms
         )
         pool = amm_pool_from_tick(pair, amm) if amm is not None else None
+        wd = withdrawal_params_from_pair(pair)
         snap = build_edge_snapshot(
             bybit=book,
             config=metrics,
@@ -797,6 +805,8 @@ def rebuild_edge_history(
             rfq_buy=rfq_buy,
             rfq_sell=rfq_sell,
             ts_ms=book.exchange_ts_ms,
+            asset_withdrawal_fee_tokens=wd.asset_fee_tokens,
+            price_multiplier=wd.price_multiplier,
         )
         observe_edges(
             state,
@@ -1167,6 +1177,7 @@ def build_pair_detail(
     if bybit is not None:
         sample_ts = bybit.exchange_ts_ms
         pool = amm_pool_from_tick(pair, amm) if amm is not None else None
+        wd = withdrawal_params_from_pair(pair)
         snap = build_edge_snapshot(
             bybit=bybit,
             config=metrics,
@@ -1175,6 +1186,8 @@ def build_pair_detail(
             rfq_buy=rfq_buy,
             rfq_sell=rfq_sell,
             ts_ms=sample_ts,
+            asset_withdrawal_fee_tokens=wd.asset_fee_tokens,
+            price_multiplier=wd.price_multiplier,
         )
         observe_edges(
             edge_state,

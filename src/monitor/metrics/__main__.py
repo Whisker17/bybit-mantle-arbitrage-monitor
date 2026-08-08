@@ -49,6 +49,21 @@ def _pool(
     )
 
 
+def _inventory_pair(ctx: MarketContext, pair_id: str) -> object | None:
+    """Resolve inventory pair from either market shape (bstocks preferred)."""
+    if ctx.bstocks is not None:
+        try:
+            return ctx.bstocks.pair_by_id(pair_id)
+        except KeyError:
+            pass
+    if ctx.pairs is not None:
+        try:
+            return ctx.pairs.pair_by_id(pair_id)
+        except KeyError:
+            pass
+    return None
+
+
 def _inventory_pool_fee_and_base_decimals(
     ctx: MarketContext,
     pair_id: str,
@@ -58,23 +73,20 @@ def _inventory_pool_fee_and_base_decimals(
     Returns None when the pair id is absent or has no AMM — caller decides
     whether that is an error.
     """
-    if ctx.bstocks is not None:
-        try:
-            bpair = ctx.bstocks.pair_by_id(pair_id)
-        except KeyError:
+    pair = _inventory_pair(ctx, pair_id)
+    if pair is None:
+        return None
+    if ctx.bstocks is not None and hasattr(pair, "pancake"):
+        amm = pair.pancake.amm  # type: ignore[attr-defined]
+        if amm is None:
             return None
-        if bpair.pancake.amm is None:
-            return None
-        return bpair.pancake.amm.fee, bpair.pancake.native_decimals
-    if ctx.pairs is not None:
-        try:
-            fpair = ctx.pairs.pair_by_id(pair_id)
-        except KeyError:
-            return None
-        if fpair.fluxion.amm is None:
+        return amm.fee, pair.pancake.native_decimals  # type: ignore[attr-defined]
+    if hasattr(pair, "fluxion"):
+        amm = pair.fluxion.amm  # type: ignore[attr-defined]
+        if amm is None:
             return None
         # Wrapper pool uses default base decimals (same as monitor.fluxion.pools).
-        return fpair.fluxion.amm.fee, WRAPPER_DECIMALS_DEFAULT
+        return amm.fee, WRAPPER_DECIMALS_DEFAULT
     return None
 
 
@@ -149,6 +161,20 @@ def main(argv: list[str] | None = None) -> int:
     )
     direction: Direction = args.direction
 
+    fee_tokens = None
+    mult = Decimal(1)
+    if args.pair_id is not None:
+        inv_pair = _inventory_pair(ctx, args.pair_id)
+        if inv_pair is not None:
+            from monitor.metrics.withdrawal import withdrawal_params_from_pair
+            from monitor.symbols.bstocks_models import BStocksPair
+            from monitor.symbols.models import Pair
+
+            if isinstance(inv_pair, (Pair, BStocksPair)):
+                wd = withdrawal_params_from_pair(inv_pair)
+                fee_tokens = wd.asset_fee_tokens
+                mult = wd.price_multiplier
+
     table = pnl_bucket_table(
         pair_id=pair_id,
         bybit_bid=cex_mid,
@@ -157,6 +183,8 @@ def main(argv: list[str] | None = None) -> int:
         config=cfg,
         amm=amm,
         include_optimal=True,
+        asset_withdrawal_fee_tokens=fee_tokens,
+        price_multiplier=mult,
     )
 
     if args.json:

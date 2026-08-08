@@ -106,6 +106,9 @@ def test_observe_edge_respects_breach_size() -> None:
         fluxion_slip_bps=Decimal(0),
         gas_bps=Decimal(0),
         basis_bps=Decimal(0),
+        withdrawal_fee_bps=Decimal(0),
+        withdrawal_fee_usd=Decimal(0),
+        withdrawal_fee_kind="stable",
     )
     big = EdgeResult(
         pair_id="TSLAx",

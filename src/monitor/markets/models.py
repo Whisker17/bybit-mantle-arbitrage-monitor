@@ -70,11 +70,16 @@ class MarketCosts(BaseModel):
     # and DEX share the same quote (e.g. Binance USDT ⇄ Pancake USDT). Engine
     # applies sign by direction (WHI-960); not constrained to >= 0.
     quote_basis_bps: Decimal = Field(default=Decimal(0))
+    # Direction-1 (buy_fluxion_sell_bybit) capital-return withdrawal fee in USD.
+    # Measured 0 for USDC/USDT on Mantle (WHI-961). Direction-2 uses per-pair
+    # asset_withdrawal_fee_tokens × listed mid instead.
+    stable_withdrawal_fee_usd: Decimal = Field(default=Decimal(0), ge=0)
 
     @field_validator(
         "cex_taker_fee_bps",
         "gas_usd_per_swap",
         "quote_basis_bps",
+        "stable_withdrawal_fee_usd",
         mode="before",
     )
     @classmethod

@@ -503,13 +503,173 @@ def test_zero_basis_identical_both_directions() -> None:
             venue="amm",
             config=cfg,
             amm=amm,
+            # Measured 0 stable; measured 0 asset so both dirs stay free.
+            asset_withdrawal_fee_tokens=Decimal(0),
         )
         assert r.fillable
         assert r.costs.basis_usd == Decimal(0)
+        assert r.costs.withdrawal_fee_usd == Decimal(0)
         rows.append(r)
     # Zero basis leaves both directions at near-zero PnL (matched mids, no fees).
     assert abs(rows[0].pnl_usd) < Decimal("1e-6")
     assert abs(rows[1].pnl_usd) < Decimal("1e-6")
+
+
+def test_withdrawal_fee_dir2_token_times_listed_mid() -> None:
+    """WHI-961: dir2 charges fee_tokens × listed mid; dir1 uses stable schedule."""
+    cfg = _cfg(gas=Decimal(0), fee_bps=Decimal(0), basis=Decimal(0))
+    # Simulate HOODx: fee 0.01 tok, mult=1, de-multiplied mid 91.
+    mid = Decimal(91)
+    fee_tokens = Decimal("0.01")
+    mult = Decimal(1)
+    expected = fee_tokens * mid * mult  # 0.91
+    amm = _pool_at_mid(mid, pool_fee=0)
+
+    dir1 = compute_pnl_usd(
+        pair_id="HOODx",
+        bybit_bid=mid,
+        bybit_ask=mid,
+        size_usd=Decimal(1000),
+        direction="buy_fluxion_sell_bybit",
+        venue="amm",
+        config=cfg,
+        amm=amm,
+        asset_withdrawal_fee_tokens=fee_tokens,
+        price_multiplier=mult,
+    )
+    dir2 = compute_pnl_usd(
+        pair_id="HOODx",
+        bybit_bid=mid,
+        bybit_ask=mid,
+        size_usd=Decimal(1000),
+        direction="buy_bybit_sell_fluxion",
+        venue="amm",
+        config=cfg,
+        amm=amm,
+        asset_withdrawal_fee_tokens=fee_tokens,
+        price_multiplier=mult,
+    )
+    assert dir1.fillable and dir2.fillable
+    assert dir1.costs.withdrawal_fee_usd == Decimal(0)
+    assert dir1.costs.withdrawal_fee_kind == "stable"
+    assert dir2.costs.withdrawal_fee_usd == expected
+    assert dir2.costs.withdrawal_fee_kind == "asset"
+    # Matched mids + zero other fees → dir2 PnL ≈ −withdrawal.
+    assert abs(dir2.pnl_usd - (-expected)) < Decimal("0.02")
+
+
+def test_withdrawal_fee_uses_listed_mid_with_multiplier() -> None:
+    """Listed mid = de-multiplied mid × multiplier (AAPLx / NVDAx path)."""
+    cfg = _cfg(gas=Decimal(0), fee_bps=Decimal(0), basis=Decimal(0))
+    dm_mid = Decimal(100)
+    mult = Decimal("1.0026642075893797")
+    fee_tokens = Decimal("0.005")
+    expected = fee_tokens * dm_mid * mult
+    amm = _pool_at_mid(dm_mid, pool_fee=0)
+    r = compute_pnl_usd(
+        pair_id="AAPLx",
+        bybit_bid=dm_mid,
+        bybit_ask=dm_mid,
+        size_usd=Decimal(500),
+        direction="buy_bybit_sell_fluxion",
+        venue="amm",
+        config=cfg,
+        amm=amm,
+        asset_withdrawal_fee_tokens=fee_tokens,
+        price_multiplier=mult,
+    )
+    assert r.fillable
+    assert abs(r.costs.withdrawal_fee_usd - expected) < Decimal("1e-12")
+    assert r.costs.withdrawal_fee_kind == "asset"
+
+
+def test_withdrawal_fee_unknown_when_token_fee_missing() -> None:
+    """Unmeasured pair: dir2 annotates unknown, never a silent asset 0."""
+    cfg = _cfg(gas=Decimal(0), fee_bps=Decimal(0), basis=Decimal(0))
+    mid = Decimal(100)
+    amm = _pool_at_mid(mid, pool_fee=0)
+    r = compute_pnl_usd(
+        pair_id="TSLAx",
+        bybit_bid=mid,
+        bybit_ask=mid,
+        size_usd=Decimal(1000),
+        direction="buy_bybit_sell_fluxion",
+        venue="amm",
+        config=cfg,
+        amm=amm,
+        asset_withdrawal_fee_tokens=None,
+        price_multiplier=Decimal(1),
+    )
+    assert r.fillable
+    assert r.costs.withdrawal_fee_usd == Decimal(0)
+    assert r.costs.withdrawal_fee_kind == "unknown"
+    d = r.to_dict()
+    assert d["costs"]["withdrawal_fee_kind"] == "unknown"
+
+
+def test_flat_withdrawal_fee_turns_against_small_clips() -> None:
+    """Flat fee amortizes in bps and pushes the bps-optimal Q* up (WHI-961 AC).
+
+    Max-USD argmax is invariant to a pure constant (engine still charges it
+    so bucket rows are correct). The **bps** curve turns against micro clips:
+    among L1-equal gross samples, bps-optimal size moves larger once the flat
+    fee is on — same product intent as the bot's admission premium.
+    """
+    from monitor.metrics.edge import withdrawal_fee_bps
+
+    cfg = _cfg(gas=Decimal(0), fee_bps=Decimal(0), basis=Decimal(0))
+    mid = Decimal(100)
+    # Fluxion richer → dir2 positive gross; deep pool keeps slip tiny.
+    amm = _pool_at_mid(Decimal("101"), pool_fee=0)
+    fee_tokens = Decimal("0.5")  # $50 flat at mid=100
+    mult = Decimal(1)
+    flat = fee_tokens * mid * mult
+
+    assert withdrawal_fee_bps(flat, Decimal(100)) == Decimal(5000)
+    assert withdrawal_fee_bps(flat, Decimal(1000)) == Decimal(500)
+    assert withdrawal_fee_bps(flat, Decimal(5000)) == Decimal(100)
+
+    sizes = [Decimal(100), Decimal(500), Decimal(1000), Decimal(5000)]
+
+    def _rows(fee: Decimal) -> list:
+        return [
+            compute_pnl_usd(
+                pair_id="T",
+                bybit_bid=mid,
+                bybit_ask=mid,
+                size_usd=s,
+                direction="buy_bybit_sell_fluxion",
+                venue="amm",
+                config=cfg,
+                amm=amm,
+                asset_withdrawal_fee_tokens=fee,
+                price_multiplier=mult,
+            )
+            for s in sizes
+        ]
+
+    free = _rows(Decimal(0))
+    charged = _rows(fee_tokens)
+    assert all(r.fillable for r in free + charged)
+    for r in charged:
+        assert r.costs.withdrawal_fee_usd == flat
+        assert r.costs.withdrawal_fee_kind == "asset"
+    # Same flat USD → more negative bps at the small clip.
+    assert charged[0].pnl_bps is not None and charged[-1].pnl_bps is not None
+    assert charged[0].pnl_bps < charged[-1].pnl_bps
+
+    def _bps_best(rows: list) -> Decimal:
+        return max(
+            (r for r in rows if r.pnl_bps is not None),
+            key=lambda r: (r.pnl_bps, -r.size_usd),  # type: ignore[arg-type, return-value]
+        ).size_usd
+
+    free_q = _bps_best(free)
+    fee_q = _bps_best(charged)
+    # Without fee, L1 bps are near-flat → tie-break prefers the smallest size.
+    assert free_q == sizes[0]
+    # With fee, amortisation prefers a larger clip.
+    assert fee_q > free_q
 
 
 def test_pnl_result_to_dict_serializable() -> None:

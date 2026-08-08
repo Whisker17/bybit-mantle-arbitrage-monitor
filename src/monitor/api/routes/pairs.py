@@ -28,6 +28,7 @@ from monitor.metrics.pnl_snapshot import (
     build_pnl_pair_snapshot,
     overview_pnl_summary,
 )
+from monitor.metrics.withdrawal import withdrawal_params_from_pair
 from monitor.quotes import now_ms
 from monitor.storage import JournalReader
 from monitor.storage.reader import AddressLabelRow
@@ -171,6 +172,7 @@ def _pnl_snapshot_for_pair(
         if amm_tick is not None
         else None
     )
+    wd = withdrawal_params_from_pair(pair)
     snap = build_pnl_pair_snapshot(
         pair_id=pair.id,
         bybit=bybit,
@@ -190,6 +192,8 @@ def _pnl_snapshot_for_pair(
             if runtime.quote_max_age_ms is not None
             else state.api.quote_max_age_ms
         ),
+        asset_withdrawal_fee_tokens=wd.asset_fee_tokens,
+        price_multiplier=wd.price_multiplier,
     )
     if cache is not None:
         cache.put(pair.id, snap)

@@ -331,6 +331,8 @@ def build_pnl_pair_snapshot(
     now_ms: int | None = None,
     quote_max_age_ms: int | None = None,
     include_optimal: bool = True,
+    asset_withdrawal_fee_tokens: Decimal | None = None,
+    price_multiplier: Decimal = Decimal(1),
 ) -> PnlPairSnapshot:
     """Build dual-direction PnL tables + best-of optimal summary.
 
@@ -423,6 +425,8 @@ def build_pnl_pair_snapshot(
             bybit_asks=bybit_asks,
             rfq_quotes=rfq_quotes or None,
             include_optimal=include_optimal,
+            asset_withdrawal_fee_tokens=asset_withdrawal_fee_tokens,
+            price_multiplier=price_multiplier,
         )
 
     # Prefer the direction with higher fillable optimal PnL; ties → smaller Q.

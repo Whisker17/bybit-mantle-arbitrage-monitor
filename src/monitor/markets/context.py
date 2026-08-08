@@ -83,6 +83,7 @@ def apply_market_costs(metrics: MetricsConfig, costs: MarketCosts) -> MetricsCon
             "bybit_taker_fee_bps": costs.cex_taker_fee_bps,
             "gas_usd_per_swap": costs.gas_usd_per_swap,
             "usdt_usdc_basis_bps": costs.quote_basis_bps,
+            "stable_withdrawal_fee_usd": costs.stable_withdrawal_fee_usd,
         }
     )
 

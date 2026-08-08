@@ -437,6 +437,23 @@ export function fmtLabel(label: string | null | undefined): string {
   return label.replaceAll("_", " ");
 }
 
+/** WHI-961: shared labels for withdrawal_fee_kind on cost waterfalls. */
+export const WITHDRAWAL_FEE_KIND_LABEL: Record<
+  "stable" | "asset" | "unknown",
+  string
+> = {
+  stable: "Withdrawal (stable)",
+  asset: "Withdrawal (asset)",
+  unknown: "Withdrawal (unknown)",
+};
+
+export function withdrawalFeeLabel(
+  kind: "stable" | "asset" | "unknown" | null | undefined,
+): string {
+  if (kind == null) return "Withdrawal";
+  return WITHDRAWAL_FEE_KIND_LABEL[kind] ?? "Withdrawal";
+}
+
 /**
  * Sum of CostBreakdown wear fields (string decimals from API).
  * ``total_wear_bps`` is a Python @property and is not in the JSON wire payload
@@ -449,6 +466,7 @@ export function totalWearBps(costs: {
   fluxion_slip_bps: string;
   gas_bps: string;
   basis_bps: string;
+  withdrawal_fee_bps?: string;
 } | null | undefined): string | null {
   if (!costs) return null;
   const parts = [
@@ -458,6 +476,7 @@ export function totalWearBps(costs: {
     costs.fluxion_slip_bps,
     costs.gas_bps,
     costs.basis_bps,
+    costs.withdrawal_fee_bps ?? "0",
   ].map(parseNum);
   if (parts.some((p) => p === null)) return null;
   const nums = parts as number[];

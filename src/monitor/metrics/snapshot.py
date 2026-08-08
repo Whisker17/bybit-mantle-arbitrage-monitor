@@ -139,6 +139,8 @@ def build_edge_snapshot(
     rfq_buy: FluxionRfqQuoteTick | None = None,
     rfq_sell: FluxionRfqQuoteTick | None = None,
     ts_ms: int | None = None,
+    asset_withdrawal_fee_tokens: Decimal | None = None,
+    price_multiplier: Decimal = Decimal(1),
 ) -> EdgeSnapshot:
     spreads = build_spread_snapshot(
         bybit=bybit,
@@ -165,6 +167,8 @@ def build_edge_snapshot(
             venue="amm",
             config=config,
             amm=amm_pool,
+            asset_withdrawal_fee_tokens=asset_withdrawal_fee_tokens,
+            price_multiplier=price_multiplier,
         )
 
     rfq_edges: list[EdgeResult] = []
@@ -190,6 +194,8 @@ def build_edge_snapshot(
                     direction=direction,
                     venue="rfq",
                     config=config,
+                    asset_withdrawal_fee_tokens=asset_withdrawal_fee_tokens,
+                    price_multiplier=price_multiplier,
                 )
             )
 

@@ -39,12 +39,16 @@ from monitor.metrics.edge import (
     CostBreakdown,
     EdgeResult,
     VenueKind,
+    WithdrawalFeeKind,
+    WithdrawalFeeParams,
     basis_wear_bps,
     best_net_edge,
     compute_edge,
     compute_edge_ladder,
     mid_from_bid_ask,
     spread_bps,
+    withdrawal_fee_bps,
+    withdrawal_fee_usd_for_direction,
 )
 from monitor.metrics.pnl_snapshot import (
     PnlOptimalSummary,
@@ -87,6 +91,7 @@ from monitor.metrics.stats import (
     OptimalPnlStats,
     SessionBuckets,
 )
+from monitor.metrics.withdrawal import withdrawal_params_from_pair
 
 __all__ = [
     "AmmPoolState",
@@ -113,6 +118,8 @@ __all__ = [
     "SessionKind",
     "SpreadSnapshot",
     "VenueKind",
+    "WithdrawalFeeKind",
+    "WithdrawalFeeParams",
     "amm_pool_from_pair_tick",
     "amm_pool_from_tick",
     "amm_quote_for_cex",
@@ -138,6 +145,9 @@ __all__ = [
     "overview_pnl_summary",
     "pnl_bucket_table",
     "premium_bps",
+    "withdrawal_fee_bps",
+    "withdrawal_fee_usd_for_direction",
+    "withdrawal_params_from_pair",
     "premium_type_label",
     "quotable_amm_mid",
     "reclassify_underlying_for_display",

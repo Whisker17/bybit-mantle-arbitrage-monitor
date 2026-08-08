@@ -61,6 +61,8 @@ export type PnlOptimalSummary = {
   depth_quote_age_ms?: number | null;
 };
 
+export type WithdrawalFeeKind = "stable" | "asset" | "unknown";
+
 export type PnlCostBreakdownUsd = {
   bybit_fee_usd: string;
   bybit_slip_usd: string;
@@ -68,6 +70,9 @@ export type PnlCostBreakdownUsd = {
   fluxion_slip_usd: string;
   gas_usd: string;
   basis_usd: string;
+  withdrawal_fee_usd: string;
+  /** WHI-961: which schedule produced withdrawal_fee_usd. ``unknown`` = unmeasured. */
+  withdrawal_fee_kind: WithdrawalFeeKind;
 };
 
 export type PnlResult = {
@@ -353,6 +358,9 @@ export type CostBreakdown = {
   fluxion_slip_bps: string;
   gas_bps: string;
   basis_bps: string;
+  withdrawal_fee_bps: string;
+  withdrawal_fee_usd: string;
+  withdrawal_fee_kind: WithdrawalFeeKind;
 };
 
 export type EdgeResult = {
