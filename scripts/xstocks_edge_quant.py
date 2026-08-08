@@ -581,7 +581,11 @@ def render_report(payload: dict[str, Any]) -> str:
     a("")
     a("## Decision rule (bot DESIGN §1.4)")
     a("")
-    a("After all costs (Bybit taker 10 bps + Fluxion pool fee + bilateral slip + gas):")
+    taker_bps = payload["method"].get("bybit_taker_fee_bps", "20")
+    a(
+        f"After all costs (Bybit taker {taker_bps} bps + Fluxion pool fee "
+        f"+ bilateral slip + gas):"
+    )
     a("")
     a(
         f"- **Go:** average capturable profit ≥ **{GO_USDT_PER_DAY} USDT/day** "
@@ -1222,6 +1226,7 @@ def run(args: argparse.Namespace) -> int:
             "inventory_usd": str(INVENTORY_USD),
             "max_trade_usd": str(MAX_TRADE_USD),
             "pricing_anomaly_gate": str(metrics_cfg.max_abs_amm_spread_bps),
+            "bybit_taker_fee_bps": str(metrics_cfg.bybit_taker_fee_bps),
         },
         "tables": [
             {

@@ -23,8 +23,9 @@ dex:
 costs:
   # Bybit xStocks "Adventure Zone" tier: maker = taker = 20 bps (no maker discount).
   # Measured 2026-08-07 via authenticated GET /v5/account/fee-rate for
-  # HOODXUSDT / CRCLXUSDT / NVDAXUSDT (sibling bot repo mantle-stocks-arbitrage-bots
-  # config/thresholds.yaml + DESIGN §2.3). Standard-spot 10 bps does not apply.
+  # HOODXUSDT / CRCLXUSDT / NVDAXUSDT. Cited from sibling bot repo
+  # mantle-stocks-arbitrage-bots (config/thresholds.yaml + that repo's DESIGN §2.3).
+  # Standard-spot 10 bps does not apply.
   cex_taker_fee_bps: 20
   gas_usd_per_swap: 0.01
   quote_basis_bps: 0

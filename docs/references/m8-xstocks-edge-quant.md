@@ -4,6 +4,11 @@ Go/no-go report for the sibling execution project `mantle-stocks-arbitrage-bots`
 
 **Generated:** 2026-08-05 14:49:46 UTC
 
+> **Stale cost basis (WHI-959):** this report was generated under the old
+> 10 bps Bybit taker assumption. Live config is now **20 bps** (Adventure Zone).
+> Headline capturable profit / go-no-go numbers overstate net edge by ~10 bps
+> per Bybit leg until re-run under WHI-909.
+
 ## Regeneration
 
 ```bash
@@ -15,7 +20,8 @@ Venue math: `monitor.metrics.pnl_v2.compute_pnl_usd` (not reimplemented).
 
 ## Decision rule (bot DESIGN §1.4)
 
-After all costs (Bybit taker 10 bps + Fluxion pool fee + bilateral slip + gas):
+After all costs (Bybit taker 10 bps + Fluxion pool fee + bilateral slip + gas)
+*(historical run cost stack — see staleness banner above)*:
 
 - **Go:** average capturable profit ≥ **15 USDT/day** at 5000 USDT inventory with ≤ **1000 USDT** per trade, **and** ≥ **3 symbols** with stable windows.
 - **No-go:** < **5 USDT/day**.

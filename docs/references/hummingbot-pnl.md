@@ -190,7 +190,7 @@ searches for optimal size; the operator picks `order_amount`.
 | \(P_b^{\mathrm{mid}}\) | quote/base | Bybit mid after `de_multiplied_price` (USDT per 1 native-equivalent base) |
 | \(q\) | base | \(q = Q / P_b^{\mathrm{mid}}\) — economic base amount (native xStock units) |
 | \(m\) | — | Bybit `xstockMultiplier` (>0). Converts raw Bybit book into units comparable to Fluxion native base (see §4.2 multiplier step) |
-| \(f_b\) | fraction | Bybit taker fee = \(10\,\mathrm{bps} = 0.001\) (config `bybit_taker_fee_bps`) |
+| \(f_b\) | fraction | Bybit xStocks Adventure Zone taker fee = \(20\,\mathrm{bps} = 0.002\) (config `bybit_taker_fee_bps`; measured 2026-08-07) |
 | \(f_p\) | fraction | AMM pool fee (e.g. 3000 → 0.003); RFQ: **0** (embedded in quote) |
 | \(G\) | USD | Mantle gas for **one** Fluxion leg (`gas_usd_per_swap`, default 0.01) |
 | \(\beta\) | fraction | Optional USDT/USDC basis wear (`usdt_usdc_basis_bps` / 1e4); default 0 |
@@ -592,15 +592,15 @@ chooses file layout and exact names):
 
 ## 7. Worked micro-example (fee algebra check)
 
-Assume mid-aligned venues, zero slip, zero gas, \(\beta=0\), \(f_b=10\) bps,
+Assume mid-aligned venues, zero slip, zero gas, \(\beta=0\), \(f_b=20\) bps,
 AMM fee 0 for clarity, \(Q=1000\), \(P=100\), net \(q=10\).
 
 **`buy_fluxion_sell_bybit`** with Bybit bid = Fluxion mid = 100:
 
 ```text
-USDT_recv  = 10 * 100 * (1 - 0.001) = 999.0   # fee in quote on sell
+USDT_recv  = 10 * 100 * (1 - 0.002) = 998.0   # fee in quote on sell
 USDC_spent = 10 * 100 = 1000.0                # fee-free AMM buy of net 10
-PnL = 999 - 1000 = -1.0 USD   (= −10 bps of Q)
+PnL = 998 - 1000 = -2.0 USD   (= −20 bps of Q)
 ```
 
 Matches “pay taker once on the CEX sell.” If the UniV3 pool fee is 30 bps on
