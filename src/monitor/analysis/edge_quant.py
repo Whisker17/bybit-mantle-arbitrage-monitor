@@ -1,8 +1,9 @@
-"""Edge-window statistics and single-flight capturable profit (WHI-866 / M8).
+"""Edge-window statistics and single-flight capturable profit (WHI-866 / WHI-909 / M8).
 
 Pure aggregation. Callers feed samples already scored by the PnL v2 engine
 (``compute_pnl_usd`` / RFQ poll rows). This module never reimplements venue
-fees, slip, or gas.
+fees, slip, or gas — but it *does* host pure cost-stack helpers used by the
+M0 re-run (live USDC premium, rebalance amortization, extended sweep grid).
 
 Decision rule (bot DESIGN §1.4): go if average capturable profit ≥ 15 USDT/day
 at 5,000 inventory with ≤ 1,000 per trade and ≥ 3 symbols with stable windows.
@@ -14,12 +15,19 @@ overlapping windows beyond what one in-flight slot can take.
 
 from __future__ import annotations
 
+import bisect
 from collections.abc import Sequence
-from dataclasses import dataclass
+from dataclasses import dataclass, replace
 from decimal import Decimal
 from typing import Literal
 
 VenueLabel = Literal["amm", "rfq"]
+
+# Direction that builds inventory skew (Fluxion long / Bybit short) in the
+# observed xStocks regime. Rebalance amortization is charged only here.
+SKEW_BUILDING_DIRECTION = "buy_fluxion_sell_bybit"
+
+BPS = Decimal(10_000)
 
 
 @dataclass(frozen=True, slots=True)
@@ -428,14 +436,141 @@ def _assert_homogeneous(samples: Sequence[EdgeSample]) -> None:
         prev = s.ts_ms
 
 
+def usdc_premium_bps_from_mid(mid: Decimal) -> Decimal:
+    """Convert a USDCUSDT mid to signed USDC-premium bps (WHI-909).
+
+    Sign convention (same as ``edge.basis_wear_bps`` / WHI-960):
+    * ``mid > 1`` → positive bps → USDC is richer than USDT.
+    * Paying USDC (``buy_fluxion_sell_bybit``) is **charged** this premium.
+    * Receiving USDC (``buy_bybit_sell_fluxion``) is **credited**.
+
+    Example: mid ``1.00075`` → ``7.5`` bps. Mid must be positive.
+    """
+    if mid <= 0:
+        raise ValueError(f"USDCUSDT mid must be > 0, got {mid}")
+    return (mid - Decimal(1)) * BPS
+
+
+def extended_threshold_grid_bps(
+    *,
+    fine_max: int = 60,
+    fine_step: int = 2,
+    coarse_max: int = 200,
+    coarse_step: int = 5,
+) -> list[Decimal]:
+    """Build the WHI-909 threshold sweep: 0..fine_max step fine, then coarse.
+
+    Default: 0..60 step 2, then 65..200 step 5. Inclusive endpoints. Deduped
+    and sorted so a caller can pass the list straight into ``threshold_sweep``.
+    """
+    if fine_step <= 0 or coarse_step <= 0:
+        raise ValueError("threshold steps must be positive")
+    if fine_max < 0 or coarse_max < fine_max:
+        raise ValueError("require 0 <= fine_max <= coarse_max")
+    fine = list(range(0, fine_max + 1, fine_step))
+    # Start coarse just past fine_max so we do not duplicate the joint.
+    coarse_start = fine_max + coarse_step
+    # Align coarse_start to the coarse grid when fine_max is not on it.
+    rem = coarse_start % coarse_step
+    if rem:
+        coarse_start += coarse_step - rem
+    coarse = list(range(coarse_start, coarse_max + 1, coarse_step))
+    # Always include coarse_max when it is above fine_max.
+    if coarse_max > fine_max and (not coarse or coarse[-1] != coarse_max):
+        if coarse_max % coarse_step == 0 or coarse_max not in fine:
+            if coarse_max not in coarse:
+                coarse.append(coarse_max)
+    out = sorted({Decimal(v) for v in fine + coarse})
+    return out
+
+
+def apply_rebalance_amortization(
+    sample: EdgeSample,
+    *,
+    rebalance_amortized_bps: Decimal,
+    skew_direction: str = SKEW_BUILDING_DIRECTION,
+) -> EdgeSample:
+    """Subtract amortized rebalance cost from a scored sample (WHI-909).
+
+    Model: cost per cycle = fixed (withdraw fee + gas) + variable (spot
+    conversion bps), divided by batch notional → ``rebalance_amortized_bps``.
+    Charged **only** on the skew-building direction (default
+    ``buy_fluxion_sell_bybit``); the reverse direction is a skew-reducing
+    unwind and pays nothing extra here.
+
+    Does not touch venue math — pure post-process on already-scored samples.
+    """
+    if rebalance_amortized_bps < 0:
+        raise ValueError("rebalance_amortized_bps must be >= 0")
+    if rebalance_amortized_bps == 0 or sample.direction != skew_direction:
+        return sample
+    if sample.size_usd <= 0:
+        return sample
+    cost_usd = rebalance_amortized_bps / BPS * sample.size_usd
+    new_pnl = sample.pnl_usd - cost_usd
+    new_bps = new_pnl / sample.size_usd * BPS
+    return replace(sample, edge_bps=new_bps, pnl_usd=new_pnl)
+
+
+def apply_rebalance_amortization_many(
+    samples: Sequence[EdgeSample],
+    *,
+    rebalance_amortized_bps: Decimal,
+    skew_direction: str = SKEW_BUILDING_DIRECTION,
+) -> list[EdgeSample]:
+    """Map ``apply_rebalance_amortization`` over a series (preserves length).
+
+    Does **not** drop non-positive PnL samples — those remain as window
+    separators for ``detect_windows`` (which already requires ``pnl_usd > 0``
+    to open a window). Filtering here would glue adjacent windows and change
+    segmentation relative to the pre-rebalance series.
+    """
+    return [
+        apply_rebalance_amortization(
+            s,
+            rebalance_amortized_bps=rebalance_amortized_bps,
+            skew_direction=skew_direction,
+        )
+        for s in samples
+    ]
+
+
+def as_of_value(
+    ts_list: Sequence[int],
+    values: Sequence[Decimal],
+    ts_ms: int,
+    *,
+    max_age_ms: int | None = None,
+) -> Decimal | None:
+    """Rightmost value with ``ts_list[i] <= ts_ms`` (optional max age).
+
+    ``ts_list`` must be sorted ascending and parallel to ``values``.
+    """
+    if not ts_list or len(ts_list) != len(values):
+        return None
+    i = bisect.bisect_right(ts_list, ts_ms) - 1
+    if i < 0:
+        return None
+    if max_age_ms is not None and ts_ms - ts_list[i] > max_age_ms:
+        return None
+    return values[i]
+
+
 __all__ = [
+    "BPS",
+    "SKEW_BUILDING_DIRECTION",
     "EdgeSample",
     "OpportunityWindow",
     "SweepRow",
     "ThresholdFit",
+    "apply_rebalance_amortization",
+    "apply_rebalance_amortization_many",
+    "as_of_value",
     "capturable_profit_single_flight",
     "detect_windows",
+    "extended_threshold_grid_bps",
     "fit_min_edge_bps",
     "portfolio_capturable_profit",
     "threshold_sweep",
+    "usdc_premium_bps_from_mid",
 ]

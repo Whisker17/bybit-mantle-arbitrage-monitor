@@ -24,6 +24,7 @@ from typing import Any, Literal
 from monitor.analysis.edge_quant import (
     EdgeSample,
     OpportunityWindow,
+    as_of_value,
     capturable_profit_single_flight,
     detect_windows,
 )
@@ -48,6 +49,33 @@ DIRECTIONS: tuple[Direction, Direction] = (
     "buy_fluxion_sell_bybit",
     "buy_bybit_sell_fluxion",
 )
+
+
+def _config_with_live_basis(
+    metrics_cfg: MetricsConfig,
+    ts_ms: int,
+    *,
+    basis_ts_ms: Sequence[int] | None,
+    basis_bps_series: Sequence[Decimal] | None,
+    basis_max_age_ms: int | None,
+) -> MetricsConfig | None:
+    """Return config with as-of basis, or None if a live series was required but missing.
+
+    When no basis series is provided, returns ``metrics_cfg`` unchanged (panel
+    path uses the market constant). When a series *is* provided, a successful
+    as-of join is required — never silently fall back to the constant (WHI-909).
+    """
+    if basis_ts_ms is None or basis_bps_series is None:
+        return metrics_cfg
+    live = as_of_value(
+        basis_ts_ms,
+        basis_bps_series,
+        ts_ms,
+        max_age_ms=basis_max_age_ms,
+    )
+    if live is None:
+        return None
+    return metrics_cfg.model_copy(update={"usdt_usdc_basis_bps": live})
 
 CaptureStatus = Literal[
     "ok",
@@ -302,10 +330,26 @@ def build_amm_samples(
     gaps: Sequence[GapInterval],
     align_ms: int,
     max_abs_spread_bps: Decimal | None,
+    basis_ts_ms: Sequence[int] | None = None,
+    basis_bps_series: Sequence[Decimal] | None = None,
+    basis_max_age_ms: int | None = None,
 ) -> list[EdgeSample]:
-    """Score AMM samples at book times (same algorithm as xstocks_edge_quant)."""
+    """Score AMM samples at book times (same algorithm as xstocks_edge_quant).
+
+    Optional ``basis_ts_ms`` / ``basis_bps_series`` (parallel, ascending) override
+    ``metrics_cfg.usdt_usdc_basis_bps`` per timestamp via as-of join (WHI-909
+    live USDCUSDT premium). When omitted, the config constant is used. When
+    provided, samples without a join within ``basis_max_age_ms`` are skipped
+    (no silent fallback to the constant).
+    """
     if not books or not pools:
         return []
+    if (basis_ts_ms is None) ^ (basis_bps_series is None):
+        raise ValueError(
+            "basis_ts_ms and basis_bps_series must both be set or both omitted"
+        )
+    if basis_ts_ms is not None and len(basis_ts_ms) != len(basis_bps_series or ()):
+        raise ValueError("basis_ts_ms and basis_bps_series length mismatch")
     pool_ts = [p.recv_ts_ms for p in pools]
     depth_ts = [d.recv_ts_ms for d in depths]
     out: list[EdgeSample] = []
@@ -340,6 +384,15 @@ def build_amm_samples(
         sess = session_kind(
             datetime.fromtimestamp(ts / 1000, tz=UTC), config=metrics_cfg
         ).value
+        cfg = _config_with_live_basis(
+            metrics_cfg,
+            ts,
+            basis_ts_ms=basis_ts_ms,
+            basis_bps_series=basis_bps_series,
+            basis_max_age_ms=basis_max_age_ms,
+        )
+        if cfg is None:
+            continue
         for direction in DIRECTIONS:
             r = compute_pnl_usd(
                 pair_id=pair.id,
@@ -348,7 +401,7 @@ def build_amm_samples(
                 size_usd=size_usd,
                 direction=direction,
                 venue="amm",
-                config=metrics_cfg,
+                config=cfg,
                 amm=amm,
                 bybit_bids=bids,
                 bybit_asks=asks,
@@ -379,10 +432,19 @@ def build_rfq_samples(
     gaps: Sequence[GapInterval],
     align_ms: int,
     max_trade_usd: Decimal,
+    basis_ts_ms: Sequence[int] | None = None,
+    basis_bps_series: Sequence[Decimal] | None = None,
+    basis_max_age_ms: int | None = None,
 ) -> list[EdgeSample]:
     """Score RFQ samples at poll times (poll-native size, capped for single-flight)."""
     if not books or not rfq_ticks:
         return []
+    if (basis_ts_ms is None) ^ (basis_bps_series is None):
+        raise ValueError(
+            "basis_ts_ms and basis_bps_series must both be set or both omitted"
+        )
+    if basis_ts_ms is not None and len(basis_ts_ms) != len(basis_bps_series or ()):
+        raise ValueError("basis_ts_ms and basis_bps_series length mismatch")
     book_ts = [b.recv_ts_ms for b in books]
     out: list[EdgeSample] = []
     if isinstance(pair, BStocksPair):
@@ -406,6 +468,15 @@ def build_rfq_samples(
             direction: Direction = "buy_fluxion_sell_bybit"
         else:
             direction = "buy_bybit_sell_fluxion"
+        cfg = _config_with_live_basis(
+            metrics_cfg,
+            ts,
+            basis_ts_ms=basis_ts_ms,
+            basis_bps_series=basis_bps_series,
+            basis_max_age_ms=basis_max_age_ms,
+        )
+        if cfg is None:
+            continue
         r = compute_pnl_usd(
             pair_id=pair.id,
             bybit_bid=book.bid_de_multiplied,
@@ -413,7 +484,7 @@ def build_rfq_samples(
             size_usd=Decimal(1),  # ignored for RFQ path
             direction=direction,
             venue="rfq",
-            config=metrics_cfg,
+            config=cfg,
             rfq=poll,
         )
         if not r.fillable or r.pnl_bps is None or r.size_usd <= 0:
