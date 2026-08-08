@@ -98,6 +98,14 @@ soon — anything touching key handling, RPC credentials defaults to at least Hi
   switched). Fix: add `swaps_range` public loader; collapse join helpers into
   one module; switch fill_validation + remaining script copies.
 
+- **WHI-963: VPS P95 re-measure + sparkline field name** (Low, WHI-963 → ops/polish).
+  Acceptance requires overview P95 inside DESIGN §2.6.7 budget measured on the
+  1 GB VPS after deploy (CI cannot host the live journal). Cold path is now
+  O(pairs × lookback/sample) with bucketed books/depth/pools + 30 s TTL, but
+  the number must be confirmed on the host. Also `CaptureSparkPoint.capturable_usd`
+  is fire-on-open sum (not occupancy-bounded); UI plots only `n_windows` so
+  rename to `window_pnl_usd` or apply single-flight per bucket is polish.
+
 - ~~**WHI-866: research script imports private JournalReader row mappers**~~
   **Discharged by WHI-963** for the bulk row-mapper path — public loaders on
   `JournalReader`; `xstocks_edge_quant.py` uses them + `monitor.metrics.capture`
