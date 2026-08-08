@@ -293,7 +293,8 @@ placeholders. Agents must not assume a module exists until its issue lands. -->
     **3.13** (`requires-python` / ruff / mypy in lockstep); `uv run mypy`
     checks `src/monitor` only (strict, exits 0); `uv run ruff check .`
     excludes archived `src/mba`. Three None-leak sites fixed with
-    regression tests. CI workflow is a follow-up (not in this issue).
+    regression tests. Unattended CI is **WHI-972** (follow-up; not in
+    this issue).
 
 ## Build, test, run
 

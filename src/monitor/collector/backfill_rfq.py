@@ -38,22 +38,59 @@ logger = logging.getLogger(__name__)
 def _row_int(row: dict[str, object], key: str) -> int:
     """Narrow a journal row field to ``int`` without ``cast`` / ``int(object)``.
 
-    SQLite rows are typed as ``dict[str, object]``; stringify first so the
-    ``int`` overload is well-defined under strict mypy (WHI-971).
+    Branch on concrete types so the ``int`` overload is well-defined under
+    strict mypy (WHI-971). Raises ``TypeError``/``ValueError`` on junk — same
+    failure mode as the pre-fix ``int(row[key])`` path for bad data.
     """
-    return int(str(row[key]))
+    value = row[key]
+    if isinstance(value, bool):
+        return int(value)
+    if isinstance(value, int):
+        return value
+    if isinstance(value, float):
+        return int(value)
+    if isinstance(value, (str, bytes, bytearray)):
+        return int(value)
+    raise TypeError(f"row[{key!r}] is not int-coercible: {type(value).__name__}")
 
 
-def _receipt_logs(rcpt: dict[str, object]) -> list[dict[str, object]]:
-    """Extract typed receipt logs; empty when missing or malformed."""
-    raw = rcpt.get("logs") or []
+def _receipt_log_dicts(raw: object) -> list[dict[str, object]] | None:
+    """Return typed receipt logs, or None when ``logs`` is not a list.
+
+    None means malformed (caller marks attempted). Empty list is a valid
+    receipt with no log entries — still enrich.
+    """
     if not isinstance(raw, list):
-        return []
-    out: list[dict[str, object]] = []
-    for item in raw:
-        if isinstance(item, dict):
-            out.append(item)
-    return out
+        return None
+    return [item for item in raw if isinstance(item, dict)]
+
+
+def _row_int_or_str(row: dict[str, object], key: str) -> int:
+    """Like ``_row_int`` but also accepts numeric strings (sqlite TEXT/INTEGER)."""
+    value = row[key]
+    if isinstance(value, str):
+        return int(value)
+    return _row_int(row, key)
+
+
+def _fill_tick_from_row(
+    row: dict[str, object],
+    *,
+    tx_hash: str | None = None,
+) -> FluxionRfqFillTick:
+    """Map an unenriched journal row onto a base RFQ fill tick."""
+    gap_raw = row.get("gap") or 0
+    gap_row = {"gap": gap_raw}
+    return FluxionRfqFillTick(
+        block_number=_row_int(row, "block_number"),
+        block_ts=_row_int(row, "block_ts"),
+        recv_ts_ms=_row_int(row, "recv_ts_ms"),
+        tx_hash=tx_hash if tx_hash is not None else str(row["tx_hash"]),
+        log_index=_row_int(row, "log_index"),
+        order_hash=str(row["order_hash"]),
+        remaining_making_amount=_row_int_or_str(row, "remaining_making_amount"),
+        gap=bool(_row_int_or_str(gap_row, "gap")),
+    )
 
 
 def enrich_fill_from_receipt(
@@ -65,16 +102,7 @@ def enrich_fill_from_receipt(
     token_to_pair: dict[str, str],
 ) -> FluxionRfqFillTick:
     """Build an enriched tick from a stored row + receipt logs."""
-    base = FluxionRfqFillTick(
-        block_number=_row_int(row, "block_number"),
-        block_ts=_row_int(row, "block_ts"),
-        recv_ts_ms=_row_int(row, "recv_ts_ms"),
-        tx_hash=str(row["tx_hash"]),
-        log_index=_row_int(row, "log_index"),
-        order_hash=str(row["order_hash"]),
-        remaining_making_amount=int(str(row["remaining_making_amount"])),
-        gap=bool(int(str(row.get("gap") or 0))),
-    )
+    base = _fill_tick_from_row(row)
     decoded = decode_rfq_fill_from_receipt(
         tx_hash=base.tx_hash,
         logs=logs,
@@ -102,16 +130,7 @@ def run_backfill(
     updated = 0
     for row in rows:
         txh = str(row["tx_hash"])
-        base = FluxionRfqFillTick(
-            block_number=_row_int(row, "block_number"),
-            block_ts=_row_int(row, "block_ts"),
-            recv_ts_ms=_row_int(row, "recv_ts_ms"),
-            tx_hash=txh,
-            log_index=_row_int(row, "log_index"),
-            order_hash=str(row["order_hash"]),
-            remaining_making_amount=int(str(row["remaining_making_amount"])),
-            gap=bool(int(str(row.get("gap") or 0))),
-        )
+        base = _fill_tick_from_row(row, tx_hash=txh)
         try:
             rcpt = rpc.get_transaction_receipt(txh)
         except Exception as exc:  # noqa: BLE001
@@ -127,9 +146,10 @@ def run_backfill(
             if store.update_rfq_fill_enrichment(replace(base, enriched=True)):
                 updated += 1
             continue
-        logs = _receipt_logs(rcpt)
-        if not logs and rcpt.get("logs") not in (None, []):
-            # Malformed logs payload — mark attempted so we do not spin.
+        # Preserve pre-WHI-971 control flow: non-list logs → mark attempted;
+        # list (incl. empty) → enrich. Dict items only for the typed seam.
+        logs = _receipt_log_dicts(rcpt.get("logs") or [])
+        if logs is None:
             if store.update_rfq_fill_enrichment(replace(base, enriched=True)):
                 updated += 1
             continue

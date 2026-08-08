@@ -35,15 +35,27 @@ def _symbol_from_topic(topic: str) -> str:
 def _optional_int(value: object) -> int | None:
     """Narrow JSON ``object`` fields to ``int`` (or None) without ``cast``.
 
-    ``int(object)`` is rejected under strict mypy; stringify first so the
-    overload is ``int(str | …)``. Same pattern as ``cex_volume.parse``.
+    Branch on concrete types so ``int(...)`` hits a known overload (WHI-971).
+    bool is checked before int (bool subclasses int). Floats truncate toward zero
+    the same way bare ``int(3.9)`` does.
     """
     if value is None or value == "":
         return None
-    try:
-        return int(str(value))
-    except (TypeError, ValueError):
-        return None
+    if isinstance(value, bool):
+        return int(value)
+    if isinstance(value, int):
+        return value
+    if isinstance(value, float):
+        try:
+            return int(value)
+        except (OverflowError, ValueError):
+            return None
+    if isinstance(value, (str, bytes, bytearray)):
+        try:
+            return int(value)
+        except ValueError:
+            return None
+    return None
 
 
 def parse_level_ops(levels: object) -> list[tuple[Decimal, Decimal]]:
