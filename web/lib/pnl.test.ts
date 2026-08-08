@@ -484,6 +484,12 @@ describe("WHI-973 isCapturableOpportunity accepts the real overview row shape", 
    * `tsx --test` strips types without checking them, so the guard here is the
    * explicit annotation plus `npm run typecheck` — narrowing the signature
    * again fails typecheck on this file.
+   *
+   * Deliberately **not** `PnlOptimalFloorFields`: this is the independent
+   * oracle. Production code shares that alias so the row types and the
+   * predicate cannot drift apart; spelling the contract out by hand here is
+   * what catches someone narrowing the alias itself. Do not "de-duplicate"
+   * this into the alias — that removes the only outside check.
    */
   type WireOptimal = {
     meets_min_profit?: boolean;

@@ -9,6 +9,7 @@ import type {
   PairOverviewRow,
   PnlBucketTable,
   PnlCostBreakdownUsd,
+  PnlOptimalFloorFields,
   PnlOptimalSummary,
   PnlPairSnapshot,
   PnlResult,
@@ -124,13 +125,10 @@ export type OverviewNetCell = {
  * the sequential drift bar. Unknown drift (no σ) does not block min_profit.
  */
 export function isCapturableOpportunity(row: {
-  // Partial<>: overview rows carry these fields *optionally* (see
-  // overviewNetCell's row type). A bare Pick<> keeps them required and does not
-  // accept the real call sites — WHI-973. The body below already treats both as
-  // possibly-absent, so the wider type is the honest one.
-  pnl_v2?: Partial<
-    Pick<PnlOptimalSummary, "meets_min_profit" | "optimal_net_pnl_usd">
-  > | null;
+  // One named type shared with the call sites (WHI-973). A bare Pick<> keeps
+  // the fields required and does not accept the real overview rows; the body
+  // below already treats both as possibly-absent.
+  pnl_v2?: PnlOptimalFloorFields | null;
   clears_drift_optimal?: boolean | null;
 }): boolean {
   const pnl = row.pnl_v2;
@@ -183,11 +181,10 @@ export function overviewNetCell(
     net_edge_bps?: string | null;
     net_size_usd?: string | null;
     amm_quote_reason?: string | null;
-    pnl_v2?: (QuoteAgeFields & {
-      status?: PnlStatus | null;
-      meets_min_profit?: boolean;
-      optimal_net_pnl_usd?: string | null;
-    }) | null;
+    pnl_v2?: (QuoteAgeFields &
+      PnlOptimalFloorFields & {
+        status?: PnlStatus | null;
+      }) | null;
     sigma_transit_bps?: string | null;
     drift_premium_bps?: string | null;
     drift_premium_k?: string | null;

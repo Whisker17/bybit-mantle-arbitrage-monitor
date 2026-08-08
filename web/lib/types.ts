@@ -67,6 +67,20 @@ export type PnlOptimalSummary = {
 };
 
 /**
+ * The optimal fields the *overview* carries, as they arrive on the wire:
+ * present-or-absent, not required (WHI-973).
+ *
+ * `PnlOptimalSummary` is the full detail-route shape; overview rows ship a
+ * subset, so a bare `Pick<>` — which keeps required-ness — does not describe
+ * them. Both the row types and the predicates that read them must name this
+ * one type, or they drift apart again and the drift only surfaces as a
+ * `next build` failure.
+ */
+export type PnlOptimalFloorFields = Partial<
+  Pick<PnlOptimalSummary, "meets_min_profit" | "optimal_net_pnl_usd">
+>;
+
+/**
  * Sequential-execution drift bar (WHI-962).
  * ``drift_premium_bps = k × σ_session``; clears when net ≥ premium.
  */

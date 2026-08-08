@@ -298,10 +298,14 @@ placeholders. Agents must not assume a module exists until its issue lands. -->
   - **Web build gate (WHI-973) landed:** `next build` was failing on `dev` —
     `isCapturableOpportunity`'s `pnl_v2` param used `Pick<>` (fields required)
     while both call sites pass the wire shape (fields optional), so no static
-    export could be produced. Param widened to `Partial<Pick<…>>` (the body
-    always handled absent fields). Root cause was gate coverage: `tsx --test`
-    strips types, so `npm test` could not catch it — `npm test` now runs
-    `tsc --noEmit` first, and the web build is listed as a gate.
+    export could be produced. Both the row types and the predicate now name one
+    shared `PnlOptimalFloorFields` (`web/lib/types.ts`) so they cannot drift
+    apart again; `pnl.test.ts` keeps a hand-written copy on purpose as the
+    outside oracle. Root cause was gate coverage: `tsx --test` strips types, so
+    `npm test` could not catch it — `npm test` now runs `tsc --noEmit` first,
+    and `npm run build` is documented as a **separate** gate (typecheck is a
+    subset; it is not chained into `npm test`). Unattended CI is still
+    **WHI-972**.
 
 ## Build, test, run
 
@@ -310,9 +314,12 @@ uv sync                                       # install deps (creates .venv)
 uv run pytest                                 # unit tests
 uv run ruff check .                           # lint (live code; src/mba excluded, WHI-971)
 uv run mypy                                   # type check (src/monitor only; WHI-971)
-# Web gates — `npm test` typechecks first (WHI-973). Run these before any PR
-# that touches web/: tsx strips types, so tests alone cannot catch a bad
-# signature; only tsc can. Deps: `cd web && npm ci` once.
+# Web gates — run BOTH before any PR touching web/ (WHI-973). tsx strips types
+# without checking them, so tests alone cannot catch a bad signature.
+# `npm test` runs `tsc --noEmit` first, but typecheck is a *subset* of the
+# build: tsconfig includes `.next/types/**`, which only exists after a build,
+# so `npm run build` is a separate gate and is NOT chained into `npm test`.
+# Deps: `cd web && npm ci` once.
 cd web && npm test                            # tsc --noEmit + pure-helper tests
 cd web && npm run build                       # static export must compile → web/out
 # Phase-1 pipeline (needs data/ parquet from a prior run):

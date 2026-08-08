@@ -31,11 +31,17 @@ soon — anything touching key handling, RPC credentials defaults to at least Hi
 
 ## Open
 
-- **No unattended CI for pytest / ruff / mypy** (Medium, WHI-971 → WHI-972).
-  Gates are green when run by hand (`uv run pytest` / `ruff check .` /
-  `mypy`), but nothing enforces them on PRs — which is how mypy silently
-  checked nothing and ruff stayed red. WHI-972 tracks adding a GitHub
-  Actions workflow; until it lands the gates are advisory.
+- **No unattended CI for pytest / ruff / mypy / the two web gates**
+  (Medium, WHI-971 + WHI-973 → WHI-972). Gates are green when run by hand
+  (`uv run pytest` / `ruff check .` / `mypy` / `cd web && npm test` /
+  `cd web && npm run build`), but nothing enforces them on PRs — which is how
+  mypy silently checked nothing, ruff stayed red, and (WHI-973) `next build`
+  reached `dev` broken so no static export could be produced. **WHI-972's
+  scope must cover the web gates too, not just the Python three** — the web
+  build is the only gate that compiles the Next.js route types, and
+  `npm run build` is deliberately *not* chained into `npm test`, so a CI job
+  that runs only `npm test` still misses it. Until WHI-972 lands, all five
+  gates are advisory.
 
 - **Max-USD `optimal_size` is invariant to a flat withdrawal fee** (Medium, WHI-961).
   Spec AC asked that adding the flat fee move direction-2 Q\* **up**. The engine
