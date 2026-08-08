@@ -21,7 +21,12 @@ dex:
   quote_decimals: 6
   has_rfq: true
 costs:
-  cex_taker_fee_bps: 10
+  # Bybit xStocks "Adventure Zone" tier: maker = taker = 20 bps (no maker discount).
+  # Measured 2026-08-07 via authenticated GET /v5/account/fee-rate for
+  # HOODXUSDT / CRCLXUSDT / NVDAXUSDT. Cited from sibling bot repo
+  # mantle-stocks-arbitrage-bots (config/thresholds.yaml + that repo's DESIGN §2.3).
+  # Standard-spot 10 bps does not apply.
+  cex_taker_fee_bps: 20
   gas_usd_per_swap: 0.01
   quote_basis_bps: 0
 # WHI-821: omit quote_max_age_ms → inherit config/api.yaml default (300s).

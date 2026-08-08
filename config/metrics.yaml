@@ -10,8 +10,11 @@ size_ladder_usd:
   - 5000
   - 20000
 
-# Bybit spot taker, undiscounted (DESIGN §1.2 / §2.3). 0.10% = 10 bps.
-bybit_taker_fee_bps: 10
+# Bybit xStocks Adventure Zone taker (DESIGN §1.2 / §2.3). 0.20% = 20 bps.
+# Base default matches bybit-fluxion (default market). Per-market costs override
+# via apply_market_costs — binance-pancake stays at 10 bps in its market file.
+# Provenance: authenticated GET /v5/account/fee-rate 2026-08-07 (HOODX/CRCLX/NVDAX).
+bybit_taker_fee_bps: 20
 
 # Bybit USDT vs Fluxion USDC basis. Positive = Bybit quote richer by this many
 # bps (applied as an additive wear term on both directions). Default 0 = treat

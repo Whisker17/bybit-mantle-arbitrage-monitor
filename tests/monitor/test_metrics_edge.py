@@ -67,7 +67,7 @@ def test_rfq_edge_hand_recompute() -> None:
     gross = (bybit_mid - fluxion) / bybit_mid * Decimal(10_000)
     bybit_slip = half_spread_bps(bid, ask)
     wear = (
-        Decimal(10)
+        Decimal(20)
         + Decimal(0)
         + bybit_slip
         + Decimal(0)
@@ -78,14 +78,15 @@ def test_rfq_edge_hand_recompute() -> None:
 
     assert edge.fillable
     assert edge.gross_spread_bps == gross
-    assert edge.costs.bybit_taker_bps == Decimal(10)
+    assert edge.costs.bybit_taker_bps == Decimal(20)
     assert edge.costs.fluxion_fee_bps == Decimal(0)
     assert edge.costs.bybit_slip_bps == bybit_slip
     assert edge.costs.fluxion_slip_bps == Decimal(0)
     assert edge.costs.gas_bps == gas_bps(Decimal("0.01"), size)
     assert edge.costs.total_wear_bps == wear
     assert edge.net_edge_bps == expected_net
-    assert Decimal("39") < edge.net_edge_bps < Decimal("41")
+    # Gross ~60 bps; wear ~30 bps (20 taker + ~10 half-spread + 0.1 gas).
+    assert Decimal("29") < edge.net_edge_bps < Decimal("31")
 
 
 def _deep_amm(target_mid: Decimal = Decimal("99.5")) -> tuple[AmmPoolState, Decimal]:
@@ -129,7 +130,7 @@ def test_amm_edge_includes_pool_fee_and_positive_slip() -> None:
 
     assert edge.fillable
     assert edge.costs.fluxion_fee_bps == Decimal(30)
-    assert edge.costs.bybit_taker_bps == Decimal(10)
+    assert edge.costs.bybit_taker_bps == Decimal(20)
     assert edge.costs.fluxion_slip_bps >= 0
     bybit_mid = mid_from_bid_ask(bid, ask)
     gross = (bybit_mid - mid) / bybit_mid * Decimal(10_000)
@@ -138,7 +139,7 @@ def test_amm_edge_includes_pool_fee_and_positive_slip() -> None:
     assert edge.net_edge_bps == gross - wear
     min_wear = (
         Decimal(30)
-        + Decimal(10)
+        + Decimal(20)
         + gas_bps(Decimal("0.01"), Decimal(1000))
         + half_spread_bps(bid, ask)
     )

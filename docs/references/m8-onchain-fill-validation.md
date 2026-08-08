@@ -4,6 +4,11 @@ Did anyone actually swap during the large paper dislocation windows that drive t
 
 **Generated:** 2026-08-07 03:22:42 UTC
 
+> **Stale cost basis (WHI-959):** this report was generated under the old
+> 10 bps Bybit taker assumption. Live config is now **20 bps** (Adventure Zone).
+> Window ranking / paper PnL inputs overstate net edge by ~10 bps per Bybit leg
+> until re-run under WHI-909.
+
 ## Regeneration
 
 ```bash

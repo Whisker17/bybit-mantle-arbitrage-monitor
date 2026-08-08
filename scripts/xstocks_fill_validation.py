@@ -1139,6 +1139,7 @@ def run(args: argparse.Namespace) -> int:
             "reentry_cooldown_ms": reentry,
             "min_edge_bps": "0",
             "pricing_anomaly_gate_default": str(default_gate),
+            "bybit_taker_fee_bps": str(metrics_cfg.bybit_taker_fee_bps),
             "top_n": top_n,
             "inventory_usd": str(INVENTORY_USD),
             "max_trade_usd": str(MAX_TRADE_USD),

@@ -22,7 +22,7 @@ Live paper-arb monitor over a fixed list of Fluxion-liquid xStocks:
 
 - Prices: AMM pool quote **and** RFQ quote as separate columns (Fluxion is V2/V3 AMM + xChange Atomic RFQ)
 - Data: pure realtime, no historical backfill
-- Economics: two-sided inventory paper arb (Bybit taker 0.10% + Fluxion pool fee + Mantle gas + bilateral slippage)
+- Economics: two-sided inventory paper arb (Bybit xStocks Adventure Zone taker 0.20% + Fluxion pool fee + Mantle gas + bilateral slippage)
 - Stats: split by US equity open vs closed session
 - UI: TUI (Python, frozen for new features) + Web (Next.js static export +
   FastAPI on the VPS; WHI-757 skeleton)
