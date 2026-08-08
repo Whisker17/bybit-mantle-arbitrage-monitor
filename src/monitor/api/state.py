@@ -9,6 +9,7 @@ from pathlib import Path
 
 from fastapi import Request
 
+from monitor.api.capture_cache import CaptureSnapshotCache
 from monitor.api.config import ApiConfig
 from monitor.api.pnl_cache import PnlSnapshotCache
 from monitor.attribution.config import AttributionConfig
@@ -75,6 +76,7 @@ class MarketRuntime:
     edge_state: RunningEdgeState = field(default_factory=RunningEdgeState)
     lock: threading.Lock = field(default_factory=threading.Lock)
     pnl_cache: PnlSnapshotCache | None = None
+    capture_cache: CaptureSnapshotCache | None = None
     inventory_cache: InventoryEventsCache | None = None
 
     def ensure_reader(self) -> JournalReader | None:

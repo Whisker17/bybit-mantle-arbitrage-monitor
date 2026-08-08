@@ -11,6 +11,7 @@ from typing import Any
 from fastapi import FastAPI
 from fastapi.middleware.cors import CORSMiddleware
 
+from monitor.api.capture_cache import CaptureSnapshotCache
 from monitor.api.config import ApiConfig, load_api_config
 from monitor.api.pnl_cache import PnlSnapshotCache
 from monitor.api.routes import health as health_routes
@@ -75,6 +76,7 @@ def _build_market_runtime(
         quote_decimals=ctx.dex.quote_decimals,
         quote_max_age_ms=ctx.market_file.quote_max_age_ms,
         pnl_cache=PnlSnapshotCache(ttl_s=api.pnl_cache_ttl_s),
+        capture_cache=CaptureSnapshotCache(ttl_s=api.capture_cache_ttl_s),
         inventory_cache=InventoryEventsCache(ttl_s=api.mm_inventory_cache_ttl_s),
     )
 

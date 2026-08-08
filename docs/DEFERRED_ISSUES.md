@@ -87,19 +87,17 @@ soon — anything touching key handling, RPC credentials defaults to at least Hi
   refactor. Fix: move sample construction into `monitor.analysis` (or a shared
   script helper) and have both scripts call it.
 
-- **WHI-908: research scripts reach private JournalReader + sibling script
-  helpers** (Low, WHI-908). Extends the WHI-866 private-mapper pattern:
-  `scripts/xstocks_fill_validation.py` imports `_row_to_swap` and, via
-  `importlib`, `_eq._in_gap` / `_eq._as_of_idx` / `_eq.load_*` from
-  `xstocks_edge_quant`. Justified for offline analysis; no public bulk-load
-  API yet. Fix: promote typed bulk loaders on `JournalReader` (and pure join
-  helpers into `monitor.analysis`) and switch both M8 scripts.
+- **WHI-908: fill_validation still reaches private `_row_to_swap` + sibling
+  script helpers** (Low, WHI-908 → partial by WHI-963). WHI-963 promoted
+  `JournalReader` bulk loaders (`bucketed_bybit_books`, `pool_states_range`,
+  `bybit_depths_range`, `rfq_quotes_range`, `collector_down_gaps`) and switched
+  `xstocks_edge_quant.py` + capture assembly. Remaining: `xstocks_fill_validation.py`
+  still imports `_row_to_swap` and sibling-script private helpers via importlib.
+  Fix: add `swaps_range` public loader + pure join helpers; switch fill_validation.
 
-- **WHI-866: research script imports private JournalReader row mappers** (Low, WHI-866).
-  `scripts/xstocks_edge_quant.py` reaches `_row_to_bybit_book` / depth / pool /
-  RFQ helpers. First cross-package private use; justified for offline analysis
-  but no public bulk-load API. Fix: promote typed bulk loaders on
-  `JournalReader` (or a `monitor.storage.rows` module) and switch the script.
+- ~~**WHI-866: research script imports private JournalReader row mappers**~~
+  **Discharged by WHI-963** — public bulk loaders on `JournalReader`;
+  `scripts/xstocks_edge_quant.py` uses them + `monitor.metrics.capture` sample builders.
 
 - **WHI-866: threshold_sweep profit not strictly monotone in theory** (Low, WHI-866).
   Filtering base windows by `peak_edge_bps` is monotone for series-level

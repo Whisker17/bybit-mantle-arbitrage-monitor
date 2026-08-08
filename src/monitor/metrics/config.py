@@ -45,6 +45,52 @@ class SessionConfig(BaseModel):
         return self
 
 
+class CaptureConfig(BaseModel):
+    """Occupancy-bounded capture rate (WHI-963).
+
+    Live panel windows/day + capturable $/day under single-flight + re-entry
+    cooldown. Defaults track the sibling bot's occupancy model
+    (``cycle_duration_s`` 390 → trade_duration_ms; ``reentry_cooldown_s`` 420)
+    — bot ``docs/DESIGN.md`` §2.5 / §2.8. Pure math:
+    ``monitor.analysis.edge_quant``.
+    """
+
+    model_config = ConfigDict(extra="forbid", frozen=True)
+
+    enabled: bool = True
+    # Trailing lookback for sample construction (ms). 24h default.
+    lookback_ms: int = Field(default=86_400_000, ge=60_000)
+    # Book sample bucket width (ms). Coarser = cheaper overview.
+    sample_ms: int = Field(default=30_000, ge=1_000)
+    # Max as-of age for pool / depth alignment (ms).
+    align_ms: int = Field(default=15_000, ge=1_000)
+    # Window glue-break gap (ms) — same role as edge_quant max_gap_ms.
+    max_gap_ms: int = Field(default=120_000, ge=1_000)
+    # Bot cycle_duration_s × 1000 (runtime.yaml: 390.0 ≈ 6.5 min).
+    trade_duration_ms: int = Field(default=390_000, ge=1)
+    # Bot reentry_cooldown_s × 1000 (capital.yaml: 420 ≈ 7 min).
+    reentry_cooldown_ms: int = Field(default=420_000, ge=0)
+    # Paper trade notional rung (USD). Matches edge quant $1k go/no-go rung.
+    size_usd: Decimal = Field(default=Decimal(1000), gt=0)
+    # Min edge to open a window (bps). 0 = fire on any positive fillable PnL.
+    min_edge_bps: Decimal = Field(default=Decimal(0), ge=0)
+    # Include RFQ series (poll-native). Overview headline prefers AMM when both.
+    include_rfq: bool = False
+    # Detail sparkline bucket width (ms). 1h default.
+    sparkline_bucket_ms: int = Field(default=3_600_000, ge=60_000)
+    # Use multi-level depth when present (matches xstocks_edge_quant). False = L1 only.
+    use_depth: bool = True
+
+    @field_validator("size_usd", "min_edge_bps", mode="before")
+    @classmethod
+    def _to_decimal(cls, value: object) -> object:
+        if value is None:
+            return None
+        if isinstance(value, (int, float, str)):
+            return Decimal(str(value))
+        return value
+
+
 class PnlV2Config(BaseModel):
     """Cash-flow PnL engine tunables (DESIGN §2.6 / hummingbot-pnl §5)."""
 
@@ -142,6 +188,9 @@ class MetricsConfig(BaseModel):
     max_breach_gap_ms: int = Field(default=300_000, ge=1)
     # PnL v2 cash-flow engine (WHI-756). Required — fail-fast at load (config/README).
     pnl_v2: PnlV2Config
+    # WHI-963: occupancy-bounded capture rate. Default factory keeps hand-built
+    # MetricsConfig fixtures working without spelling every capture field.
+    capture: CaptureConfig = Field(default_factory=CaptureConfig)
     # WHI-822 / WHI-964: |AMM mid − CEX mid| / CEX in bps. Above this, mid/spread
     # still surface with reason ``pricing_anomaly`` but PnL optimal + paper edge
     # + Top-N seats are suppressed (DESIGN §2.9). Default 300 tracks the

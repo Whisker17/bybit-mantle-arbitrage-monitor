@@ -282,6 +282,27 @@ polls under ~500 ms P95 on the 1 GB VPS:
 - P95 target: keep overview+detail under ~500 ms with this cache; re-measure on
   first VPS deploy (pair count × optimal samples under `state.lock`).
 
+#### 2.6.8 Capture rate (WHI-963)
+
+Qualifying poll cycles are **not** opportunities. The executing bot is
+single-flight with ~6–7 min occupancy per cycle, so capture is bounded by
+window count × occupancy.
+
+- Pure math: `monitor.analysis.edge_quant` (`detect_windows` +
+  `capturable_profit_single_flight`).
+- Live assembly: `monitor.metrics.capture` over `JournalReader` bulk loaders
+  (same sample path as `scripts/xstocks_edge_quant.py`).
+- Config `capture:` in `config/metrics.yaml` — `trade_duration_ms` (390 000 =
+  bot `cycle_duration_s` 390) and `reentry_cooldown_ms` (420 000 = bot
+  `reentry_cooldown_s` 420), citing bot `docs/DESIGN.md` §2.5 / §2.8.
+  Trailing `lookback_ms` default 24 h; `sample_ms` 30 s.
+- API: nested `capture` on overview rows (compact) + full snapshot (series +
+  sparkline) on pair detail. TTL cache `capture_cache_ttl_s` default **30**
+  (longer than PnL — trailing window is heavy).
+- Web: overview **Cap $/d** column (subline windows/day); detail Capture rate
+  panel with hourly windows sparkline.
+- Out of scope: forecasting; per-address competition.
+
 ### 2.7 Multi-market metrics & attribution (WHI-773 / M7-4)
 
 **Invariant:** one metrics/attribution code path for every market. Venue

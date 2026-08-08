@@ -14,6 +14,7 @@ import {
   dexNonTradeableTitle,
   directionToggleLabel,
   explorerTxUrl,
+  fmtCaptureUsdPerDay,
   fmtDirection,
   fmtDirectionTitle,
   fmtNotional,
@@ -27,6 +28,7 @@ import {
   fmtUtcHm,
   fmtVolumeRatio,
   fmtUnderlyingPriceType,
+  fmtWindowsPerDay,
   isRealUnderlyingPrint,
   shortAddr,
   totalWearBps,
@@ -154,6 +156,18 @@ describe("fmtUsd / usdTone", () => {
     assert.equal(fmtUsd(null), "—");
     assert.equal(usdTone("-1"), "neg");
     assert.equal(usdTone("2"), "pos");
+  });
+});
+
+describe("fmtWindowsPerDay / fmtCaptureUsdPerDay (WHI-963)", () => {
+  it("formats windows/day compactly", () => {
+    assert.equal(fmtWindowsPerDay(2.5), "2.50");
+    assert.equal(fmtWindowsPerDay(12.34), "12.3");
+    assert.equal(fmtWindowsPerDay(null), "—");
+  });
+  it("formats capturable $/day", () => {
+    assert.equal(fmtCaptureUsdPerDay("5.25"), "+5.25");
+    assert.equal(fmtCaptureUsdPerDay(null), "—");
   });
 });
 

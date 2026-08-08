@@ -45,14 +45,11 @@ from monitor.analysis.edge_quant import (  # noqa: E402
     threshold_sweep,
 )
 from monitor.markets import load_market_context  # noqa: E402
-from monitor.metrics.amm_pool import amm_pool_from_pair_tick  # noqa: E402
-from monitor.metrics.amm_quote import amm_quote_for_cex  # noqa: E402
-from monitor.metrics.edge import mid_from_bid_ask  # noqa: E402
-from monitor.metrics.pnl_snapshot import (  # noqa: E402
-    levels_from_depth_curve,
-    rfq_tick_to_poll_quote,
+from monitor.metrics.capture import (  # noqa: E402
+    GapInterval,
+    build_amm_samples,
+    build_rfq_samples,
 )
-from monitor.metrics.pnl_v2 import compute_pnl_usd  # noqa: E402
 from monitor.metrics.session import session_kind  # noqa: E402
 from monitor.quotes import (  # noqa: E402
     BybitBookTick,
@@ -60,17 +57,7 @@ from monitor.quotes import (  # noqa: E402
     FluxionPoolStateTick,
     FluxionRfqQuoteTick,
 )
-
-# Row mappers are module-private on JournalReader but are the only typed
-# SQLite→tick path; research scripts reuse them rather than re-parsing
-# columns (same pattern as offline analysis elsewhere).
-from monitor.storage.reader import (  # noqa: E402
-    _row_to_bybit_book,
-    _row_to_bybit_depth,
-    _row_to_pool_state,
-    _row_to_rfq_quote,
-)
-from monitor.symbols.models import Pair  # noqa: E402
+from monitor.storage import JournalReader  # noqa: E402
 
 # Bot DESIGN §1.4 gates.
 GO_USDT_PER_DAY = Decimal("15")
@@ -92,13 +79,6 @@ DEFAULT_SAMPLE_MS = 10_000
 DEFAULT_ALIGN_MS = 15_000  # max as-of age for pool / depth
 DEFAULT_REPORT = _REPO / "docs" / "references" / "m8-xstocks-edge-quant.md"
 DEFAULT_JSON = _REPO / "docs" / "references" / "m8-xstocks-edge-quant.json"
-
-
-@dataclass(frozen=True, slots=True)
-class GapInterval:
-    start_ms: int
-    end_ms: int
-    source: str
 
 
 @dataclass
@@ -131,17 +111,11 @@ def _as_of_idx(ts_list: Sequence[int], ts_ms: int) -> int | None:
     return i if i >= 0 else None
 
 
-def load_gaps(conn: sqlite3.Connection) -> list[GapInterval]:
-    rows = conn.execute(
-        """
-        SELECT source, gap_start_ms, gap_end_ms
-        FROM collector_gaps
-        WHERE source = 'collector_down'
-        ORDER BY gap_start_ms
-        """
-    ).fetchall()
+def load_gaps(reader: JournalReader) -> list[GapInterval]:
+    """Collector downtime gaps via public JournalReader (WHI-963)."""
     return [
-        GapInterval(start_ms=int(r[1]), end_ms=int(r[2]), source=str(r[0])) for r in rows
+        GapInterval(start_ms=g.gap_start_ms, end_ms=g.gap_end_ms, source=g.source)
+        for g in reader.collector_down_gaps()
     ]
 
 
@@ -178,102 +152,47 @@ def per_pair_book_span(
 
 
 def load_bucketed_books(
-    conn: sqlite3.Connection,
+    reader: JournalReader,
     pair_id: str,
     *,
     sample_ms: int,
     since_ms: int,
     until_ms: int,
 ) -> list[BybitBookTick]:
-    """One book tick per sample_ms bucket (latest recv in bucket)."""
-    rows = conn.execute(
-        """
-        SELECT b.*
-        FROM bybit_book b
-        INNER JOIN (
-            SELECT (recv_ts_ms / ?) * ? AS bucket, MAX(id) AS mid
-            FROM bybit_book
-            WHERE pair_id = ?
-              AND recv_ts_ms >= ?
-              AND recv_ts_ms <= ?
-              AND gap = 0
-            GROUP BY bucket
-        ) t ON b.id = t.mid
-        ORDER BY b.recv_ts_ms ASC
-        """,
-        (sample_ms, sample_ms, pair_id, since_ms, until_ms),
-    ).fetchall()
-    return [_row_to_bybit_book(r) for r in rows]
+    """One book tick per sample_ms bucket (public JournalReader bulk loader)."""
+    return reader.bucketed_bybit_books(
+        pair_id, sample_ms=sample_ms, since_ms=since_ms, until_ms=until_ms
+    )
 
 
 def load_pools(
-    conn: sqlite3.Connection,
+    reader: JournalReader,
     pair_id: str,
     *,
     since_ms: int,
     until_ms: int,
 ) -> list[FluxionPoolStateTick]:
-    rows = conn.execute(
-        """
-        SELECT * FROM fluxion_pool_state
-        WHERE pair_id = ?
-          AND recv_ts_ms >= ?
-          AND recv_ts_ms <= ?
-          AND gap = 0
-        ORDER BY recv_ts_ms ASC
-        """,
-        (pair_id, since_ms, until_ms),
-    ).fetchall()
-    return [_row_to_pool_state(r) for r in rows]
+    return reader.pool_states_range(pair_id, since_ms=since_ms, until_ms=until_ms)
 
 
 def load_depths(
-    conn: sqlite3.Connection,
+    reader: JournalReader,
     pair_id: str,
     *,
     since_ms: int,
     until_ms: int,
 ) -> list[BybitDepthTick]:
-    # Depth is throttled (~1s); still large — bucket to sample_ms via join later
-    # by loading full range for as-of (2d × 1Hz ≈ 170k/pair worst case).
-    rows = conn.execute(
-        """
-        SELECT d.*
-        FROM bybit_depth d
-        INNER JOIN (
-            SELECT (recv_ts_ms / 1000) * 1000 AS bucket, MAX(id) AS mid
-            FROM bybit_depth
-            WHERE pair_id = ?
-              AND recv_ts_ms >= ?
-              AND recv_ts_ms <= ?
-              AND gap = 0
-            GROUP BY bucket
-        ) t ON d.id = t.mid
-        ORDER BY d.recv_ts_ms ASC
-        """,
-        (pair_id, since_ms, until_ms),
-    ).fetchall()
-    return [_row_to_bybit_depth(r) for r in rows]
+    return reader.bybit_depths_range(pair_id, since_ms=since_ms, until_ms=until_ms)
 
 
 def load_rfq(
-    conn: sqlite3.Connection,
+    reader: JournalReader,
     pair_id: str,
     *,
     since_ms: int,
     until_ms: int,
 ) -> list[FluxionRfqQuoteTick]:
-    rows = conn.execute(
-        """
-        SELECT * FROM fluxion_rfq_quotes
-        WHERE pair_id = ?
-          AND poll_ts_ms >= ?
-          AND poll_ts_ms <= ?
-        ORDER BY poll_ts_ms ASC
-        """,
-        (pair_id, since_ms, until_ms),
-    ).fetchall()
-    return [_row_to_rfq_quote(r) for r in rows]
+    return reader.rfq_quotes_range(pair_id, since_ms=since_ms, until_ms=until_ms)
 
 
 def rth_closed_hours(
@@ -306,159 +225,6 @@ def rth_closed_hours(
                 closed_ok += dt
         cur = nxt
     return rth / 3600, closed / 3600, rth_ok / 3600, closed_ok / 3600
-
-
-def build_amm_samples(
-    *,
-    pair: Pair,
-    books: Sequence[BybitBookTick],
-    pools: Sequence[FluxionPoolStateTick],
-    depths: Sequence[BybitDepthTick],
-    metrics_cfg: Any,
-    quote_decimals: int,
-    size_usd: Decimal,
-    gaps: Sequence[GapInterval],
-    align_ms: int,
-    max_abs_spread_bps: Decimal | None,
-) -> list[EdgeSample]:
-    if not books or not pools:
-        return []
-    pool_ts = [p.recv_ts_ms for p in pools]
-    depth_ts = [d.recv_ts_ms for d in depths]
-    out: list[EdgeSample] = []
-    for book in books:
-        ts = book.recv_ts_ms
-        if _in_gap(ts, gaps):
-            continue
-        pi = _as_of_idx(pool_ts, ts)
-        if pi is None:
-            continue
-        pool = pools[pi]
-        if ts - pool.recv_ts_ms > align_ms:
-            continue
-        amm = amm_pool_from_pair_tick(pair, pool, quote_decimals=quote_decimals)
-        if amm is None:
-            continue
-        cex_mid = mid_from_bid_ask(book.bid_de_multiplied, book.ask_de_multiplied)
-        if cex_mid is None or cex_mid <= 0:
-            continue
-        _, reason = amm_quote_for_cex(
-            pool,
-            cex_mid=cex_mid,
-            max_abs_spread_bps=max_abs_spread_bps,
-        )
-        if reason is not None:
-            continue
-        bids = asks = None
-        di = _as_of_idx(depth_ts, ts) if depth_ts else None
-        if di is not None and ts - depths[di].recv_ts_ms <= align_ms:
-            bids = levels_from_depth_curve(depths[di], side="bid") or None
-            asks = levels_from_depth_curve(depths[di], side="ask") or None
-        sess = session_kind(
-            datetime.fromtimestamp(ts / 1000, tz=UTC), config=metrics_cfg
-        ).value
-        for direction in DIRECTIONS:
-            r = compute_pnl_usd(
-                pair_id=pair.id,
-                bybit_bid=book.bid_de_multiplied,
-                bybit_ask=book.ask_de_multiplied,
-                size_usd=size_usd,
-                direction=direction,  # type: ignore[arg-type]
-                venue="amm",
-                config=metrics_cfg,
-                amm=amm,
-                bybit_bids=bids,
-                bybit_asks=asks,
-            )
-            if not r.fillable or r.pnl_bps is None:
-                continue
-            out.append(
-                EdgeSample(
-                    ts_ms=ts,
-                    pair_id=pair.id,
-                    direction=direction,
-                    session=sess,  # type: ignore[arg-type]
-                    venue="amm",
-                    size_usd=size_usd,
-                    edge_bps=r.pnl_bps,
-                    pnl_usd=r.pnl_usd,
-                )
-            )
-    return out
-
-
-def build_rfq_samples(
-    *,
-    pair: Pair,
-    books: Sequence[BybitBookTick],
-    rfq_ticks: Sequence[FluxionRfqQuoteTick],
-    metrics_cfg: Any,
-    gaps: Sequence[GapInterval],
-    align_ms: int,
-) -> list[EdgeSample]:
-    """RFQ samples at poll times; size is poll-native (not forced to $500/$1k)."""
-    if not books or not rfq_ticks:
-        return []
-    book_ts = [b.recv_ts_ms for b in books]
-    out: list[EdgeSample] = []
-    native_dec = pair.fluxion.native_decimals
-    for tick in rfq_ticks:
-        ts = tick.poll_ts_ms
-        if _in_gap(ts, gaps):
-            continue
-        poll = rfq_tick_to_poll_quote(tick, native_decimals=native_dec)
-        if poll is None:
-            continue
-        bi = _as_of_idx(book_ts, ts)
-        if bi is None:
-            continue
-        book = books[bi]
-        if ts - book.recv_ts_ms > align_ms:
-            continue
-        # Map RFQ leg → paper direction.
-        if poll.fluxion_leg == "buy":
-            direction = "buy_fluxion_sell_bybit"
-        else:
-            direction = "buy_bybit_sell_fluxion"
-        r = compute_pnl_usd(
-            pair_id=pair.id,
-            bybit_bid=book.bid_de_multiplied,
-            bybit_ask=book.ask_de_multiplied,
-            size_usd=Decimal(1),  # ignored for RFQ path
-            direction=direction,  # type: ignore[arg-type]
-            venue="rfq",
-            config=metrics_cfg,
-            rfq=poll,
-        )
-        if not r.fillable or r.pnl_bps is None or r.size_usd <= 0:
-            continue
-        # Cap reporting notional note: still record actual poll size.
-        if r.size_usd > MAX_TRADE_USD:
-            # Scale PnL linearly for single-flight cap (conservative).
-            scale = MAX_TRADE_USD / r.size_usd
-            pnl = r.pnl_usd * scale
-            size = MAX_TRADE_USD
-            bps = pnl / size * Decimal(10_000)
-        else:
-            pnl = r.pnl_usd
-            size = r.size_usd
-            bps = r.pnl_bps
-        sess = session_kind(
-            datetime.fromtimestamp(ts / 1000, tz=UTC), config=metrics_cfg
-        ).value
-        out.append(
-            EdgeSample(
-                ts_ms=ts,
-                pair_id=pair.id,
-                direction=direction,
-                session=sess,  # type: ignore[arg-type]
-                venue="rfq",
-                size_usd=size,
-                edge_bps=bps,
-                pnl_usd=pnl,
-            )
-        )
-    return out
 
 
 def group_key(s: EdgeSample) -> tuple[str, str, str, str, str]:
@@ -858,10 +624,13 @@ def run(args: argparse.Namespace) -> int:
     pairs_amm = ctx.pairs.pairs_with_amm()
     pairs_all = {p.id: p for p in ctx.pairs.pairs}
 
+    # Typed bulk loaders via JournalReader (WHI-963); table_span still uses
+    # a raw RO connection for COUNT/MIN/MAX diagnostics.
+    reader = JournalReader(db_path)
     conn = sqlite3.connect(f"file:{db_path}?mode=ro", uri=True)
     conn.row_factory = sqlite3.Row
 
-    gaps = load_gaps(conn)
+    gaps = load_gaps(reader)
     spans = {
         "bybit_book": table_span(conn, "bybit_book", "recv_ts_ms"),
         "bybit_depth": table_span(conn, "bybit_depth", "recv_ts_ms"),
@@ -873,6 +642,8 @@ def run(args: argparse.Namespace) -> int:
     book_span = spans["bybit_book"]
     if book_span.min_ms is None or book_span.max_ms is None:
         print("bybit_book is empty — cannot run study", file=sys.stderr)
+        reader.close()
+        conn.close()
         return 2
 
     since_ms = book_span.min_ms
@@ -925,14 +696,16 @@ def run(args: argparse.Namespace) -> int:
     for pair in pairs_amm:
         print(f"  loading {pair.id}…", flush=True)
         books = load_bucketed_books(
-            conn, pair.id, sample_ms=sample_ms, since_ms=since_ms, until_ms=until_ms
+            reader, pair.id, sample_ms=sample_ms, since_ms=since_ms, until_ms=until_ms
         )
-        pools = load_pools(conn, pair.id, since_ms=since_ms - align_ms, until_ms=until_ms)
+        pools = load_pools(
+            reader, pair.id, since_ms=since_ms - align_ms, until_ms=until_ms
+        )
         depths = load_depths(
-            conn, pair.id, since_ms=since_ms - align_ms, until_ms=until_ms
+            reader, pair.id, since_ms=since_ms - align_ms, until_ms=until_ms
         )
         rfq_ticks = load_rfq(
-            conn, pair.id, since_ms=since_ms, until_ms=until_ms
+            reader, pair.id, since_ms=since_ms, until_ms=until_ms
         )
         print(
             f"    books={len(books)} pools={len(pools)} depth={len(depths)} rfq={len(rfq_ticks)}",
@@ -962,11 +735,13 @@ def run(args: argparse.Namespace) -> int:
             metrics_cfg=metrics_cfg,
             gaps=gaps,
             align_ms=align_ms,
+            max_trade_usd=MAX_TRADE_USD,
         )
         for s in rfq_samples:
             series[group_key(s)].append(s)
         print(f"    RFQ: {len(rfq_samples)} fillable samples", flush=True)
 
+    reader.close()
     conn.close()
 
     # --- Analyze each series ---

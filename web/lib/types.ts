@@ -242,6 +242,64 @@ export type PairOverviewRow = {
   drift_premium_bps?: string | null;
   clears_drift?: Partial<Record<Direction, boolean | null>> | null;
   clears_drift_optimal?: boolean | null;
+  /**
+   * WHI-963: occupancy-bounded capture rate (compact overview card).
+   * windows/day + capturable $/day under single-flight + re-entry cooldown.
+   */
+  capture?: CaptureOverview | null;
+};
+
+/** Capture status from monitor.metrics.capture.CaptureStatus. */
+export type CaptureStatus =
+  | "ok"
+  | "disabled"
+  | "insufficient"
+  | "no_samples"
+  | "no_pool";
+
+/** Compact capture card on overview rows (WHI-963). */
+export type CaptureOverview = {
+  status: CaptureStatus;
+  windows_per_day: number | null;
+  capturable_usd_per_day: string | null;
+  n_windows: number | null;
+  direction: Direction | null;
+  session: SessionKind | null;
+  venue: VenueKind | null;
+  span_ms: number;
+  lookback_ms: number;
+  size_usd: string;
+};
+
+export type CaptureSeries = {
+  pair_id: string;
+  direction: Direction;
+  session: SessionKind;
+  venue: VenueKind;
+  size_usd: string;
+  n_samples: number;
+  n_windows: number;
+  windows_per_day: number;
+  capturable_usd: string;
+  capturable_usd_per_day: string;
+  span_ms: number;
+};
+
+export type CaptureSparkPoint = {
+  bucket_start_ms: number;
+  n_windows: number;
+  capturable_usd: string;
+};
+
+/** Full capture snapshot on pair detail (WHI-963). */
+export type CapturePairSnapshot = CaptureOverview & {
+  pair_id: string;
+  since_ms: number;
+  until_ms: number;
+  trade_duration_ms: number;
+  reentry_cooldown_ms: number;
+  series: CaptureSeries[];
+  sparkline: CaptureSparkPoint[];
 };
 
 /** Session bucket for volume compare (WHI-777). */
@@ -325,6 +383,8 @@ export type PairDetailResponse = {
   volume_compare?: VolumeCompare | null;
   /** WHI-779: current premium + journal-window distributions. */
   premium?: PremiumPanel | null;
+  /** WHI-963: occupancy-bounded capture rate + windows/day sparkline. */
+  capture?: CapturePairSnapshot | null;
   error?: string | null;
   /** Present after WHI-774 multi-market routes. */
   market_id?: string;

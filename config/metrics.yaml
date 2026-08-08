@@ -78,3 +78,22 @@ pnl_v2:
   gas_on_rfq: true
   # Optional soft L1 depth cap; null = infinite (L1 never size-unfillable).
   l1_assumed_size_usd: null
+
+# Occupancy-bounded capture rate (WHI-963). Single-flight windows/day +
+# capturable $/day over a trailing lookback. Pure math:
+# monitor.analysis.edge_quant; live assembly: monitor.metrics.capture.
+# trade_duration_ms / reentry_cooldown_ms cite sibling bot
+# docs/DESIGN.md §2.5 / §2.8 (cycle_duration_s 390, reentry_cooldown_s 420).
+capture:
+  enabled: true
+  lookback_ms: 86400000       # 24h trailing
+  sample_ms: 30000            # book bucket (balance cost vs resolution)
+  align_ms: 15000             # pool/depth as-of age
+  max_gap_ms: 120000          # window glue-break (collector gap / quiet)
+  trade_duration_ms: 390000   # bot cycle_duration_s × 1000 (~6.5 min)
+  reentry_cooldown_ms: 420000 # bot reentry_cooldown_s × 1000 (~7 min)
+  size_usd: 1000              # paper rung (edge quant $1k go/no-go)
+  min_edge_bps: 0             # any positive fillable PnL opens a window
+  include_rfq: false          # overview headline is AMM-only (M8 primary)
+  sparkline_bucket_ms: 3600000  # 1h detail sparkline buckets
+  use_depth: true             # multi-level Bybit depth when journal has it

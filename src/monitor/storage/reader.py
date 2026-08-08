@@ -686,6 +686,163 @@ class JournalReader:
         ).fetchall()
         return [_row_to_rebalance_event(r) for r in rows]
 
+    # --- bulk range loaders (WHI-963 capture + M8 scripts) -------------------
+    # Public typed loaders so analysis/scripts no longer import private
+    # ``_row_to_*`` mappers (discharges DEFERRED WHI-866 / WHI-908).
+
+    def bucketed_bybit_books(
+        self,
+        pair_id: str,
+        *,
+        sample_ms: int,
+        since_ms: int,
+        until_ms: int,
+    ) -> list[BybitBookTick]:
+        """One L1 book tick per ``sample_ms`` bucket (latest recv in bucket).
+
+        ``gap = 0`` rows only — downtime samples must not seed edge windows.
+        """
+        if sample_ms < 1:
+            raise ValueError("sample_ms must be >= 1")
+        rows = self._conn.execute(
+            """
+            SELECT b.*
+            FROM bybit_book b
+            INNER JOIN (
+                SELECT (recv_ts_ms / ?) * ? AS bucket, MAX(id) AS mid
+                FROM bybit_book
+                WHERE pair_id = ?
+                  AND recv_ts_ms >= ?
+                  AND recv_ts_ms <= ?
+                  AND gap = 0
+                GROUP BY bucket
+            ) t ON b.id = t.mid
+            ORDER BY b.recv_ts_ms ASC
+            """,
+            (sample_ms, sample_ms, pair_id, since_ms, until_ms),
+        ).fetchall()
+        return [_row_to_bybit_book(r) for r in rows]
+
+    def pool_states_range(
+        self,
+        pair_id: str,
+        *,
+        since_ms: int,
+        until_ms: int,
+    ) -> list[FluxionPoolStateTick]:
+        """Ascending pool states in ``[since_ms, until_ms]`` (gap=0 only)."""
+        rows = self._conn.execute(
+            """
+            SELECT * FROM fluxion_pool_state
+            WHERE pair_id = ?
+              AND recv_ts_ms >= ?
+              AND recv_ts_ms <= ?
+              AND gap = 0
+            ORDER BY recv_ts_ms ASC
+            """,
+            (pair_id, since_ms, until_ms),
+        ).fetchall()
+        return [_row_to_pool_state(r) for r in rows]
+
+    def bybit_depths_range(
+        self,
+        pair_id: str,
+        *,
+        since_ms: int,
+        until_ms: int,
+        sample_ms: int = 1_000,
+    ) -> list[BybitDepthTick]:
+        """Bucketed multi-level depth ticks in range (default 1s buckets).
+
+        Depth is throttled in the collector (~1 Hz); bucketing caps worst-case
+        row count for long lookbacks (WHI-963 capture / M8 offline).
+        """
+        if sample_ms < 1:
+            raise ValueError("sample_ms must be >= 1")
+        if "bybit_depth" not in self._table_names():
+            return []
+        rows = self._conn.execute(
+            """
+            SELECT d.*
+            FROM bybit_depth d
+            INNER JOIN (
+                SELECT (recv_ts_ms / ?) * ? AS bucket, MAX(id) AS mid
+                FROM bybit_depth
+                WHERE pair_id = ?
+                  AND recv_ts_ms >= ?
+                  AND recv_ts_ms <= ?
+                  AND gap = 0
+                GROUP BY bucket
+            ) t ON d.id = t.mid
+            ORDER BY d.recv_ts_ms ASC
+            """,
+            (sample_ms, sample_ms, pair_id, since_ms, until_ms),
+        ).fetchall()
+        return [_row_to_bybit_depth(r) for r in rows]
+
+    def rfq_quotes_range(
+        self,
+        pair_id: str,
+        *,
+        since_ms: int,
+        until_ms: int,
+    ) -> list[FluxionRfqQuoteTick]:
+        """Ascending RFQ poll quotes in ``[since_ms, until_ms]``."""
+        rows = self._conn.execute(
+            """
+            SELECT * FROM fluxion_rfq_quotes
+            WHERE pair_id = ?
+              AND poll_ts_ms >= ?
+              AND poll_ts_ms <= ?
+            ORDER BY poll_ts_ms ASC
+            """,
+            (pair_id, since_ms, until_ms),
+        ).fetchall()
+        return [_row_to_rfq_quote(r) for r in rows]
+
+    def collector_down_gaps(
+        self,
+        *,
+        since_ms: int = 0,
+        until_ms: int | None = None,
+    ) -> list[CollectorGap]:
+        """``collector_down`` gaps overlapping ``[since_ms, until_ms]``, ascending.
+
+        Used by capture / edge quant so downtime does not glue windows.
+        """
+        if until_ms is None:
+            rows = self._conn.execute(
+                """
+                SELECT source, gap_start_ms, gap_end_ms, detail
+                FROM collector_gaps
+                WHERE source = 'collector_down'
+                  AND gap_end_ms >= ?
+                ORDER BY gap_start_ms ASC
+                """,
+                (since_ms,),
+            ).fetchall()
+        else:
+            rows = self._conn.execute(
+                """
+                SELECT source, gap_start_ms, gap_end_ms, detail
+                FROM collector_gaps
+                WHERE source = 'collector_down'
+                  AND gap_end_ms >= ?
+                  AND gap_start_ms <= ?
+                ORDER BY gap_start_ms ASC
+                """,
+                (since_ms, until_ms),
+            ).fetchall()
+        return [
+            CollectorGap(
+                source=str(r["source"]),
+                gap_start_ms=int(r["gap_start_ms"]),
+                gap_end_ms=int(r["gap_end_ms"]),
+                detail=str(r["detail"]),
+            )
+            for r in rows
+        ]
+
 
 # --- row mappers ----------------------------------------------------------
 

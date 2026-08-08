@@ -193,6 +193,32 @@ export function fmtVolumeRatio(
   return `${n.toFixed(digits)}×`;
 }
 
+/**
+ * Windows/day for capture rate (WHI-963). Compact; 1 decimal under 10.
+ */
+export function fmtWindowsPerDay(
+  value: number | null | undefined,
+): string {
+  if (value === null || value === undefined || !Number.isFinite(value)) {
+    return DASH;
+  }
+  if (value >= 100) return value.toFixed(0);
+  if (value >= 10) return value.toFixed(1);
+  return value.toFixed(2);
+}
+
+/** Capturable $/day (WHI-963). Reuses compact USD formatting. */
+export function fmtCaptureUsdPerDay(
+  value: string | number | null | undefined,
+): string {
+  if (value === null || value === undefined || value === "") return DASH;
+  const n = typeof value === "number" ? value : Number(value);
+  if (!Number.isFinite(n)) return String(value);
+  // Same compact scale as fmtNotional for large days; signed via fmtUsd.
+  if (Math.abs(n) >= 1_000) return fmtUsd(n, 0);
+  return fmtUsd(n, 2);
+}
+
 /** UTC HH:MM for truncated DEX volume labels (WHI-777). */
 export function fmtUtcHm(tsMs: number | null | undefined): string {
   if (tsMs === null || tsMs === undefined || !Number.isFinite(tsMs)) return DASH;
