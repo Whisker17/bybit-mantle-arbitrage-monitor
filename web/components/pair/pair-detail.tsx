@@ -274,12 +274,23 @@ export function PairDetail({ marketId, pairId }: Props) {
                 : (net.emptyLabel ??
                   ammQuoteReasonLabel(o.amm_quote_reason) ??
                   "—");
+            // WHI-962: green only when capturable (min profit + drift bar).
+            const rawTone = bpsTone(o.net_edge_bps);
+            const netTone =
+              rawTone === "pos" &&
+              (net.capturable === false || net.failsDrift)
+                ? "empty"
+                : rawTone;
             return (
               <>
                 <Field
                   label="Net @ Q*"
-                  value={netValue}
-                  tone={bpsTone(o.net_edge_bps)}
+                  value={
+                    net.failsDrift && o.net_edge_bps != null
+                      ? `${netValue} · drift`
+                      : netValue
+                  }
+                  tone={netTone}
                   title={net.title}
                 />
                 <Field

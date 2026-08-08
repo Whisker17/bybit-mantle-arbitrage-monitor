@@ -5,6 +5,9 @@ import assert from "node:assert/strict";
 import { describe, it } from "node:test";
 
 import {
+  failsDriftBar,
+  formatDriftRequirement,
+  isCapturableOpportunity,
   isOptimalBucket,
   isThinDepth,
   overviewNetCell,
@@ -200,6 +203,140 @@ describe("overviewNetCell empty title passthrough", () => {
       pnl_v2: { status: "ok", quote_aged: false },
     });
     assert.equal(cell.emptyLabel, "unfillable");
+  });
+});
+
+describe("WHI-962 sequential drift bar", () => {
+  it("CRCLx-style net ≪ 1.5×σ is not capturable", () => {
+    assert.equal(
+      isCapturableOpportunity({
+        pnl_v2: {
+          meets_min_profit: true,
+          optimal_net_pnl_usd: "1.23",
+        },
+        clears_drift_optimal: false,
+      }),
+      false,
+    );
+    assert.equal(failsDriftBar({ clears_drift_optimal: false }), true);
+  });
+
+  it("+$0.40 fails min_profit floor even when drift clears", () => {
+    assert.equal(
+      isCapturableOpportunity({
+        pnl_v2: {
+          meets_min_profit: false,
+          optimal_net_pnl_usd: "0.40",
+        },
+        clears_drift_optimal: true,
+      }),
+      false,
+    );
+  });
+
+  it("green only when floors + drift both clear", () => {
+    assert.equal(
+      isCapturableOpportunity({
+        pnl_v2: {
+          meets_min_profit: true,
+          optimal_net_pnl_usd: "2.5",
+        },
+        clears_drift_optimal: true,
+      }),
+      true,
+    );
+  });
+
+  it("missing σ does not fail-closed (binance-pancake)", () => {
+    assert.equal(
+      isCapturableOpportunity({
+        pnl_v2: {
+          meets_min_profit: true,
+          optimal_net_pnl_usd: "3",
+        },
+        clears_drift_optimal: null,
+      }),
+      true,
+    );
+  });
+
+  it("overviewNetCell sets capturable/failsDrift for AC2 muting", () => {
+    const fails = overviewNetCell({
+      net_edge_bps: "15",
+      net_size_usd: "500",
+      pnl_v2: {
+        meets_min_profit: true,
+        optimal_net_pnl_usd: "1.23",
+      },
+      clears_drift_optimal: false,
+      sigma_transit_bps: "68.83",
+      drift_premium_bps: "103.245",
+      drift_premium_k: "1.5",
+    });
+    assert.equal(fails.capturable, false);
+    assert.equal(fails.failsDrift, true);
+    assert.match(fails.title, /Fails sequential bar/);
+
+    const ok = overviewNetCell({
+      net_edge_bps: "120",
+      net_size_usd: "500",
+      pnl_v2: {
+        meets_min_profit: true,
+        optimal_net_pnl_usd: "6",
+      },
+      clears_drift_optimal: true,
+      sigma_transit_bps: "24.85",
+      drift_premium_bps: "37.275",
+      drift_premium_k: "1.5",
+    });
+    assert.equal(ok.capturable, true);
+    assert.equal(ok.failsDrift, false);
+  });
+
+  it("overviewPnlCell mutes when drift fails", () => {
+    const pnl: PnlOptimalSummary = {
+      status: "ok",
+      has_depth: true,
+      direction: "buy_fluxion_sell_bybit",
+      optimal_notional_usd: "500",
+      optimal_net_pnl_usd: "1.23",
+      optimal_net_pnl_bps: "15",
+      bybit_depth_source: "book",
+      meets_min_profit: true,
+    };
+    const cell = overviewPnlCell(pnl, null, null, {
+      clears_drift_optimal: false,
+      sigma_transit_bps: "68.83",
+      drift_premium_bps: "103.245",
+      drift_premium_k: "1.5",
+      net_edge_bps: "15",
+    });
+    assert.equal(cell.kind, "ok");
+    if (cell.kind === "ok") {
+      assert.equal(cell.capturable, false);
+      assert.equal(cell.failsDrift, true);
+      assert.match(cell.title, /Fails sequential bar/);
+    }
+  });
+
+  it("formatDriftRequirement renders requirement line", () => {
+    const line = formatDriftRequirement(
+      {
+        sigma_transit_bps: "68.83",
+        drift_premium_k: "1.5",
+        drift_premium_bps: "103.245",
+        session: "open",
+        clears_drift: {
+          buy_fluxion_sell_bybit: false,
+          buy_bybit_sell_fluxion: null,
+        },
+        clears_drift_optimal: false,
+      },
+      "15",
+    );
+    assert.ok(line);
+    assert.match(line!, /fails/);
+    assert.match(line!, /103\.245/);
   });
 });
 

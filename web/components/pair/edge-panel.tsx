@@ -20,6 +20,7 @@ import {
   type DirectionVenues,
 } from "@/lib/format";
 import {
+  formatDriftRequirement,
   isOptimalBucket,
   isThinDepth,
   pickBucketTable,
@@ -31,6 +32,7 @@ import {
 import type {
   CostBreakdown,
   Direction,
+  DriftAnnotation,
   Distribution,
   EdgePanel,
   PnlBucketTable,
@@ -298,6 +300,43 @@ function Bps({
   );
 }
 
+function DriftRequirementLine({
+  drift,
+  netBps,
+  direction,
+}: {
+  drift: DriftAnnotation | null | undefined;
+  netBps?: string | null;
+  /** Selected bucket direction — use that leg's clears_drift when present. */
+  direction?: Direction | null;
+}) {
+  if (drift == null) return null;
+  // Prefer the toggled direction's gate so the line tracks the direction control.
+  const dirClear =
+    direction != null ? (drift.clears_drift?.[direction] ?? null) : null;
+  const view: DriftAnnotation = {
+    ...drift,
+    clears_drift_optimal:
+      dirClear !== null && dirClear !== undefined
+        ? dirClear
+        : drift.clears_drift_optimal,
+  };
+  const line = formatDriftRequirement(view, netBps);
+  if (line == null) return null;
+  const fails = view.clears_drift_optimal === false;
+  return (
+    <p
+      className={cn(
+        "text-[11px]",
+        fails ? "text-warning" : "text-muted-foreground",
+      )}
+      title="Bot admission requires net ≥ k × σ_transit (sequential transfer). WHI-915/WHI-962."
+    >
+      {line}
+    </p>
+  );
+}
+
 function BucketPnlPanel({
   snap,
   direction,
@@ -328,6 +367,23 @@ function BucketPnlPanel({
 
   const thin = isThinDepth(table);
   const best = snap.best;
+  const drift = snap.drift;
+  // Best-optimal tone uses the *optimal* direction's gate (not the toggle).
+  const optimalClear =
+    (best.direction != null
+      ? drift?.clears_drift?.[best.direction]
+      : null) ??
+    drift?.clears_drift_optimal ??
+    null;
+  const bestFailsDrift = optimalClear === false;
+  const bestCapturable =
+    best.meets_min_profit !== false &&
+    !bestFailsDrift &&
+    best.status === "ok";
+  // Requirement line tracks the toggled direction.
+  const dirNetBps =
+    table?.optimal?.result.pnl_bps ??
+    (best.direction === direction ? best.optimal_net_pnl_bps : null);
 
   return (
     <div className="rounded-md border border-border bg-card px-3 py-2.5 space-y-2">
@@ -379,7 +435,12 @@ function BucketPnlPanel({
           <span
             className={cn(
               "tabular-nums font-semibold",
-              usdTone(best.optimal_net_pnl_usd) === "pos" && "text-positive",
+              bestCapturable &&
+                usdTone(best.optimal_net_pnl_usd) === "pos" &&
+                "text-positive",
+              !bestCapturable &&
+                usdTone(best.optimal_net_pnl_usd) === "pos" &&
+                "text-muted-foreground",
               usdTone(best.optimal_net_pnl_usd) === "neg" && "text-negative",
             )}
           >
@@ -403,6 +464,12 @@ function BucketPnlPanel({
           )}
         </p>
       )}
+
+      <DriftRequirementLine
+        drift={drift}
+        netBps={dirNetBps ?? best.optimal_net_pnl_bps}
+        direction={direction}
+      />
 
       {!table ? (
         <p className="text-[11px] text-muted-foreground">

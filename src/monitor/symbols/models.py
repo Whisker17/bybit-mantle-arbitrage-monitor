@@ -95,6 +95,27 @@ class FluxionSide(BaseModel):
     amm: AmmPool | None = None
 
 
+class SigmaTransitBps(BaseModel):
+    """Per-session transit-window σ (bps) for sequential-execution bar (WHI-962).
+
+    Source of record: ``docs/references/m8-delay-decay.md`` (WHI-915), lag=10m
+    Bybit mid log-return sample std. Stale-by-design — refresh when WHI-915
+    re-runs; not recomputed live.
+    """
+
+    model_config = ConfigDict(extra="forbid", frozen=True)
+
+    open: Decimal = Field(ge=0)
+    closed: Decimal = Field(ge=0)
+
+    @field_validator("open", "closed", mode="before")
+    @classmethod
+    def _parse_sigma(cls, value: object) -> object:
+        if isinstance(value, (int, float, str)):
+            return Decimal(str(value))
+        return value
+
+
 class Pair(BaseModel):
     model_config = ConfigDict(extra="forbid", frozen=True)
 
@@ -107,6 +128,9 @@ class Pair(BaseModel):
     # via GET /v5/asset/coin/query-info. None = unmeasured → PnL/edge annotate
     # fee_unknown on direction 2 (never silent 0). WHI-961.
     asset_withdrawal_fee_tokens: Decimal | None = None
+    # WHI-962: session-split transit σ (bps @ ~10 min). None = unmeasured
+    # (no sequential bar; panel does not invent a default).
+    sigma_transit_bps: SigmaTransitBps | None = None
 
     @field_validator("asset_withdrawal_fee_tokens", mode="before")
     @classmethod

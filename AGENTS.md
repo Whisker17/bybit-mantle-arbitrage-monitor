@@ -268,6 +268,13 @@ placeholders. Agents must not assume a module exists until its issue lands. -->
     HOODX/CRCLX/NVDAX populated; unmeasured pairs annotate
     `withdrawal_fee_kind=unknown` (never silent 0). Web cost waterfall surfaces
     the line. DESIGN §2.6.1 amended.
+  - **Sequential drift bar (WHI-962) landed:** per-pair session-split
+    `sigma_transit_bps` (WHI-915 / m8-delay-decay @10m) on bybit-fluxion
+    inventory; API `drift_premium_bps = k × σ` + per-direction
+    `clears_drift` (`pnl_v2.drift_premium_k` default 1.5); overview Net /
+    Bucket PnL mute + `drift` chip when net fails the bar; green only when
+    min-profit floors **and** drift clear; `min_profit_usd: 1.5` (bot floor).
+    Pure `monitor.metrics.drift`; TUI frozen.
 
 ## Build, test, run
 

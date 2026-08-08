@@ -5,6 +5,8 @@
 
 import type {
   Direction,
+  DriftAnnotation,
+  PairOverviewRow,
   PnlBucketTable,
   PnlCostBreakdownUsd,
   PnlOptimalSummary,
@@ -32,6 +34,13 @@ export type OverviewPnlCell =
       /** WHI-821: quiet CEX / aged legs — still show numbers. */
       quoteAged?: boolean;
       ageHint?: string;
+      /**
+       * WHI-962: green only when min-profit floors + drift bar both clear.
+       * False → muted secondary (not capturable under sequential execution).
+       */
+      capturable?: boolean;
+      /** True when net failed k×σ even if USD is positive. */
+      failsDrift?: boolean;
     }
   | { kind: "status"; label: string; title: string }
   | { kind: "empty"; label: string; title: string };
@@ -101,14 +110,82 @@ export type OverviewNetCell = {
   emptyLabel: string | null;
   quoteAged: boolean;
   ageHint?: string;
+  /**
+   * WHI-962: green only when net clears drift bar **and** min-profit floors.
+   * When failsDrift, UI mutes the positive tone.
+   */
+  capturable?: boolean;
+  failsDrift?: boolean;
+  driftHint?: string | null;
 };
+
+/**
+ * WHI-962: profitable highlight = min_profit floors cleared AND not failing
+ * the sequential drift bar. Unknown drift (no σ) does not block min_profit.
+ */
+export function isCapturableOpportunity(row: {
+  pnl_v2?: Pick<PnlOptimalSummary, "meets_min_profit" | "optimal_net_pnl_usd"> | null;
+  clears_drift_optimal?: boolean | null;
+}): boolean {
+  const pnl = row.pnl_v2;
+  if (pnl == null || pnl.optimal_net_pnl_usd == null) return false;
+  // Prefer explicit meets_min_profit; fall back to positive USD when older API.
+  const floors =
+    pnl.meets_min_profit !== undefined
+      ? Boolean(pnl.meets_min_profit)
+      : (parseNum(pnl.optimal_net_pnl_usd) ?? 0) > 0;
+  if (!floors) return false;
+  // null/undefined σ → do not fail-closed (binance-pancake has no transit σ).
+  if (row.clears_drift_optimal === false) return false;
+  return true;
+}
+
+export function failsDriftBar(row: {
+  clears_drift_optimal?: boolean | null;
+}): boolean {
+  return row.clears_drift_optimal === false;
+}
+
+export function driftBarTitle(row: {
+  sigma_transit_bps?: string | null;
+  drift_premium_bps?: string | null;
+  drift_premium_k?: string | null;
+  clears_drift_optimal?: boolean | null;
+  net_edge_bps?: string | null;
+}): string | null {
+  if (row.drift_premium_bps == null && row.sigma_transit_bps == null) {
+    return null;
+  }
+  const kPart =
+    row.drift_premium_k != null && row.drift_premium_k !== ""
+      ? `${row.drift_premium_k}×σ`
+      : "k×σ";
+  const sigma = row.sigma_transit_bps ?? "—";
+  const prem = row.drift_premium_bps ?? "—";
+  const net = row.net_edge_bps ?? "—";
+  if (row.clears_drift_optimal === false) {
+    return `Fails sequential bar: net ${net} bps < ${kPart}=${prem} bps (σ=${sigma})`;
+  }
+  if (row.clears_drift_optimal === true) {
+    return `Clears sequential bar: net ${net} bps ≥ ${kPart}=${prem} bps (σ=${sigma})`;
+  }
+  return `Sequential bar ${kPart}=${prem} bps (σ=${sigma})`;
+}
 
 export function overviewNetCell(
   row: {
     net_edge_bps?: string | null;
     net_size_usd?: string | null;
     amm_quote_reason?: string | null;
-    pnl_v2?: (QuoteAgeFields & { status?: PnlStatus | null }) | null;
+    pnl_v2?: (QuoteAgeFields & {
+      status?: PnlStatus | null;
+      meets_min_profit?: boolean;
+      optimal_net_pnl_usd?: string | null;
+    }) | null;
+    sigma_transit_bps?: string | null;
+    drift_premium_bps?: string | null;
+    drift_premium_k?: string | null;
+    clears_drift_optimal?: boolean | null;
   },
   emptyTitle?: string | null,
 ): OverviewNetCell {
@@ -116,6 +193,8 @@ export function overviewNetCell(
   const aged = Boolean(ages.quote_aged);
   const agedTitle = aged ? quoteAgeTitle(ages) : null;
   const ageHint = quoteAgedHint(ages);
+  const failsDrift = failsDriftBar(row);
+  const driftTitle = driftBarTitle(row);
   if (row.net_edge_bps == null) {
     const status = row.pnl_v2?.status ?? null;
     // Same map as overviewPnlCell — exhaustiveness via Record<PnlStatus, …>.
@@ -138,6 +217,9 @@ export function overviewNetCell(
       emptyLabel: statusLabel,
       quoteAged: aged,
       ageHint,
+      capturable: false,
+      failsDrift,
+      driftHint: driftTitle,
     };
   }
   const size =
@@ -145,6 +227,8 @@ export function overviewNetCell(
   // bps already a fixed-point wire string; keep as-is for stable titles.
   let title = `Net ${row.net_edge_bps} bps @ ${size} (PnL v2 optimal; same size as Bucket PnL)`;
   if (agedTitle) title = `${title} · ${agedTitle}`;
+  if (driftTitle) title = `${title} · ${driftTitle}`;
+  const capturable = isCapturableOpportunity(row);
   return {
     title,
     sizeLabel:
@@ -152,6 +236,9 @@ export function overviewNetCell(
     emptyLabel: null,
     quoteAged: aged,
     ageHint,
+    capturable,
+    failsDrift,
+    driftHint: driftTitle,
   };
 }
 
@@ -159,6 +246,14 @@ export function overviewPnlCell(
   pnl: PnlOptimalSummary | null | undefined,
   venues?: DirectionVenues | null,
   marketId?: string | null,
+  drift?: Pick<
+    PairOverviewRow,
+    | "clears_drift_optimal"
+    | "sigma_transit_bps"
+    | "drift_premium_bps"
+    | "drift_premium_k"
+    | "net_edge_bps"
+  > | null,
 ): OverviewPnlCell {
   if (pnl == null) {
     return {
@@ -210,6 +305,21 @@ export function overviewPnlCell(
   if (aged && agedTitle) {
     title = `${title} · ${agedTitle}`;
   }
+  const driftRow = {
+    pnl_v2: pnl,
+    clears_drift_optimal: drift?.clears_drift_optimal,
+    sigma_transit_bps: drift?.sigma_transit_bps,
+    drift_premium_bps: drift?.drift_premium_bps,
+    drift_premium_k: drift?.drift_premium_k,
+    net_edge_bps: drift?.net_edge_bps ?? pnl.optimal_net_pnl_bps,
+  };
+  const capturable = isCapturableOpportunity(driftRow);
+  const failsDrift = failsDriftBar(driftRow);
+  const driftTitle = driftBarTitle(driftRow);
+  if (driftTitle) title = `${title} · ${driftTitle}`;
+  if (!capturable && (failsDrift || pnl.meets_min_profit === false)) {
+    title = `${title} · not capturable (floors/drift)`;
+  }
   return {
     kind: "ok",
     pnlUsd: pnl.optimal_net_pnl_usd,
@@ -218,7 +328,28 @@ export function overviewPnlCell(
     title,
     quoteAged: aged,
     ageHint: agedHint,
+    capturable,
+    failsDrift,
   };
+}
+
+/** Format a detail-page drift requirement line (WHI-962). */
+export function formatDriftRequirement(
+  drift: DriftAnnotation | null | undefined,
+  netBps?: string | null,
+): string | null {
+  if (drift == null || drift.drift_premium_bps == null) return null;
+  const k = drift.drift_premium_k;
+  const sigma = drift.sigma_transit_bps ?? "—";
+  const prem = drift.drift_premium_bps;
+  const net = netBps ?? "—";
+  const gate =
+    drift.clears_drift_optimal === true
+      ? "clears"
+      : drift.clears_drift_optimal === false
+        ? "fails"
+        : "n/a";
+  return `Sequential bar: net ${net} bps ${gate === "clears" ? "≥" : gate === "fails" ? "<" : "vs"} ${k}×σ=${prem} bps (σ=${sigma} · ${drift.session ?? "session?"}) · ${gate}`;
 }
 
 export function pickBucketTable(

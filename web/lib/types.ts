@@ -54,11 +54,30 @@ export type PnlOptimalSummary = {
   optimal_net_pnl_usd: string | null;
   optimal_net_pnl_bps: string | null;
   bybit_depth_source: PnlDepthSource | null;
+  /**
+   * WHI-962: true when optimal PnL clears configured min_profit floors
+   * (min_profit_usd / min_profit_bps). Used with clears_drift for green.
+   */
+  meets_min_profit?: boolean;
   /** WHI-821: true when any leg exceeds quote_max_age_ms (quiet ≠ dead). */
   quote_aged?: boolean;
   cex_quote_age_ms?: number | null;
   amm_quote_age_ms?: number | null;
   depth_quote_age_ms?: number | null;
+};
+
+/**
+ * Sequential-execution drift bar (WHI-962).
+ * ``drift_premium_bps = k × σ_session``; clears when net ≥ premium.
+ */
+export type DriftAnnotation = {
+  sigma_transit_bps: string | null;
+  drift_premium_k: string;
+  drift_premium_bps: string | null;
+  session: SessionKind | null;
+  clears_drift: Partial<Record<Direction, boolean | null>>;
+  /** Gate for overview optimal / Net direction. */
+  clears_drift_optimal: boolean | null;
 };
 
 export type WithdrawalFeeKind = "stable" | "asset" | "unknown";
@@ -125,6 +144,8 @@ export type PnlPairSnapshot = {
   amm_quote_age_ms?: number | null;
   depth_quote_age_ms?: number | null;
   quote_aged?: boolean;
+  /** WHI-962: sequential bar nested on detail payload. */
+  drift?: DriftAnnotation | null;
 };
 
 export type PairOverviewRow = {
@@ -212,6 +233,15 @@ export type PairOverviewRow = {
    */
   pnl_optimal_net_usd?: string | null;
   pnl_optimal_net_bps?: string | null;
+  /**
+   * WHI-962: sequential-execution bar. Session-selected σ, k×σ premium,
+   * per-direction clears_drift map + clears_drift_optimal for Net/Bucket.
+   */
+  sigma_transit_bps?: string | null;
+  drift_premium_k?: string | null;
+  drift_premium_bps?: string | null;
+  clears_drift?: Partial<Record<Direction, boolean | null>> | null;
+  clears_drift_optimal?: boolean | null;
 };
 
 /** Session bucket for volume compare (WHI-777). */

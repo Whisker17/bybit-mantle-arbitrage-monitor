@@ -217,7 +217,8 @@ not a proven continuous global max.
 |-------|------|
 | Freshness (WHI-821) | **Two separate thresholds.** (1) `collector_stale_ms` (default 30s) on `/api/health` only — process liveness (`collector_alive` / UI **feed down**). (2) `quote_max_age_ms` — **annotate** quiet legs via `quote_aged` + per-leg ages; **never wipe** tables because event-driven bookTicker is quiet. Default in `config/api.yaml` (300s); optional **per-market override** on `config/markets/{id}.yaml` `quote_max_age_ms` (e.g. binance-pancake 600s for closed-session bStocks). Quiet (pair ages) ≠ offline (process health). True empty states remain `no_book` / `no_pool` only. Align / RFQ-age / pool-block lag still deferred (see `docs/DEFERRED_ISSUES.md`). |
 | Align | Dual-leg snapshot skew ≤ `align_skew_ms` |
-| Min profit | Config threshold for **highlight / breach only** — raw PnL always emitted |
+| Min profit | Config threshold for **highlight / breach only** — raw PnL always emitted. Live default `pnl_v2.min_profit_usd: 1.5` (bot floor; WHI-962). Shared base config: also gates binance-pancake green highlights (drift still fail-open there because no σ) |
+| Sequential drift bar (WHI-962) | Real execution is sequential (~10 min transfer). Panel admits a green “profitable” highlight only when `net_bps ≥ k × σ_session` **and** min-profit floors. σ is stale inventory from WHI-915 (`m8-delay-decay.md` @10m, open/closed); `k` defaults to **1.5** from the executing bot (not a fitted WHI-915 open-session k — that span derived none). Wire: `sigma_transit_bps`, `drift_premium_bps`, per-direction `clears_drift`. Fail-open when σ missing (e.g. binance-pancake). Does **not** recompute σ live; does **not** model favourable drift; TUI frozen |
 | Thin book | Partial depth fill ⇒ unfillable (no silent partial) |
 
 **UI stale disambiguation (WHI-821):** three formerly-identical "stale" strings:

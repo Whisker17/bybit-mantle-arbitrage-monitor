@@ -65,8 +65,16 @@ pnl_v2:
   amm_solve_max_iters: 64
   amm_cap_max_iters: 24
   # Highlight thresholds only — raw PnL is never clamped.
-  min_profit_usd: null
+  # Bot floor 1.5 USDT (sibling mantle-stocks-arbitrage-bots thresholds).
+  # null would degrade to pnl_usd > 0 (any cent highlights) — WHI-962.
+  # Shared base config: also gates binance-pancake highlights (intentional).
+  min_profit_usd: 1.5
   min_profit_bps: null
+  # Sequential-execution bar: net ≥ k × σ_transit. k=1.5 is the bot's
+  # drift_premium_k (decide.py / thresholds) — not a fitted value from
+  # WHI-915 (that span derived no open-session k). σ is per-pair inventory
+  # (m8-delay-decay.md @10m). WHI-962.
+  drift_premium_k: 1.5
   gas_on_rfq: true
   # Optional soft L1 depth cap; null = infinite (L1 never size-unfillable).
   l1_assumed_size_usd: null
