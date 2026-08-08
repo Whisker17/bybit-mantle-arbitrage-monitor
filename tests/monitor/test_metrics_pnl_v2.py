@@ -217,7 +217,9 @@ def test_bucket_table_six_rungs_hand_recompute() -> None:
 
 
 def test_base_sized_vwap_walk() -> None:
-    # Local import: top-level depth_math import races the metrics→bybit cycle.
+    # Local import avoids a real package cycle when depth_math is imported first:
+    # depth_math → symbols.__init__ → markets → attribution → metrics →
+    # bybit_slip → depth_math (partial). Metrics is already loaded above.
     from monitor.bybit.depth_math import book_vwap_for_base
 
     levels = [(Decimal(100), Decimal(1)), (Decimal(99), Decimal(2))]
@@ -486,10 +488,11 @@ def test_basis_wear_signed_by_direction() -> None:
 
 
 def test_zero_basis_identical_both_directions() -> None:
-    """basis=0 stays a no-op on both directions (binance-pancake path)."""
+    """basis=0 is a no-op: both directions share the same PnL (binance-pancake)."""
     cfg = _cfg(gas=Decimal(0), fee_bps=Decimal(0), basis=Decimal(0))
     mid = Decimal(100)
     amm = _pool_at_mid(mid, pool_fee=0)
+    rows = []
     for direction in ("buy_fluxion_sell_bybit", "buy_bybit_sell_fluxion"):
         r = compute_pnl_usd(
             pair_id="T",
@@ -503,6 +506,10 @@ def test_zero_basis_identical_both_directions() -> None:
         )
         assert r.fillable
         assert r.costs.basis_usd == Decimal(0)
+        rows.append(r)
+    # Zero basis leaves both directions at near-zero PnL (matched mids, no fees).
+    assert abs(rows[0].pnl_usd) < Decimal("1e-6")
+    assert abs(rows[1].pnl_usd) < Decimal("1e-6")
 
 
 def test_pnl_result_to_dict_serializable() -> None:

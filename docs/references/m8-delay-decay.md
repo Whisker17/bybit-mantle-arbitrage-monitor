@@ -4,10 +4,11 @@ Does the bot's **zero-inventory transfer cycle** still earn money when the legs 
 
 **Generated:** 2026-08-07 03:39:40 UTC
 
-> **Stale cost basis (WHI-959):** this report was generated under the old
-> 10 bps Bybit taker assumption. Live config is now **20 bps** (Adventure Zone).
-> Realised PnL / sequential-cycle numbers overstate net edge by ~10 bps per
-> Bybit leg until re-run under WHI-909.
+> **Stale cost basis (WHI-959 + WHI-960):** this report was generated under the
+> old 10 bps Bybit taker and **0** USDT/USDC basis. Live config is **20 bps**
+> Adventure Zone taker and **signed 7.5 bps** USDC premium (dir1 charged).
+> Realised / sequential-cycle numbers overstate net edge by ~10 + ~7.5 bps per
+> Fluxion→Bybit cycle until re-run under WHI-909.
 
 ## Regeneration
 
