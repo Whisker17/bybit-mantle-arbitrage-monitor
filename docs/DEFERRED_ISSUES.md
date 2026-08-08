@@ -188,11 +188,6 @@ soon — anything touching key handling, RPC credentials defaults to at least Hi
   `config/pairs.yaml` / `AmmPool.kind` — inventory is V3-only; DESIGN still says
   “V2/V3”. Revisit if Fluxion publishes a V2 factory used by xStock pairs.
 
-- **USDT/USDC basis left at 0 bps** (Medium, WHI-732 → measure when live).
-  `config/metrics.yaml` `usdt_usdc_basis_bps` / DESIGN §8 — M3 exposes the wear
-  knob but ships 0 (1:1). Populate from a measured Bybit USDT vs Fluxion USDC
-  series before treating net edge as production-accurate.
-
 - **L1BookTracker parallel to DepthBookTracker** (Low, WHI-755 → cleanup).
   Production WS uses `DepthBookTracker` only; `L1BookTracker` + `apply_l1_side`
   remain for orderbook.1 unit tests. Port those fixtures onto depth=1 payloads

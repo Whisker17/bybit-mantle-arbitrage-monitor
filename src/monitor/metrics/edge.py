@@ -8,7 +8,7 @@ Two-sided inventory paper arb:
              - bybit_slip_bps(Q)
              - fluxion_slip_bps(Q)      (AMM exact; RFQ 0 at quoted size)
              - gas_bps(Q)
-             - usdt_usdc_basis_bps      (optional; default 0)
+             - signed_basis_bps         (USDC premium; + when paying USDC)
 
 Directions (relative to base xStock):
 
@@ -100,6 +100,22 @@ def direction_aware_gross_bps(
     return (fluxion_mid - bybit_mid) / bybit_mid * BPS
 
 
+def basis_wear_bps(
+    usdt_usdc_basis_bps: Decimal,
+    direction: Direction,
+) -> Decimal:
+    """Sign-aware basis wear from a USDC-over-USDT premium (bps).
+
+    DESIGN §2.6.2 / WHI-960: paying USDC is **charged** the premium; receiving
+    USDC is **credited**. ``usdt_usdc_basis_bps`` is the measured premium of
+    USDC vs USDT (positive when USDC > USDT, e.g. ~7.5). Breakdown keeps the
+    signed line so the UI can render a credit as negative wear.
+    """
+    if direction == "buy_fluxion_sell_bybit":
+        return usdt_usdc_basis_bps
+    return -usdt_usdc_basis_bps
+
+
 def _costs(
     config: MetricsConfig,
     *,
@@ -107,6 +123,7 @@ def _costs(
     bybit_slip: Decimal,
     fluxion_fee: Decimal,
     fluxion_slip: Decimal,
+    direction: Direction,
 ) -> CostBreakdown:
     return CostBreakdown(
         bybit_taker_bps=config.bybit_taker_fee_bps,
@@ -114,7 +131,7 @@ def _costs(
         bybit_slip_bps=bybit_slip,
         fluxion_slip_bps=fluxion_slip,
         gas_bps=gas_bps(config.gas_usd_per_swap, size_usd),
-        basis_bps=config.usdt_usdc_basis_bps,
+        basis_bps=basis_wear_bps(config.usdt_usdc_basis_bps, direction),
     )
 
 
@@ -162,6 +179,7 @@ def compute_edge(
             bybit_slip=Decimal(0),
             fluxion_fee=Decimal(0),
             fluxion_slip=Decimal(0),
+            direction=direction,
         )
         return EdgeResult(
             pair_id=pair_id,
@@ -200,6 +218,7 @@ def compute_edge(
         bybit_slip=b_slip,
         fluxion_fee=fee,
         fluxion_slip=f_slip,
+        direction=direction,
     )
     return EdgeResult(
         pair_id=pair_id,

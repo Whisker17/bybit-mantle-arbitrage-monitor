@@ -119,8 +119,11 @@ class MetricsConfig(BaseModel):
     version: int = Field(ge=1)
     size_ladder_usd: list[Decimal] = Field(min_length=1)
     bybit_taker_fee_bps: Decimal = Field(ge=0)
-    # Additive wear on both directions; must be >= 0 (abs basis if measured negative).
-    usdt_usdc_basis_bps: Decimal = Field(default=Decimal(0), ge=0)
+    # Signed USDC premium over USDT, in bps (positive = USDC richer). Applied as
+    # direction-aware wear: +basis when paying USDC, −basis when receiving it
+    # (WHI-960; see edge.basis_wear_bps). Per-market override via
+    # costs.quote_basis_bps (bybit-fluxion measured ~7.5; binance-pancake 0).
+    usdt_usdc_basis_bps: Decimal = Field(default=Decimal(0))
     gas_usd_per_swap: Decimal = Field(ge=0)
     session: SessionConfig
     breach_size_usd: Decimal = Field(gt=0)

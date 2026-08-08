@@ -23,6 +23,7 @@ def test_load_checked_in_metrics_config() -> None:
     assert cfg.version == 1
     assert cfg.size_ladder_usd == [Decimal(1000), Decimal(5000), Decimal(20000)]
     assert cfg.bybit_taker_fee_bps == Decimal(20)
+    # Base metrics.yaml stays 0; bybit-fluxion market file overrides to 7.5.
     assert cfg.usdt_usdc_basis_bps == Decimal(0)
     assert cfg.gas_usd_per_swap == Decimal("0.01")
     assert cfg.breach_size_usd == Decimal(1000)
@@ -35,6 +36,37 @@ def test_load_checked_in_metrics_config() -> None:
     assert cfg.pnl_v2.buckets_usd[0] == Decimal(10)
     assert cfg.pnl_v2.buckets_usd[-1] == Decimal(10000)
     assert cfg.pnl_v2.coarse_points == 24
+
+
+def test_metrics_config_accepts_negative_basis() -> None:
+    """WHI-960: signed USDC premium may be negative (USDT richer)."""
+    from decimal import Decimal
+
+    from monitor.metrics.config import MetricsConfig, PnlV2Config, SessionConfig
+
+    cfg = MetricsConfig(
+        version=1,
+        size_ladder_usd=[Decimal(1000)],
+        bybit_taker_fee_bps=Decimal(20),
+        usdt_usdc_basis_bps=Decimal("-3.5"),
+        gas_usd_per_swap=Decimal("0.01"),
+        session=SessionConfig(
+            timezone="America/New_York",
+            open="09:30",
+            close="16:00",
+            early_close="13:00",
+        ),
+        breach_size_usd=Decimal(1000),
+        max_breach_gap_ms=300_000,
+        pnl_v2=PnlV2Config.model_validate(
+            {
+                "buckets_usd": [10, 50, 100, 500, 1000, 10000],
+                "q_min_usd": 10,
+                "config_cap_usd": 10000,
+            }
+        ),
+    )
+    assert cfg.usdt_usdc_basis_bps == Decimal("-3.5")
 
 
 def test_reject_breach_size_not_on_ladder(tmp_path: Path) -> None:

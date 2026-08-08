@@ -187,6 +187,8 @@ def test_load_market_context_bybit_fluxion() -> None:
     assert ctx.collector is not None
     assert ctx.attribution is not None
     assert ctx.metrics.bybit_taker_fee_bps == Decimal(20)
+    # WHI-960: measured ~7.5 bps USDC premium (signed by direction in engine).
+    assert ctx.metrics.usdt_usdc_basis_bps == Decimal("7.5")
     # Convention path unless legacy fallback applies (checked separately).
     assert ctx.sqlite_path.name in {
         "monitor-bybit-fluxion.db",

@@ -7,7 +7,6 @@ from __future__ import annotations
 
 from decimal import Decimal
 
-from monitor.bybit.depth_math import book_vwap_for_base
 from monitor.fluxion.pools import mid_from_sqrt_price_x96
 from monitor.metrics import (
     AmmPoolState,
@@ -218,6 +217,9 @@ def test_bucket_table_six_rungs_hand_recompute() -> None:
 
 
 def test_base_sized_vwap_walk() -> None:
+    # Local import: top-level depth_math import races the metrics→bybit cycle.
+    from monitor.bybit.depth_math import book_vwap_for_base
+
     levels = [(Decimal(100), Decimal(1)), (Decimal(99), Decimal(2))]
     vwap = book_vwap_for_base(levels, Decimal("1.5"))
     assert vwap is not None
@@ -439,8 +441,53 @@ def test_pool_fee_increases_usdc_spent() -> None:
     assert r1.costs.fluxion_fee_usd > 0
 
 
-def test_basis_wear_subtracts_both_directions() -> None:
-    cfg = _cfg(gas=Decimal(0), fee_bps=Decimal(0), basis=Decimal(5))  # 5 bps
+def test_basis_wear_signed_by_direction() -> None:
+    """WHI-960: paying USDC is charged; receiving USDC is credited.
+
+    With zero fees/gas and matched mids, dir1 PnL falls by basis×Q and dir2
+    rises by the same magnitude (credit reduces the cost stack).
+    """
+    basis_bps = Decimal("7.5")
+    size = Decimal(1000)
+    expected_mag = basis_bps / Decimal(10_000) * size  # 0.75
+    cfg = _cfg(gas=Decimal(0), fee_bps=Decimal(0), basis=basis_bps)
+    mid = Decimal(100)
+    amm = _pool_at_mid(mid, pool_fee=0)
+
+    dir1 = compute_pnl_usd(
+        pair_id="T",
+        bybit_bid=mid,
+        bybit_ask=mid,
+        size_usd=size,
+        direction="buy_fluxion_sell_bybit",
+        venue="amm",
+        config=cfg,
+        amm=amm,
+    )
+    dir2 = compute_pnl_usd(
+        pair_id="T",
+        bybit_bid=mid,
+        bybit_ask=mid,
+        size_usd=size,
+        direction="buy_bybit_sell_fluxion",
+        venue="amm",
+        config=cfg,
+        amm=amm,
+    )
+    assert dir1.fillable and dir2.fillable
+    assert dir1.costs.basis_usd == expected_mag
+    assert dir2.costs.basis_usd == -expected_mag
+    # Matched mids + zero fees → PnL ≈ −basis (dir1 cost) / +basis (dir2 credit).
+    # Tiny residual from discrete AMM mid encoding is allowed.
+    assert abs(dir1.pnl_usd - (-expected_mag)) < Decimal("0.01")
+    assert abs(dir2.pnl_usd - expected_mag) < Decimal("0.01")
+    # Direction-relative skew: dir2 is ~15 bps of Q better than dir1.
+    assert abs((dir2.pnl_usd - dir1.pnl_usd) - expected_mag * 2) < Decimal("0.01")
+
+
+def test_zero_basis_identical_both_directions() -> None:
+    """basis=0 stays a no-op on both directions (binance-pancake path)."""
+    cfg = _cfg(gas=Decimal(0), fee_bps=Decimal(0), basis=Decimal(0))
     mid = Decimal(100)
     amm = _pool_at_mid(mid, pool_fee=0)
     for direction in ("buy_fluxion_sell_bybit", "buy_bybit_sell_fluxion"):
@@ -455,8 +502,7 @@ def test_basis_wear_subtracts_both_directions() -> None:
             amm=amm,
         )
         assert r.fillable
-        assert r.costs.basis_usd == Decimal("0.5")  # 5 bps of 1000
-        assert r.pnl_usd <= Decimal("-0.4")
+        assert r.costs.basis_usd == Decimal(0)
 
 
 def test_pnl_result_to_dict_serializable() -> None:
