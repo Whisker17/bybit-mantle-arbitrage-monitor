@@ -15,6 +15,7 @@ overlapping windows beyond what one in-flight slot can take.
 
 from __future__ import annotations
 
+import bisect
 from collections.abc import Sequence
 from dataclasses import dataclass, replace
 from decimal import Decimal
@@ -545,8 +546,6 @@ def as_of_value(
 
     ``ts_list`` must be sorted ascending and parallel to ``values``.
     """
-    import bisect
-
     if not ts_list or len(ts_list) != len(values):
         return None
     i = bisect.bisect_right(ts_list, ts_ms) - 1

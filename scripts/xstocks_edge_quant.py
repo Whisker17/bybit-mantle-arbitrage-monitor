@@ -202,7 +202,9 @@ def load_or_fetch_basis_series(
             for row in raw.get("mids", [])
             if start_ms <= int(row["ts_ms"]) <= end_ms
         ]
-        if mids:
+        # Require the cache to cover the study window ends (within one bar)
+        # so a stale partial cache cannot silently shrink the sample set.
+        if mids and mids[0][0] <= start_ms + 60_000 and mids[-1][0] >= end_ms - 120_000:
             return basis_series_from_mids(
                 mids, source=f"cache:{cache_path.name}", symbol=symbol
             )
@@ -1423,6 +1425,15 @@ def run(args: argparse.Namespace) -> int:
             file=sys.stderr,
         )
         return 2
+    if basis.ts_ms[0] > since_ms + 60_000 or basis.ts_ms[-1] < until_ms - BASIS_MAX_AGE_MS:
+        print(
+            "ERROR: USDCUSDT basis series does not cover the study window "
+            f"({_ms_iso(basis.ts_ms[0])} → {_ms_iso(basis.ts_ms[-1])} vs "
+            f"study {_ms_iso(since_ms)} → {_ms_iso(until_ms)}). "
+            "Re-run with --force-basis-fetch.",
+            file=sys.stderr,
+        )
+        return 2
 
     # Load journal feeds once per pair.
     pair_feeds: dict[str, dict[str, Any]] = {}
@@ -1714,6 +1725,9 @@ def run(args: argparse.Namespace) -> int:
             "any excluded days (bot DESIGN §8).",
             "No bStocks-style share rebase segment break was introduced for "
             "Fluxion xStocks wrappers in this study.",
+            "USDCUSDT 1m mid is HL2 of the bar starting at or before the "
+            "sample (≤60s of intra-bar look-ahead). Samples without a basis "
+            f"bar within {BASIS_MAX_AGE_MS} ms are skipped (no constant fallback).",
             "Samples with `gap=1` on book/pool/depth rows are dropped at load.",
             "Pairs failing `amm_quote_for_cex` (empty_pool / invalid_mid / "
             f"pricing_anomaly, default |spread| > "
