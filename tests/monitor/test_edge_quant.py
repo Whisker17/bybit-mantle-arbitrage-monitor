@@ -335,15 +335,16 @@ class TestRebalanceAmortization:
         )
         assert adj.pnl_usd == s.pnl_usd
 
-    def test_many_filters_non_positive(self) -> None:
+    def test_many_preserves_non_positive_as_separator(self) -> None:
         from monitor.analysis.edge_quant import apply_rebalance_amortization_many
 
-        # 5 bps edge on $1000 = $0.50; 10 bps rebalance kills it.
+        # 5 bps edge on $1000 = $0.50; 10 bps rebalance → pnl −0.50, kept.
         samples = [_s(0, edge=5, pnl=Decimal("0.5"), size=1000)]
         out = apply_rebalance_amortization_many(
             samples, rebalance_amortized_bps=Decimal(10)
         )
-        assert out == []
+        assert len(out) == 1
+        assert out[0].pnl_usd == Decimal("-0.5")
 
 
 class TestExtendedThresholdGrid:

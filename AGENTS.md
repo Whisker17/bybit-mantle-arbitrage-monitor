@@ -247,8 +247,8 @@ placeholders. Agents must not assume a module exists until its issue lands. -->
     under live USDCUSDT premium, 10/20 bps taker sensitivity (primary **20**),
     rebalance amortization 1/5/13.5 bps (skew-building dir only), extended
     threshold sweep 0..200. Pure helpers in `monitor.analysis.cost_stack` +
-    edge_quant; prior WHI-866 report retained as
-    `m8-xstocks-edge-quant-v1-whi866.md`. Schema v2 companion JSON.
+    edge_quant (kline HTTP stays in the driver script); prior WHI-866 report
+    retained as `m8-xstocks-edge-quant-v1-whi866.md`. Schema v2 companion JSON.
   - **M8 on-chain fill validation (WHI-908) landed:** pure
     `monitor.analysis.fill_validation` + `scripts/xstocks_fill_validation.py`
     ranks top paper windows, matches journal `fluxion_swaps`, classifies

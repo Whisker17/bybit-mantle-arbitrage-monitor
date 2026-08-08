@@ -291,7 +291,9 @@ window count × occupancy.
 - Pure math: `monitor.analysis.edge_quant` (`detect_windows` +
   `capturable_profit_single_flight`).
 - Live assembly: `monitor.metrics.capture` over `JournalReader` bulk loaders
-  (same sample path as `scripts/xstocks_edge_quant.py`).
+  (same sample/window path as `scripts/xstocks_edge_quant.py`). Cost stack
+  may differ: the offline WHI-909 re-run injects live USDCUSDT premium +
+  rebalance amortization; the panel uses market constants (see DEFERRED).
 - Config `capture:` in `config/metrics.yaml` — `trade_duration_ms` (390 000 =
   bot `cycle_duration_s` 390) and `reentry_cooldown_ms` (420 000 = bot
   `reentry_cooldown_s` 420), citing bot `docs/DESIGN.md` §2.5 / §2.8.
@@ -303,11 +305,13 @@ window count × occupancy.
   cold recompute stays O(pairs × lookback/sample).
 - Rates normalize by **observed sample coverage** (`max(ts)−min(ts)`), not the
   configured lookback alone — short journals do not understate Cap $/d.
-- Parity: same `sample_ms` / `trade_duration_ms` / `reentry_cooldown_ms` /
-  `size_usd` / span as `scripts/xstocks_edge_quant.py` → T=0
-  `capturable_profit_per_day` / `windows_per_day` within rounding (live defaults
-  use bot occupancy 390s/420s; the offline script's primary go/no-go uses
-  5s flight + 1-day re-entry — pass matching flags to compare).
+- Parity (window math): same `sample_ms` / `trade_duration_ms` /
+  `reentry_cooldown_ms` / `size_usd` / span as `scripts/xstocks_edge_quant.py`
+  → T=0 `capturable_profit_per_day` / `windows_per_day` within rounding when
+  the cost stack matches (live defaults use bot occupancy 390s/420s; the
+  offline script's primary go/no-go uses 5s flight + 1-day re-entry — pass
+  matching flags to compare). WHI-909 corrected-stack numbers intentionally
+  diverge from panel Cap $/d (live basis + rebalance amortization).
 - Web: overview **Cap $/d** column (subline windows/day); detail Capture rate
   panel with hourly windows sparkline.
 - Out of scope: forecasting; per-address competition. VPS P95 re-measure after

@@ -1,21 +1,17 @@
 """Corrected M0 cost-stack helpers for the WHI-909 edge-quant re-run.
 
-Keeps offline study concerns (live USDCUSDT series, downtime inventory)
-out of the pure window/threshold math in ``edge_quant`` and out of the
-live capture path.
+Pure helpers only: downtime inventory, kline mid/parse, basis-series assembly.
+HTTP fetch of USDCUSDT klines lives in the driver script
+(``scripts/xstocks_edge_quant.py``) — this module never opens a network socket
+or writes files (same contract as ``fill_validation`` / ``delay_decay``).
 """
 
 from __future__ import annotations
 
-import json
-import urllib.error
-import urllib.parse
-import urllib.request
 from collections.abc import Sequence
 from dataclasses import dataclass
 from datetime import UTC, datetime, timedelta
 from decimal import Decimal
-from pathlib import Path
 from typing import Any
 
 from monitor.analysis.edge_quant import usdc_premium_bps_from_mid
@@ -26,7 +22,6 @@ from monitor.metrics.session import session_kind
 # collector healthy enough to re-run?" gate in WHI-909.
 WHI835_LAND_MS = int(datetime(2026, 8, 4, 2, 35, tzinfo=UTC).timestamp() * 1000)
 
-BYBIT_KLINE_URL = "https://api.bybit.com/v5/market/kline"
 DEFAULT_USDCUSDT_SYMBOL = "USDCUSDT"
 
 
@@ -122,11 +117,9 @@ def downtime_by_day(
             clipped.append((cs, ce))
     clipped.sort()
 
-    # Walk minute by minute for RTH attribution (same resolution as edge quant).
     cur = datetime.fromtimestamp(since_ms / 1000, tz=UTC)
     end = datetime.fromtimestamp(until_ms / 1000, tz=UTC)
     step = timedelta(minutes=1)
-    # day -> [total_gap_s, rth_s, rth_gap_s]
     acc: dict[str, list[float]] = {}
     while cur < end:
         nxt = min(end, cur + step)
@@ -158,9 +151,8 @@ def downtime_by_day(
     return out
 
 
-def kline_mid(open_: Decimal, high: Decimal, low: Decimal, close: Decimal) -> Decimal:
+def kline_mid(high: Decimal, low: Decimal) -> Decimal:
     """Minute mid proxy: average of high and low (Bybit spot kline)."""
-    _ = open_, close
     return (high + low) / Decimal(2)
 
 
@@ -174,78 +166,13 @@ def parse_bybit_klines(payload: dict[str, Any]) -> list[tuple[int, Decimal]]:
         if len(row) < 5:
             continue
         start_ms = int(row[0])
-        o = Decimal(str(row[1]))
         h = Decimal(str(row[2]))
         lo = Decimal(str(row[3]))
-        c = Decimal(str(row[4]))
         if h <= 0 or lo <= 0:
             continue
-        out.append((start_ms, kline_mid(o, h, lo, c)))
+        out.append((start_ms, kline_mid(h, lo)))
     out.sort(key=lambda x: x[0])
     return out
-
-
-def fetch_usdcusdt_klines(
-    *,
-    start_ms: int,
-    end_ms: int,
-    symbol: str = DEFAULT_USDCUSDT_SYMBOL,
-    interval: str = "1",
-    timeout_s: float = 30.0,
-) -> list[tuple[int, Decimal]]:
-    """Pull USDCUSDT 1m klines from Bybit public REST (paginated).
-
-    Bybit returns at most 1000 candles per call, **newest-first** inside the
-    requested window. We walk **backward** from ``end_ms`` so the full span is
-    covered (a forward walk only ever sees the last 1000 bars).
-    """
-    if end_ms < start_ms:
-        return []
-    all_rows: list[tuple[int, Decimal]] = []
-    cursor_end = end_ms
-    # Safety cap: ~14 days of 1m bars at 1000/page.
-    for _ in range(30):
-        if cursor_end < start_ms:
-            break
-        params = urllib.parse.urlencode(
-            {
-                "category": "spot",
-                "symbol": symbol,
-                "interval": interval,
-                "start": str(start_ms),
-                "end": str(cursor_end),
-                "limit": "1000",
-            }
-        )
-        url = f"{BYBIT_KLINE_URL}?{params}"
-        req = urllib.request.Request(url, headers={"User-Agent": "whi-909-edge-quant/1"})
-        try:
-            with urllib.request.urlopen(req, timeout=timeout_s) as resp:
-                payload = json.loads(resp.read().decode("utf-8"))
-        except (urllib.error.URLError, TimeoutError, json.JSONDecodeError) as exc:
-            raise RuntimeError(f"Bybit kline fetch failed: {exc}") from exc
-        if int(payload.get("retCode", -1)) != 0:
-            raise RuntimeError(
-                f"Bybit kline error: {payload.get('retCode')} {payload.get('retMsg')}"
-            )
-        batch = parse_bybit_klines(payload)
-        if not batch:
-            break
-        all_rows.extend(batch)
-        oldest = batch[0][0]
-        # Move end cursor strictly before the oldest bar we already have.
-        nxt_end = oldest - 1
-        if nxt_end >= cursor_end:
-            break
-        cursor_end = nxt_end
-        if len(batch) < 1000:
-            break
-    # Dedupe by ts (overlapping pages).
-    by_ts: dict[int, Decimal] = {}
-    for ts, mid in all_rows:
-        if start_ms <= ts <= end_ms:
-            by_ts[ts] = mid
-    return sorted(by_ts.items(), key=lambda x: x[0])
 
 
 def basis_series_from_mids(
@@ -267,55 +194,13 @@ def basis_series_from_mids(
     )
 
 
-def load_or_fetch_basis_series(
-    *,
-    start_ms: int,
-    end_ms: int,
-    cache_path: Path | None = None,
-    force_fetch: bool = False,
-    symbol: str = DEFAULT_USDCUSDT_SYMBOL,
-) -> BasisSeries:
-    """Load cached USDCUSDT basis series or fetch from Bybit and optionally cache."""
-    if cache_path is not None and cache_path.is_file() and not force_fetch:
-        raw = json.loads(cache_path.read_text(encoding="utf-8"))
-        mids = [
-            (int(row["ts_ms"]), Decimal(str(row["mid"])))
-            for row in raw.get("mids", [])
-            if start_ms <= int(row["ts_ms"]) <= end_ms
-        ]
-        if mids:
-            return basis_series_from_mids(
-                mids, source=f"cache:{cache_path.name}", symbol=symbol
-            )
-    mids = fetch_usdcusdt_klines(start_ms=start_ms, end_ms=end_ms, symbol=symbol)
-    series = basis_series_from_mids(
-        mids, source="bybit_rest_kline_1m", symbol=symbol
-    )
-    if cache_path is not None:
-        cache_path.parent.mkdir(parents=True, exist_ok=True)
-        payload = {
-            "symbol": symbol,
-            "interval": "1",
-            "start_ms": start_ms,
-            "end_ms": end_ms,
-            "mids": [
-                {"ts_ms": ts, "mid": format(mid, "f")} for ts, mid in mids
-            ],
-        }
-        cache_path.write_text(
-            json.dumps(payload, indent=2) + "\n", encoding="utf-8"
-        )
-    return series
-
-
 __all__ = [
     "WHI835_LAND_MS",
+    "DEFAULT_USDCUSDT_SYMBOL",
     "BasisSeries",
     "DayDowntime",
     "basis_series_from_mids",
     "downtime_by_day",
-    "fetch_usdcusdt_klines",
     "kline_mid",
-    "load_or_fetch_basis_series",
     "parse_bybit_klines",
 ]

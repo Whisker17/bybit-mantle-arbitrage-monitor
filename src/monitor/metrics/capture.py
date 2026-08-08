@@ -50,6 +50,33 @@ DIRECTIONS: tuple[Direction, Direction] = (
     "buy_bybit_sell_fluxion",
 )
 
+
+def _config_with_live_basis(
+    metrics_cfg: MetricsConfig,
+    ts_ms: int,
+    *,
+    basis_ts_ms: Sequence[int] | None,
+    basis_bps_series: Sequence[Decimal] | None,
+    basis_max_age_ms: int | None,
+) -> MetricsConfig | None:
+    """Return config with as-of basis, or None if a live series was required but missing.
+
+    When no basis series is provided, returns ``metrics_cfg`` unchanged (panel
+    path uses the market constant). When a series *is* provided, a successful
+    as-of join is required — never silently fall back to the constant (WHI-909).
+    """
+    if basis_ts_ms is None or basis_bps_series is None:
+        return metrics_cfg
+    live = as_of_value(
+        basis_ts_ms,
+        basis_bps_series,
+        ts_ms,
+        max_age_ms=basis_max_age_ms,
+    )
+    if live is None:
+        return None
+    return metrics_cfg.model_copy(update={"usdt_usdc_basis_bps": live})
+
 CaptureStatus = Literal[
     "ok",
     "disabled",
@@ -305,13 +332,15 @@ def build_amm_samples(
     max_abs_spread_bps: Decimal | None,
     basis_ts_ms: Sequence[int] | None = None,
     basis_bps_series: Sequence[Decimal] | None = None,
-    basis_max_age_ms: int | None = 120_000,
+    basis_max_age_ms: int | None = None,
 ) -> list[EdgeSample]:
     """Score AMM samples at book times (same algorithm as xstocks_edge_quant).
 
     Optional ``basis_ts_ms`` / ``basis_bps_series`` (parallel, ascending) override
     ``metrics_cfg.usdt_usdc_basis_bps`` per timestamp via as-of join (WHI-909
-    live USDCUSDT premium). When omitted, the config constant is used.
+    live USDCUSDT premium). When omitted, the config constant is used. When
+    provided, samples without a join within ``basis_max_age_ms`` are skipped
+    (no silent fallback to the constant).
     """
     if not books or not pools:
         return []
@@ -355,16 +384,15 @@ def build_amm_samples(
         sess = session_kind(
             datetime.fromtimestamp(ts / 1000, tz=UTC), config=metrics_cfg
         ).value
-        cfg = metrics_cfg
-        if basis_ts_ms is not None and basis_bps_series is not None:
-            live = as_of_value(
-                basis_ts_ms,
-                basis_bps_series,
-                ts,
-                max_age_ms=basis_max_age_ms,
-            )
-            if live is not None:
-                cfg = metrics_cfg.model_copy(update={"usdt_usdc_basis_bps": live})
+        cfg = _config_with_live_basis(
+            metrics_cfg,
+            ts,
+            basis_ts_ms=basis_ts_ms,
+            basis_bps_series=basis_bps_series,
+            basis_max_age_ms=basis_max_age_ms,
+        )
+        if cfg is None:
+            continue
         for direction in DIRECTIONS:
             r = compute_pnl_usd(
                 pair_id=pair.id,
@@ -406,7 +434,7 @@ def build_rfq_samples(
     max_trade_usd: Decimal,
     basis_ts_ms: Sequence[int] | None = None,
     basis_bps_series: Sequence[Decimal] | None = None,
-    basis_max_age_ms: int | None = 120_000,
+    basis_max_age_ms: int | None = None,
 ) -> list[EdgeSample]:
     """Score RFQ samples at poll times (poll-native size, capped for single-flight)."""
     if not books or not rfq_ticks:
@@ -440,16 +468,15 @@ def build_rfq_samples(
             direction: Direction = "buy_fluxion_sell_bybit"
         else:
             direction = "buy_bybit_sell_fluxion"
-        cfg = metrics_cfg
-        if basis_ts_ms is not None and basis_bps_series is not None:
-            live = as_of_value(
-                basis_ts_ms,
-                basis_bps_series,
-                ts,
-                max_age_ms=basis_max_age_ms,
-            )
-            if live is not None:
-                cfg = metrics_cfg.model_copy(update={"usdt_usdc_basis_bps": live})
+        cfg = _config_with_live_basis(
+            metrics_cfg,
+            ts,
+            basis_ts_ms=basis_ts_ms,
+            basis_bps_series=basis_bps_series,
+            basis_max_age_ms=basis_max_age_ms,
+        )
+        if cfg is None:
+            continue
         r = compute_pnl_usd(
             pair_id=pair.id,
             bybit_bid=book.bid_de_multiplied,

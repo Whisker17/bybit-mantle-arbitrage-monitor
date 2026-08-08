@@ -46,9 +46,12 @@ _REPO = Path(__file__).resolve().parents[1]
 sys.path.insert(0, str(_REPO / "src"))
 
 from monitor.analysis.cost_stack import (  # noqa: E402
+    DEFAULT_USDCUSDT_SYMBOL,
     WHI835_LAND_MS,
+    BasisSeries,
+    basis_series_from_mids,
     downtime_by_day,
-    load_or_fetch_basis_series,
+    parse_bybit_klines,
 )
 from monitor.analysis.edge_quant import (  # noqa: E402
     EdgeSample,
@@ -108,6 +111,119 @@ REBALANCE_TIERS_BPS = (Decimal("1"), Decimal("5"), Decimal("13.5"))
 PRIMARY_TAKER_BPS = Decimal(20)
 PRIMARY_REBALANCE_BPS = Decimal("1")
 SCHEMA_VERSION = 2
+# Study-only: max age of USDCUSDT 1m bar vs sample timestamp.
+BASIS_MAX_AGE_MS = 120_000
+BYBIT_KLINE_URL = "https://api.bybit.com/v5/market/kline"
+
+
+def fetch_usdcusdt_klines(
+    *,
+    start_ms: int,
+    end_ms: int,
+    symbol: str = DEFAULT_USDCUSDT_SYMBOL,
+    interval: str = "1",
+    timeout_s: float = 30.0,
+) -> list[tuple[int, Decimal]]:
+    """Pull USDCUSDT 1m klines from Bybit public REST (paginated, newest-first).
+
+    Walks backward from ``end_ms`` so the full span is covered (a single
+    forward page only ever sees the last 1000 bars).
+    """
+    import json
+    import urllib.error
+    import urllib.parse
+    import urllib.request
+
+    if end_ms < start_ms:
+        return []
+    all_rows: list[tuple[int, Decimal]] = []
+    cursor_end = end_ms
+    for _ in range(30):
+        if cursor_end < start_ms:
+            break
+        params = urllib.parse.urlencode(
+            {
+                "category": "spot",
+                "symbol": symbol,
+                "interval": interval,
+                "start": str(start_ms),
+                "end": str(cursor_end),
+                "limit": "1000",
+            }
+        )
+        url = f"{BYBIT_KLINE_URL}?{params}"
+        req = urllib.request.Request(
+            url, headers={"User-Agent": "whi-909-edge-quant/1"}
+        )
+        try:
+            with urllib.request.urlopen(req, timeout=timeout_s) as resp:
+                payload = json.loads(resp.read().decode("utf-8"))
+        except (urllib.error.URLError, TimeoutError, json.JSONDecodeError) as exc:
+            raise RuntimeError(f"Bybit kline fetch failed: {exc}") from exc
+        if int(payload.get("retCode", -1)) != 0:
+            raise RuntimeError(
+                f"Bybit kline error: {payload.get('retCode')} "
+                f"{payload.get('retMsg')}"
+            )
+        batch = parse_bybit_klines(payload)
+        if not batch:
+            break
+        all_rows.extend(batch)
+        oldest = batch[0][0]
+        nxt_end = oldest - 1
+        if nxt_end >= cursor_end:
+            break
+        cursor_end = nxt_end
+        if len(batch) < 1000:
+            break
+    by_ts: dict[int, Decimal] = {}
+    for ts, mid in all_rows:
+        if start_ms <= ts <= end_ms:
+            by_ts[ts] = mid
+    return sorted(by_ts.items(), key=lambda x: x[0])
+
+
+def load_or_fetch_basis_series(
+    *,
+    start_ms: int,
+    end_ms: int,
+    cache_path: Path | None = None,
+    force_fetch: bool = False,
+    symbol: str = DEFAULT_USDCUSDT_SYMBOL,
+) -> BasisSeries:
+    """Load cached USDCUSDT mids or fetch from Bybit and optionally cache."""
+    import json
+
+    if cache_path is not None and cache_path.is_file() and not force_fetch:
+        raw = json.loads(cache_path.read_text(encoding="utf-8"))
+        mids = [
+            (int(row["ts_ms"]), Decimal(str(row["mid"])))
+            for row in raw.get("mids", [])
+            if start_ms <= int(row["ts_ms"]) <= end_ms
+        ]
+        if mids:
+            return basis_series_from_mids(
+                mids, source=f"cache:{cache_path.name}", symbol=symbol
+            )
+    mids = fetch_usdcusdt_klines(start_ms=start_ms, end_ms=end_ms, symbol=symbol)
+    series = basis_series_from_mids(
+        mids, source="bybit_rest_kline_1m", symbol=symbol
+    )
+    if cache_path is not None:
+        cache_path.parent.mkdir(parents=True, exist_ok=True)
+        payload = {
+            "symbol": symbol,
+            "interval": "1",
+            "start_ms": start_ms,
+            "end_ms": end_ms,
+            "mids": [
+                {"ts_ms": ts, "mid": format(mid, "f")} for ts, mid in mids
+            ],
+        }
+        cache_path.write_text(
+            json.dumps(payload, indent=2) + "\n", encoding="utf-8"
+        )
+    return series
 
 
 @dataclass
@@ -1127,6 +1243,7 @@ def _build_series_for_taker(
                 max_abs_spread_bps=cfg.max_abs_amm_spread_bps,
                 basis_ts_ms=basis_ts,
                 basis_bps_series=basis_bps,
+                basis_max_age_ms=BASIS_MAX_AGE_MS,
             )
             for s in samples:
                 series[group_key(s)].append(s)
@@ -1140,6 +1257,7 @@ def _build_series_for_taker(
             max_trade_usd=MAX_TRADE_USD,
             basis_ts_ms=basis_ts,
             basis_bps_series=basis_bps,
+            basis_max_age_ms=BASIS_MAX_AGE_MS,
         )
         for s in rfq_samples:
             series[group_key(s)].append(s)
@@ -1187,7 +1305,16 @@ def run(args: argparse.Namespace) -> int:
     rth_h, closed_h, rth_ok, closed_ok = rth_closed_hours(
         since_ms, until_ms, metrics_cfg=metrics_cfg, gaps=gaps
     )
-    gap_hours = sum((g.end_ms - g.start_ms) for g in gaps) / 3_600_000
+    # Study-window gap hours only (not the full journal history).
+    study_gap_ms = 0
+    study_gap_count = 0
+    for g in gaps:
+        cs = max(g.start_ms, since_ms)
+        ce = min(g.end_ms, until_ms)
+        if ce > cs:
+            study_gap_ms += ce - cs
+            study_gap_count += 1
+    gap_hours = study_gap_ms / 3_600_000
     gap_rth = rth_h - rth_ok
 
     # --- Collector health since WHI-835 (report before any headline) ---
@@ -1565,7 +1692,7 @@ def run(args: argparse.Namespace) -> int:
             "closed_hours": closed_h,
             "rth_hours_excl_gap": rth_ok,
             "closed_hours_excl_gap": closed_ok,
-            "gap_count": len(gaps),
+            "gap_count": study_gap_count,
             "gap_hours": gap_hours,
             "gap_rth_hours": gap_rth,
         },

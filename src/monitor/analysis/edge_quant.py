@@ -517,21 +517,21 @@ def apply_rebalance_amortization_many(
     rebalance_amortized_bps: Decimal,
     skew_direction: str = SKEW_BUILDING_DIRECTION,
 ) -> list[EdgeSample]:
-    """Map ``apply_rebalance_amortization`` over a series; drop non-positive PnL.
+    """Map ``apply_rebalance_amortization`` over a series (preserves length).
 
-    Samples whose adjusted ``pnl_usd`` is ≤ 0 are filtered out so window
-    detection never books a non-capturable trade after the cost line lands.
+    Does **not** drop non-positive PnL samples — those remain as window
+    separators for ``detect_windows`` (which already requires ``pnl_usd > 0``
+    to open a window). Filtering here would glue adjacent windows and change
+    segmentation relative to the pre-rebalance series.
     """
-    out: list[EdgeSample] = []
-    for s in samples:
-        adj = apply_rebalance_amortization(
+    return [
+        apply_rebalance_amortization(
             s,
             rebalance_amortized_bps=rebalance_amortized_bps,
             skew_direction=skew_direction,
         )
-        if adj.pnl_usd > 0:
-            out.append(adj)
-    return out
+        for s in samples
+    ]
 
 
 def as_of_value(
@@ -545,18 +545,11 @@ def as_of_value(
 
     ``ts_list`` must be sorted ascending and parallel to ``values``.
     """
+    import bisect
+
     if not ts_list or len(ts_list) != len(values):
         return None
-    # Local import-free bisect via manual binary search to keep this module
-    # free of extra deps; list is small for 1m klines (~few thousand).
-    lo, hi = 0, len(ts_list)
-    while lo < hi:
-        mid = (lo + hi) // 2
-        if ts_list[mid] <= ts_ms:
-            lo = mid + 1
-        else:
-            hi = mid
-    i = lo - 1
+    i = bisect.bisect_right(ts_list, ts_ms) - 1
     if i < 0:
         return None
     if max_age_ms is not None and ts_ms - ts_list[i] > max_age_ms:
