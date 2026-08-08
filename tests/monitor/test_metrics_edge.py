@@ -190,3 +190,62 @@ def test_opposite_direction_negative_when_fluxion_cheap() -> None:
     )
     assert edge.gross_spread_bps < 0
     assert edge.net_edge_bps < 0
+
+
+def test_basis_wear_signed_by_direction_on_edge() -> None:
+    """WHI-960: M3 cost breakdown signs basis by direction (bot parity)."""
+    from monitor.metrics.config import MetricsConfig, PnlV2Config, SessionConfig
+    from monitor.metrics.edge import basis_wear_bps
+
+    basis = Decimal("7.5")
+    assert basis_wear_bps(basis, "buy_fluxion_sell_bybit") == basis
+    assert basis_wear_bps(basis, "buy_bybit_sell_fluxion") == -basis
+
+    cfg = MetricsConfig(
+        version=1,
+        size_ladder_usd=[Decimal(1000), Decimal(5000), Decimal(20000)],
+        bybit_taker_fee_bps=Decimal(0),
+        usdt_usdc_basis_bps=basis,
+        gas_usd_per_swap=Decimal(0),
+        session=SessionConfig(
+            timezone="America/New_York",
+            open="09:30",
+            close="16:00",
+            early_close="13:00",
+        ),
+        breach_size_usd=Decimal(1000),
+        max_breach_gap_ms=300_000,
+        pnl_v2=PnlV2Config.model_validate(
+            {
+                "buckets_usd": [10, 50, 100, 500, 1000, 10000],
+                "q_min_usd": 10,
+                "config_cap_usd": 10000,
+            }
+        ),
+    )
+    mid = Decimal(100)
+    dir1 = compute_edge(
+        pair_id="T",
+        bybit_bid=mid,
+        bybit_ask=mid,
+        fluxion_mid=mid,
+        size_usd=Decimal(1000),
+        direction="buy_fluxion_sell_bybit",
+        venue="rfq",
+        config=cfg,
+    )
+    dir2 = compute_edge(
+        pair_id="T",
+        bybit_bid=mid,
+        bybit_ask=mid,
+        fluxion_mid=mid,
+        size_usd=Decimal(1000),
+        direction="buy_bybit_sell_fluxion",
+        venue="rfq",
+        config=cfg,
+    )
+    assert dir1.costs.basis_bps == basis
+    assert dir2.costs.basis_bps == -basis
+    # Zero gross + zero other wear → net = −signed basis.
+    assert dir1.net_edge_bps == -basis
+    assert dir2.net_edge_bps == basis

@@ -81,7 +81,7 @@ edge_bps = direction_aware_spread_bps
          - bybit_slip_bps(Q)
          - fluxion_slip_bps(Q)
          - gas_bps(Q)
-         - usdt_usdc_basis_bps   # optional; default 0
+         - signed_basis_bps      # USDC premium; + when paying USDC (WHI-960)
 ```
 
 Inventory is pre-positioned on both sides (same model as phase-1); carry is an
@@ -144,15 +144,25 @@ invariant; matched base \(q\) shares that unit). Full algebra in research note
 
 | Direction | Buy leg (trader pays) | Sell leg (trader receives) | PnL (USD) |
 |-----------|----------------------|----------------------------|-----------|
-| `buy_fluxion_sell_bybit` | Fluxion: USDC spent to acquire net base \(q\) (fee-inclusive AMM; or RFQ `amountIn`) | Bybit: sell \(q\) at bid VWAP; USDT received after fee | \(\mathrm{USDT_{recv}} - \mathrm{USDC_{spent}} - G - \beta Q\) |
-| `buy_bybit_sell_fluxion` | Bybit: buy gross base so **net** base \(= q\) after fee; USDT spent | Fluxion: sell \(q\) for USDC received (fee-inclusive AMM; or RFQ `amountOut`) | \(\mathrm{USDC_{recv}} - \mathrm{USDT_{spent}} - G - \beta Q\) |
+| `buy_fluxion_sell_bybit` | Fluxion: USDC spent to acquire net base \(q\) (fee-inclusive AMM; or RFQ `amountIn`) | Bybit: sell \(q\) at bid VWAP; USDT received after fee | \(\mathrm{USDT_{recv}} - \mathrm{USDC_{spent}} - G - \mathrm{basis\_usd}\) |
+| `buy_bybit_sell_fluxion` | Bybit: buy gross base so **net** base \(= q\) after fee; USDT spent | Fluxion: sell \(q\) for USDC received (fee-inclusive AMM; or RFQ `amountOut`) | \(\mathrm{USDC_{recv}} - \mathrm{USDT_{spent}} - G - \mathrm{basis\_usd}\) |
 
 - \(G =\) `gas_usd_per_swap` (default $0.01), charged **once** per Fluxion leg
   (AMM and RFQ; default charge gas on RFQ too — conservative).
-- USDT/USDC cash legs 1:1; \(\beta = \texttt{usdt\_usdc\_basis\_bps}/10^4\)
-  (default 0) is **additive wear on both directions** (same contract as M3
-  `edge.py`). Error if left at 0 while true basis ≠ 0 is typically sub-5 bps
-  (DESIGN §8).
+- USDT/USDC cash legs use a **signed** basis (WHI-960). Config
+  \(\beta = \texttt{usdt\_usdc\_basis\_bps}/10^4\) is the **USDC premium over
+  USDT** (positive when USDC is richer). Wear is direction-aware via
+  `edge.basis_wear_bps` / PnL `_basis_usd`:
+  - `buy_fluxion_sell_bybit` **pays** USDC → \(\mathrm{basis\_usd} = +\beta Q\) (cost).
+  - `buy_bybit_sell_fluxion` **receives** USDC → \(\mathrm{basis\_usd} = -\beta Q\) (credit).
+  bybit-fluxion ships \(\beta = 7.5\,\mathrm{bps}\) (Bybit `USDCUSDT` ~1.0007–1.0008;
+  sibling bot repo `mantle-stocks-arbitrage-bots` DESIGN §2.3 + that repo's
+  `docs/references/m1-stable-rail-and-xstocks-latency.md` snapshot).
+  binance-pancake stays at 0 (both legs USDT). Breakdown keeps the signed
+  line so UI can render a credit as negative wear. The dir2 credit assumes
+  USDC is valued 1:1 against USDT after receipt (converting back to USDT
+  incurs its own USDCUSDT fee/spread — not modeled here). Live per-timestamp
+  feed is out of scope here (tracked in `docs/DEFERRED_ISSUES.md`).
 - AMM fee: fee-inclusive amounts in cash-flow; UI wear breakdown may split fee
   vs impact **without** double-subtracting in \(\mathrm{PnL}\).
 - RFQ: no separate pool-fee line. Rows are keyed by **poll size** (USDC
@@ -271,7 +281,7 @@ algorithms under `monitor.metrics` / `monitor.attribution` stay market-agnostic.
 |---------|--------|-------|
 | CEX taker fee | market `costs.cex_taker_fee_bps` → `MetricsConfig.bybit_taker_fee_bps` | Field name is historical; value is the active CEX venue fee (Bybit xStocks Adventure Zone **20**, Binance spot **10**). |
 | Gas per AMM swap | market `costs.gas_usd_per_swap` | Mantle ~$0.01; BSC inventory default $0.05 (non-zero constant). |
-| Quote basis wear | market `costs.quote_basis_bps` → `usdt_usdc_basis_bps` | 0 when CEX and DEX share the same quote (Binance USDT ⇄ Pancake USDT). |
+| Quote basis wear | market `costs.quote_basis_bps` → `usdt_usdc_basis_bps` | Signed USDC premium (bps); bybit-fluxion **7.5**, binance-pancake **0** (same quote). Engine signs by direction (WHI-960). |
 | Pool fee | inventory per-pool `amm.fee` (UniV3 units) | Injected into `AmmPoolState.pool_fee` at tick lift — not a global YAML. |
 | Quote token decimals | market `dex.quote_decimals` | Mantle USDC=6; BSC USDT=18. API/CLI pass this into `amm_pool_from_pair_tick`. Pure `amm_pool_from_tick` always requires explicit decimals. Pair-wrapper defaults (6/18) remain only for frozen TUI call sites that omit the arg (Bybit-only until M7-5). |
 | CEX depth VWAP | journal `bybit_depth` (table name reused per ADR-0001) | M7-3 Binance depth20 precomputes the same bucket curve shape. |
@@ -678,7 +688,7 @@ M7 is parallel product expansion after Web PnL v2; does not block Web polish.
 | bStocks (Binance) multiplier may not match Bybit semantics | **Resolved WHI-770 (inventory):** BEP-677 `uiMultiplier` scales **UI qty**, raw `balanceOf` unchanged — not classic rebase. Binance public `exchangeInfo` has no mult field. Pricing identity: `amm_raw_mid ≈ binance_display_mid * (uiMultiplier/1e18)` (**multiply**, opposite direction from Bybit divide). Draft field `ui_multiplier` in `config/binance_pancake_pairs.yaml` — do not reuse `de_multiplied_price` unchanged. |
 | US VPS cannot reach `api.binance.com` for M7 collector | **Resolved WHI-770 (measured):** `107.175.234.202` gets HTTP **451** on api/stream.binance.com; **`data-api.binance.vision` + `data-stream.binance.vision` return 200/101**. Default M7-6 path: vision endpoints on existing VPS; non-US sidecar only if vision gaps. |
 | Fluxion pool ABI / fork lineage unknown until M1 (phase-1 Agni topic0 trap) | **Resolved M1:** UniV3-lineage factory/quoter; liquid xStock pools fee=3000 USDC. M2 still re-verifies topic0 on live swaps |
-| Bybit quote is **USDT** while Fluxion AMM/RFQ quote is **USDC** — basis not modeled in M1 | M3 (knob `usdt_usdc_basis_bps`, default 0); PnL v2 same default — measure before production accuracy claims |
+| Bybit quote is **USDT** while Fluxion AMM/RFQ quote is **USDC** — basis not modeled in M1 | **Resolved WHI-960:** signed direction-aware wear; bybit-fluxion `quote_basis_bps: 7.5` (USDC premium); binance-pancake stays 0. Live per-timestamp feed still open. |
 | Live book depth quality vs phase-1 single snapshot approximation | M2/M3; PnL v2 VWAP needs depth (L1 degrade until wired) |
 | PnL v2 optimal search is sample-best, not continuous global max | WHI-756; acceptable for panel buckets $10–$10k |
 | Mantle block ingest P95 / head_lag (LB not-found) | **Resolved WHI-749:** default `head_lag_blocks: 1`; SLO in §5.2; note `docs/references/m2-block-ingest-latency.md` |

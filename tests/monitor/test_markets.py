@@ -187,6 +187,8 @@ def test_load_market_context_bybit_fluxion() -> None:
     assert ctx.collector is not None
     assert ctx.attribution is not None
     assert ctx.metrics.bybit_taker_fee_bps == Decimal(20)
+    # WHI-960: measured ~7.5 bps USDC premium (signed by direction in engine).
+    assert ctx.metrics.usdt_usdc_basis_bps == Decimal("7.5")
     # Convention path unless legacy fallback applies (checked separately).
     assert ctx.sqlite_path.name in {
         "monitor-bybit-fluxion.db",
@@ -248,6 +250,8 @@ def test_load_market_context_binance_has_inventory_no_pairs_shape() -> None:
     assert len(ctx.bstocks.pairs) == 55  # WHI-790 full bStocks universe
     assert ctx.cex.multiplier_semantics is MultiplierSemantics.MULTIPLY
     assert ctx.metrics.gas_usd_per_swap == Decimal("0.05")
+    # WHI-960: both legs USDT — basis stays 0 (bybit-fluxion is 7.5).
+    assert ctx.metrics.usdt_usdc_basis_bps == Decimal(0)
     assert "binance-pancake" in str(ctx.sqlite_path)
 
 

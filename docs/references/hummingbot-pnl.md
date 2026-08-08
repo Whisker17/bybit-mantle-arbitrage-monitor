@@ -111,7 +111,8 @@ levels are `(price, size_base)` and conversion is consistent (see §4.2).
 - Interchangeability table treats wrapped natives and some stables as 1:1;
   **v2 executor additionally treats any pair of tokens both containing `"USD"`
   as interchangeable** (USDT/USDC ≈ 1). That is the Hummingbot precedent for
-  our default `usdt_usdc_basis_bps: 0`.
+  a default 1:1 cash-leg conversion; bybit-fluxion ships a **signed** measured
+  basis (WHI-960, §4.4) rather than leaving β at 0.
 
 ### 2.4 Budget (`connector/budget_checker.py`)
 
@@ -172,7 +173,7 @@ searches for optimal size; the operator picks `order_amount`.
 | Fee on buy adds cost; fee on sell cuts proceeds | **Yes** | Explicit cash-flow (§4) |
 | Size-aware quote prices (VWAP / AMM) | **Yes** | Bybit depth VWAP; Fluxion V3 math / RFQ poll |
 | `min_profitability` gate | **Yes (display)** | `min_profit_usd` / `min_profit_bps` config; do not hide negative PnL |
-| Quote conversion oracle | **Partial** | USDT/USDC default 1:1; optional `usdt_usdc_basis_bps` wear (M3) |
+| Quote conversion oracle | **Partial** | Signed USDC premium (`usdt_usdc_basis_bps`; bybit-fluxion 7.5, binance-pancake 0) |
 | BudgetChecker | **No** | Paper inventory; depth → `fillable=False` |
 | Slippage buffer on order price | **No** (no orders) | Optional future “execution haircut” config, default 0 |
 | Executor imbalance / delay | **No** (no execution) | Optional session stats only |
@@ -193,7 +194,7 @@ searches for optimal size; the operator picks `order_amount`.
 | \(f_b\) | fraction | Bybit xStocks Adventure Zone taker fee = \(20\,\mathrm{bps} = 0.002\) (config `bybit_taker_fee_bps`; measured 2026-08-07) |
 | \(f_p\) | fraction | AMM pool fee (e.g. 3000 → 0.003); RFQ: **0** (embedded in quote) |
 | \(G\) | USD | Mantle gas for **one** Fluxion leg (`gas_usd_per_swap`, default 0.01) |
-| \(\beta\) | fraction | Optional USDT/USDC basis wear (`usdt_usdc_basis_bps` / 1e4); default 0 |
+| \(\beta\) | fraction | Signed USDC premium over USDT (`usdt_usdc_basis_bps` / 1e4); bybit-fluxion 7.5 bps |
 | \(D\) | enum | `buy_fluxion_sell_bybit` or `buy_bybit_sell_fluxion` (M3 names) |
 | \(V\) | enum | Venue on Fluxion: `amm` or `rfq` |
 
@@ -329,25 +330,26 @@ today (`config/collector.yaml`):
 
 ### 4.4 Direction cash-flows (USD)
 
-**USDT ≈ USDC conversion:** treat both as 1:1 dollars in the cash legs
-(\(\mathrm{usd}(x) = x\)).
-
-**Basis wear (normative — matches M3):** let
-\(\beta = \texttt{usdt\_usdc\_basis\_bps} / 10^4\) (config; default 0). When
-\(\beta > 0\) (“Bybit USDT richer than Fluxion USDC by \(\beta\)”), subtract an
-**additive wear on both directions**:
+**USDT/USDC conversion (normative — matches M3 `edge.basis_wear_bps`, WHI-960):**
+cash legs are denominated in different stables on bybit-fluxion (Bybit USDT vs
+Fluxion USDC). Config \(\beta = \texttt{usdt\_usdc\_basis\_bps}/10^4\) is the
+**USDC premium over USDT** (positive when USDC is richer, e.g. 7.5 bps). Wear is
+**signed by direction**, not additive on both sides:
 
 \[
-\mathrm{basis\_usd}(Q) = \beta \cdot Q
+\mathrm{basis\_usd}(Q, D) =
+\begin{cases}
++\beta Q & D = \texttt{buy\_fluxion\_sell\_bybit}\ \text{(pays USDC)} \\
+-\beta Q & D = \texttt{buy\_bybit\_sell\_fluxion}\ \text{(receives USDC)}
+\end{cases}
 \]
 
 \[
-\mathrm{PnL} = (\text{recv} - \text{spent} - G) - \mathrm{basis\_usd}(Q)
+\mathrm{PnL} = (\text{recv} - \text{spent} - G) - \mathrm{basis\_usd}(Q, D)
 \]
 
-Do **not** implement basis as a one-sided haircut on USDC only (that flips sign
-vs M3 on `buy_fluxion_sell_bybit`). Default \(\beta=0\) ⇒ no term. Error if
-left at 0 while the true basis is nonzero: typically sub-5 bps (DESIGN §8).
+binance-pancake keeps \(\beta = 0\) (both legs USDT). Live per-timestamp
+USDCUSDT feed is out of scope (panel ships the constant).
 
 All names below are from the **trader** perspective: `*_spent` leaves the wallet,
 `*_recv` enters it. \(Q_{\mathrm{ref}}\) is the AMM bucket \(Q\), or for RFQ rows
@@ -578,7 +580,7 @@ RFQ: separate poll-keyed rows (§4.3.2), not this list.
 | Missing rate | `profit_pct = 0` + warning | Fail closed: `fillable=false`, reason `missing_quote` |
 | Thin book | Partial volume in query result | Treat partial as unfillable (stricter than silent partial fill) |
 | Fee double-count | Single fee_amount path | Cash-flow §4; wear breakdown is reporting-only |
-| Stable basis | USD* interchangeable | Default β=0; document error: typically sub-5 bps, owned as DESIGN §8 open risk until measured |
+| Stable basis | USD* interchangeable | Signed β (WHI-960); bybit-fluxion 7.5 bps USDC premium; binance-pancake 0 |
 
 Suggested knobs for WHI-756 (illustrative — not a frozen schema; implementer
 chooses file layout and exact names):

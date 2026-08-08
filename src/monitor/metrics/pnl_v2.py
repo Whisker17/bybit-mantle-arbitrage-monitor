@@ -22,7 +22,7 @@ from monitor.metrics.amm_slip import (
 )
 from monitor.metrics.bybit_slip import BPS
 from monitor.metrics.config import MetricsConfig, PnlV2Config
-from monitor.metrics.edge import Direction, VenueKind, mid_from_bid_ask
+from monitor.metrics.edge import Direction, VenueKind, basis_wear_bps, mid_from_bid_ask
 
 DepthSource = Literal["l1", "book"]
 
@@ -168,8 +168,18 @@ def _fee_fraction(config: MetricsConfig) -> Decimal:
     return config.bybit_taker_fee_bps / BPS
 
 
-def _basis_usd(config: MetricsConfig, size_usd: Decimal) -> Decimal:
-    return config.usdt_usdc_basis_bps / BPS * size_usd
+def _basis_usd(
+    config: MetricsConfig,
+    size_usd: Decimal,
+    direction: Direction,
+) -> Decimal:
+    """Signed USDT/USDC basis cost in USD (credit is negative).
+
+    Mirrors ``edge.basis_wear_bps``: dir1 (pay USDC) charged; dir2 (recv USDC)
+    credited. PnL subtracts this line, so a credit raises net PnL.
+    """
+    signed_bps = basis_wear_bps(config.usdt_usdc_basis_bps, direction)
+    return signed_bps / BPS * size_usd
 
 
 def _zero_costs(*, gas: Decimal = Decimal(0), basis: Decimal = Decimal(0)) -> PnlCostBreakdownUsd:
@@ -432,7 +442,7 @@ def compute_pnl_usd(
 
     q = size_usd / bybit_mid
     f_b = _fee_fraction(config)
-    basis = _basis_usd(config, size_usd)
+    basis = _basis_usd(config, size_usd, direction)
 
     if direction == "buy_fluxion_sell_bybit":
         return _pnl_buy_fluxion_sell_bybit(
@@ -481,7 +491,7 @@ def _unfillable_result(
     gas: Decimal | None = None,
 ) -> PnlResult:
     g = config.gas_usd_per_swap if gas is None else gas
-    basis = _basis_usd(config, size_usd) if size_usd > 0 else Decimal(0)
+    basis = _basis_usd(config, size_usd, direction) if size_usd > 0 else Decimal(0)
     costs = _zero_costs(gas=g, basis=basis)
     return PnlResult(
         pair_id=pair_id,
@@ -713,7 +723,7 @@ def _pnl_rfq(
         usdc_spent = rfq.amount_in
         q = rfq.amount_out
         size_usd = q * bybit_mid
-        basis = _basis_usd(config, size_usd)
+        basis = _basis_usd(config, size_usd, direction)
         bybit = _bybit_sell_cash(
             bid=bybit_bid,
             ask=bybit_ask,
@@ -779,7 +789,7 @@ def _pnl_rfq(
     q = rfq.amount_in
     usdc_recv = rfq.amount_out
     size_usd = q * bybit_mid
-    basis = _basis_usd(config, size_usd)
+    basis = _basis_usd(config, size_usd, direction)
     bybit = _bybit_buy_cash(
         bid=bybit_bid,
         ask=bybit_ask,

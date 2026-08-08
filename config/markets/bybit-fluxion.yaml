@@ -28,7 +28,14 @@ costs:
   # Standard-spot 10 bps does not apply.
   cex_taker_fee_bps: 20
   gas_usd_per_swap: 0.01
-  quote_basis_bps: 0
+  # Signed USDC premium over USDT (bps; positive = USDC richer). Bybit xStocks
+  # quote USDT while Fluxion AMM/RFQ quote USDC. Measured ~7.5 bps: Bybit
+  # USDCUSDT trades ~1.0007–1.0008. Corroborating snapshot in sibling bot repo
+  # mantle-stocks-arbitrage-bots (DESIGN §2.3 + that repo's
+  # docs/references/m1-stable-rail-and-xstocks-latency.md — pool mid 1.00074,
+  # book 1.0007–1.0008). Engine signs by direction (WHI-960): + when paying
+  # USDC, − when receiving. Live per-timestamp feed still open.
+  quote_basis_bps: 7.5
 # WHI-821: omit quote_max_age_ms → inherit config/api.yaml default (300s).
 # Override only when a market needs a different quiet-book window (see
 # binance-pancake.yaml for closed-session bStocks).

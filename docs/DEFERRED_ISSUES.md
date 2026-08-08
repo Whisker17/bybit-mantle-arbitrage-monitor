@@ -31,6 +31,37 @@ soon — anything touching key handling, RPC credentials defaults to at least Hi
 
 ## Open
 
+- **Live per-timestamp USDT/USDC basis feed** (Medium, WHI-960 → later).
+  Panel ships a signed constant (`quote_basis_bps: 7.5` on bybit-fluxion).
+  Owner-measured Bybit daily klines show meaningful range (median daily 4 bps,
+  p90 7, p99 50; year extremes 0.9911–1.0059). Live `USDCUSDT` mid per sample
+  is the eventual right answer; out of scope for WHI-960. DESIGN §8 residual.
+
+- **No abs bound on signed `usdt_usdc_basis_bps` / `quote_basis_bps`** (Low, WHI-960).
+  `ge=0` was dropped so the field can be signed; a fat-fingered 750 or −7500
+  now validates. Consider `|x| ≤ 100` (or similar) when a live feed lands.
+
+- **Unfillable PnL rows still stamp signed basis in the cost breakdown** (Low, WHI-960).
+  `_unfillable_result` keeps direction-aware `basis_usd` even when `pnl_usd=0`
+  and `fillable=False`. Cosmetic phantom credit on dir2; UI already treats
+  non-ok rows as non-tradable. Zeroing basis on unfillable would be cleaner.
+
+- **Web cost waterfall paints signed credits as cost bars** (Low, WHI-960 → Web).
+  After signed basis, dir2 `basis_bps`/`basis_usd` are negative. Both
+  `web/components/pair/edge-panel.tsx` waterfalls size bars with `Math.abs`
+  and always use `bg-warning/70`, so a credit looks like a cost bar; only the
+  numeric label shows the sign. Pre-existing rendering; negative basis was
+  unreachable under `ge=0`. Fix: signed fill color / direction, or a credit
+  style class. Out of scope for the metrics engine change.
+
+- **Package cycle forces lazy `depth_math` imports in tests** (Low, WHI-960
+  review surface). Chain: `monitor.bybit.depth_math` → `symbols.__init__` →
+  `bstocks_load` → `markets` → `attribution` → `metrics` → `bybit_slip` →
+  `depth_math` (partial). Tests (`test_metrics_pnl_v2`, `test_metrics_pnl_snapshot`)
+  import `depth_math` lazily after metrics. Pre-existing architecture; fix by
+  making `depth_math` import `monitor.symbols.multipliers` without pulling
+  package `__init__` side effects (or slimming `symbols.__init__`).
+
 - **WHI-908: fill-validation script duplicates M0 sample builder** (Low, WHI-908).
   `scripts/xstocks_fill_validation.py::build_amm_samples_with_meta` is a near-
   copy of `scripts/xstocks_edge_quant.py::build_amm_samples`, adding only the
@@ -187,11 +218,6 @@ soon — anything touching key handling, RPC credentials defaults to at least Hi
 - **Fluxion V2 factory not published for xStocks** (Low, WHI-730 → later if needed).
   `config/pairs.yaml` / `AmmPool.kind` — inventory is V3-only; DESIGN still says
   “V2/V3”. Revisit if Fluxion publishes a V2 factory used by xStock pairs.
-
-- **USDT/USDC basis left at 0 bps** (Medium, WHI-732 → measure when live).
-  `config/metrics.yaml` `usdt_usdc_basis_bps` / DESIGN §8 — M3 exposes the wear
-  knob but ships 0 (1:1). Populate from a measured Bybit USDT vs Fluxion USDC
-  series before treating net edge as production-accurate.
 
 - **L1BookTracker parallel to DepthBookTracker** (Low, WHI-755 → cleanup).
   Production WS uses `DepthBookTracker` only; `L1BookTracker` + `apply_l1_side`

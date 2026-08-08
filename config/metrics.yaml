@@ -16,9 +16,9 @@ size_ladder_usd:
 # Provenance: authenticated GET /v5/account/fee-rate 2026-08-07 (HOODX/CRCLX/NVDAX).
 bybit_taker_fee_bps: 20
 
-# Bybit USDT vs Fluxion USDC basis. Positive = Bybit quote richer by this many
-# bps (applied as an additive wear term on both directions). Default 0 = treat
-# 1:1 until a measured series lands (DESIGN §8 open risk, owned by M3).
+# Signed USDC premium over USDT, in bps (positive = USDC richer). Base default
+# 0; bybit-fluxion overrides via costs.quote_basis_bps (measured ~7.5). Engine
+# applies sign by direction (WHI-960 / DESIGN §2.6.2) — not additive both ways.
 usdt_usdc_basis_bps: 0
 
 # Mantle gas for one V3 swap, USD (gasUsed * baseFee + OP-Stack L1 data fee).

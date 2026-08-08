@@ -62,12 +62,14 @@ class MarketCosts(BaseModel):
 
     model_config = ConfigDict(extra="forbid", frozen=True)
 
-    # CEX taker fee in bps (Bybit spot 10, Binance spot 10 at inventory time).
+    # CEX taker fee in bps (Bybit xStocks Adventure Zone 20; Binance spot 10).
     cex_taker_fee_bps: Decimal = Field(ge=0)
     # One AMM swap gas in USD (Mantle ~$0.01; BSC differs — set per market).
     gas_usd_per_swap: Decimal = Field(ge=0)
-    # Quote-asset basis wear (Bybit USDT vs Fluxion USDC). 0 when same quote.
-    quote_basis_bps: Decimal = Field(default=Decimal(0), ge=0)
+    # Signed USDC premium over USDT in bps (positive = USDC richer). 0 when CEX
+    # and DEX share the same quote (e.g. Binance USDT ⇄ Pancake USDT). Engine
+    # applies sign by direction (WHI-960); not constrained to >= 0.
+    quote_basis_bps: Decimal = Field(default=Decimal(0))
 
     @field_validator(
         "cex_taker_fee_bps",
