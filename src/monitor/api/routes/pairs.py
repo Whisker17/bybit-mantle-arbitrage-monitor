@@ -28,6 +28,7 @@ from monitor.metrics.pnl_snapshot import (
     build_pnl_pair_snapshot,
     overview_pnl_summary,
 )
+from monitor.metrics.withdrawal import withdrawal_params_from_pair
 from monitor.quotes import now_ms
 from monitor.storage import JournalReader
 from monitor.storage.reader import AddressLabelRow
@@ -94,17 +95,6 @@ def _native_decimals(pair: InventoryPair) -> int:
     if isinstance(pair, BStocksPair):
         return pair.pancake.native_decimals
     return pair.fluxion.native_decimals
-
-
-def _withdrawal_params(pair: InventoryPair) -> tuple[Decimal | None, Decimal]:
-    """Per-pair Bybit withdrawal fee tokens + listed-price multiplier (WHI-961).
-
-    binance-pancake has no measured schedule — returns ``(None, 1)`` so dir2
-    annotates fee_unknown rather than guessing.
-    """
-    if isinstance(pair, BStocksPair):
-        return None, Decimal(1)
-    return pair.asset_withdrawal_fee_tokens, pair.bybit.multiplier
 
 
 def _quote_is_token0_map(inv: InventoryConfig) -> dict[str, bool]:
@@ -182,7 +172,7 @@ def _pnl_snapshot_for_pair(
         if amm_tick is not None
         else None
     )
-    fee_tokens, mult = _withdrawal_params(pair)
+    wd = withdrawal_params_from_pair(pair)
     snap = build_pnl_pair_snapshot(
         pair_id=pair.id,
         bybit=bybit,
@@ -202,8 +192,8 @@ def _pnl_snapshot_for_pair(
             if runtime.quote_max_age_ms is not None
             else state.api.quote_max_age_ms
         ),
-        asset_withdrawal_fee_tokens=fee_tokens,
-        price_multiplier=mult,
+        asset_withdrawal_fee_tokens=wd.asset_fee_tokens,
+        price_multiplier=wd.price_multiplier,
     )
     if cache is not None:
         cache.put(pair.id, snap)

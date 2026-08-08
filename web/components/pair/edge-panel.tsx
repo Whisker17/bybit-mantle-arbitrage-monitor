@@ -15,6 +15,7 @@ import {
   resolveVenues,
   totalWearBps,
   usdTone,
+  withdrawalFeeLabel,
   type DirectionVenues,
 } from "@/lib/format";
 import {
@@ -211,13 +212,10 @@ const WEAR_ROWS: Array<{
 ];
 
 function wearLabel(key: keyof CostBreakdown, costs: CostBreakdown): string {
-  if (key !== "withdrawal_fee_bps") {
-    return WEAR_ROWS.find((r) => r.key === key)?.label ?? String(key);
+  if (key === "withdrawal_fee_bps") {
+    return withdrawalFeeLabel(costs.withdrawal_fee_kind);
   }
-  if (costs.withdrawal_fee_kind === "unknown") return "Withdrawal (unknown)";
-  if (costs.withdrawal_fee_kind === "stable") return "Withdrawal (stable)";
-  if (costs.withdrawal_fee_kind === "asset") return "Withdrawal (asset)";
-  return "Withdrawal";
+  return WEAR_ROWS.find((r) => r.key === key)?.label ?? String(key);
 }
 
 function CostWaterfall({ costs }: { costs: CostBreakdown | null }) {

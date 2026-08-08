@@ -125,6 +125,24 @@ def basis_wear_bps(
     return -usdt_usdc_basis_bps
 
 
+@dataclass(frozen=True, slots=True)
+class WithdrawalFeeParams:
+    """Per-pair token fee schedule for listed-mid conversion (WHI-961).
+
+    ``asset_fee_tokens`` None = unmeasured (dir2 annotates ``unknown``).
+    ``price_multiplier`` is Bybit ``xstockMultiplier`` (listed = dm mid × mult).
+    """
+
+    asset_fee_tokens: Decimal | None = None
+    price_multiplier: Decimal = Decimal(1)
+
+    def __post_init__(self) -> None:
+        if self.price_multiplier <= 0:
+            raise ValueError("price_multiplier must be positive")
+        if self.asset_fee_tokens is not None and self.asset_fee_tokens < 0:
+            raise ValueError("asset_fee_tokens must be >= 0 when set")
+
+
 def withdrawal_fee_usd_for_direction(
     *,
     direction: Direction,
@@ -138,8 +156,8 @@ def withdrawal_fee_usd_for_direction(
       ``stable_fee_usd`` (measured 0 for USDC/USDT Mantle).
     * ``buy_bybit_sell_fluxion`` (dir2) — outbound xStock Bybit→Mantle; charge
       ``asset_fee_tokens × listed_token_price_usd``. When the token fee is
-      unmeasured (``None``), return ``(0, "unknown")`` — never a silent 0
-      without the kind annotation (display-only annotate-and-degrade).
+      unmeasured (``None``) **or** listed mid is non-positive, return
+      ``(0, "unknown")`` — never a silent 0 under the ``asset`` label.
 
     ``listed_token_price_usd`` is the **Bybit listed** mid (de-multiplied mid ×
     ``bybit.multiplier``), not the de-multiplied comparison mid alone.
@@ -150,10 +168,8 @@ def withdrawal_fee_usd_for_direction(
         raise ValueError("asset_fee_tokens must be >= 0 when set")
     if direction == "buy_fluxion_sell_bybit":
         return stable_fee_usd, "stable"
-    if asset_fee_tokens is None:
+    if asset_fee_tokens is None or listed_token_price_usd <= 0:
         return Decimal(0), "unknown"
-    if listed_token_price_usd <= 0:
-        raise ValueError("listed_token_price_usd must be positive")
     return asset_fee_tokens * listed_token_price_usd, "asset"
 
 
@@ -183,7 +199,7 @@ def _costs(
         direction=direction,
         stable_fee_usd=config.stable_withdrawal_fee_usd,
         asset_fee_tokens=asset_withdrawal_fee_tokens,
-        listed_token_price_usd=listed if listed > 0 else Decimal(1),
+        listed_token_price_usd=listed,
     )
     return CostBreakdown(
         bybit_taker_bps=config.bybit_taker_fee_bps,

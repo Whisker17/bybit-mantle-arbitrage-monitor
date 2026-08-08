@@ -205,18 +205,14 @@ def _withdrawal_usd(
     """Direction-aware withdrawal fee in USD (WHI-961).
 
     Listed mid = de-multiplied Bybit mid × price_multiplier (AAPLx / NVDAx / …).
+    Non-positive listed mid on dir2 degrades to ``unknown`` (never silent asset 0).
     """
     listed = bybit_mid * price_multiplier if bybit_mid > 0 else Decimal(0)
-    if listed <= 0 and direction == "buy_bybit_sell_fluxion":
-        # Missing mid — annotate unknown rather than crash unfillable paths.
-        if asset_withdrawal_fee_tokens is None:
-            return Decimal(0), "unknown"
-        return Decimal(0), "asset"
     return withdrawal_fee_usd_for_direction(
         direction=direction,
         stable_fee_usd=config.stable_withdrawal_fee_usd,
         asset_fee_tokens=asset_withdrawal_fee_tokens,
-        listed_token_price_usd=listed if listed > 0 else Decimal(1),
+        listed_token_price_usd=listed,
     )
 
 
@@ -566,21 +562,13 @@ def _unfillable_result(
 ) -> PnlResult:
     g = config.gas_usd_per_swap if gas is None else gas
     basis = _basis_usd(config, size_usd, direction) if size_usd > 0 else Decimal(0)
-    if bybit_mid > 0:
-        withdrawal, withdrawal_kind = _withdrawal_usd(
-            config,
-            direction=direction,
-            bybit_mid=bybit_mid,
-            asset_withdrawal_fee_tokens=asset_withdrawal_fee_tokens,
-            price_multiplier=price_multiplier,
-        )
-    else:
-        withdrawal = Decimal(0)
-        withdrawal_kind = (
-            "stable" if direction == "buy_fluxion_sell_bybit" else "unknown"
-            if asset_withdrawal_fee_tokens is None
-            else "asset"
-        )
+    withdrawal, withdrawal_kind = _withdrawal_usd(
+        config,
+        direction=direction,
+        bybit_mid=bybit_mid if bybit_mid > 0 else Decimal(0),
+        asset_withdrawal_fee_tokens=asset_withdrawal_fee_tokens,
+        price_multiplier=price_multiplier,
+    )
     costs = _zero_costs(
         gas=g, basis=basis, withdrawal=withdrawal, withdrawal_kind=withdrawal_kind
     )

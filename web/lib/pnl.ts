@@ -18,6 +18,7 @@ import {
   fmtNotional,
   fmtUsd,
   parseNum,
+  withdrawalFeeLabel,
   type DirectionVenues,
 } from "./format";
 
@@ -207,16 +208,10 @@ export function usdCostRows(
 ): Array<{ key: string; label: string; value: number }> {
   if (!costs) return [];
   return USD_COST_ROWS.map((r) => {
-    let label = r.label;
-    if (r.key === "withdrawal_fee_usd") {
-      if (costs.withdrawal_fee_kind === "unknown") {
-        label = "Withdrawal (unknown)";
-      } else if (costs.withdrawal_fee_kind === "stable") {
-        label = "Withdrawal (stable)";
-      } else if (costs.withdrawal_fee_kind === "asset") {
-        label = "Withdrawal (asset)";
-      }
-    }
+    const label =
+      r.key === "withdrawal_fee_usd"
+        ? withdrawalFeeLabel(costs.withdrawal_fee_kind)
+        : r.label;
     return {
       key: r.key,
       label,

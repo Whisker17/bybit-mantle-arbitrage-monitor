@@ -31,6 +31,16 @@ soon — anything touching key handling, RPC credentials defaults to at least Hi
 
 ## Open
 
+- **Max-USD `optimal_size` is invariant to a flat withdrawal fee** (Medium, WHI-961).
+  Spec AC asked that adding the flat fee move direction-2 Q\* **up**. The engine
+  maximizes `pnl_usd`; subtracting a constant from every fillable sample cannot
+  move the argmax. The shipped unit test covers the real product claim (bps
+  amortization turns against small clips; bps-optimal size moves up) and charges
+  the fee in USD rows. Changing `optimal_size` to max-bps would break the
+  cash-flow USD objective used by overview Bucket PnL / WHI-824 sort. Revisit
+  only if admission-premium sizing (bot parity) becomes an overview product
+  requirement.
+
 - **Live per-timestamp USDT/USDC basis feed** (Medium, WHI-960 → later).
   Panel ships a signed constant (`quote_basis_bps: 7.5` on bybit-fluxion).
   Owner-measured Bybit daily klines show meaningful range (median daily 4 bps,

@@ -363,8 +363,6 @@ def _format_edge_panels(
                 f"f_slip={fmt_bps(c.fluxion_slip_bps)} "
                 f"gas={fmt_bps(c.gas_bps)} "
                 f"basis={fmt_bps(c.basis_bps)} "
-                f"wd={fmt_bps(c.withdrawal_fee_bps)}"
-                f"{'(?)' if c.withdrawal_fee_kind == 'unknown' else ''} "
                 f"total={fmt_bps(c.total_wear_bps)}"
             )
         lines.append(f"  {_dist_line('all', panel.distribution_all)}")
