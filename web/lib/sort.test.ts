@@ -36,6 +36,7 @@ function row(partial: Partial<PairOverviewRow> & { pair_id: string }): PairOverv
     net_edge_bps: null,
     net_edge_venue: null,
     net_edge_direction: null,
+    net_size_usd: null,
     reference_size_usd: "1000",
     volume_24h: "0",
     trades_24h: 0,

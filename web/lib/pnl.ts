@@ -85,6 +85,76 @@ export function quoteAgedHint(ages: QuoteAgeFields): string | undefined {
   return "aged";
 }
 
+/**
+ * Overview Net @ Q* cell helpers (ADR-0002 / WHI-966).
+ * Mirrors Bucket PnL quote_aged annotations + blank-status labels so
+ * adjacent Net / Bucket PnL columns stay consistent.
+ */
+export type OverviewNetCell = {
+  title: string;
+  /** Visible Q* chip when numeric; null when Net is blank. */
+  sizeLabel: string | null;
+  /**
+   * Visible empty-state label when Net is blank (e.g. "no depth") so the
+   * cell does not show a bare dash next to Bucket PnL's status text.
+   */
+  emptyLabel: string | null;
+  quoteAged: boolean;
+  ageHint?: string;
+};
+
+export function overviewNetCell(
+  row: {
+    net_edge_bps?: string | null;
+    net_size_usd?: string | null;
+    amm_quote_reason?: string | null;
+    pnl_v2?: (QuoteAgeFields & { status?: PnlStatus | null }) | null;
+  },
+  emptyTitle?: string | null,
+): OverviewNetCell {
+  const ages = row.pnl_v2 ?? {};
+  const aged = Boolean(ages.quote_aged);
+  const agedTitle = aged ? quoteAgeTitle(ages) : null;
+  const ageHint = quoteAgedHint(ages);
+  if (row.net_edge_bps == null) {
+    const status = row.pnl_v2?.status ?? null;
+    // Same map as overviewPnlCell — exhaustiveness via Record<PnlStatus, …>.
+    // status==ok with null bps is the rare unfillable-optimal case (server
+    // blanks Net via _has_numeric_optimal); match Bucket PnL's "unfillable".
+    const statusLabel =
+      status == null
+        ? null
+        : status === "ok"
+          ? STATUS_LABEL.no_fillable
+          : STATUS_LABEL[status];
+    const base =
+      emptyTitle ??
+      (statusLabel != null
+        ? `No Q* (${statusLabel})`
+        : "No Q* yet (needs depth + fillable AMM optimal)");
+    return {
+      title: agedTitle ? `${base} · ${agedTitle}` : base,
+      sizeLabel: null,
+      emptyLabel: statusLabel,
+      quoteAged: aged,
+      ageHint,
+    };
+  }
+  const size =
+    row.net_size_usd != null ? `Q*=$${fmtNotional(row.net_size_usd)}` : "Q*";
+  // bps already a fixed-point wire string; keep as-is for stable titles.
+  let title = `Net ${row.net_edge_bps} bps @ ${size} (PnL v2 optimal; same size as Bucket PnL)`;
+  if (agedTitle) title = `${title} · ${agedTitle}`;
+  return {
+    title,
+    sizeLabel:
+      row.net_size_usd != null ? `Q* $${fmtNotional(row.net_size_usd)}` : null,
+    emptyLabel: null,
+    quoteAged: aged,
+    ageHint,
+  };
+}
+
 export function overviewPnlCell(
   pnl: PnlOptimalSummary | null | undefined,
   venues?: DirectionVenues | null,

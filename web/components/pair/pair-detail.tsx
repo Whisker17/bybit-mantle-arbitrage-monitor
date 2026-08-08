@@ -34,6 +34,7 @@ import {
   resolveVenues,
   type DirectionVenues,
 } from "@/lib/format";
+import { overviewNetCell } from "@/lib/pnl";
 import {
   marketAccumulatingMessage,
   marketApiHealthPath,
@@ -262,15 +263,37 @@ export function PairDetail({ marketId, pairId }: Props) {
                 : "AMM mid vs underlying (bps)"
             }
           />
-          <Field
-            label="Net edge"
-            value={fmtOrAmmReason(
-              fmtSignedBps(o.net_edge_bps),
-              o.net_edge_bps,
-              o.amm_quote_reason,
-            )}
-            tone={bpsTone(o.net_edge_bps)}
-          />
+          {(() => {
+            const net = overviewNetCell(
+              o,
+              ammQuoteReasonTitle(o.amm_quote_reason) ?? null,
+            );
+            const netValue =
+              o.net_edge_bps != null
+                ? fmtSignedBps(o.net_edge_bps)
+                : (net.emptyLabel ??
+                  ammQuoteReasonLabel(o.amm_quote_reason) ??
+                  "—");
+            return (
+              <>
+                <Field
+                  label="Net @ Q*"
+                  value={netValue}
+                  tone={bpsTone(o.net_edge_bps)}
+                  title={net.title}
+                />
+                <Field
+                  label="Q*"
+                  value={
+                    o.net_size_usd != null
+                      ? `$${fmtNotional(o.net_size_usd)}`
+                      : "—"
+                  }
+                  title="PnL v2 optimal notional for Net / Bucket PnL"
+                />
+              </>
+            );
+          })()}
           <Field
             label="Direction"
             value={fmtOrAmmReason(
@@ -362,6 +385,7 @@ export function PairDetail({ marketId, pairId }: Props) {
           hasRfq={hasRfq}
           venues={venues}
           marketId={marketId}
+          referenceSizeUsd={o.reference_size_usd}
         />
       </Panel>
 

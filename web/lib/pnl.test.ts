@@ -7,6 +7,7 @@ import { describe, it } from "node:test";
 import {
   isOptimalBucket,
   isThinDepth,
+  overviewNetCell,
   overviewPnlCell,
   pickBucketTable,
   quoteAgeTitle,
@@ -155,6 +156,54 @@ describe("overviewPnlCell", () => {
     assert.match(quoteAgeTitle(ages), /AMM/);
   });
 
+  it("overviewNetCell surfaces Q* size and quote_aged parity (WHI-966)", () => {
+    const aged = overviewNetCell({
+      net_edge_bps: "12.5",
+      net_size_usd: "250",
+      pnl_v2: {
+        quote_aged: true,
+        cex_quote_age_ms: 45_000,
+        amm_quote_age_ms: 800,
+      },
+    });
+    assert.equal(aged.sizeLabel, "Q* $250");
+    assert.equal(aged.quoteAged, true);
+    assert.equal(aged.ageHint, "aged 45s");
+    assert.match(aged.title, /Q\*=\$250/);
+    assert.match(aged.title, /quote aged/);
+
+    const blank = overviewNetCell({
+      net_edge_bps: null,
+      net_size_usd: null,
+      pnl_v2: { status: "no_depth", quote_aged: false },
+    });
+    assert.equal(blank.sizeLabel, null);
+    assert.equal(blank.emptyLabel, "no depth");
+    assert.equal(blank.quoteAged, false);
+    assert.match(blank.title, /no depth/);
+  });
+});
+
+describe("overviewNetCell empty title passthrough", () => {
+  it("uses caller empty title when Net is blank", () => {
+    const cell = overviewNetCell(
+      { net_edge_bps: null, net_size_usd: null },
+      "empty pool",
+    );
+    assert.equal(cell.title, "empty pool");
+  });
+
+  it("maps ok+null-bps blank Net to unfillable (parity with Bucket PnL)", () => {
+    const cell = overviewNetCell({
+      net_edge_bps: null,
+      net_size_usd: null,
+      pnl_v2: { status: "ok", quote_aged: false },
+    });
+    assert.equal(cell.emptyLabel, "unfillable");
+  });
+});
+
+describe("status labels", () => {
   it("labels empty_pool / invalid_mid / pricing_anomaly distinctly from no_pool", () => {
     const empty = overviewPnlCell({
       status: "empty_pool",

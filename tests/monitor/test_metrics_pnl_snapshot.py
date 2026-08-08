@@ -5,6 +5,7 @@ from __future__ import annotations
 from decimal import Decimal
 
 from monitor.metrics import (
+    PnlOptimalSummary,
     build_pnl_pair_snapshot,
     levels_from_depth_curve,
     load_metrics_config,
@@ -613,6 +614,65 @@ def test_empty_reconstructed_depth_is_no_depth() -> None:
     )
     assert snap.has_depth is False
     assert snap.status == "no_depth"
+
+
+def test_overview_net_wire_ok_matches_optimal() -> None:
+    """ADR-0002: ok summary drives Net from the same Q* bps / direction / size."""
+    summary = PnlOptimalSummary(
+        status="ok",
+        has_depth=True,
+        direction="buy_fluxion_sell_bybit",
+        optimal_notional_usd=Decimal("247.5"),
+        optimal_net_pnl_usd=Decimal("1.25"),
+        optimal_net_pnl_bps=Decimal("50.505"),
+        quote_aged=True,
+        cex_quote_age_ms=45_000,
+    )
+    wire = summary.overview_net_wire()
+    assert wire["net_edge_bps"] == "50.505"
+    assert wire["net_edge_venue"] == "amm"
+    assert wire["net_edge_direction"] == "buy_fluxion_sell_bybit"
+    assert wire["net_size_usd"] == "247.5"
+    # Sign agreement with Bucket PnL flat keys on the same summary.
+    usd, bps = summary.flat_sort_fields()
+    assert usd is not None and bps is not None
+    assert Decimal(wire["net_edge_bps"]) == bps
+    assert (Decimal(wire["net_edge_bps"]) > 0) == (bps > 0)
+
+
+def test_overview_net_wire_blank_when_non_ok() -> None:
+    """Non-ok PnL must not fall back to M3 $1K Net (structural sign trap)."""
+    for status in (
+        "no_depth",
+        "no_pool",
+        "empty_pool",
+        "no_book",
+        "pricing_anomaly",
+        "no_fillable",
+        "stale",
+    ):
+        summary = PnlOptimalSummary(status=status, has_depth=status != "no_depth")
+        wire = summary.overview_net_wire()
+        assert wire["net_edge_bps"] is None, status
+        assert wire["net_edge_venue"] is None, status
+        assert wire["net_edge_direction"] is None, status
+        assert wire["net_size_usd"] is None, status
+
+
+def test_overview_net_wire_negative_ok_keeps_sign() -> None:
+    """Negative optimal PnL remains first-class on Net (same as Bucket PnL)."""
+    summary = PnlOptimalSummary(
+        status="ok",
+        has_depth=True,
+        direction="buy_bybit_sell_fluxion",
+        optimal_notional_usd=Decimal(180),
+        optimal_net_pnl_usd=Decimal("-0.9"),
+        optimal_net_pnl_bps=Decimal("-50"),
+    )
+    wire = summary.overview_net_wire()
+    assert Decimal(wire["net_edge_bps"]) < 0
+    assert Decimal(wire["net_edge_bps"]) == summary.optimal_net_pnl_bps
+    assert wire["net_edge_direction"] == "buy_bybit_sell_fluxion"
 
 
 def test_checked_in_metrics_still_loads() -> None:

@@ -9,6 +9,7 @@ import {
   fmtDirection,
   fmtDirectionTitle,
   fmtNotional,
+  fmtReferenceSize,
   fmtSignedBps,
   fmtUsd,
   parseNum,
@@ -47,6 +48,11 @@ type Props = {
   /** Explicit venues preferred over marketId split (WHI-780). */
   venues?: DirectionVenues | null;
   marketId?: string;
+  /**
+   * M3 breach / EdgeStats fixed rung (from overview.reference_size_usd).
+   * Secondary diagnostic — not overview Net (ADR-0002 / WHI-966).
+   */
+  referenceSizeUsd?: string | null;
 };
 
 const DIRECTION_IDS: Direction[] = [
@@ -61,6 +67,7 @@ export function EdgeStatsPanel({
   hasRfq = true,
   venues: venuesProp,
   marketId,
+  referenceSizeUsd,
 }: Props) {
   const venues = resolveVenues(venuesProp, marketId);
   const directions = DIRECTION_IDS.map((id) => ({
@@ -70,6 +77,7 @@ export function EdgeStatsPanel({
   const [direction, setDirection] = useState<Direction>(
     "buy_fluxion_sell_bybit",
   );
+  const breachLabel = fmtReferenceSize(referenceSizeUsd);
 
   // Prefer best optimal direction once the API payload arrives / updates.
   useEffect(() => {
@@ -86,9 +94,12 @@ export function EdgeStatsPanel({
   return (
     <div className="space-y-3">
       <p className="text-[10px] text-muted-foreground">
-        Net paper edge (M3) — cumulative over recent journal book samples
-        (each distribution row prints its own n=). PnL v2 below is cash-flow
-        at fixed USD buckets + sample-best optimal size.
+        M3 paper edge + cumulative EdgeStats at fixed{" "}
+        <strong>breach size {breachLabel}</strong> (secondary diagnostic; not
+        the overview headline). Overview <strong>Net</strong> uses PnL v2{" "}
+        <strong>Q*</strong> (ADR-0002). Each distribution row prints its own
+        n=. PnL v2 below is cash-flow at fixed USD buckets + sample-best
+        optimal size.
       </p>
       <div
         className={cn(

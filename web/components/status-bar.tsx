@@ -1,6 +1,6 @@
 import { Badge } from "@/components/ui/badge";
 import { cn } from "@/lib/cn";
-import { fmtAgeMs, fmtSession, fmtTsMs } from "@/lib/format";
+import { fmtAgeMs, fmtReferenceSize, fmtSession, fmtTsMs } from "@/lib/format";
 import type { HealthResponse, OverviewResponse } from "@/lib/types";
 
 type Props = {
@@ -114,14 +114,12 @@ export function StatusBar({
           </span>
         </span>
 
-        {overview?.reference_size_usd != null && (
-          <span>
-            net@{" "}
-            <span className="tabular-nums text-foreground">
-              ${Number(overview.reference_size_usd).toLocaleString()}
-            </span>
-          </span>
-        )}
+        <span
+          title={`Overview Net is at PnL v2 optimal size Q* per row (ADR-0002). Detail EdgeStats remain secondary at fixed M3 ${fmtReferenceSize(overview?.reference_size_usd)}.`}
+        >
+          net@{" "}
+          <span className="tabular-nums text-foreground">Q*</span>
+        </span>
       </div>
     </div>
   );

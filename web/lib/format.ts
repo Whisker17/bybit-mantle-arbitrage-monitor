@@ -202,6 +202,21 @@ export function fmtUtcHm(tsMs: number | null | undefined): string {
   return `${hh}:${mm}`;
 }
 
+/**
+ * Fixed M3 reference / breach size for secondary EdgeStats copy (WHI-966).
+ * Falls back to "reference size" when the overview wire field is missing.
+ */
+export function fmtReferenceSize(
+  value: string | number | null | undefined,
+): string {
+  if (value === null || value === undefined || value === "") {
+    return "reference size";
+  }
+  const n = typeof value === "number" ? value : Number(value);
+  if (!Number.isFinite(n)) return "reference size";
+  return `$${n.toLocaleString()}`;
+}
+
 /** Signed USD (PnL v2). Compact for overview cells. */
 export function fmtUsd(
   value: string | number | null | undefined,
