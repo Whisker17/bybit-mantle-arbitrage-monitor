@@ -31,6 +31,9 @@ export type PnlStatus =
  */
 export type AmmQuoteReason = "empty_pool" | "invalid_mid" | "pricing_anomaly";
 
+/** Overview / detail CEX Vol blank reason when REST is unavailable (WHI-974). */
+export type CexVolumeReason = "geo_blocked";
+
 /**
  * Why a row is denied a Top-N seat (WHI-796 + WHI-822). UI maps via format
  * helpers; eligibility lives in web/lib/sort.ts.
@@ -214,7 +217,7 @@ export type PairOverviewRow = {
    * exchange REST path is blocked from this host (WS unaffected). Journal
    * derived volume stays on the pair detail panel only.
    */
-  cex_volume_reason?: "geo_blocked" | null;
+  cex_volume_reason?: CexVolumeReason | null;
   /** WHI-779: underlying equity reference + tokenized premium. */
   underlying_ticker?: string | null;
   underlying_price?: string | null;
@@ -359,7 +362,7 @@ export type VolumeCompare = {
   cex_journal: CexJournalVolumeWindow | null;
   volume_ratio: string | null;
   /** WHI-974: same vocabulary as overview row. */
-  cex_volume_reason?: "geo_blocked" | null;
+  cex_volume_reason?: CexVolumeReason | null;
 };
 
 /** Market journal readiness for overview / markets list (WHI-774). */

@@ -1,6 +1,7 @@
 import type {
   AmmQuoteReason,
   CaptureStatus,
+  CexVolumeReason,
   DexNonTradeableReason,
   Direction,
   SessionKind,
@@ -15,9 +16,7 @@ const AMM_QUOTE_REASON_LABEL: Record<AmmQuoteReason, string> = {
   pricing_anomaly: "price anomaly",
 };
 
-/** Overview CEX Vol / ratio blank reason (WHI-974). */
-export type CexVolumeReason = "geo_blocked";
-
+/** Overview CEX Vol / ratio blank reason labels (WHI-974). */
 const CEX_VOLUME_REASON_LABEL: Record<CexVolumeReason, string> = {
   geo_blocked: "geo blocked",
 };

@@ -57,7 +57,7 @@ from monitor.metrics.volume import (
     CexVolumeReason,
     VolumeCompare,
     build_volume_compare,
-    resolve_cex_volume_reason,
+    resolve_cex_volume_gate,
 )
 from monitor.metrics.withdrawal import withdrawal_params_from_pair
 from monitor.quotes import (
@@ -419,19 +419,20 @@ def _volume_compare_for_pair(
         jwin = aggregate_cex_journal_volume(
             journal, since_ms=since_ms, now_ms=now_ms, metrics=metrics
         )
-    cex_vol = None if cex is None else cex.volume_quote_24h
-    cex_n = None if cex is None else cex.trade_count_24h
+    gated_tick, out_reason = resolve_cex_volume_gate(
+        cex_tick=cex, meta_reason=reason
+    )
+    cex_vol = None if gated_tick is None else gated_tick.volume_quote_24h
+    cex_n = None if gated_tick is None else gated_tick.trade_count_24h
     return VolumeCompare(
         cex_volume_24h=cex_vol,
         cex_trade_count_24h=cex_n,
-        cex_source=None if cex is None else cex.source,
-        cex_poll_ts_ms=None if cex is None else cex.poll_ts_ms,
+        cex_source=None if gated_tick is None else gated_tick.source,
+        cex_poll_ts_ms=None if gated_tick is None else gated_tick.poll_ts_ms,
         dex=dex,
         cex_journal=jwin,
         volume_ratio=volume_ratio(cex_vol, notional),
-        cex_volume_reason=resolve_cex_volume_reason(
-            cex_tick=cex, meta_reason=reason
-        ),
+        cex_volume_reason=out_reason,
     )
 
 
