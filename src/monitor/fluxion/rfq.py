@@ -222,6 +222,10 @@ class RfqPoller:
                 )
 
             recv = now_ms()
+            # side_hint only for productive 200 bodies (vendor side may still
+            # win). Non-200/204 and empty 200 keep side=NULL so
+            # latest_rfq_quote's side filter does not blank the last good quote
+            # with an intermittent 451 (WHI-974 review).
             tick = parse_rfq_response(
                 pair_id=pair.id,
                 token_in=token_in,
@@ -232,7 +236,7 @@ class RfqPoller:
                 http_status=status,
                 body=body,
                 gap=gap,
-                side_hint=leg,
+                side_hint=leg if status == 200 else None,
             )
             ticks.append(tick)
             # Reachable product response ends the failover chain; errors try next URL.
@@ -253,7 +257,7 @@ class RfqPoller:
                     http_status=0,
                     body=None,
                     gap=gap,
-                    side_hint=leg,
+                    side_hint=None,
                 )
             )
         return ticks

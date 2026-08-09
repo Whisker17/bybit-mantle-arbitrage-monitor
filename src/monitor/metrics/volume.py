@@ -103,6 +103,17 @@ def volume_ratio(cex: Decimal | None, dex: Decimal) -> Decimal | None:
     return cex / dex
 
 
+def resolve_cex_volume_reason(
+    *,
+    cex_tick: CexVolumeTick | None,
+    meta_reason: CexVolumeReason | None,
+) -> CexVolumeReason | None:
+    """REST present clears a geo_blocked annotation (overview + detail share)."""
+    if cex_tick is not None:
+        return None
+    return meta_reason
+
+
 def aggregate_dex_volume(
     swaps: list[FluxionSwapTick],
     *,
@@ -271,10 +282,9 @@ def build_volume_compare(
         cex_n = cex_tick.trade_count_24h
         cex_src = cex_tick.source
         cex_poll = cex_tick.poll_ts_ms
-        # REST present → clear blank reason even if meta is stale mid-poll.
-        reason: CexVolumeReason | None = None
-    else:
-        reason = cex_volume_reason
+    reason = resolve_cex_volume_reason(
+        cex_tick=cex_tick, meta_reason=cex_volume_reason
+    )
 
     journal = None
     if journal_trades is not None:
@@ -284,9 +294,11 @@ def build_volume_compare(
             now_ms=now_ms,
             metrics=metrics,
         )
-    # Do NOT back-fill cex_trade_count_24h from journal when REST is missing —
-    # that mixed a journal count next to a blank REST volume (WHI-974).
-    # Journal print count lives only under cex_journal.trade_count.
+    # Bybit REST omits trade count; when the REST tick is present, journal
+    # prints are a secondary count only. Never fill count when volume is blank
+    # (geo_blocked / no poll) — that mixed sources next to a null volume (WHI-974).
+    if cex_n is None and journal is not None and cex_tick is not None:
+        cex_n = journal.trade_count
 
     return VolumeCompare(
         cex_volume_24h=cex_vol,

@@ -35,7 +35,9 @@ META_CEX_VOLUME_FIRST_MS = "cex_volume_blocked_first_ms"
 META_CEX_VOLUME_LAST_MS = "cex_volume_blocked_last_ms"
 META_CEX_VOLUME_DETAIL = "cex_volume_detail"
 
-OnBlockedChange = Callable[
+CexVolumeStatus = Literal["ok", "geo_blocked", "error"]
+
+OnCexVolumeStatus = Callable[
     [dict[str, str]], Coroutine[Any, Any, None] | None
 ]
 
@@ -59,7 +61,7 @@ class CexVolumePoller:
         poll_interval_s: float = 60.0,
         http_timeout_s: float = 15.0,
         client: httpx.AsyncClient | None = None,
-        on_status: OnBlockedChange | None = None,
+        on_status: OnCexVolumeStatus | None = None,
     ) -> None:
         if not pair_id_by_symbol:
             raise ValueError("pair_id_by_symbol must be non-empty")
@@ -77,15 +79,15 @@ class CexVolumePoller:
         self._owns_client = client is None
         self._stop = asyncio.Event()
         self._on_status = on_status
-        # None = never observed; "ok" | "geo_blocked" | "error"
-        self._state: str | None = None
+        # None = never observed.
+        self._state: CexVolumeStatus | None = None
         self._blocked_first_ms: int | None = None
 
     def request_stop(self) -> None:
         self._stop.set()
 
     @property
-    def state(self) -> str | None:
+    def state(self) -> CexVolumeStatus | None:
         return self._state
 
     def _host(self) -> str:
@@ -93,7 +95,7 @@ class CexVolumePoller:
 
     async def _publish_status(
         self,
-        status: str,
+        status: CexVolumeStatus,
         *,
         http_status: int | None = None,
         detail: str = "",
@@ -122,21 +124,15 @@ class CexVolumePoller:
 
     async def _transition(
         self,
-        new_state: str,
+        new_state: CexVolumeStatus,
         *,
         http_status: int | None = None,
         detail: str = "",
         exc: BaseException | None = None,
     ) -> None:
         prev = self._state
-        if new_state == prev and new_state == "geo_blocked":
-            # Stay quiet on repeated geo blocks; refresh last-seen meta only.
-            await self._publish_status(
-                new_state, http_status=http_status, detail=detail
-            )
-            return
-        if new_state == prev and new_state == "error":
-            # Recurring non-geo errors: still quiet after first (no traceback loop).
+        if new_state == prev and new_state in ("geo_blocked", "error"):
+            # Stay quiet on repeated failures; refresh last-seen meta only.
             await self._publish_status(
                 new_state, http_status=http_status, detail=detail
             )

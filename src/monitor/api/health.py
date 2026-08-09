@@ -276,39 +276,28 @@ def recovery_hint_for_state(
     return None
 
 
-def _cex_volume_block_from_meta(
-    reader: JournalReader,
-) -> dict[str, Any]:
-    """Read WHI-974 CEX volume REST block state from journal meta."""
-    status = reader.get_meta(META_CEX_VOLUME_STATUS)
-    venue = reader.get_meta(META_CEX_VOLUME_VENUE)
-    host = reader.get_meta(META_CEX_VOLUME_HOST)
-    http_raw = reader.get_meta(META_CEX_VOLUME_HTTP_STATUS)
-    first_raw = reader.get_meta(META_CEX_VOLUME_FIRST_MS)
-    last_raw = reader.get_meta(META_CEX_VOLUME_LAST_MS)
+@dataclass(frozen=True, slots=True)
+class CexVolumeBlock:
+    """CEX REST volume block state from journal meta (WHI-974)."""
+
+    status: str | None
+    venue: str | None
+    host: str | None
     http_status: int | None
-    try:
-        http_status = int(http_raw) if http_raw not in (None, "") else None
-    except ValueError:
-        http_status = None
-    first_ms: int | None
-    try:
-        first_ms = int(first_raw) if first_raw not in (None, "") else None
-    except ValueError:
-        first_ms = None
-    last_ms: int | None
-    try:
-        last_ms = int(last_raw) if last_raw not in (None, "") else None
-    except ValueError:
-        last_ms = None
-    return {
-        "cex_volume_status": status,
-        "cex_volume_venue": venue,
-        "cex_volume_host": host,
-        "cex_volume_http_status": http_status,
-        "cex_volume_blocked_first_ms": first_ms,
-        "cex_volume_blocked_last_ms": last_ms,
-    }
+    blocked_first_ms: int | None
+    blocked_last_ms: int | None
+
+
+def _cex_volume_block_from_meta(reader: JournalReader) -> CexVolumeBlock:
+    """Read WHI-974 CEX volume REST block state from journal meta."""
+    return CexVolumeBlock(
+        status=reader.get_meta(META_CEX_VOLUME_STATUS),
+        venue=reader.get_meta(META_CEX_VOLUME_VENUE),
+        host=reader.get_meta(META_CEX_VOLUME_HOST),
+        http_status=_meta_int(reader, META_CEX_VOLUME_HTTP_STATUS),
+        blocked_first_ms=_meta_int(reader, META_CEX_VOLUME_FIRST_MS),
+        blocked_last_ms=_meta_int(reader, META_CEX_VOLUME_LAST_MS),
+    )
 
 
 def build_health(
@@ -445,5 +434,10 @@ def build_health(
         rfq_availability_among_reachable=rfq_cov.availability_among_reachable,
         rfq_http_status_counts=rfq_cov.by_status,
         rfq_coverage_window_ms=rfq_error_window_ms,
-        **cex_block,
+        cex_volume_status=cex_block.status,
+        cex_volume_venue=cex_block.venue,
+        cex_volume_host=cex_block.host,
+        cex_volume_http_status=cex_block.http_status,
+        cex_volume_blocked_first_ms=cex_block.blocked_first_ms,
+        cex_volume_blocked_last_ms=cex_block.blocked_last_ms,
     )

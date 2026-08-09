@@ -420,10 +420,10 @@ def _volume_compare_for_pair(
         jwin = aggregate_cex_journal_volume(
             journal, since_ms=since_ms, now_ms=now_ms, metrics=metrics
         )
+    from monitor.metrics.volume import resolve_cex_volume_reason
+
     cex_vol = None if cex is None else cex.volume_quote_24h
     cex_n = None if cex is None else cex.trade_count_24h
-    # REST present clears the geo_blocked annotation (same as build_volume_compare).
-    out_reason: CexVolumeReason | None = None if cex is not None else reason
     return VolumeCompare(
         cex_volume_24h=cex_vol,
         cex_trade_count_24h=cex_n,
@@ -432,7 +432,9 @@ def _volume_compare_for_pair(
         dex=dex,
         cex_journal=jwin,
         volume_ratio=volume_ratio(cex_vol, notional),
-        cex_volume_reason=out_reason,
+        cex_volume_reason=resolve_cex_volume_reason(
+            cex_tick=cex, meta_reason=reason
+        ),
     )
 
 

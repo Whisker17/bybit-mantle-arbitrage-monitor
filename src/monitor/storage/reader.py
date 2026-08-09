@@ -1060,29 +1060,33 @@ def rfq_quote_coverage(
     *,
     since_ms: int = 0,
 ) -> RfqQuoteCoverage:
-    """Aggregate RFQ poll outcomes; errors do not inflate availability (WHI-974)."""
+    """Aggregate RFQ poll outcomes; errors do not inflate availability (WHI-974).
+
+    ``availability_among_reachable`` is the share of HTTP-200 rows among
+    reachable product responses (200 + 204). Error/transport rows are counted
+    separately via ``error_rate`` and never enter that denominator.
+    """
+    from monitor.fluxion.rfq import is_rfq_http_error
+
     by_status = reader.rfq_http_status_counts(since_ms=since_ms)
     ok_200 = by_status.get(200, 0)
     no_quote_204 = by_status.get(204, 0)
     transport_rows = by_status.get(0, 0)
-    error_rows = sum(
-        n for status, n in by_status.items() if status > 0 and status not in (200, 204)
-    )
+    error_rows = sum(n for status, n in by_status.items() if is_rfq_http_error(status))
     total = sum(by_status.values())
-    # available_rows requires a second pass only when we care about price presence;
-    # for health rate, 200-count is the practical "got a quote body" proxy. Callers
-    # that need exact available flags can re-query; keep this O(1) group-by.
-    available_rows = ok_200
+    # Group-by cannot see per-row ``available`` (price parse). 200-count is the
+    # O(1) proxy for "endpoint returned a quote body"; rename not needed on the
+    # wire because the field documents the 200-share of reachable.
     reachable = ok_200 + no_quote_204
     error_rate = (error_rows / total) if total > 0 else None
-    availability = (available_rows / reachable) if reachable > 0 else None
+    availability = (ok_200 / reachable) if reachable > 0 else None
     return RfqQuoteCoverage(
         total_rows=total,
         ok_200=ok_200,
         no_quote_204=no_quote_204,
         error_rows=error_rows,
         transport_rows=transport_rows,
-        available_rows=available_rows,
+        available_rows=ok_200,
         error_rate=error_rate,
         availability_among_reachable=availability,
         by_status=dict(sorted(by_status.items())),

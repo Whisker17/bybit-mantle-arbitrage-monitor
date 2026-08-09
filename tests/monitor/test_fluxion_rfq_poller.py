@@ -62,7 +62,11 @@ def _rfq_cfg() -> RfqConfig:
 
 
 def test_parse_rfq_451_error_row() -> None:
-    """Non-200/204 → available=False, price null, status preserved (WHI-974)."""
+    """Non-200/204 → available=False, price null, status preserved (WHI-974).
+
+    side stays None on errors so latest_rfq_quote's side filter does not blank
+    the last good quote with an intermittent 451.
+    """
     tick = parse_rfq_response(
         pair_id="TSLAx",
         token_in="0x44",
@@ -72,13 +76,13 @@ def test_parse_rfq_451_error_row() -> None:
         recv_ts_ms=2,
         http_status=451,
         body=None,
-        side_hint="buy_native",
+        side_hint=None,
     )
     assert tick.available is False
     assert tick.price is None
     assert tick.amount_out is None
     assert tick.http_status == 451
-    assert tick.side == "buy_native"
+    assert tick.side is None
     assert is_rfq_http_error(451)
     assert not is_rfq_http_error(200)
     assert not is_rfq_http_error(204)
@@ -124,7 +128,7 @@ def test_poll_one_persists_451_then_failover_success() -> None:
     assert err.http_status == 451
     assert err.available is False
     assert err.price is None
-    assert err.side == "buy_native"
+    assert err.side is None  # errors stay unscoped for latest_rfq_quote
     assert ok.http_status == 200
     assert ok.available is True
     assert ok.price == Decimal("250.5")
@@ -152,7 +156,7 @@ def test_poll_one_both_urls_451_only_error_rows() -> None:
     assert len(ticks) >= 1
     assert all(t.http_status == 451 for t in ticks)
     assert all(not t.available for t in ticks)
-    assert all(t.side == "sell_native" for t in ticks)
+    assert all(t.side is None for t in ticks)
 
 
 def test_coverage_stats_exclude_errors_from_availability(tmp_path: Path) -> None:
