@@ -34,6 +34,12 @@ curl -sI localhost:8010/             # text/html from StaticFiles
 curl -s  localhost:8010/__meta       # discovery index (stable path)
 ```
 
+Mount is decided at API process start: if `/opt/xstocks/www` did not exist when
+`xstocks-api` started, create/rsync it and `sudo systemctl restart xstocks-api`
+once (or re-run a full `./scripts/deploy-web.sh` without `--www-only`). An empty
+dir is enough to attach the mount; later rsyncs fill files without another
+restart.
+
 `config/api.yaml` defaults:
 
 | key | value | why |

@@ -2,6 +2,7 @@
 
 from __future__ import annotations
 
+import logging
 import os
 from collections.abc import AsyncIterator
 from contextlib import asynccontextmanager
@@ -27,6 +28,8 @@ from monitor.markets import (
 )
 from monitor.storage import JournalReader
 from monitor.tui.config import TuiConfig, load_tui_config, validate_tui_against_metrics
+
+logger = logging.getLogger(__name__)
 
 # Discovery index — lives at /__meta always (and at / when static serving is off).
 # StaticFiles mounts at / shadow a root route, so the stable path is /__meta (WHI-979).
@@ -226,6 +229,14 @@ def create_app(
             name="web",
         )
     else:
+        if static_path is not None:
+            # Configured path but absent — silent API-only would look like a
+            # dead panel over the tunnel (rsync missed / wrong REMOTE_WWW).
+            logger.warning(
+                "static_dir %s configured but not a directory — API-only "
+                "(create the dir and restart the API after rsync)",
+                static_path,
+            )
 
         @application.get("/")
         def root() -> dict[str, Any]:

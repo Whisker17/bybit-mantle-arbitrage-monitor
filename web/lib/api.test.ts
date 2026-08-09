@@ -1,3 +1,12 @@
+/**
+ * Unit tests for fetchJson failure messages (WHI-979).
+ *
+ * NEXT_PUBLIC_API_BASE is inlined at `next build` time in the static export;
+ * these tests mutate process.env at runtime under tsx and therefore exercise
+ * the Node/dev path, not the browser bundle's frozen literal. The valuable
+ * assertions are the error-message shapes (base named, tunnel hints) — do not
+ * "fix" production to read env at runtime based on green results here.
+ */
 import assert from "node:assert/strict";
 import { afterEach, describe, it } from "node:test";
 
