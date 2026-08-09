@@ -10,6 +10,7 @@ from typing import Any
 
 from fastapi import FastAPI
 from fastapi.middleware.cors import CORSMiddleware
+from fastapi.staticfiles import StaticFiles
 
 from monitor.api.capture_cache import CaptureSnapshotCache
 from monitor.api.config import ApiConfig, load_api_config
@@ -26,6 +27,20 @@ from monitor.markets import (
 )
 from monitor.storage import JournalReader
 from monitor.tui.config import TuiConfig, load_tui_config, validate_tui_against_metrics
+
+# Discovery index — lives at /__meta always (and at / when static serving is off).
+# StaticFiles mounts at / shadow a root route, so the stable path is /__meta (WHI-979).
+_DISCOVERY: dict[str, Any] = {
+    "service": "monitor.api",
+    "docs": "/docs",
+    "openapi": "/openapi.json",
+    "markets": "/api/markets",
+    "health": "/api/health",
+    "pairs": "/api/pairs",
+    "market_health": "/api/{market}/health",
+    "market_pairs": "/api/{market}/pairs",
+    "meta": "/__meta",
+}
 
 
 def _inventory_pair_count(inventory: dict[str, Any]) -> int:
@@ -173,13 +188,16 @@ def create_app(
             "Reuses monitor.tui builders + M3/M4 metrics (WHI-757 / WHI-774). "
             "Clients should poll GET /api/{market}/pairs and GET /api/{market}/health "
             "every ~2s (see config/api.yaml poll_interval_s). "
-            "Legacy unscoped /api/pairs and /api/health map to the default market."
+            "Legacy unscoped /api/pairs and /api/health map to the default market. "
+            "Service discovery is at GET /__meta (GET / is the static panel when "
+            "config static_dir is set and the directory exists — WHI-979)."
         ),
         version="0.1.0",
         lifespan=lifespan,
     )
 
-    # CORS empty on VPS (nginx same-origin). Local dogfood can list origins.
+    # CORS empty on VPS (same-origin static from this process). Local dogfood
+    # with NEXT_PUBLIC_API_BASE can list origins.
     if resolved_api.cors_origins:
         application.add_middleware(
             CORSMiddleware,
@@ -192,18 +210,26 @@ def create_app(
     application.include_router(health_routes.router)
     application.include_router(pairs_routes.router)
 
-    @application.get("/")
-    def root() -> dict[str, Any]:
-        """Tiny discovery index (OpenAPI is the real contract)."""
-        return {
-            "service": "monitor.api",
-            "docs": "/docs",
-            "openapi": "/openapi.json",
-            "markets": "/api/markets",
-            "health": "/api/health",
-            "pairs": "/api/pairs",
-            "market_health": "/api/{market}/health",
-            "market_pairs": "/api/{market}/pairs",
-        }
+    @application.get("/__meta")
+    def meta() -> dict[str, Any]:
+        """Stable discovery index (OpenAPI is the real contract)."""
+        return dict(_DISCOVERY)
+
+    # Mount static export last so it cannot swallow /api/*, /docs, /openapi.json,
+    # or /__meta. Only when configured and the directory exists; missing export
+    # must not invent a catch-all SPA shell (404 stays 404 — WHI-979).
+    static_path = resolved_api.resolved_static_dir()
+    if static_path is not None and static_path.is_dir():
+        application.mount(
+            "/",
+            StaticFiles(directory=str(static_path), html=True),
+            name="web",
+        )
+    else:
+
+        @application.get("/")
+        def root() -> dict[str, Any]:
+            """Discovery at / when static serving is off (dev/tests parity)."""
+            return dict(_DISCOVERY)
 
     return application

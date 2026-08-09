@@ -8,7 +8,7 @@
     "start": "next start",
     "lint": "next lint",
     "typecheck": "tsc --noEmit",
-    "test": "npm run typecheck && tsx --test lib/format.test.ts lib/sort.test.ts lib/pair-ids.test.ts lib/spread-chart.test.ts lib/pnl.test.ts lib/mm.test.ts lib/inventory-chart.test.ts lib/markets.test.ts"
+    "test": "npm run typecheck && tsx --test lib/format.test.ts lib/sort.test.ts lib/pair-ids.test.ts lib/spread-chart.test.ts lib/pnl.test.ts lib/mm.test.ts lib/inventory-chart.test.ts lib/markets.test.ts lib/api.test.ts"
   },
   "dependencies": {
     "clsx": "^2.1.1",

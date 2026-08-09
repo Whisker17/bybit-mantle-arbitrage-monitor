@@ -28,7 +28,7 @@ Environment=PYTHONUNBUFFERED=1
 ExecStart=/opt/xstocks/app/.venv/bin/python -m monitor.api --market bybit-fluxion
 Restart=on-failure
 RestartSec=3
-# Hard caps — leave headroom for collector + nginx + OS on a 1GB VPS.
+# Hard caps — leave headroom for collector + OS on a 1GB VPS.
 MemoryMax=256M
 MemoryHigh=200M
 # No write access needed beyond reading the journal + logs.

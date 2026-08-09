@@ -12,7 +12,7 @@
 #   ./scripts/deploy-web.sh user@host --www-only
 #
 # Layout expected on the remote (override with env):
-#   REMOTE_WWW=/opt/xstocks/www          # nginx root
+#   REMOTE_WWW=/opt/xstocks/www          # FastAPI static_dir (same-origin panel)
 #   REMOTE_APP=/opt/xstocks/app          # python package checkout
 #   SYSTEMD_UNIT=xstocks-api             # restarted after code sync
 #

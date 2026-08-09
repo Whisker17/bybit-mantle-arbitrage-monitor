@@ -28,12 +28,55 @@ def test_load_default_api_config() -> None:
         "http://127.0.0.1:3000",
         "http://localhost:3000",
     ]
+    # WHI-979: VPS static export path; mount only if the directory exists.
+    assert cfg.static_dir == "/opt/xstocks/www"
+    assert cfg.resolved_static_dir() == Path("/opt/xstocks/www")
 
 
 def test_resolved_sqlite_path_relative(tmp_path: Path) -> None:
     cfg = load_api_config()
     resolved = cfg.resolved_sqlite_path(cwd=tmp_path)
     assert resolved == (tmp_path / "data" / "monitor-bybit-fluxion.db").resolve()
+
+
+def test_resolved_static_dir_relative(tmp_path: Path) -> None:
+    path = tmp_path / "api.yaml"
+    path.write_text(
+        """version: 1
+host: 127.0.0.1
+port: 8000
+sqlite_path: data/monitor.db
+collector_stale_ms: 30000
+recent_gap_window_ms: 300000
+poll_interval_s: 2.0
+static_dir: web/out
+cors_origins: []
+""",
+        encoding="utf-8",
+    )
+    cfg = load_api_config(path)
+    assert cfg.static_dir == "web/out"
+    assert cfg.resolved_static_dir(cwd=tmp_path) == (tmp_path / "web" / "out").resolve()
+
+
+def test_empty_static_dir_is_none(tmp_path: Path) -> None:
+    path = tmp_path / "api.yaml"
+    path.write_text(
+        """version: 1
+host: 127.0.0.1
+port: 8000
+sqlite_path: data/monitor.db
+collector_stale_ms: 30000
+recent_gap_window_ms: 300000
+poll_interval_s: 2.0
+static_dir: ""
+cors_origins: []
+""",
+        encoding="utf-8",
+    )
+    cfg = load_api_config(path)
+    assert cfg.static_dir is None
+    assert cfg.resolved_static_dir() is None
 
 
 def test_missing_config_fails_fast(tmp_path: Path) -> None:

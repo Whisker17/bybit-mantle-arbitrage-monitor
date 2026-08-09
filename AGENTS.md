@@ -66,6 +66,12 @@ placeholders. Agents must not assume a module exists until its issue lands. -->
     SQLite; reuses TUI builders), `web/` (Next.js static export), `deploy/` +
     `scripts/deploy-web.sh` (systemd + nginx). Tunables in `config/api.yaml`.
     TUI frozen for new features — Web is the surface for new metrics.
+  - **Same-origin static panel (WHI-979) landed:** FastAPI serves `web/out`
+    from `static_dir` (`/opt/xstocks/www` on VPS) when the directory exists —
+    one tunnel to `127.0.0.1:8000` for panel + `/api/*`; discovery at
+    `GET /__meta`. `fetchJson` names the resolved API base on network failure
+    (dead tunnel / wrong `-L` port). arb-bot-vps: no nginx, no public listener;
+    keepalive tunnel documented in `deploy/README.md`.
   - **Web overview (WHI-758) landed:** dark Tailwind overview table (TUI-parity
     columns + status bar + stale yellow banner + sort/filter + 2s poll + row
     → `/pair/{id}/`).

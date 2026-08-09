@@ -118,10 +118,17 @@ def _write_api_yaml(
     *,
     sqlite_path: Path,
     market: str = "bybit-fluxion",
+    static_dir: Path | str | None = None,
 ) -> Path:
     """Minimal api.yaml for TestClient fixtures (cache TTLs off)."""
     api_yaml = tmp_path / "config" / "api.yaml"
     api_yaml.parent.mkdir(parents=True, exist_ok=True)
+    # Explicit null keeps fixtures API-only even if the host has /opt/xstocks/www.
+    static_line = (
+        f"static_dir: {static_dir}"
+        if static_dir is not None
+        else "static_dir: null"
+    )
     api_yaml.write_text(
         f"""version: 1
 host: 127.0.0.1
@@ -137,6 +144,7 @@ mm_series_max_points: 500
 mm_rebalance_limit: 100
 mm_inventory_cache_ttl_s: 0
 cors_origins: []
+{static_line}
 """,
         encoding="utf-8",
     )
@@ -356,6 +364,83 @@ def test_openapi_available(client: TestClient) -> None:
     assert "/api/pairs/{pair_id}" in paths
     assert "/api/pairs/{pair_id}/trades" in paths
     assert "/api/pairs/{pair_id}/mm" in paths
+
+
+def test_discovery_meta_without_static(client: TestClient) -> None:
+    """WHI-979: discovery lives at /__meta and still at / when static is off."""
+    for path in ("/__meta", "/"):
+        r = client.get(path)
+        assert r.status_code == 200, path
+        body = r.json()
+        assert body["service"] == "monitor.api"
+        assert body["docs"] == "/docs"
+        assert body["markets"] == "/api/markets"
+        assert body["meta"] == "/__meta"
+
+
+def test_static_mount_serves_panel_and_keeps_api(
+    seeded_db: Path, tmp_path: Path, monkeypatch: pytest.MonkeyPatch
+) -> None:
+    """One process serves panel HTML + /api/* when static_dir exists (WHI-979)."""
+    www = tmp_path / "www"
+    www.mkdir()
+    (www / "index.html").write_text(
+        "<!doctype html><title>panel</title><h1>xStocks</h1>",
+        encoding="utf-8",
+    )
+    sub = www / "m" / "bybit-fluxion"
+    sub.mkdir(parents=True)
+    (sub / "index.html").write_text(
+        "<!doctype html><title>market</title>",
+        encoding="utf-8",
+    )
+    monkeypatch.chdir(tmp_path)
+    api_yaml = _write_api_yaml(tmp_path, sqlite_path=seeded_db, static_dir=www)
+    app = create_app(api_config_path=api_yaml)
+    with TestClient(app) as client:
+        html = client.get("/")
+        assert html.status_code == 200
+        assert "text/html" in html.headers.get("content-type", "")
+        assert "xStocks" in html.text
+
+        nested = client.get("/m/bybit-fluxion/")
+        assert nested.status_code == 200
+        assert "text/html" in nested.headers.get("content-type", "")
+
+        health = client.get("/api/health")
+        assert health.status_code == 200
+        assert health.json()["ok"] is True
+
+        meta = client.get("/__meta")
+        assert meta.status_code == 200
+        assert meta.json()["service"] == "monitor.api"
+
+        docs = client.get("/docs")
+        assert docs.status_code == 200
+
+        openapi = client.get("/openapi.json")
+        assert openapi.status_code == 200
+        assert "/api/health" in openapi.json()["paths"]
+
+        # No SPA catch-all: missing export paths stay 404.
+        missing = client.get("/no-such-page/")
+        assert missing.status_code == 404
+
+
+def test_static_dir_missing_does_not_mount(
+    seeded_db: Path, tmp_path: Path, monkeypatch: pytest.MonkeyPatch
+) -> None:
+    """Configured but absent static_dir keeps API-only root discovery."""
+    monkeypatch.chdir(tmp_path)
+    missing = tmp_path / "does-not-exist"
+    api_yaml = _write_api_yaml(
+        tmp_path, sqlite_path=seeded_db, static_dir=missing
+    )
+    app = create_app(api_config_path=api_yaml)
+    with TestClient(app) as client:
+        r = client.get("/")
+        assert r.status_code == 200
+        assert r.json()["service"] == "monitor.api"
 
 
 def test_pairs_overview_mm_active_unknown_without_labels(client: TestClient) -> None:
