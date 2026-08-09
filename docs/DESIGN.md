@@ -439,9 +439,9 @@ filtered pair with structured status badges (`no pool` / `empty pool` /
 | httpx | RPC + REST (existing `mba.rpc` pattern) |
 | polars / duckdb | local analytics if needed; TUI may stay in-memory |
 | **Textual** (TUI) | M5 chose Textual over rich for interactive two-level nav (DataTable + detail screen); pure view models stay library-free |
-| **FastAPI** (read-only API) | WHI-757: serves overview/detail/trades/health JSON over collector SQLite; reuses TUI builders + M3/M4 |
+| **FastAPI** (read-only API) | WHI-757: serves overview/detail/trades/health JSON over collector SQLite; reuses TUI builders + M3/M4. WHI-979: optional `static_dir` serves `web/out` same-origin on `127.0.0.1` (primary arb-bot-vps shape — ADR-0003) |
 | **Next.js static export** | WHI-757: build on laptop/CI, rsync `web/out` to VPS; no Node runtime on the 1GB box |
-| nginx + systemd | VPS: static site + `/api` reverse-proxy; `xstocks-api.service` (uvicorn, 1 worker, MemoryMax) |
+| systemd (+ optional nginx) | Primary: `xstocks-api.service` alone (uvicorn, 1 worker, MemoryMax) serves panel + `/api` same-origin (WHI-979 / ADR-0003). Optional nginx reverse-proxy only on panel-only hosts that are not co-tenant with trading keys |
 | Mantle JSON-RPC + Multicall3 | pool state + eth_call quotes |
 
 ### 4.2 Module layout
@@ -468,9 +468,9 @@ Planned `src/monitor/` packages (land with their issues; empty package until the
 | `monitor/metrics` | edge, wear, session stats | M3 (landed WHI-732) |
 | `monitor/attribution` | mechanism + behavior labels (+ MM/rebalancer, WHI-768) | M4 (landed WHI-733); MM productization WHI-768 |
 | `monitor/tui` | live panel (Textual overview + detail); **frozen** after Web lands | M5 (landed WHI-734) |
-| `monitor/api` | read-only FastAPI over the same journal + builders | WHI-757 (skeleton) |
+| `monitor/api` | read-only FastAPI over the same journal + builders; optional same-origin static | WHI-757 (skeleton); WHI-979 static_dir |
 | `web/` | Next.js static export (panel UI) | WHI-757 skeleton; WHI-758 overview; WHI-759 pair detail |
-| `deploy/` + `scripts/deploy-web.sh` | systemd unit, nginx site, one-command redeploy | WHI-757 |
+| `deploy/` + `scripts/deploy-web.sh` | systemd unit, optional nginx site, one-command redeploy | WHI-757; arb-bot layout WHI-979 / ADR-0003 |
 
 #### Phase-1 → phase-2 reuse map
 
@@ -684,7 +684,7 @@ Probe: `python -m monitor.collector.latency_probe`.
 | **M4** | WHI-733 | Attribution (mechanism + heuristics) |
 | **M5** | WHI-734 | TUI panel |
 | **M6** | WHI-735 | ~~Web panel plan doc only~~ **Canceled** 2026-08-01 — replaced by implementable Web issues |
-| **Web skeleton** | WHI-757 | FastAPI read-only API + Next.js static export + nginx/systemd deploy on VPS |
+| **Web skeleton** | WHI-757 | FastAPI read-only API + Next.js static export + systemd deploy on VPS (nginx optional; WHI-979 same-origin primary) |
 | **Web overview** | WHI-758 | Full overview table (TUI-parity columns, status/stale banner, sort/filter) |
 | **Web pair detail** | WHI-759 | Pair detail: spread chart, trade stream, edge stats, attribution |
 | **M7 multi-market (Binance ⇄ Pancake bStocks)** | WHI-770… | Second market beside Bybit⇄Fluxion. **M7-1…M7-4** landed (inventory, domain, collectors, metrics/attribution — DESIGN §2.7). **M7-5 Web/API bar** (WHI-774) landed: `/api/markets` + `/api/{market}/…`, Web `/m/{market}/` switcher, RFQ hide + accumulating empty state. **WHI-790** expands binance-pancake inventory from top-10 to all **55** Binance bStocks (21 factory-verified V3 USDT AMM + 34 dex:none). |
@@ -721,7 +721,8 @@ M7 is parallel product expansion after Web PnL v2; does not block Web polish.
 | New repo for phase-2 | Zero-commit state made overlay ≡ template; Linear project already points at `report/`; avoid moving 3k LOC |
 | Continue WMNT/USDT0 product | User rejected phase-1 POC product direction 2026-08-01 |
 | Web-first UI (v1) | TUI first for operator speed; Web deferred until after M5, then full VPS stack (WHI-757) instead of plan-only M6 |
-| Vercel / hosted Web + data egress | Operator wants data on-box; 1GB VPS already runs nginx; static export + FastAPI co-located with collector SQLite |
+| Vercel / hosted Web + data egress | Operator wants data on-box; static export + FastAPI co-located with collector SQLite on `127.0.0.1` (tunnel access; no public panel listener on arb-bot-vps — WHI-979 / ADR-0003) |
+| Public nginx panel on arb-bot-vps | Box holds trading keys + live `arb-bot.service`; owner rejected public listener (WHI-979) |
 | Historical backfill for live panel | Product is forward-looking paper arb, not another backtest |
 | Single blended AMM+RFQ price | Must show both; quote availability and spreads still differ by pair and session, but closed ≠ RFQ-off (WHI-753) |
 | Auto-trade / bot execution | Explicit non-goal |
