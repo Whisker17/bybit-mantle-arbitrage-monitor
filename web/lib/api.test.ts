@@ -72,7 +72,24 @@ describe("fetchJson", () => {
     );
   });
 
-  it("keeps HTTP status message on non-2xx", async () => {
+  it("names base on non-2xx (wrong -L often 404s another listener)", async () => {
+    process.env.NEXT_PUBLIC_API_BASE = "http://127.0.0.1:8010";
+    globalThis.fetch = async () =>
+      new Response("nope", { status: 404, statusText: "Not Found" });
+    await assert.rejects(
+      () => fetchJson("/api/health"),
+      (err: unknown) => {
+        assert.ok(err instanceof Error);
+        assert.equal(
+          err.message,
+          "/api/health → HTTP 404 from http://127.0.0.1:8010",
+        );
+        return true;
+      },
+    );
+  });
+
+  it("names same-origin on non-2xx when base is empty", async () => {
     delete process.env.NEXT_PUBLIC_API_BASE;
     globalThis.fetch = async () =>
       new Response("nope", { status: 503, statusText: "Service Unavailable" });
@@ -80,7 +97,7 @@ describe("fetchJson", () => {
       () => fetchJson("/api/health"),
       (err: unknown) => {
         assert.ok(err instanceof Error);
-        assert.equal(err.message, "/api/health → HTTP 503");
+        assert.equal(err.message, "/api/health → HTTP 503 from same-origin");
         return true;
       },
     );

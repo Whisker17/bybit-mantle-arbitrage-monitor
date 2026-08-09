@@ -35,7 +35,9 @@ export async function fetchJson<T>(path: string): Promise<T> {
     throw new Error(`cannot reach API at ${where} — ${hint}`);
   }
   if (!res.ok) {
-    throw new Error(`${path} → HTTP ${res.status}`);
+    throw new Error(
+      `${path} → HTTP ${res.status} from ${apiBaseLabel()}`,
+    );
   }
   try {
     return (await res.json()) as T;

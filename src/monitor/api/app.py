@@ -230,13 +230,19 @@ def create_app(
         )
     else:
         if static_path is not None:
-            # Configured path but absent — silent API-only would look like a
-            # dead panel over the tunnel (rsync missed / wrong REMOTE_WWW).
-            logger.warning(
+            # Configured path but absent — silent API-only looks like a dead
+            # panel over the tunnel. Warn when the parent exists (VPS layout
+            # half-provisioned / rsync miss); INFO when even the parent is
+            # missing so laptop dogfood with the checked-in /opt/... default
+            # does not train operators to ignore every WARNING.
+            msg = (
                 "static_dir %s configured but not a directory — API-only "
-                "(create the dir and restart the API after rsync)",
-                static_path,
+                "(create the dir and restart the API after rsync)"
             )
+            if static_path.parent.is_dir():
+                logger.warning(msg, static_path)
+            else:
+                logger.info(msg, static_path)
 
         @application.get("/")
         def root() -> dict[str, Any]:
