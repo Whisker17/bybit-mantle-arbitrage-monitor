@@ -53,7 +53,12 @@ from monitor.metrics.premium import (
 )
 from monitor.metrics.snapshot import rfq_price
 from monitor.metrics.stats import Distribution
-from monitor.metrics.volume import VolumeCompare, build_volume_compare
+from monitor.metrics.volume import (
+    CexVolumeReason,
+    VolumeCompare,
+    build_volume_compare,
+    resolve_cex_volume_reason,
+)
 from monitor.metrics.withdrawal import withdrawal_params_from_pair
 from monitor.quotes import (
     BybitBookTick,
@@ -323,7 +328,7 @@ def _quote_is_token0_resolved(
     return q0 if q0 is not None else _inventory_quote_is_token0(pair)
 
 
-def _cex_volume_reason_from_meta(reader: JournalReader) -> str | None:
+def _cex_volume_reason_from_meta(reader: JournalReader) -> CexVolumeReason | None:
     """WHI-974: journal meta from CexVolumePoller → overview blank reason."""
     from monitor.cex_volume.poller import META_CEX_VOLUME_STATUS
 
@@ -350,7 +355,12 @@ def _volume_compare_for_pair(
     the 2s poll does not hydrate every swap row. Detail sets
     ``full_session_split=True`` for open/closed buckets.
     """
-    from monitor.metrics.volume import CexVolumeReason
+    from monitor.metrics.volume import (
+        DexVolumeWindow,
+        SessionVolumeSlice,
+        aggregate_cex_journal_volume,
+        volume_ratio,
+    )
 
     cex = reader.latest_cex_volume(pair.id)
     earliest = reader.earliest_swap_recv_ts_ms(pair.id)
@@ -359,10 +369,7 @@ def _volume_compare_for_pair(
     journal = (
         reader.trades_since(pair.id, since_ms=since_ms) if include_journal_cex else None
     )
-    raw_reason = _cex_volume_reason_from_meta(reader)
-    reason: CexVolumeReason | None = (
-        "geo_blocked" if raw_reason == "geo_blocked" else None
-    )
+    reason = _cex_volume_reason_from_meta(reader)
 
     if full_session_split:
         swaps = reader.swaps_since(pair.id, since_ms=since_ms)
@@ -380,14 +387,6 @@ def _volume_compare_for_pair(
         )
 
     # Lightweight overview: SQL sum/count + empty session buckets.
-    from monitor.metrics.volume import (
-        DexVolumeWindow,
-        SessionVolumeSlice,
-        VolumeCompare,
-        aggregate_cex_journal_volume,
-        volume_ratio,
-    )
-
     notional, count = reader.dex_volume_totals(
         pair.id, since_ms=since_ms, quote_is_token0=q0
     )
@@ -420,8 +419,6 @@ def _volume_compare_for_pair(
         jwin = aggregate_cex_journal_volume(
             journal, since_ms=since_ms, now_ms=now_ms, metrics=metrics
         )
-    from monitor.metrics.volume import resolve_cex_volume_reason
-
     cex_vol = None if cex is None else cex.volume_quote_24h
     cex_n = None if cex is None else cex.trade_count_24h
     return VolumeCompare(
@@ -1174,7 +1171,10 @@ def build_pair_detail(
         pair.id, limit=max(tui.spread_history_max_points, tui.edge_history_max_samples)
     )
     pools = reader.pool_states(pair.id, limit=tui.edge_history_max_samples)
-    rfq_hist = reader.rfq_quotes(pair.id, limit=tui.edge_history_max_samples)
+    # WHI-974: exclude HTTP error rows so edge-history LIMIT is not spent on 451s.
+    rfq_hist = reader.rfq_quotes(
+        pair.id, limit=tui.edge_history_max_samples, reachable_only=True
+    )
     und_hist = reader.underlying_prices(
         ticker, limit=tui.spread_history_max_points
     )

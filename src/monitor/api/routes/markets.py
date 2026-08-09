@@ -17,19 +17,18 @@ def market_summary(
     stale_ms: int,
     gap_window_ms: int,
     poll_interval_s: float,
-    rfq_error_window_ms: int | None = None,
+    rfq_error_window_ms: int,
 ) -> dict[str, Any]:
     """One market card for the switcher / discovery endpoint."""
     from monitor.api.routes.health import health_dict_for_runtime
 
-    kwargs: dict[str, Any] = {
-        "stale_ms": stale_ms,
-        "gap_window_ms": gap_window_ms,
-        "poll_interval_s": poll_interval_s,
-    }
-    if rfq_error_window_ms is not None:
-        kwargs["rfq_error_window_ms"] = rfq_error_window_ms
-    health = health_dict_for_runtime(runtime, **kwargs)
+    health = health_dict_for_runtime(
+        runtime,
+        stale_ms=stale_ms,
+        gap_window_ms=gap_window_ms,
+        poll_interval_s=poll_interval_s,
+        rfq_error_window_ms=rfq_error_window_ms,
+    )
     return {
         "id": runtime.market_id,
         "display_name": runtime.display_name,

@@ -13,7 +13,6 @@ from monitor.fluxion.rfq import (
     RfqPoller,
     is_rfq_http_error,
     parse_rfq_response,
-    rfq_http_status_bucket,
 )
 from monitor.quotes import FluxionRfqQuoteTick
 from monitor.storage import JournalReader, SqliteStore
@@ -86,9 +85,6 @@ def test_parse_rfq_451_error_row() -> None:
     assert is_rfq_http_error(451)
     assert not is_rfq_http_error(200)
     assert not is_rfq_http_error(204)
-    assert rfq_http_status_bucket(451) == "error"
-    assert rfq_http_status_bucket(200) == "ok"
-    assert rfq_http_status_bucket(204) == "no_quote"
 
 
 def test_poll_one_persists_451_then_failover_success() -> None:

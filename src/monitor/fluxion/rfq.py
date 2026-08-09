@@ -25,17 +25,6 @@ def is_rfq_http_error(http_status: int) -> bool:
     return http_status > 0 and http_status not in RFQ_HTTP_REACHABLE
 
 
-def rfq_http_status_bucket(http_status: int) -> Literal["ok", "no_quote", "error", "transport"]:
-    """Coarse bucket for coverage / health rate (WHI-974)."""
-    if http_status == 200:
-        return "ok"
-    if http_status == 204:
-        return "no_quote"
-    if http_status <= 0:
-        return "transport"
-    return "error"
-
-
 def parse_rfq_response(
     *,
     pair_id: str,
@@ -222,10 +211,10 @@ class RfqPoller:
                 )
 
             recv = now_ms()
-            # side_hint only for productive 200 bodies (vendor side may still
-            # win). Non-200/204 and empty 200 keep side=NULL so
+            # side_hint only when we have a 200 body (vendor side may still
+            # win). Errors, 204, and empty 200 keep side=NULL so
             # latest_rfq_quote's side filter does not blank the last good quote
-            # with an intermittent 451 (WHI-974 review).
+            # (WHI-974 review).
             tick = parse_rfq_response(
                 pair_id=pair.id,
                 token_in=token_in,
@@ -236,7 +225,7 @@ class RfqPoller:
                 http_status=status,
                 body=body,
                 gap=gap,
-                side_hint=leg if status == 200 else None,
+                side_hint=leg if (status == 200 and body is not None) else None,
             )
             ticks.append(tick)
             # Reachable product response ends the failover chain; errors try next URL.

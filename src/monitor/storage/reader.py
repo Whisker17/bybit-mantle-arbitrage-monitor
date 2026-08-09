@@ -264,16 +264,35 @@ class JournalReader:
         *,
         since_ms: int = 0,
         limit: int = 500,
+        reachable_only: bool = False,
     ) -> list[FluxionRfqQuoteTick]:
-        rows = self._conn.execute(
-            """
-            SELECT * FROM fluxion_rfq_quotes
-            WHERE pair_id = ? AND poll_ts_ms >= ?
-            ORDER BY poll_ts_ms DESC, id DESC
-            LIMIT ?
-            """,
-            (pair_id, since_ms, limit),
-        ).fetchall()
+        """RFQ quote history for a pair.
+
+        ``reachable_only=True`` keeps HTTP 200/204 rows only so edge-history
+        limits are not spent on error rows (WHI-974). Coverage / health still
+        load all statuses via ``rfq_http_status_counts``.
+        """
+        if reachable_only:
+            rows = self._conn.execute(
+                """
+                SELECT * FROM fluxion_rfq_quotes
+                WHERE pair_id = ? AND poll_ts_ms >= ?
+                  AND http_status IN (200, 204)
+                ORDER BY poll_ts_ms DESC, id DESC
+                LIMIT ?
+                """,
+                (pair_id, since_ms, limit),
+            ).fetchall()
+        else:
+            rows = self._conn.execute(
+                """
+                SELECT * FROM fluxion_rfq_quotes
+                WHERE pair_id = ? AND poll_ts_ms >= ?
+                ORDER BY poll_ts_ms DESC, id DESC
+                LIMIT ?
+                """,
+                (pair_id, since_ms, limit),
+            ).fetchall()
         ticks = [_row_to_rfq_quote(r) for r in rows]
         ticks.reverse()
         return ticks
@@ -1065,18 +1084,20 @@ def rfq_quote_coverage(
     ``availability_among_reachable`` is the share of HTTP-200 rows among
     reachable product responses (200 + 204). Error/transport rows are counted
     separately via ``error_rate`` and never enter that denominator.
-    """
-    from monitor.fluxion.rfq import is_rfq_http_error
 
+    Status vocabulary is inlined (200/204 reachable) so ``monitor.storage``
+    does not import the Fluxion feed module.
+    """
     by_status = reader.rfq_http_status_counts(since_ms=since_ms)
     ok_200 = by_status.get(200, 0)
     no_quote_204 = by_status.get(204, 0)
     transport_rows = by_status.get(0, 0)
-    error_rows = sum(n for status, n in by_status.items() if is_rfq_http_error(status))
+    error_rows = sum(
+        n for status, n in by_status.items() if status > 0 and status not in (200, 204)
+    )
     total = sum(by_status.values())
     # Group-by cannot see per-row ``available`` (price parse). 200-count is the
-    # O(1) proxy for "endpoint returned a quote body"; rename not needed on the
-    # wire because the field documents the 200-share of reachable.
+    # O(1) proxy for "endpoint returned a quote body".
     reachable = ok_200 + no_quote_204
     error_rate = (error_rows / total) if total > 0 else None
     availability = (ok_200 / reachable) if reachable > 0 else None
