@@ -306,6 +306,14 @@ placeholders. Agents must not assume a module exists until its issue lands. -->
     and `npm run build` is documented as a **separate** gate (typecheck is a
     subset; it is not chained into `npm test`). Unattended CI is still
     **WHI-972**.
+  - **US-host upstream gaps (WHI-974) landed:** bybit-fluxion on AS3635 —
+    Fluxion RFQ intermittent 451s now leave `fluxion_rfq_quotes` rows (incl.
+    intermediate failover failures); `/api/health` exposes `rfq_error_rate` +
+    status counts; availability uses reachable (200/204) denominator only.
+    Bybit REST 403 is a quiet `geo_blocked` meta transition (no 60s traceback
+    spam); overview CEX Vol / ratio render `geo_blocked` (journal-derived
+    volume stays detail-only). Note
+    `docs/references/whi-974-us-host-upstream-gaps.md`.
 
 ## Build, test, run
 

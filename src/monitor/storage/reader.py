@@ -45,6 +45,27 @@ class VolumeStats:
 
 
 @dataclass(frozen=True, slots=True)
+class RfqQuoteCoverage:
+    """RFQ poll outcome counts for health / research (WHI-974).
+
+    * ``error_rows`` — HTTP failures (451, 5xx, …); excluded from the
+      availability denominator so silent drop no longer inflates the rate.
+    * ``availability_among_reachable`` — available / (200 + 204) when that
+      denominator is positive; None when only errors/transport rows exist.
+    """
+
+    total_rows: int
+    ok_200: int
+    no_quote_204: int
+    error_rows: int
+    transport_rows: int
+    available_rows: int
+    error_rate: float | None
+    availability_among_reachable: float | None
+    by_status: dict[int, int]
+
+
+@dataclass(frozen=True, slots=True)
 class AddressLabelRow:
     """One row from address_labels (WHI-768 productized labels)."""
 
@@ -538,6 +559,26 @@ class JournalReader:
             return None
         return int(row["ts"])
 
+    def rfq_http_status_counts(
+        self, *, since_ms: int = 0
+    ) -> dict[int, int]:
+        """Count ``fluxion_rfq_quotes`` rows by ``http_status`` since ``since_ms``.
+
+        Used by /api/health RFQ error rate (WHI-974). Empty / missing table → {}.
+        """
+        if "fluxion_rfq_quotes" not in self._table_names():
+            return {}
+        rows = self._conn.execute(
+            """
+            SELECT http_status, COUNT(*) AS n
+            FROM fluxion_rfq_quotes
+            WHERE poll_ts_ms >= ?
+            GROUP BY http_status
+            """,
+            (since_ms,),
+        ).fetchall()
+        return {int(r["http_status"]): int(r["n"]) for r in rows}
+
     def recent_gaps(
         self,
         *,
@@ -1011,6 +1052,40 @@ def _row_to_pool_state(row: sqlite3.Row) -> FluxionPoolStateTick:
         mid_usdc_per_native=_d(row["mid_usdc_per_native"]),
         wrapper_assets_per_share=_d(row["wrapper_assets_per_share"]),
         gap=bool(row["gap"]),
+    )
+
+
+def rfq_quote_coverage(
+    reader: JournalReader,
+    *,
+    since_ms: int = 0,
+) -> RfqQuoteCoverage:
+    """Aggregate RFQ poll outcomes; errors do not inflate availability (WHI-974)."""
+    by_status = reader.rfq_http_status_counts(since_ms=since_ms)
+    ok_200 = by_status.get(200, 0)
+    no_quote_204 = by_status.get(204, 0)
+    transport_rows = by_status.get(0, 0)
+    error_rows = sum(
+        n for status, n in by_status.items() if status > 0 and status not in (200, 204)
+    )
+    total = sum(by_status.values())
+    # available_rows requires a second pass only when we care about price presence;
+    # for health rate, 200-count is the practical "got a quote body" proxy. Callers
+    # that need exact available flags can re-query; keep this O(1) group-by.
+    available_rows = ok_200
+    reachable = ok_200 + no_quote_204
+    error_rate = (error_rows / total) if total > 0 else None
+    availability = (available_rows / reachable) if reachable > 0 else None
+    return RfqQuoteCoverage(
+        total_rows=total,
+        ok_200=ok_200,
+        no_quote_204=no_quote_204,
+        error_rows=error_rows,
+        transport_rows=transport_rows,
+        available_rows=available_rows,
+        error_rate=error_rate,
+        availability_among_reachable=availability,
+        by_status=dict(sorted(by_status.items())),
     )
 
 

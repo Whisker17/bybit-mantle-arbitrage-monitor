@@ -15,6 +15,26 @@ logger = logging.getLogger(__name__)
 
 RfqLeg = Literal["buy_native", "sell_native"]
 
+# HTTP outcomes that mean "the RFQ endpoint answered productively".
+# 200 = executable quote; 204 = no resting quote (not an error).
+RFQ_HTTP_REACHABLE = frozenset({200, 204})
+
+
+def is_rfq_http_error(http_status: int) -> bool:
+    """True when the status is a real HTTP failure (not 200/204, not transport 0)."""
+    return http_status > 0 and http_status not in RFQ_HTTP_REACHABLE
+
+
+def rfq_http_status_bucket(http_status: int) -> Literal["ok", "no_quote", "error", "transport"]:
+    """Coarse bucket for coverage / health rate (WHI-974)."""
+    if http_status == 200:
+        return "ok"
+    if http_status == 204:
+        return "no_quote"
+    if http_status <= 0:
+        return "transport"
+    return "error"
+
 
 def parse_rfq_response(
     *,
@@ -27,9 +47,17 @@ def parse_rfq_response(
     http_status: int,
     body: dict[str, Any] | None,
     gap: bool = False,
+    side_hint: str | None = None,
 ) -> FluxionRfqQuoteTick:
-    """Map HTTP status + JSON body to a tick. 204 → available=False, not an error."""
-    if http_status == 204 or body is None:
+    """Map HTTP status + JSON body to a tick.
+
+    * 200 + price → available=True
+    * 204 → available=False (no resting quote; not an error)
+    * other HTTP (e.g. 451) → available=False, price/amount null, status kept
+      (WHI-974: failures must leave a journal row)
+    """
+    if body is None:
+        # 204 no-quote, HTTP errors (451/…), transport 0, or empty 200 body.
         return FluxionRfqQuoteTick(
             pair_id=pair_id,
             poll_ts_ms=poll_ts_ms,
@@ -39,7 +67,7 @@ def parse_rfq_response(
             amount_in=amount_in,
             amount_out=None,
             price=None,
-            side=None,
+            side=side_hint,
             request_id=None,
             http_status=http_status,
             available=False,
@@ -53,6 +81,9 @@ def parse_rfq_response(
         except InvalidOperation:
             price = None
     amount_out = body.get("amountOut")
+    side_raw = body.get("side")
+    side = side_hint if side_raw is None else str(side_raw)
+    request_id = None if body.get("requestId") is None else str(body.get("requestId"))
     return FluxionRfqQuoteTick(
         pair_id=pair_id,
         poll_ts_ms=poll_ts_ms,
@@ -62,8 +93,8 @@ def parse_rfq_response(
         amount_in=amount_in,
         amount_out=None if amount_out is None else str(amount_out),
         price=price,
-        side=None if body.get("side") is None else str(body.get("side")),
-        request_id=None if body.get("requestId") is None else str(body.get("requestId")),
+        side=side,
+        request_id=request_id,
         http_status=http_status,
         available=http_status == 200 and price is not None,
         gap=gap,
@@ -73,10 +104,15 @@ def parse_rfq_response(
 class RfqPoller:
     """Round-robin EXACT_INPUT quote polls respecting global rate limit.
 
-    Each ``poll_next`` issues **one** HTTP quote. With ``poll_both_sides``, the
-    schedule interleaves buy_native and sell_native legs (2N slots). Sleep
-    between polls is ``60 / rate_limit_per_minute`` (1s at 60/min). With N=11
-    and both sides, each pair×leg repeats every **22s** (2N seconds).
+    Each ``poll_next`` issues **one** HTTP schedule slot (one pair×leg). With
+    ``poll_both_sides``, the schedule interleaves buy_native and sell_native
+    (2N slots). Sleep between polls is ``60 / rate_limit_per_minute`` (1s at
+    60/min). With N=11 and both sides, each pair×leg repeats every **22s**.
+
+    URL failover: try primary then proxy. **Every definitive HTTP response is
+    returned as a tick** (WHI-974) — intermediate 451s leave rows even when the
+    proxy later returns 200. Transport failures try the next URL; if all fail,
+    a status=0 tick is returned.
     """
 
     def __init__(
@@ -131,7 +167,12 @@ class RfqPoller:
 
     def poll_one(
         self, pair: Pair, leg: RfqLeg = "buy_native", *, gap: bool = False
-    ) -> FluxionRfqQuoteTick:
+    ) -> list[FluxionRfqQuoteTick]:
+        """Poll one pair×leg; return **all** ticks for this attempt (incl. errors).
+
+        Intermediate non-200/204 responses are included so journal coverage /
+        error rates are not silently inflated by proxy failover (WHI-974).
+        """
         if leg == "buy_native":
             token_in = pair.fluxion.quote_token_address
             token_out = pair.fluxion.native_token
@@ -151,46 +192,72 @@ class RfqPoller:
             urls = list(reversed(urls))
 
         poll_ts = now_ms()
-        last_status = 0
-        last_body: dict[str, Any] | None = None
+        ticks: list[FluxionRfqQuoteTick] = []
         for url in urls:
             try:
                 r = self._client.post(url, json=payload)
-                last_status = r.status_code
-                if r.status_code == 204:
-                    last_body = None
-                    break
-                if r.status_code == 200:
-                    try:
-                        last_body = r.json()
-                    except Exception:  # noqa: BLE001
-                        last_body = None
-                    break
-                logger.warning(
-                    "rfq quote HTTP %s from %s for %s/%s",
-                    r.status_code,
-                    url,
-                    pair.id,
-                    leg,
-                )
             except Exception as exc:  # noqa: BLE001
                 logger.warning(
                     "rfq quote transport error %s for %s/%s: %s", url, pair.id, leg, exc
                 )
-                last_status = 0
-        recv = now_ms()
-        return parse_rfq_response(
-            pair_id=pair.id,
-            token_in=token_in,
-            token_out=token_out,
-            amount_in=amount,
-            poll_ts_ms=poll_ts,
-            recv_ts_ms=recv,
-            http_status=last_status or 0,
-            body=last_body if isinstance(last_body, dict) else None,
-            gap=gap,
-        )
+                continue
 
-    def poll_next(self, *, gap: bool = False) -> FluxionRfqQuoteTick:
+            status = r.status_code
+            body: dict[str, Any] | None = None
+            if status == 200:
+                try:
+                    parsed = r.json()
+                    body = parsed if isinstance(parsed, dict) else None
+                except Exception:  # noqa: BLE001
+                    body = None
+            elif status == 204:
+                body = None
+            else:
+                logger.warning(
+                    "rfq quote HTTP %s from %s for %s/%s",
+                    status,
+                    url,
+                    pair.id,
+                    leg,
+                )
+
+            recv = now_ms()
+            tick = parse_rfq_response(
+                pair_id=pair.id,
+                token_in=token_in,
+                token_out=token_out,
+                amount_in=amount,
+                poll_ts_ms=poll_ts,
+                recv_ts_ms=recv,
+                http_status=status,
+                body=body,
+                gap=gap,
+                side_hint=leg,
+            )
+            ticks.append(tick)
+            # Reachable product response ends the failover chain; errors try next URL.
+            if status in RFQ_HTTP_REACHABLE:
+                break
+
+        if not ticks:
+            # All URLs transport-failed.
+            recv = now_ms()
+            ticks.append(
+                parse_rfq_response(
+                    pair_id=pair.id,
+                    token_in=token_in,
+                    token_out=token_out,
+                    amount_in=amount,
+                    poll_ts_ms=poll_ts,
+                    recv_ts_ms=recv,
+                    http_status=0,
+                    body=None,
+                    gap=gap,
+                    side_hint=leg,
+                )
+            )
+        return ticks
+
+    def poll_next(self, *, gap: bool = False) -> list[FluxionRfqQuoteTick]:
         pair, leg = self.next_job()
         return self.poll_one(pair, leg, gap=gap)

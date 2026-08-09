@@ -10,6 +10,8 @@ import {
   ammQuoteReasonLabel,
   bpsTone,
   cexPremiumBps,
+  cexVolumeReasonLabel,
+  cexVolumeReasonTitle,
   dexNonTradeableLabel,
   dexNonTradeableTitle,
   directionToggleLabel,
@@ -58,6 +60,17 @@ describe("ammQuoteReasonLabel", () => {
     assert.equal(ammQuoteReasonLabel("pricing_anomaly"), "price anomaly");
     assert.equal(ammQuoteReasonLabel(null), null);
     assert.equal(ammQuoteReasonLabel(undefined), null);
+  });
+});
+
+describe("cexVolumeReasonLabel (WHI-974)", () => {
+  it("maps geo_blocked; null otherwise", () => {
+    assert.equal(cexVolumeReasonLabel("geo_blocked"), "geo blocked");
+    assert.equal(cexVolumeReasonLabel(null), null);
+    assert.equal(cexVolumeReasonLabel(undefined), null);
+    assert.ok(
+      (cexVolumeReasonTitle("geo_blocked") ?? "").includes("REST"),
+    );
   });
 });
 

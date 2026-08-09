@@ -187,6 +187,7 @@ def _volume_fields(vol: VolumeCompare | None) -> dict[str, object]:
             "cex_trade_count_24h": None,
             "dex_volume_truncated": False,
             "dex_volume_window_start_ms": None,
+            "cex_volume_reason": None,
         }
     return {
         "cex_volume_24h": vol.cex_volume_24h,
@@ -196,6 +197,7 @@ def _volume_fields(vol: VolumeCompare | None) -> dict[str, object]:
         "cex_trade_count_24h": vol.cex_trade_count_24h,
         "dex_volume_truncated": vol.dex.truncated,
         "dex_volume_window_start_ms": vol.dex.window_start_ms,
+        "cex_volume_reason": vol.cex_volume_reason,
     }
 
 
@@ -321,6 +323,16 @@ def _quote_is_token0_resolved(
     return q0 if q0 is not None else _inventory_quote_is_token0(pair)
 
 
+def _cex_volume_reason_from_meta(reader: JournalReader) -> str | None:
+    """WHI-974: journal meta from CexVolumePoller → overview blank reason."""
+    from monitor.cex_volume.poller import META_CEX_VOLUME_STATUS
+
+    status = reader.get_meta(META_CEX_VOLUME_STATUS)
+    if status == "geo_blocked":
+        return "geo_blocked"
+    return None
+
+
 def _volume_compare_for_pair(
     pair: Pair | BStocksPair,
     *,
@@ -338,12 +350,18 @@ def _volume_compare_for_pair(
     the 2s poll does not hydrate every swap row. Detail sets
     ``full_session_split=True`` for open/closed buckets.
     """
+    from monitor.metrics.volume import CexVolumeReason
+
     cex = reader.latest_cex_volume(pair.id)
     earliest = reader.earliest_swap_recv_ts_ms(pair.id)
     collector_started = _collector_coverage_ms(reader)
     q0 = _quote_is_token0_resolved(pair, reader=reader, amm=amm)
     journal = (
         reader.trades_since(pair.id, since_ms=since_ms) if include_journal_cex else None
+    )
+    raw_reason = _cex_volume_reason_from_meta(reader)
+    reason: CexVolumeReason | None = (
+        "geo_blocked" if raw_reason == "geo_blocked" else None
     )
 
     if full_session_split:
@@ -358,6 +376,7 @@ def _volume_compare_for_pair(
             earliest_swap_recv_ts_ms=earliest,
             collector_started_ms=collector_started,
             journal_trades=journal,
+            cex_volume_reason=reason,
         )
 
     # Lightweight overview: SQL sum/count + empty session buckets.
@@ -403,8 +422,8 @@ def _volume_compare_for_pair(
         )
     cex_vol = None if cex is None else cex.volume_quote_24h
     cex_n = None if cex is None else cex.trade_count_24h
-    if cex_n is None and jwin is not None:
-        cex_n = jwin.trade_count
+    # REST present clears the geo_blocked annotation (same as build_volume_compare).
+    out_reason: CexVolumeReason | None = None if cex is not None else reason
     return VolumeCompare(
         cex_volume_24h=cex_vol,
         cex_trade_count_24h=cex_n,
@@ -413,6 +432,7 @@ def _volume_compare_for_pair(
         dex=dex,
         cex_journal=jwin,
         volume_ratio=volume_ratio(cex_vol, notional),
+        cex_volume_reason=out_reason,
     )
 
 
