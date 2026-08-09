@@ -81,21 +81,22 @@ class ApiConfig(BaseModel):
         return self
 
     def resolved_sqlite_path(self, *, cwd: Path | None = None) -> Path:
-        path = Path(self.sqlite_path)
-        if path.is_absolute():
-            return path
-        base = cwd if cwd is not None else Path.cwd()
-        return (base / path).resolve()
+        return _resolve_path(self.sqlite_path, cwd=cwd)
 
     def resolved_static_dir(self, *, cwd: Path | None = None) -> Path | None:
         """Absolute path for the optional static export, or None if disabled."""
         if self.static_dir is None:
             return None
-        path = Path(self.static_dir)
-        if path.is_absolute():
-            return path
-        base = cwd if cwd is not None else Path.cwd()
-        return (base / path).resolve()
+        return _resolve_path(self.static_dir, cwd=cwd)
+
+
+def _resolve_path(value: str, *, cwd: Path | None = None) -> Path:
+    """Resolve a config path: absolute stays absolute; relative is against cwd."""
+    path = Path(value)
+    if path.is_absolute():
+        return path
+    base = cwd if cwd is not None else Path.cwd()
+    return (base / path).resolve()
 
 
 def default_api_path() -> Path:

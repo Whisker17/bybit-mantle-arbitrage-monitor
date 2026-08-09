@@ -98,9 +98,11 @@ The API and collector for a market must agree on the same journal path
 
 Use nginx **only** on hosts that are not co-tenant with trading keys / live
 bots. The checked-in `deploy/nginx-xstocks.conf` still works: serve
-`/opt/xstocks/www` + proxy `/api/` → `127.0.0.1:8000`. On that path set
-`static_dir: null` in `config/api.yaml` so FastAPI does not double-serve the
-export, and keep CORS empty (same-origin via nginx).
+`/opt/xstocks/www` + proxy `/api/` → `127.0.0.1:8000`. Leave checked-in
+`static_dir: /opt/xstocks/www` as-is — browser traffic through nginx never
+hits uvicorn for static, and a direct tunnel to `:8000` still gets the panel
+from FastAPI (harmless double-home of the same files). Empty CORS is correct
+(same-origin via nginx). See ADR-0003.
 
 ```bash
 sudo cp /opt/xstocks/app/deploy/nginx-xstocks.conf /etc/nginx/sites-available/xstocks

@@ -37,5 +37,14 @@ export async function fetchJson<T>(path: string): Promise<T> {
   if (!res.ok) {
     throw new Error(`${path} → HTTP ${res.status}`);
   }
-  return (await res.json()) as T;
+  try {
+    return (await res.json()) as T;
+  } catch {
+    // Wrong -L remote port can land on another HTTP listener that returns
+    // 200 HTML; surface base + content-type instead of raw SyntaxError.
+    const ct = res.headers.get("content-type") ?? "unknown";
+    throw new Error(
+      `${path} → non-JSON response from ${apiBaseLabel()} (content-type: ${ct}) — wrong -L target?`,
+    );
+  }
 }

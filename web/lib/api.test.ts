@@ -87,4 +87,23 @@ describe("fetchJson", () => {
     const body = await fetchJson<{ ok: boolean }>("/api/health");
     assert.deepEqual(body, { ok: true });
   });
+
+  it("names base when 200 body is non-JSON (wrong -L target)", async () => {
+    process.env.NEXT_PUBLIC_API_BASE = "http://127.0.0.1:8010";
+    globalThis.fetch = async () =>
+      new Response("<!doctype html><title>other</title>", {
+        status: 200,
+        headers: { "content-type": "text/html" },
+      });
+    await assert.rejects(
+      () => fetchJson("/api/health"),
+      (err: unknown) => {
+        assert.ok(err instanceof Error);
+        assert.match(err.message, /non-JSON response from http:\/\/127\.0\.0\.1:8010/);
+        assert.match(err.message, /wrong -L target/);
+        assert.doesNotMatch(err.message, /Unexpected token|SyntaxError/);
+        return true;
+      },
+    );
+  });
 });
