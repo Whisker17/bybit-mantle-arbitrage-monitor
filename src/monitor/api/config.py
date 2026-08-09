@@ -49,11 +49,21 @@ class ApiConfig(BaseModel):
     mm_rebalance_limit: int = Field(default=100, ge=1, le=5_000)
     mm_inventory_cache_ttl_s: float = Field(default=2.5, ge=0, le=60)
     cors_origins: list[str] = Field(default_factory=list)
+    # Optional Next static export (web/out). None / empty = API-only (dev/tests).
+    # Mounted only when the resolved directory exists (WHI-979 same-origin).
+    static_dir: str | None = None
 
     @field_validator("cors_origins", mode="before")
     @classmethod
     def _none_to_list(cls, value: object) -> object:
         return [] if value is None else value
+
+    @field_validator("static_dir", mode="before")
+    @classmethod
+    def _empty_static_to_none(cls, value: object) -> object:
+        if value is None or value == "":
+            return None
+        return value
 
     @model_validator(mode="after")
     def _cross_field(self) -> Self:
@@ -73,11 +83,22 @@ class ApiConfig(BaseModel):
         return self
 
     def resolved_sqlite_path(self, *, cwd: Path | None = None) -> Path:
-        path = Path(self.sqlite_path)
-        if path.is_absolute():
-            return path
-        base = cwd if cwd is not None else Path.cwd()
-        return (base / path).resolve()
+        return _resolve_path(self.sqlite_path, cwd=cwd)
+
+    def resolved_static_dir(self, *, cwd: Path | None = None) -> Path | None:
+        """Absolute path for the optional static export, or None if disabled."""
+        if self.static_dir is None:
+            return None
+        return _resolve_path(self.static_dir, cwd=cwd)
+
+
+def _resolve_path(value: str, *, cwd: Path | None = None) -> Path:
+    """Resolve a config path: absolute stays absolute; relative is against cwd."""
+    path = Path(value)
+    if path.is_absolute():
+        return path
+    base = cwd if cwd is not None else Path.cwd()
+    return (base / path).resolve()
 
 
 def default_api_path() -> Path:

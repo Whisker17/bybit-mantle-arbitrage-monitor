@@ -4,9 +4,16 @@
 
 version: 1
 
-# Bind address for uvicorn (systemd / local). Nginx reverse-proxies /api here.
+# Bind address for uvicorn (systemd / local). Stay on 127.0.0.1 — tunnel is auth
+# (arb-bot-vps holds trading keys; no public listener — WHI-979).
 host: 127.0.0.1
 port: 8000
+
+# Optional Next static export directory (web/out). null / missing path = API-only
+# (dev/tests). Absolute VPS path is the deploy-web.sh rsync target; mount only
+# runs when the directory exists, so local checkouts without /opt/... are fine.
+# Same-origin serving → browser uses apiBase "" (no NEXT_PUBLIC_API_BASE).
+static_dir: /opt/xstocks/www
 
 # Default market for *legacy unscoped* routes (/api/pairs, /api/health) and
 # the sqlite_path override below (M7-2 / WHI-771 / WHI-774). The API opens
@@ -62,8 +69,9 @@ mm_rebalance_limit: 100
 mm_inventory_cache_ttl_s: 2.5   # 0 = rebuild every request
 
 # CORS origins for local Next dogfood (NEXT_PUBLIC_API_BASE → :8000 is
-# cross-origin). Empty list is correct on the VPS (nginx same-origin).
-# Without these, the browser reports "API unreachable / Failed to fetch".
+# cross-origin). Empty list is correct on the VPS (same-origin static from
+# this process — WHI-979). Without these, the browser reports
+# "API unreachable / Failed to fetch" on the split-origin dogfood path.
 cors_origins:
   - "http://127.0.0.1:3000"
   - "http://localhost:3000"

@@ -1,20 +1,65 @@
-# Deploy: web panel + read-only API (WHI-757)
+# Deploy: web panel + read-only API (WHI-757 / WHI-979)
 
-Target: **whi715-vps** (1GB RAM, nginx already running). All data stays on the
-box. Node is **not** a runtime dependency on the VPS.
+Two deployment shapes share the same build + rsync path. Pick the one that
+matches the box.
 
-## Layout
+## arb-bot-vps (primary) — no nginx, same-origin, 127.0.0.1 only
+
+**Target:** a host that also runs live `arb-bot.service` and holds trading keys.
+**Decision (owner, 2026-08-09 / WHI-979):** no public listener, no nginx on this
+box. FastAPI binds `127.0.0.1:8000` and serves **both** `/api/*` and the Next
+static export (`web/out` → `/opt/xstocks/www`) from one process. The browser uses
+same-origin `apiBase ""` — **do not** bake `NEXT_PUBLIC_API_BASE` into the VPS
+build.
+
+Access is an SSH local forward with keepalives:
+
+```bash
+ssh -N -L 8010:127.0.0.1:8000 \
+  -o ServerAliveInterval=30 \
+  -o ServerAliveCountMax=3 \
+  arb-bot-vps
+```
+
+Then open `http://127.0.0.1:8010/` (panel) and `http://127.0.0.1:8010/api/health`
+(JSON) on **one** tunnel. Without `ServerAliveInterval` the tunnel can wedge on a
+silent NAT/firewall timeout — **present, listening, not forwarding** — which
+looks exactly like a dead API and is harder to diagnose than a clean drop.
+
+Smoke after deploy:
+
+```bash
+curl -s  localhost:8010/api/health   # JSON ok
+curl -sI localhost:8010/             # text/html from StaticFiles
+curl -s  localhost:8010/__meta       # discovery index (stable path)
+```
+
+Mount is decided at API process start: if `/opt/xstocks/www` did not exist when
+`xstocks-api` started, create/rsync it and `sudo systemctl restart xstocks-api`
+once (or re-run a full `./scripts/deploy-web.sh` without `--www-only`). An empty
+dir is enough to attach the mount; later rsyncs fill files without another
+restart.
+
+`config/api.yaml` defaults:
+
+| key | value | why |
+|-----|-------|-----|
+| `host` | `127.0.0.1` | no public bind |
+| `port` | `8000` | tunnel target |
+| `static_dir` | `/opt/xstocks/www` | rsync target; mount only if dir exists |
+| `cors_origins` | local Next dogfood only | unused on same-origin VPS |
+
+## Layout (both shapes)
 
 | Path | Role |
 |------|------|
 | `/opt/xstocks/app` | Git checkout / rsynced sources + `.venv` |
 | `/opt/xstocks/app/data/monitor-{market}.db` | Per-market collector journal (WAL; API reads one market — ADR-0001) |
-| `/opt/xstocks/www` | Next.js static export (`web/out`) |
+| `/opt/xstocks/www` | Next.js static export (`web/out`); FastAPI `static_dir` on arb-bot-vps |
 | `xstocks-api.service` | `python -m monitor.api --market bybit-fluxion` (uvicorn, 1 process) |
 | `xstocks-collector@.service` | Template: `xstocks-collector@bybit-fluxion` → `--market %i` |
-| nginx | Serves `/opt/xstocks/www` + reverse-proxies `/api/` → `127.0.0.1:8000` |
 
-## One-time VPS setup
+## One-time VPS setup (API + collectors)
 
 ```bash
 # 1) User + dirs
@@ -43,12 +88,6 @@ sudo systemctl enable --now xstocks-collector@binance-pancake
 sudo systemctl enable --now xstocks-api
 # Verify both are wanted + restarting:
 #   sudo systemctl --no-pager status 'xstocks-collector@*'
-
-# 4) nginx
-sudo cp /opt/xstocks/app/deploy/nginx-xstocks.conf /etc/nginx/sites-available/xstocks
-sudo ln -sf /etc/nginx/sites-available/xstocks /etc/nginx/sites-enabled/xstocks
-# edit server_name; disable any conflicting default site if needed
-sudo nginx -t && sudo systemctl reload nginx
 ```
 
 Collector is market-scoped (`--market bybit-fluxion` by default). It writes
@@ -60,6 +99,23 @@ mv data/monitor.db data/monitor-bybit-fluxion.db
 
 The API and collector for a market must agree on the same journal path
 (`config/api.yaml` / `config/collector.yaml` `markets.<id>.sqlite_path`).
+
+### Optional: nginx reverse-proxy (whi715-vps style only)
+
+Use nginx **only** on hosts that are not co-tenant with trading keys / live
+bots. The checked-in `deploy/nginx-xstocks.conf` still works: serve
+`/opt/xstocks/www` + proxy `/api/` → `127.0.0.1:8000`. Leave checked-in
+`static_dir: /opt/xstocks/www` as-is — browser traffic through nginx never
+hits uvicorn for static, and a direct tunnel to `:8000` still gets the panel
+from FastAPI (harmless double-home of the same files). Empty CORS is correct
+(same-origin via nginx). See ADR-0003.
+
+```bash
+sudo cp /opt/xstocks/app/deploy/nginx-xstocks.conf /etc/nginx/sites-available/xstocks
+sudo ln -sf /etc/nginx/sites-available/xstocks /etc/nginx/sites-enabled/xstocks
+# edit server_name; disable any conflicting default site if needed
+sudo nginx -t && sudo systemctl reload nginx
+```
 
 ### Restart collectors after collector code ships
 
@@ -128,8 +184,9 @@ or kill + re-run `python -m monitor.collector --market …` per market).
 ## Redeploy (one command from a laptop)
 
 ```bash
-# Build Next static export locally, rsync www + API sources, restart unit
-./scripts/deploy-web.sh xstocks@whi715-vps
+# Build Next static export locally (no NEXT_PUBLIC_API_BASE for arb-bot-vps),
+# rsync www + API sources, restart unit
+./scripts/deploy-web.sh xstocks@arb-bot-vps
 
 # Variants
 ./scripts/deploy-web.sh xstocks@host --skip-build   # reuse web/out
@@ -143,31 +200,34 @@ See [Restart collectors after collector code ships](#restart-collectors-after-co
 ## Local dogfood
 
 ```bash
-# Terminal A — API (needs a real or fixture journal)
+# Terminal A — API (optional: serve a local export same-origin)
+# config/api.yaml static_dir: web/out  (after npm run build), or null for API-only
 uv run python -m monitor.api --reload
 
-# Terminal B — Next dev (proxy-less: point at API origin)
+# Terminal B — Next dev against a split-origin API
 cd web && NEXT_PUBLIC_API_BASE=http://127.0.0.1:8000 npm run dev
 ```
 
-For static export parity: `cd web && npm run build && npx serve out` and set
-CORS in `config/api.yaml` `cors_origins` for the serve origin.
+Same-origin parity without Next dev: `cd web && npm run build`, set
+`static_dir: web/out` in a local api.yaml overlay, restart the API, open
+`http://127.0.0.1:8000/`.
 
 ## Memory report (acceptance)
 
-On the VPS after a warm collector + API + nginx:
+On the VPS after a warm collector + API:
 
 ```bash
-ps -o rss=,comm= -C nginx,python,uvicorn 2>/dev/null
+ps -o rss=,comm= -C python,uvicorn 2>/dev/null
 # or:
 systemctl status xstocks-api --no-pager | head
-ps aux | egrep 'nginx|monitor\.(api|collector)' | grep -v egrep
+ps aux | egrep 'monitor\.(api|collector)' | grep -v egrep
 free -h
 ```
 
-Record RSS for collector / API / nginx into the PR or a short note under
-`docs/references/` when first measured on whi715-vps.
+Record RSS for collector / API into the PR or a short note under
+`docs/references/` when first measured.
 
 ## OpenAPI
 
-With the API up: `http://<host>/docs` and `http://<host>/openapi.json`.
+With the API up (tunnel or local): `http://127.0.0.1:8010/docs` and
+`/openapi.json`. Service discovery: `GET /__meta`.
