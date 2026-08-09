@@ -19,6 +19,8 @@ def test_load_default_api_config() -> None:
     assert cfg.collector_stale_ms == 30_000
     # WHI-821: quote annotation threshold, separate from process liveness.
     assert cfg.quote_max_age_ms == 300_000
+    # WHI-974: RFQ error-rate window on /api/health.
+    assert cfg.rfq_error_window_ms == 900_000
     assert cfg.poll_interval_s == 2.0
     assert cfg.pnl_cache_ttl_s == 2.5
     # WHI-963: capture rate TTL (longer than PnL — trailing-window heavy).

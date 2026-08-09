@@ -6,11 +6,20 @@ import sys
 from dataclasses import dataclass, field
 from typing import Any, Literal
 
+from monitor.cex_volume.poller import (
+    META_CEX_VOLUME_FIRST_MS,
+    META_CEX_VOLUME_HOST,
+    META_CEX_VOLUME_HTTP_STATUS,
+    META_CEX_VOLUME_LAST_MS,
+    META_CEX_VOLUME_STATUS,
+    META_CEX_VOLUME_VENUE,
+)
 from monitor.collector.gaps import SOURCE_COLLECTOR_DOWN
 from monitor.collector.watchdog import META_HEARTBEAT, META_LAST_TICK_WRITE
 from monitor.markets.ids import DEFAULT_MARKET_ID
 from monitor.quotes import CollectorGap, now_ms
 from monitor.storage import JournalReader
+from monitor.storage.reader import RfqQuoteCoverage, rfq_quote_coverage
 from monitor.underlying.coverage_probe import (
     META_MISMATCHES,
     META_PROBE_ERRORS,
@@ -26,6 +35,9 @@ FeedState = Literal["ok", "feed_down", "feed_quiet", "gap"]
 
 # Default: data older than this while the process is still heartbeating → quiet.
 DEFAULT_DATA_QUIET_MS = 60_000
+
+# Rolling window for RFQ error-rate on /api/health (WHI-974).
+DEFAULT_RFQ_ERROR_WINDOW_MS = 15 * 60_000
 
 
 @dataclass(frozen=True, slots=True)
@@ -62,6 +74,20 @@ class HealthStatus:
     heartbeat_age_ms: int | None = None
     # True when a recent gap has source=collector_down.
     collector_down_gap_recent: bool = False
+    # WHI-974: RFQ poll outcome counts (error rate visible without journald).
+    rfq_error_rate: float | None = None
+    rfq_error_rows: int | None = None
+    rfq_total_rows: int | None = None
+    rfq_availability_among_reachable: float | None = None
+    rfq_http_status_counts: dict[int, int] = field(default_factory=dict)
+    rfq_coverage_window_ms: int | None = None
+    # WHI-974: CEX REST volume geo-block (sourced from journal meta).
+    cex_volume_status: str | None = None
+    cex_volume_venue: str | None = None
+    cex_volume_host: str | None = None
+    cex_volume_http_status: int | None = None
+    cex_volume_blocked_first_ms: int | None = None
+    cex_volume_blocked_last_ms: int | None = None
 
     @classmethod
     def unavailable(
@@ -100,6 +126,18 @@ class HealthStatus:
             recovery_hint=hint,
             heartbeat_age_ms=None,
             collector_down_gap_recent=False,
+            rfq_error_rate=None,
+            rfq_error_rows=None,
+            rfq_total_rows=None,
+            rfq_availability_among_reachable=None,
+            rfq_http_status_counts={},
+            rfq_coverage_window_ms=None,
+            cex_volume_status=None,
+            cex_volume_venue=None,
+            cex_volume_host=None,
+            cex_volume_http_status=None,
+            cex_volume_blocked_first_ms=None,
+            cex_volume_blocked_last_ms=None,
         )
 
 
@@ -238,6 +276,30 @@ def recovery_hint_for_state(
     return None
 
 
+@dataclass(frozen=True, slots=True)
+class CexVolumeBlock:
+    """CEX REST volume block state from journal meta (WHI-974)."""
+
+    status: str | None
+    venue: str | None
+    host: str | None
+    http_status: int | None
+    blocked_first_ms: int | None
+    blocked_last_ms: int | None
+
+
+def _cex_volume_block_from_meta(reader: JournalReader) -> CexVolumeBlock:
+    """Read WHI-974 CEX volume REST block state from journal meta."""
+    return CexVolumeBlock(
+        status=reader.get_meta(META_CEX_VOLUME_STATUS),
+        venue=reader.get_meta(META_CEX_VOLUME_VENUE),
+        host=reader.get_meta(META_CEX_VOLUME_HOST),
+        http_status=_meta_int(reader, META_CEX_VOLUME_HTTP_STATUS),
+        blocked_first_ms=_meta_int(reader, META_CEX_VOLUME_FIRST_MS),
+        blocked_last_ms=_meta_int(reader, META_CEX_VOLUME_LAST_MS),
+    )
+
+
 def build_health(
     reader: JournalReader,
     *,
@@ -247,6 +309,7 @@ def build_health(
     poll_interval_s: float | None = None,
     quiet_ms: int = DEFAULT_DATA_QUIET_MS,
     market_id: str | None = None,
+    rfq_error_window_ms: int = DEFAULT_RFQ_ERROR_WINDOW_MS,
 ) -> HealthStatus:
     """Derive health from meta keys + (fallback) freshest journal recv.
 
@@ -331,6 +394,13 @@ def build_health(
     probe_ms = _meta_int(reader, META_PROBE_MS)
     probe_errors = errors_from_meta_json(reader.get_meta(META_PROBE_ERRORS))
     unpublished = unpublished_from_meta_json(reader.get_meta(META_UNPUBLISHED))
+
+    # WHI-974: RFQ error rate over a short window (readable without journald).
+    rfq_cov: RfqQuoteCoverage = rfq_quote_coverage(
+        reader, since_ms=max(0, ts - rfq_error_window_ms)
+    )
+    cex_block = _cex_volume_block_from_meta(reader)
+
     # ``ok`` is the UI banner aggregate: process alive and not in a hard-down
     # state. feed_quiet / advisory gap keep ok=True so the panel stays usable;
     # feed_down and missing journal flip ok=False.
@@ -358,4 +428,16 @@ def build_health(
         recovery_hint=hint,
         heartbeat_age_ms=heartbeat_age,
         collector_down_gap_recent=down_recent,
+        rfq_error_rate=rfq_cov.error_rate,
+        rfq_error_rows=rfq_cov.error_rows,
+        rfq_total_rows=rfq_cov.total_rows,
+        rfq_availability_among_reachable=rfq_cov.availability_among_reachable,
+        rfq_http_status_counts=rfq_cov.by_status,
+        rfq_coverage_window_ms=rfq_error_window_ms,
+        cex_volume_status=cex_block.status,
+        cex_volume_venue=cex_block.venue,
+        cex_volume_host=cex_block.host,
+        cex_volume_http_status=cex_block.http_status,
+        cex_volume_blocked_first_ms=cex_block.blocked_first_ms,
+        cex_volume_blocked_last_ms=cex_block.blocked_last_ms,
     )

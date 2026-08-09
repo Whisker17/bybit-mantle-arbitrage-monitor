@@ -53,6 +53,9 @@ class PairOverviewRow:
     cex_trade_count_24h: int | None = None
     dex_volume_truncated: bool = False
     dex_volume_window_start_ms: int | None = None
+    # WHI-974: why CEX Vol / ratio are blank (geo_blocked); null when REST ok
+    # or simply not yet polled.
+    cex_volume_reason: str | None = None
     # WHI-779: underlying equity + tokenized premium vs underlying.
     underlying_ticker: str | None = None
     underlying_price: Decimal | None = None

@@ -532,6 +532,7 @@ class CollectorDaemon:
             on_volume=self._on_cex_volume,
             poll_interval_s=cfg.poll_interval_s,
             http_timeout_s=cfg.http_timeout_s,
+            on_status=self._on_cex_volume_status,
         )
         self._cex_volume_poller = poller
         return asyncio.create_task(poller.run(), name="cex_volume")
@@ -540,6 +541,15 @@ class CollectorDaemon:
         await asyncio.to_thread(self.store.insert_cex_volume, ticks)
         # REST 24h volume is not part of freshest_recv / watchdog progress —
         # a successful volume poll while WS+chain are dead must not disarm it.
+
+    async def _on_cex_volume_status(self, meta: dict[str, str]) -> None:
+        """Persist CEX volume REST block state for API/UI (WHI-974)."""
+
+        def _write() -> None:
+            for key, value in meta.items():
+                self.store.set_meta(key, value)
+
+        await asyncio.to_thread(_write)
 
     async def _on_gap(self, gap: CollectorGap) -> None:
         await asyncio.to_thread(self.store.insert_gap, gap)
@@ -822,10 +832,15 @@ class CollectorDaemon:
         try:
             while not self._stop.is_set():
                 try:
-                    tick = await asyncio.to_thread(poller.poll_next, gap=self._rfq_gap)
+                    # WHI-974: poll_next returns every HTTP attempt (incl. 451
+                    # errors) so failover success cannot hide failure rates.
+                    ticks = await asyncio.to_thread(
+                        poller.poll_next, gap=self._rfq_gap
+                    )
                     self._rfq_gap = False
-                    await asyncio.to_thread(self.store.insert_rfq_quotes, [tick])
-                    self._note_data_write(tick.poll_ts_ms)
+                    if ticks:
+                        await asyncio.to_thread(self.store.insert_rfq_quotes, ticks)
+                        self._note_data_write(ticks[-1].poll_ts_ms)
                 except Exception as exc:  # noqa: BLE001
                     logger.exception("rfq poll error: %s", exc)
                     self._note_feed_error("rfq_poll", exc)

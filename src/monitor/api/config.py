@@ -34,6 +34,8 @@ class ApiConfig(BaseModel):
     # but bucket tables still compute (WHI-821). Separate from collector_stale_ms.
     quote_max_age_ms: int = Field(default=300_000, ge=1_000)
     recent_gap_window_ms: int = Field(ge=1_000)
+    # WHI-974: trailing window for RFQ http_status error rate on /api/health.
+    rfq_error_window_ms: int = Field(default=900_000, ge=1_000)
     poll_interval_s: float = Field(gt=0, le=60)
     # PnL v2 snapshot TTL (seconds). 0 disables cache (recompute every request).
     # Default slightly above poll_interval_s so steady pollers still hit cache.

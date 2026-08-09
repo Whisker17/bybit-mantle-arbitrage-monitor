@@ -39,6 +39,10 @@ quote_max_age_ms: 300000
 # Health: list gaps whose gap_end_ms falls inside this trailing window.
 recent_gap_window_ms: 300000
 
+# Health: RFQ poll error-rate window (WHI-974). Group-by on fluxion_rfq_quotes
+# http_status over this trailing ms; 15m catches rising 451 without journald.
+rfq_error_window_ms: 900000
+
 # Recommended client poll interval (seconds). Documented in OpenAPI / frontend;
 # the API itself is request/response only (no SSE in v1).
 poll_interval_s: 2.0

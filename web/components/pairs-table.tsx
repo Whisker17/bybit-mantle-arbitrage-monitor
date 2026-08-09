@@ -9,6 +9,8 @@ import { cn } from "@/lib/cn";
 import {
   ammQuoteReasonLabel,
   ammQuoteReasonTitle,
+  cexVolumeReasonLabel,
+  cexVolumeReasonTitle,
   bpsTone,
   cexPremiumBps,
   dexNonTradeableLabel,
@@ -938,10 +940,14 @@ export function PairsTable({
                     title={
                       row.cex_volume_24h != null
                         ? `CEX 24h ${row.cex_volume_24h}`
-                        : "Waiting for CEX volume poll"
+                        : (cexVolumeReasonTitle(row.cex_volume_reason) ??
+                          "Waiting for CEX volume poll")
                     }
                   >
-                    {fmtNotional(row.cex_volume_24h)}
+                    {row.cex_volume_24h != null
+                      ? fmtNotional(row.cex_volume_24h)
+                      : (cexVolumeReasonLabel(row.cex_volume_reason) ??
+                        fmtNotional(null))}
                   </td>
                   <td className="px-2 py-1.5 text-right">
                     <CexVsUndCell row={row} />
@@ -1025,10 +1031,14 @@ export function PairsTable({
                         ? row.dex_volume_truncated
                           ? `CEX/DEX = ${row.volume_ratio} (DEX window truncated — ratio mixes full CEX 24h vs partial DEX)`
                           : `CEX/DEX = ${row.volume_ratio}`
-                        : "Ratio needs positive DEX volume and a CEX poll"
+                        : (cexVolumeReasonTitle(row.cex_volume_reason) ??
+                          "Ratio needs positive DEX volume and a CEX poll")
                     }
                   >
-                    {fmtVolumeRatio(row.volume_ratio)}
+                    {row.volume_ratio != null
+                      ? fmtVolumeRatio(row.volume_ratio)
+                      : (cexVolumeReasonLabel(row.cex_volume_reason) ??
+                        fmtVolumeRatio(null))}
                     {row.dex_volume_truncated && row.volume_ratio != null ? (
                       <span className="ml-0.5 text-[10px] text-amber-400/90">
                         *

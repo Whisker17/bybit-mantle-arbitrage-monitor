@@ -17,6 +17,7 @@ def market_summary(
     stale_ms: int,
     gap_window_ms: int,
     poll_interval_s: float,
+    rfq_error_window_ms: int,
 ) -> dict[str, Any]:
     """One market card for the switcher / discovery endpoint."""
     from monitor.api.routes.health import health_dict_for_runtime
@@ -26,6 +27,7 @@ def market_summary(
         stale_ms=stale_ms,
         gap_window_ms=gap_window_ms,
         poll_interval_s=poll_interval_s,
+        rfq_error_window_ms=rfq_error_window_ms,
     )
     return {
         "id": runtime.market_id,
@@ -50,6 +52,7 @@ def list_markets(request: Request) -> dict[str, Any]:
             stale_ms=state.api.collector_stale_ms,
             gap_window_ms=state.api.recent_gap_window_ms,
             poll_interval_s=state.api.poll_interval_s,
+            rfq_error_window_ms=state.api.rfq_error_window_ms,
         )
         for runtime in sorted(state.markets.values(), key=lambda r: r.market_id)
     ]

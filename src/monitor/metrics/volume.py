@@ -10,6 +10,7 @@ from __future__ import annotations
 from dataclasses import dataclass
 from datetime import UTC, datetime
 from decimal import Decimal
+from typing import Literal
 
 from monitor.metrics.config import MetricsConfig
 from monitor.metrics.session import SessionKind, session_kind
@@ -67,9 +68,21 @@ class CexJournalVolumeWindow:
     truncated: bool
 
 
+# Why overview CEX Vol / ratio is blank (WHI-974). Keep vocabulary stable —
+# same family as no_pool / empty_pool / pricing_anomaly.
+CexVolumeReason = Literal["geo_blocked"]
+
+
 @dataclass(frozen=True, slots=True)
 class VolumeCompare:
-    """Pair-level CEX vs DEX volume snapshot for overview + detail."""
+    """Pair-level CEX vs DEX volume snapshot for overview + detail.
+
+    Overview **CEX Vol** is exchange-reported REST turnover only. When REST is
+    geo-blocked the figure stays null with ``cex_volume_reason='geo_blocked'``;
+    journal-derived notional never fills the overview column or ``volume_ratio``
+    (owner lock WHI-974). Journal session split remains on detail only via
+    ``cex_journal``.
+    """
 
     cex_volume_24h: Decimal | None
     cex_trade_count_24h: int | None
@@ -79,6 +92,8 @@ class VolumeCompare:
     # Journal-derived CEX open/closed (None when no trades in window).
     cex_journal: CexJournalVolumeWindow | None
     volume_ratio: Decimal | None  # cex / dex when both > 0 and cex known
+    # WHI-974: explicit blank reason (geo_blocked) when REST is unavailable.
+    cex_volume_reason: CexVolumeReason | None = None
 
 
 def volume_ratio(cex: Decimal | None, dex: Decimal) -> Decimal | None:
@@ -86,6 +101,25 @@ def volume_ratio(cex: Decimal | None, dex: Decimal) -> Decimal | None:
     if cex is None or dex <= 0:
         return None
     return cex / dex
+
+
+def resolve_cex_volume_gate(
+    *,
+    cex_tick: CexVolumeTick | None,
+    meta_reason: CexVolumeReason | None,
+) -> tuple[CexVolumeTick | None, CexVolumeReason | None]:
+    """Apply geo_blocked meta over a possibly-stale REST tick (WHI-974).
+
+    When the collector has stamped ``geo_blocked``, drop any prior REST row so
+    overview cannot show a frozen exchange print after the host becomes
+    blocked. A live poll success clears the meta before the next overview
+    build, so this does not suppress a healthy feed.
+    """
+    if meta_reason == "geo_blocked":
+        return None, "geo_blocked"
+    if cex_tick is not None:
+        return cex_tick, None
+    return None, meta_reason
 
 
 def aggregate_dex_volume(
@@ -229,8 +263,15 @@ def build_volume_compare(
     earliest_swap_recv_ts_ms: int | None = None,
     collector_started_ms: int | None = None,
     journal_trades: list[BybitTradeTick] | None = None,
+    cex_volume_reason: CexVolumeReason | None = None,
 ) -> VolumeCompare:
-    """Assemble overview/detail volume compare for one pair."""
+    """Assemble overview/detail volume compare for one pair.
+
+    Journal trades feed ``cex_journal`` (detail panel) only. They never fill
+    ``cex_volume_24h``, ``cex_trade_count_24h``, or ``volume_ratio`` — those
+    stay exchange-REST-only so a geo-blocked host cannot silently look like a
+    partial REST print (WHI-974).
+    """
     dex = aggregate_dex_volume(
         swaps,
         quote_is_token0=quote_is_token0,
@@ -240,15 +281,18 @@ def build_volume_compare(
         earliest_recv_ts_ms=earliest_swap_recv_ts_ms,
         collector_started_ms=collector_started_ms,
     )
+    gated_tick, reason = resolve_cex_volume_gate(
+        cex_tick=cex_tick, meta_reason=cex_volume_reason
+    )
     cex_vol: Decimal | None = None
     cex_n: int | None = None
     cex_src: str | None = None
     cex_poll: int | None = None
-    if cex_tick is not None:
-        cex_vol = cex_tick.volume_quote_24h
-        cex_n = cex_tick.trade_count_24h
-        cex_src = cex_tick.source
-        cex_poll = cex_tick.poll_ts_ms
+    if gated_tick is not None:
+        cex_vol = gated_tick.volume_quote_24h
+        cex_n = gated_tick.trade_count_24h
+        cex_src = gated_tick.source
+        cex_poll = gated_tick.poll_ts_ms
 
     journal = None
     if journal_trades is not None:
@@ -258,8 +302,10 @@ def build_volume_compare(
             now_ms=now_ms,
             metrics=metrics,
         )
-    # Bybit tickers omit trade count; surface journal prints as secondary.
-    if cex_n is None and journal is not None:
+    # Bybit REST omits trade count; when the REST tick is present, journal
+    # prints are a secondary count only. Never fill count when volume is blank
+    # (geo_blocked / no poll) — that mixed sources next to a null volume (WHI-974).
+    if cex_n is None and journal is not None and gated_tick is not None:
         cex_n = journal.trade_count
 
     return VolumeCompare(
@@ -270,6 +316,7 @@ def build_volume_compare(
         dex=dex,
         cex_journal=journal,
         volume_ratio=volume_ratio(cex_vol, dex.volume_usd),
+        cex_volume_reason=reason,
     )
 
 

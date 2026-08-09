@@ -174,6 +174,78 @@ def test_build_volume_compare_ratio() -> None:
     assert cmp_.dex.volume_usd == Decimal("100")
     assert cmp_.volume_ratio == Decimal("10")
     assert cmp_.dex.truncated is True
+    assert cmp_.cex_volume_reason is None
+
+
+def test_geo_blocked_keeps_overview_blank_and_ratio_null() -> None:
+    """WHI-974: REST geo-block → reason geo_blocked; journal never fills ratio."""
+    from monitor.quotes import BybitTradeTick
+
+    metrics = load_metrics_config()
+    trades = [
+        BybitTradeTick(
+            pair_id="TSLAx",
+            symbol="TSLAXUSDT",
+            exchange_ts_ms=5_000,
+            recv_ts_ms=5_001,
+            trade_id="t1",
+            price=Decimal("100"),
+            price_de_multiplied=Decimal("100"),
+            size=Decimal("2"),
+            side="Buy",
+            multiplier=Decimal(1),
+        )
+    ]
+    swaps = [_swap(recv_ts_ms=8_000, amount0="100", log_index=0)]
+    cmp_ = build_volume_compare(
+        cex_tick=None,
+        swaps=swaps,
+        quote_is_token0=True,
+        since_ms=0,
+        now_ms=10_000,
+        metrics=metrics,
+        earliest_swap_recv_ts_ms=8_000,
+        journal_trades=trades,
+        cex_volume_reason="geo_blocked",
+    )
+    assert cmp_.cex_volume_24h is None
+    assert cmp_.cex_trade_count_24h is None  # not journal-backfilled
+    assert cmp_.volume_ratio is None
+    assert cmp_.cex_volume_reason == "geo_blocked"
+    # Detail panel still has journal figure (partial / truncated).
+    assert cmp_.cex_journal is not None
+    assert cmp_.cex_journal.volume_usd == Decimal("200")
+    assert cmp_.cex_journal.trade_count == 1
+    assert cmp_.cex_journal.truncated is True
+
+
+def test_geo_blocked_wins_over_stale_rest_tick() -> None:
+    """WHI-974 R3: meta geo_blocked blanks a prior REST print (not a frozen figure)."""
+    metrics = load_metrics_config()
+    stale = CexVolumeTick(
+        pair_id="TSLAx",
+        symbol="TSLAXUSDT",
+        poll_ts_ms=1_000,
+        recv_ts_ms=1_001,
+        volume_quote_24h=Decimal("9999"),
+        trade_count_24h=5,
+        source="bybit",
+    )
+    swaps = [_swap(recv_ts_ms=8_000, amount0="100", log_index=0)]
+    cmp_ = build_volume_compare(
+        cex_tick=stale,
+        swaps=swaps,
+        quote_is_token0=True,
+        since_ms=0,
+        now_ms=10_000,
+        metrics=metrics,
+        earliest_swap_recv_ts_ms=8_000,
+        cex_volume_reason="geo_blocked",
+    )
+    assert cmp_.cex_volume_24h is None
+    assert cmp_.cex_trade_count_24h is None
+    assert cmp_.volume_ratio is None
+    assert cmp_.cex_volume_reason == "geo_blocked"
 
 
 def test_store_and_reader_cex_volume(tmp_path: Path) -> None:

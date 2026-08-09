@@ -31,6 +31,9 @@ export type PnlStatus =
  */
 export type AmmQuoteReason = "empty_pool" | "invalid_mid" | "pricing_anomaly";
 
+/** Overview / detail CEX Vol blank reason when REST is unavailable (WHI-974). */
+export type CexVolumeReason = "geo_blocked";
+
 /**
  * Why a row is denied a Top-N seat (WHI-796 + WHI-822). UI maps via format
  * helpers; eligibility lives in web/lib/sort.ts.
@@ -209,6 +212,12 @@ export type PairOverviewRow = {
   cex_trade_count_24h?: number | null;
   dex_volume_truncated?: boolean;
   dex_volume_window_start_ms?: number | null;
+  /**
+   * WHI-974: why CEX Vol / volume_ratio are blank. `geo_blocked` when the
+   * exchange REST path is blocked from this host (WS unaffected). Journal
+   * derived volume stays on the pair detail panel only.
+   */
+  cex_volume_reason?: CexVolumeReason | null;
   /** WHI-779: underlying equity reference + tokenized premium. */
   underlying_ticker?: string | null;
   underlying_price?: string | null;
@@ -352,6 +361,8 @@ export type VolumeCompare = {
   dex: DexVolumeWindow;
   cex_journal: CexJournalVolumeWindow | null;
   volume_ratio: string | null;
+  /** WHI-974: same vocabulary as overview row. */
+  cex_volume_reason?: CexVolumeReason | null;
 };
 
 /** Market journal readiness for overview / markets list (WHI-774). */
@@ -666,6 +677,20 @@ export type HealthResponse = {
   recovery_hint?: string | null;
   heartbeat_age_ms?: number | null;
   collector_down_gap_recent?: boolean;
+  /** WHI-974: RFQ poll error rate over rfq_coverage_window_ms. */
+  rfq_error_rate?: number | null;
+  rfq_error_rows?: number | null;
+  rfq_total_rows?: number | null;
+  rfq_availability_among_reachable?: number | null;
+  rfq_http_status_counts?: Record<string, number>;
+  rfq_coverage_window_ms?: number | null;
+  /** WHI-974: CEX REST volume status (ok | geo_blocked | error). */
+  cex_volume_status?: string | null;
+  cex_volume_venue?: string | null;
+  cex_volume_host?: string | null;
+  cex_volume_http_status?: number | null;
+  cex_volume_blocked_first_ms?: number | null;
+  cex_volume_blocked_last_ms?: number | null;
 };
 
 /** One market card from GET /api/markets (WHI-774). */

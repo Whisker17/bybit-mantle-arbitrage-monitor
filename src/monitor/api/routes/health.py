@@ -6,7 +6,7 @@ from typing import Any
 
 from fastapi import APIRouter, Request
 
-from monitor.api.health import HealthStatus, build_health
+from monitor.api.health import DEFAULT_RFQ_ERROR_WINDOW_MS, HealthStatus, build_health
 from monitor.api.routes.common import runtime_or_404
 from monitor.api.serialize import to_json_dict
 from monitor.api.state import AppState, MarketRuntime, app_state_from_request
@@ -20,6 +20,7 @@ def health_dict_for_runtime(
     stale_ms: int,
     gap_window_ms: int,
     poll_interval_s: float,
+    rfq_error_window_ms: int = DEFAULT_RFQ_ERROR_WINDOW_MS,
 ) -> dict[str, Any]:
     """Shared health snapshot used by /health and /api/markets summaries."""
     reader = runtime.ensure_reader()
@@ -39,6 +40,7 @@ def health_dict_for_runtime(
             gap_window_ms=gap_window_ms,
             poll_interval_s=poll_interval_s,
             market_id=runtime.market_id,
+            rfq_error_window_ms=rfq_error_window_ms,
         )
     return to_json_dict(status)
 
@@ -49,6 +51,7 @@ def _health_body(state: AppState, runtime: MarketRuntime) -> dict[str, Any]:
         stale_ms=state.api.collector_stale_ms,
         gap_window_ms=state.api.recent_gap_window_ms,
         poll_interval_s=state.api.poll_interval_s,
+        rfq_error_window_ms=state.api.rfq_error_window_ms,
     )
     body["market_id"] = runtime.market_id
     body["display_name"] = runtime.display_name

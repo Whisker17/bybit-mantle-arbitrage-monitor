@@ -5,6 +5,8 @@ from __future__ import annotations
 from decimal import Decimal
 from pathlib import Path
 
+import pytest
+
 from monitor.api.health import HealthStatus, build_health
 from monitor.quotes import BybitBookTick, CollectorGap, now_ms
 from monitor.storage import JournalReader, SqliteStore
@@ -102,6 +104,65 @@ def test_reader_recent_gaps_source_filter_before_limit(tmp_path: Path) -> None:
         assert len(downs) == 1
         assert downs[0].source == "collector_down"
         assert downs[0].detail == "downtime"
+
+
+def test_build_health_exposes_rfq_error_rate(tmp_path: Path) -> None:
+    """WHI-974: /api/health surface includes RFQ error rate from journal rows."""
+    from monitor.quotes import FluxionRfqQuoteTick
+
+    db = tmp_path / "rfq.db"
+    store = SqliteStore(db)
+    ts = now_ms()
+    store.set_meta("collector_started_ms", str(ts - 60_000))
+    store.set_meta("collector_heartbeat_ms", str(ts - 500))
+    tok = "0x" + "11" * 20
+    store.insert_rfq_quotes(
+        [
+            FluxionRfqQuoteTick(
+                pair_id="TSLAx",
+                poll_ts_ms=ts - 1_000,
+                recv_ts_ms=ts - 999,
+                token_in=tok,
+                token_out=tok,
+                amount_in="1",
+                amount_out="1",
+                price=Decimal("1"),
+                side="buy",
+                request_id="r",
+                http_status=200,
+                available=True,
+            ),
+            FluxionRfqQuoteTick(
+                pair_id="TSLAx",
+                poll_ts_ms=ts - 900,
+                recv_ts_ms=ts - 899,
+                token_in=tok,
+                token_out=tok,
+                amount_in="1",
+                amount_out=None,
+                price=None,
+                side=None,
+                request_id=None,
+                http_status=451,
+                available=False,
+            ),
+        ]
+    )
+    _seed_book(store, ts=ts - 1_000)
+    store.close()
+
+    with JournalReader(db) as reader:
+        health = build_health(
+            reader,
+            now=ts,
+            stale_ms=30_000,
+            gap_window_ms=300_000,
+            rfq_error_window_ms=900_000,
+        )
+    assert health.rfq_total_rows == 2
+    assert health.rfq_error_rows == 1
+    assert health.rfq_error_rate == pytest.approx(0.5)
+    assert health.rfq_http_status_counts.get(451) == 1
 
 
 def test_build_health_alive(tmp_path: Path) -> None:

@@ -5,6 +5,8 @@
  */
 
 import {
+  cexVolumeReasonLabel,
+  cexVolumeReasonTitle,
   fmtNotional,
   fmtUtcHm,
   fmtVolumeRatio,
@@ -68,8 +70,18 @@ export function VolumePanel({ volume, className }: Props) {
         <div className="text-[11px] font-medium uppercase tracking-wide text-muted-foreground">
           CEX 24h (REST)
         </div>
-        <div className="text-sm font-medium tabular-nums">
-          {fmtNotional(volume.cex_volume_24h)}
+        <div
+          className="text-sm font-medium tabular-nums"
+          title={
+            volume.cex_volume_24h == null
+              ? cexVolumeReasonTitle(volume.cex_volume_reason)
+              : undefined
+          }
+        >
+          {volume.cex_volume_24h != null
+            ? fmtNotional(volume.cex_volume_24h)
+            : (cexVolumeReasonLabel(volume.cex_volume_reason) ??
+              fmtNotional(null))}
           {volume.cex_trade_count_24h != null ? (
             <span className="ml-1 text-xs font-normal text-muted-foreground">
               · {volume.cex_trade_count_24h} prints
@@ -79,7 +91,9 @@ export function VolumePanel({ volume, className }: Props) {
         <div className="text-[11px] text-muted-foreground">
           {volume.cex_source
             ? `Source: ${volume.cex_source}`
-            : "No poll yet"}
+            : volume.cex_volume_reason === "geo_blocked"
+              ? "REST geo-blocked from this host (WS unaffected)"
+              : "No poll yet"}
         </div>
         {volume.cex_journal != null ? (
           <div className="mt-2 space-y-1 border-t border-border/40 pt-2">

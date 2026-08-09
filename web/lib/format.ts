@@ -1,6 +1,7 @@
 import type {
   AmmQuoteReason,
   CaptureStatus,
+  CexVolumeReason,
   DexNonTradeableReason,
   Direction,
   SessionKind,
@@ -14,6 +15,32 @@ const AMM_QUOTE_REASON_LABEL: Record<AmmQuoteReason, string> = {
   invalid_mid: "invalid mid",
   pricing_anomaly: "price anomaly",
 };
+
+/** Overview CEX Vol / ratio blank reason labels (WHI-974). */
+const CEX_VOLUME_REASON_LABEL: Record<CexVolumeReason, string> = {
+  geo_blocked: "geo blocked",
+};
+
+const CEX_VOLUME_REASON_TITLE: Record<CexVolumeReason, string> = {
+  geo_blocked:
+    "CEX REST 24h volume blocked from this host (e.g. Bybit 403 on US VPS). " +
+    "WebSocket book/trades still work. Exchange-reported column stays blank; " +
+    "journal-derived figure is on the pair detail volume panel only (WHI-974).",
+};
+
+export function cexVolumeReasonLabel(
+  reason: CexVolumeReason | null | undefined,
+): string | null {
+  if (reason == null) return null;
+  return CEX_VOLUME_REASON_LABEL[reason] ?? null;
+}
+
+export function cexVolumeReasonTitle(
+  reason: CexVolumeReason | null | undefined,
+): string | undefined {
+  if (reason == null) return undefined;
+  return CEX_VOLUME_REASON_TITLE[reason];
+}
 
 /** Pair-id badge labels for non-tradeable DEX legs (WHI-796 / WHI-822). */
 const DEX_NON_TRADEABLE_LABEL: Record<DexNonTradeableReason, string> = {
