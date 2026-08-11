@@ -191,7 +191,7 @@ searches for optimal size; the operator picks `order_amount`.
 | \(P_b^{\mathrm{mid}}\) | quote/base | Bybit mid after `de_multiplied_price` (USDT per 1 native-equivalent base) |
 | \(q\) | base | \(q = Q / P_b^{\mathrm{mid}}\) — economic base amount (native xStock units) |
 | \(m\) | — | Bybit `xstockMultiplier` (>0). Converts raw Bybit book into units comparable to Fluxion native base (see §4.2 multiplier step) |
-| \(f_b\) | fraction | Bybit xStocks Adventure Zone taker fee = \(20\,\mathrm{bps} = 0.002\) (config `bybit_taker_fee_bps`; measured 2026-08-07) |
+| \(f_b\) | fraction | Bybit xStocks taker fee = \(15\,\mathrm{bps} = 0.0015\) (config `bybit_taker_fee_bps` / market `cex_taker_fee_bps`; MEASURED 2026-08-11, WHI-1042; maker 10 bps unmodeled) |
 | \(f_p\) | fraction | AMM pool fee (e.g. 3000 → 0.003); RFQ: **0** (embedded in quote) |
 | \(G\) | USD | Mantle gas for **one** Fluxion leg (`gas_usd_per_swap`, default 0.01) |
 | \(\beta\) | fraction | Signed USDC premium over USDT (`usdt_usdc_basis_bps` / 1e4); bybit-fluxion 7.5 bps |
@@ -261,8 +261,8 @@ examples: buy BTC → fee in BTC; sell BTC → fee in USDT). With rate \(f_b\):
 | **Buy** base (want **net** base \(q\)) | Walk asks for gross base \(q_{\mathrm{g}} = q / (1 - f_b)\); pay \(q_{\mathrm{g}} \cdot P_{\mathrm{ask}}^{\mathrm{vwap}}\) USDT | Receive \(q\) base after fee |
 | **Sell** base \(q\) | Walk bids for base \(q\); gross USDT \(= q \cdot P_{\mathrm{bid}}^{\mathrm{vwap}}\) | Receive \(q \cdot P_{\mathrm{bid}}^{\mathrm{vwap}} \cdot (1 - f_b)\) USDT |
 
-First-order, \(1/(1-f_b) \approx 1+f_b\) (error \(\sim f_b^2\), ~0.04 bps at
-20 bps). **Implement the exact received-asset form** so the matched-base
+First-order, \(1/(1-f_b) \approx 1+f_b\) (error \(\sim f_b^2\), ~0.02 bps at
+15 bps). **Implement the exact received-asset form** so the matched-base
 invariant stays honest; do not bill buy fees as pure quote markup without
 adjusting gross base.
 
@@ -431,7 +431,7 @@ With \(G = 0.01\):
 | \(Q\) | gas bps | Implication |
 |------:|--------:|-------------|
 | $10 | 10.0 | Needs \>10 bps gross-after-fees just to break even on gas alone |
-| $50 | 2.0 | Material vs 20 bps Bybit fee |
+| $50 | 2.0 | Material vs 15 bps Bybit fee |
 | $100 | 1.0 | Still visible |
 | $500 | 0.2 | Small |
 | $1 000 | 0.1 | Negligible vs fee/slip |
@@ -594,15 +594,15 @@ chooses file layout and exact names):
 
 ## 7. Worked micro-example (fee algebra check)
 
-Assume mid-aligned venues, zero slip, zero gas, \(\beta=0\), \(f_b=20\) bps,
-AMM fee 0 for clarity, \(Q=1000\), \(P=100\), net \(q=10\).
+Assume mid-aligned venues, zero slip, zero gas, \(\beta=0\), \(f_b=15\) bps
+(WHI-1042 live pin), AMM fee 0 for clarity, \(Q=1000\), \(P=100\), net \(q=10\).
 
 **`buy_fluxion_sell_bybit`** with Bybit bid = Fluxion mid = 100:
 
 ```text
-USDT_recv  = 10 * 100 * (1 - 0.002) = 998.0   # fee in quote on sell
-USDC_spent = 10 * 100 = 1000.0                # fee-free AMM buy of net 10
-PnL = 998 - 1000 = -2.0 USD   (= −20 bps of Q)
+USDT_recv  = 10 * 100 * (1 - 0.0015) = 998.5   # fee in quote on sell
+USDC_spent = 10 * 100 = 1000.0                 # fee-free AMM buy of net 10
+PnL = 998.5 - 1000 = -1.5 USD   (= −15 bps of Q)
 ```
 
 Matches “pay taker once on the CEX sell.” If the UniV3 pool fee is 30 bps on
@@ -610,16 +610,16 @@ input and we binary-search quote_in for base_out = 10:
 
 ```text
 USDC_spent ≈ 1000 / (1 - 0.003) ≈ 1003.01
-PnL ≈ 998 - 1003.01 = -5.01 USD
+PnL ≈ 998.5 - 1003.01 = -4.51 USD
 ```
 
 **`buy_bybit_sell_fluxion`** same mids:
 
 ```text
-q_gross    = 10 / (1 - 0.002) ≈ 10.02004      # fee in base on buy
-USDT_spent = 10.02004 * 100 ≈ 1002.004
+q_gross    = 10 / (1 - 0.0015) ≈ 10.01502     # fee in base on buy
+USDT_spent = 10.01502 * 100 ≈ 1001.502
 USDC_recv  = 10 * 100 = 1000.0
-PnL ≈ 1000 - 1002.004 = -2.004 USD
+PnL ≈ 1000 - 1001.502 = -1.502 USD
 ```
 
 Hummingbot-style % of buy notional remains available from the same cash-flows;

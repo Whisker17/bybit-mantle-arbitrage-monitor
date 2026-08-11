@@ -10,11 +10,12 @@ size_ladder_usd:
   - 5000
   - 20000
 
-# Bybit xStocks Adventure Zone taker (DESIGN §1.2 / §2.3). 0.20% = 20 bps.
-# Base default matches bybit-fluxion (default market). Per-market costs override
-# via apply_market_costs — binance-pancake stays at 10 bps in its market file.
-# Provenance: authenticated GET /v5/account/fee-rate 2026-08-07 (HOODX/CRCLX/NVDAX).
-bybit_taker_fee_bps: 20
+# Bybit xStocks taker (DESIGN §1.2 / §2.3). MEASURED 15 bps (WHI-1042,
+# 2026-08-11 GET /v5/account/fee-rate). Base default matches bybit-fluxion.
+# Per-market costs override via apply_market_costs — binance-pancake stays at
+# 10 bps in its market file. Maker is 10 bps but unmodeled (always charge
+# taker). Evidence: docs/references/whi-1042-bybit-taker-fee-15bps.md
+bybit_taker_fee_bps: 15
 
 # Signed USDC premium over USDT, in bps (positive = USDC richer). Base default
 # 0; bybit-fluxion overrides via costs.quote_basis_bps (measured ~7.5). Engine

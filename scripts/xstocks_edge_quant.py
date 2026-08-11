@@ -6,7 +6,7 @@ at $500 / $1,000 notional for both directions under the **corrected cost
 stack** (WHI-909):
 
   * live per-timestamp USDCUSDT premium (not a hardcoded 7.5)
-  * Bybit taker sensitivity at 10 and 20 bps (20 = Adventure Zone, believed)
+  * Bybit taker sensitivity at primary (market config, WHI-1042 = 15 bps) and 10 bps
   * rebalance amortization at 1 / 5 / 13.5 bps on skew-building direction
   * extended min_edge_bps sweep 0..200 (step 2 to 60, step 5 beyond)
 
@@ -105,8 +105,8 @@ DEFAULT_JSON = _REPO / "docs" / "references" / "m8-xstocks-edge-quant.json"
 DEFAULT_BASIS_CACHE = (
     _REPO / "docs" / "references" / "m8-xstocks-edge-quant-usdcusdt-klines.json"
 )
-# Cost-stack sensitivity (WHI-909). Primary taker = market file
-# (bybit-fluxion cex_taker_fee_bps / WHI-959 Adventure Zone); alternate
+# Cost-stack sensitivity (WHI-909 / WHI-1042). Primary taker = market file
+# (bybit-fluxion cex_taker_fee_bps; currently 15 bps WHI-1042); alternate
 # sensitivity leg is the pre-correction 10 bps stack. Rebalance primary 1 bps.
 SENSITIVITY_TAKER_BPS = Decimal(10)  # pre-WHI-959 stack for comparison only
 REBALANCE_TIERS_BPS = (Decimal("1"), Decimal("5"), Decimal("13.5"))
@@ -485,12 +485,14 @@ def render_report(payload: dict[str, Any]) -> str:
     a("")
     a(f"**Generated:** {gen}")
     a("")
+    primary_taker = payload["cost_stack"]["primary_taker_bps"]
     a(
         "> **Supersedes WHI-866.** Prior report retained at "
         "`docs/references/m8-xstocks-edge-quant-v1-whi866.md` (10 bps taker, "
         "0 basis, 0 rebalance, 0..60 sweep). This re-run uses live USDCUSDT "
-        "premium, 20 bps Adventure Zone taker (primary), rebalance "
-        "amortization, and an extended 0..200 bps threshold sweep."
+        f"premium, **{primary_taker} bps** Bybit taker (primary from market "
+        "file / WHI-1042), rebalance amortization, and an extended 0..200 bps "
+        "threshold sweep."
     )
     a("")
     a("## Regeneration")
@@ -569,8 +571,9 @@ def render_report(payload: dict[str, Any]) -> str:
     cs = payload["cost_stack"]
     a(
         f"- **Bybit taker:** primary **{cs['primary_taker_bps']} bps** "
-        f"(Adventure Zone, measured WHI-959 / bot fee-rate pull). Sensitivity "
-        f"also reported at {', '.join(str(x) for x in cs['taker_tiers_bps'])} bps."
+        f"({cs.get('taker_reason', 'market costs.cex_taker_fee_bps')}). "
+        f"Sensitivity also reported at "
+        f"{', '.join(str(x) for x in cs['taker_tiers_bps'])} bps."
     )
     a(
         f"- **USDT/USDC basis:** live per-timestamp USDCUSDT 1m mid → "
@@ -1464,8 +1467,8 @@ def run(args: argparse.Namespace) -> int:
     reader.close()
     conn.close()
 
-    # Primary taker from market file (Adventure Zone 20 bps after WHI-959);
-    # sensitivity also includes the pre-correction 10 bps leg.
+    # Primary taker from market file (WHI-1042: 15 bps taker); sensitivity
+    # also includes the pre-correction 10 bps leg.
     primary_taker_bps = metrics_cfg.bybit_taker_fee_bps
     taker_tiers = sorted({primary_taker_bps, SENSITIVITY_TAKER_BPS})
 
@@ -1622,8 +1625,9 @@ def run(args: argparse.Namespace) -> int:
             "taker_tiers_bps": [str(t) for t in taker_tiers],
             "taker_believed": str(primary_taker_bps),
             "taker_reason": (
-                "market costs.cex_taker_fee_bps (bybit-fluxion; WHI-959 "
-                "Adventure Zone maker=taker=20 bps via bot fee-rate pull)"
+                "market costs.cex_taker_fee_bps (bybit-fluxion; WHI-1042 "
+                "MEASURED 2026-08-11 maker 10 / taker 15 bps; model always "
+                "charges taker)"
             ),
             "primary_rebalance_bps": str(PRIMARY_REBALANCE_BPS),
             "rebalance_tiers_bps": [str(t) for t in REBALANCE_TIERS_BPS],

@@ -22,7 +22,7 @@ def test_load_checked_in_metrics_config() -> None:
     cfg = load_metrics_config()
     assert cfg.version == 1
     assert cfg.size_ladder_usd == [Decimal(1000), Decimal(5000), Decimal(20000)]
-    assert cfg.bybit_taker_fee_bps == Decimal(20)
+    assert cfg.bybit_taker_fee_bps == Decimal(15)
     # Base metrics.yaml stays 0; bybit-fluxion market file overrides to 7.5.
     assert cfg.usdt_usdc_basis_bps == Decimal(0)
     assert cfg.gas_usd_per_swap == Decimal("0.01")
@@ -51,7 +51,7 @@ def test_metrics_config_accepts_negative_basis() -> None:
     cfg = MetricsConfig(
         version=1,
         size_ladder_usd=[Decimal(1000)],
-        bybit_taker_fee_bps=Decimal(20),
+        bybit_taker_fee_bps=Decimal(15),
         usdt_usdc_basis_bps=Decimal("-3.5"),
         gas_usd_per_swap=Decimal("0.01"),
         session=SessionConfig(
@@ -74,7 +74,7 @@ def test_metrics_config_accepts_negative_basis() -> None:
     # Market file path also accepts a signed premium (YAML → MarketCosts).
     costs = MarketCosts.model_validate(
         {
-            "cex_taker_fee_bps": 20,
+            "cex_taker_fee_bps": 15,
             "gas_usd_per_swap": "0.01",
             "quote_basis_bps": "-3.5",
         }

@@ -121,6 +121,10 @@ placeholders. Agents must not assume a module exists until its issue lands. -->
     via `apply_market_attribution(has_rfq=dex.has_rfq)`, pool geometry with
     BSC USDT 18d, CLI `python -m monitor.metrics --market binance-pancake`.
     DESIGN §2.7.
+  - **Bybit xStocks taker 20→15 (WHI-1042) landed:** live tier maker 10 /
+    taker 15 bps; `bybit-fluxion` `cex_taker_fee_bps` + metrics base default;
+    binance-pancake unchanged; evidence
+    `docs/references/whi-1042-bybit-taker-fee-15bps.md`.
   - **M7-5 Web/API multi-market (WHI-774) landed:** `GET /api/markets` +
     market-scoped `/api/{market}/pairs|health|…` (legacy unscoped routes map
     to default `bybit-fluxion`); Web `MarketSwitcher` + routes

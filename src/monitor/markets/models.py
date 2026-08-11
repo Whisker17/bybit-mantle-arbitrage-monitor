@@ -62,7 +62,7 @@ class MarketCosts(BaseModel):
 
     model_config = ConfigDict(extra="forbid", frozen=True)
 
-    # CEX taker fee in bps (Bybit xStocks Adventure Zone 20; Binance spot 10).
+    # CEX taker fee in bps (Bybit xStocks 15 taker WHI-1042; Binance spot 10).
     cex_taker_fee_bps: Decimal = Field(ge=0)
     # One AMM swap gas in USD (Mantle ~$0.01; BSC differs — set per market).
     gas_usd_per_swap: Decimal = Field(ge=0)

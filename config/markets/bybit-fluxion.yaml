@@ -21,12 +21,15 @@ dex:
   quote_decimals: 6
   has_rfq: true
 costs:
-  # Bybit xStocks "Adventure Zone" tier: maker = taker = 20 bps (no maker discount).
-  # Measured 2026-08-07 via authenticated GET /v5/account/fee-rate for
-  # HOODXUSDT / CRCLXUSDT / NVDAXUSDT. Cited from sibling bot repo
-  # mantle-stocks-arbitrage-bots (config/thresholds.yaml + that repo's DESIGN §2.3).
-  # Standard-spot 10 bps does not apply.
-  cex_taker_fee_bps: 20
+  # MEASURED 2026-08-11 via GET /v5/account/fee-rate (WHI-1042):
+  # AAPLX/CRCLX/GOOGLX/HOODX/METAX/NVDAX/TSLAX maker 10 / taker 15 bps.
+  # Always charge taker (crossing side); maker unmodeled (DEFERRED).
+  # Prior WHI-959 pin was maker=taker=20 from a 2026-08-07 morning read;
+  # tier flipped the same day. Fee tiers are not static — re-check after
+  # Bybit VIP/zone announcements.
+  # Evidence: docs/references/whi-1042-bybit-taker-fee-15bps.md
+  # (sibling bot already shipped the same pin).
+  cex_taker_fee_bps: 15
   gas_usd_per_swap: 0.01
   # Signed USDC premium over USDT (bps; positive = USDC richer). Bybit xStocks
   # quote USDT while Fluxion AMM/RFQ quote USDC. Measured ~7.5 bps: Bybit

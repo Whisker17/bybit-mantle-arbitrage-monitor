@@ -24,9 +24,9 @@ long, after realistic costs, and who is moving the prices.
   still measured from on-chain LOP + Swap, not inferred from the wall clock.
 - **Data:** pure realtime, accumulate from zero — **no historical backfill**.
 - **Arb definition:** two-sided inventory paper arb. Wear =
-  Bybit xStocks Adventure Zone taker **0.20%** (20 bps; maker = taker; measured
-  2026-08-07 via `GET /v5/account/fee-rate`) + Fluxion pool fee + Mantle gas +
-  bilateral slippage.
+  Bybit xStocks taker **0.15%** (15 bps; MEASURED 2026-08-11 via
+  `GET /v5/account/fee-rate`, WHI-1042; maker is 10 bps but unmodeled —
+  always charge taker) + Fluxion pool fee + Mantle gas + bilateral slippage.
 - **Attribution:** mechanism layer (RFQ = MM-driven / AMM = active taker) +
   behavior layer (address heuristics; see §4.2 reuse of `m6_attribution`).
 - **Stats:** all metrics segmented by **US equity open vs closed** session.
@@ -76,7 +76,7 @@ For size ladder \(Q\) (USD notionals; M3 ships $1K / $5K / $20K in
 
 ```
 edge_bps = direction_aware_spread_bps
-         - bybit_taker_bps (20)  # Adventure Zone; config/markets/bybit-fluxion.yaml
+         - bybit_taker_bps (15)  # WHI-1042; config/markets/bybit-fluxion.yaml
          - fluxion_fee_bps
          - bybit_slip_bps(Q)
          - fluxion_slip_bps(Q)
@@ -143,10 +143,11 @@ bucket table. Methodology derivation and Hummingbot comparison:
 
 #### 2.6.2 Cash-flow formulas
 
-Bybit taker fee \(f_b = 20\,\mathrm{bps}\) (config; xStocks Adventure Zone —
-maker = taker = 20 bps, measured 2026-08-07 via authenticated
-`GET /v5/account/fee-rate` on HOODXUSDT / CRCLXUSDT / NVDAXUSDT). Spot fees are
-charged in the
+Bybit taker fee \(f_b = 15\,\mathrm{bps}\) (config; MEASURED 2026-08-11 via
+authenticated `GET /v5/account/fee-rate` on all seven Fluxion-liquid pairs —
+maker 10 / taker 15; WHI-1042). The prior "maker = taker = 20" claim (WHI-959)
+is false after the 2026-08-07 tier move. Paper edge always charges **taker**
+(crossing side); maker discount is unmodeled. Spot fees are charged in the
 **received** asset (Bybit help center): buy → fee in base; sell → fee in quote.
 VWAP levels: \(p = p^{\mathrm{raw}}/m\), \(s = s^{\mathrm{raw}}\cdot m\) (notional
 invariant; matched base \(q\) shares that unit). Full algebra in research note
@@ -325,7 +326,7 @@ algorithms under `monitor.metrics` / `monitor.attribution` stay market-agnostic.
 
 | Concern | Source | Notes |
 |---------|--------|-------|
-| CEX taker fee | market `costs.cex_taker_fee_bps` → `MetricsConfig.bybit_taker_fee_bps` | Field name is historical; value is the active CEX venue fee (Bybit xStocks Adventure Zone **20**, Binance spot **10**). |
+| CEX taker fee | market `costs.cex_taker_fee_bps` → `MetricsConfig.bybit_taker_fee_bps` | Field name is historical; value is the active CEX venue fee (Bybit xStocks **15** taker WHI-1042, Binance spot **10**). |
 | Gas per AMM swap | market `costs.gas_usd_per_swap` | Mantle ~$0.01; BSC inventory default $0.05 (non-zero constant). |
 | Quote basis wear | market `costs.quote_basis_bps` → `usdt_usdc_basis_bps` | Signed USDC premium (bps); bybit-fluxion **7.5**, binance-pancake **0** (same quote). Engine signs by direction (WHI-960). |
 | Stable withdrawal fee | market `costs.stable_withdrawal_fee_usd` → `MetricsConfig.stable_withdrawal_fee_usd` | Dir1 capital-return fee (USD). Measured **0** for USDC/USDT Mantle (WHI-961). |
