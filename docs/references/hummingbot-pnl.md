@@ -191,7 +191,7 @@ searches for optimal size; the operator picks `order_amount`.
 | \(P_b^{\mathrm{mid}}\) | quote/base | Bybit mid after `de_multiplied_price` (USDT per 1 native-equivalent base) |
 | \(q\) | base | \(q = Q / P_b^{\mathrm{mid}}\) — economic base amount (native xStock units) |
 | \(m\) | — | Bybit `xstockMultiplier` (>0). Converts raw Bybit book into units comparable to Fluxion native base (see §4.2 multiplier step) |
-| \(f_b\) | fraction | Bybit xStocks Adventure Zone taker fee = \(20\,\mathrm{bps} = 0.002\) (config `bybit_taker_fee_bps`; measured 2026-08-07) |
+| \(f_b\) | fraction | Bybit xStocks taker fee = \(15\,\mathrm{bps} = 0.0015\) (config `bybit_taker_fee_bps` / market `cex_taker_fee_bps`; MEASURED 2026-08-11, WHI-1042; maker 10 bps unmodeled) |
 | \(f_p\) | fraction | AMM pool fee (e.g. 3000 → 0.003); RFQ: **0** (embedded in quote) |
 | \(G\) | USD | Mantle gas for **one** Fluxion leg (`gas_usd_per_swap`, default 0.01) |
 | \(\beta\) | fraction | Signed USDC premium over USDT (`usdt_usdc_basis_bps` / 1e4); bybit-fluxion 7.5 bps |

@@ -4,12 +4,12 @@ Go/no-go report for the sibling execution project `mantle-stocks-arbitrage-bots`
 
 **Generated:** 2026-08-05 14:49:46 UTC
 
-> **Stale cost basis (WHI-959 + WHI-960):** this report was generated under the
-> old 10 bps Bybit taker and **0** USDT/USDC basis. Live config is **20 bps**
-> Adventure Zone taker and **signed 7.5 bps** USDC premium (dir1 charged, dir2
-> credited). Profit-bearing rows are dir1 (`buy_fluxion_sell_bybit`), so
-> capturable profit overstates net edge by ~10 bps taker + ~7.5 bps basis per
-> trade until re-run under WHI-909.
+> **Stale cost basis (WHI-959 + WHI-960 + WHI-1042):** this report was generated
+> under the old 10 bps Bybit taker and **0** USDT/USDC basis. Intermediate live
+> pin was **20 bps** (WHI-959); **current** bybit-fluxion config is **15 bps**
+> taker (WHI-1042) and **signed 7.5 bps** USDC premium. Capturable profit
+> overstates net edge vs today's stack until re-run under the current cost
+> config (see WHI-909 re-run + WHI-1042 fee pin).
 
 ## Regeneration
 
