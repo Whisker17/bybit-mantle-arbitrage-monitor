@@ -14,9 +14,17 @@ Fluxion-liquid xStocks pairs:
 
 | Symbol | makerFeeRate | takerFeeRate |
 | --- | ---: | ---: |
-| AAPLX … TSLAX (all seven) | 0.0010 | 0.0015 |
+| AAPLX | 0.0010 | 0.0015 |
+| CRCLX | 0.0010 | 0.0015 |
+| GOOGLX | 0.0010 | 0.0015 |
+| HOODX | 0.0010 | 0.0015 |
+| METAX | 0.0010 | 0.0015 |
+| NVDAX | 0.0010 | 0.0015 |
+| TSLAX | 0.0010 | 0.0015 |
 
-→ **maker 10 bps / taker 15 bps**.
+→ **maker 10 bps / taker 15 bps** on the seven Fluxion-liquid pairs measured.
+Inventory also lists SPCXx / AMZNx / COINx / MCDx — **not re-read**; assumed
+same Adventure Zone schedule until a fee-rate pull shows otherwise.
 
 Corroborating fills (`/v5/execution/list`): tier flipped 2026-08-07 between
 03:13 (METAx buy still **20** bps) and 13:19 (CRCLx sell **15** taker). Full
