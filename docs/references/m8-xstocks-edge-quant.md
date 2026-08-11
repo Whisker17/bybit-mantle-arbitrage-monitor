@@ -6,6 +6,8 @@ Go/no-go report for the sibling execution project `mantle-stocks-arbitrage-bots`
 
 > **Supersedes WHI-866.** Prior report retained at `docs/references/m8-xstocks-edge-quant-v1-whi866.md` (10 bps taker, 0 basis, 0 rebalance, 0..60 sweep). This re-run uses live USDCUSDT premium, 20 bps Adventure Zone taker (primary), rebalance amortization, and an extended 0..200 bps threshold sweep.
 
+> **Caveat (WHI-1042):** primary stack in this note used **taker 20** (then-config). Live bybit-fluxion is **15 bps** taker as of 2026-08-11. Headline M0 numbers are ~5 bps tight vs live; do not rewrite the historical verdict in place — re-run quant if a fresh go/no-go is needed.
+
 ## Regeneration
 
 ```bash

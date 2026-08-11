@@ -31,6 +31,20 @@ soon — anything touching key handling, RPC credentials defaults to at least Hi
 
 ## Open
 
+- **Bybit maker fee unmodeled (always charge taker)** (Low, WHI-1042).
+  Live tier is maker 10 / taker 15 bps; config pins only
+  `costs.cex_taker_fee_bps`. Paper edge always models the crossing side.
+  Monitor is read-only — no fill-mode prediction path. Fix only if a future
+  product models resting limits. Evidence:
+  `docs/references/whi-1042-bybit-taker-fee-15bps.md`.
+
+- **No runtime re-read of Bybit `/v5/account/fee-rate`** (Low, WHI-1042).
+  Fee tier is a pinned YAML constant with a dated `MEASURED` comment +
+  endpoint. Second wrong pin in a week (WHI-959 → WHI-1042). Monitor has no
+  trading-role private REST bootstrap; a re-read needs a dedicated read-only
+  key path + alert. Fix: optional fee-rate poll when private read is
+  available, page on mismatch. Same evidence note.
+
 - **No unattended CI for pytest / ruff / mypy / the two web gates**
   (Medium, WHI-971 + WHI-973 → WHI-972). Gates are green when run by hand
   (`uv run pytest` / `ruff check .` / `mypy` / `cd web && npm test` /

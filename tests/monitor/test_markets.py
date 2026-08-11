@@ -48,7 +48,7 @@ def test_list_and_load_checked_in_markets() -> None:
     assert bf.cex.multiplier_semantics is MultiplierSemantics.DIVIDE
     assert bf.dex.has_rfq is True
     assert bf.dex.quote_decimals == 6
-    assert bf.costs.cex_taker_fee_bps == Decimal(20)
+    assert bf.costs.cex_taker_fee_bps == Decimal(15)
     assert bf.costs.gas_usd_per_swap == Decimal("0.01")
 
     bp = load_market_file("binance-pancake")
@@ -187,7 +187,7 @@ def test_load_market_context_bybit_fluxion() -> None:
     assert len(ctx.pairs.pairs) == 11
     assert ctx.collector is not None
     assert ctx.attribution is not None
-    assert ctx.metrics.bybit_taker_fee_bps == Decimal(20)
+    assert ctx.metrics.bybit_taker_fee_bps == Decimal(15)
     assert ctx.costs.stable_withdrawal_fee_usd == Decimal(0)
     assert ctx.metrics.stable_withdrawal_fee_usd == Decimal(0)
     # WHI-960: measured ~7.5 bps USDC premium (signed by direction in engine).
