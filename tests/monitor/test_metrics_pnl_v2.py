@@ -587,28 +587,35 @@ def test_googlx_dir2_withdrawal_at_ticket_qstar() -> None:
     """WHI-1090 AC: GOOGLx fee at the observed Q* is ~51.9 bps.
 
     Ticket pins (2026-08-13): fee $1.722 at Q* $332 → 51.9 bps. Listed mid
-    344.4 is that USD fee / 0.005 tokens. Residual vs the execution bot is
-    the assets_per_share wrapper→native offset (pools.py 1:1 shortcut;
+    344.4 is independent of the de-multiplied mid. Residual vs the execution
+    bot is the assets_per_share wrapper→native offset (pools.py 1:1 shortcut;
     GOOGLx aps ≈ 1.000418 ≈ 4.2 bps), not the fee.
     """
-    from monitor.metrics.edge import withdrawal_fee_bps, withdrawal_fee_usd_for_direction
+    from monitor.metrics.edge import withdrawal_fee_bps
     from monitor.symbols import load_pairs_config
 
     googl = load_pairs_config().pair_by_id("GOOGLx")
     fee_tokens = googl.asset_withdrawal_fee_tokens
     assert fee_tokens == Decimal("0.005")
     listed_mid = Decimal("344.4")
-    # Listed mid = de-multiplied mid × inventory multiplier (not dm mid alone).
     dm_mid = listed_mid / googl.bybit.multiplier
-    got_usd, kind = withdrawal_fee_usd_for_direction(
+    r = compute_pnl_usd(
+        pair_id="GOOGLx",
+        bybit_bid=dm_mid,
+        bybit_ask=dm_mid,
+        size_usd=Decimal(332),
         direction="buy_bybit_sell_fluxion",
-        stable_fee_usd=Decimal(0),
-        asset_fee_tokens=fee_tokens,
-        listed_token_price_usd=dm_mid * googl.bybit.multiplier,
+        venue="amm",
+        config=_cfg(gas=Decimal(0), fee_bps=Decimal(0), basis=Decimal(0)),
+        amm=_pool_at_mid(dm_mid, pool_fee=0),
+        asset_withdrawal_fee_tokens=fee_tokens,
+        price_multiplier=googl.bybit.multiplier,
     )
-    assert kind == "asset"
-    assert got_usd == Decimal("1.722")
-    bps = withdrawal_fee_bps(got_usd, Decimal(332))
+    assert r.costs.withdrawal_fee_kind == "asset"
+    assert r.costs.withdrawal_fee_usd == Decimal("1.722")
+    # Engine must use listed mid (× multiplier), not the de-multiplied book.
+    assert r.costs.withdrawal_fee_usd != fee_tokens * dm_mid
+    bps = withdrawal_fee_bps(r.costs.withdrawal_fee_usd, Decimal(332))
     assert abs(bps - Decimal("51.9")) < Decimal("0.05")
 
 

@@ -345,13 +345,13 @@ def build_amm_samples(
     """
     if not books or not pools:
         return []
-    wd = withdrawal_params_from_pair(pair)
     if (basis_ts_ms is None) ^ (basis_bps_series is None):
         raise ValueError(
             "basis_ts_ms and basis_bps_series must both be set or both omitted"
         )
     if basis_ts_ms is not None and len(basis_ts_ms) != len(basis_bps_series or ()):
         raise ValueError("basis_ts_ms and basis_bps_series length mismatch")
+    wd = withdrawal_params_from_pair(pair)
     pool_ts = [p.recv_ts_ms for p in pools]
     depth_ts = [d.recv_ts_ms for d in depths]
     out: list[EdgeSample] = []
@@ -445,13 +445,13 @@ def build_rfq_samples(
     """Score RFQ samples at poll times (poll-native size, capped for single-flight)."""
     if not books or not rfq_ticks:
         return []
-    wd = withdrawal_params_from_pair(pair)
     if (basis_ts_ms is None) ^ (basis_bps_series is None):
         raise ValueError(
             "basis_ts_ms and basis_bps_series must both be set or both omitted"
         )
     if basis_ts_ms is not None and len(basis_ts_ms) != len(basis_bps_series or ()):
         raise ValueError("basis_ts_ms and basis_bps_series length mismatch")
+    wd = withdrawal_params_from_pair(pair)
     book_ts = [b.recv_ts_ms for b in books]
     out: list[EdgeSample] = []
     if isinstance(pair, BStocksPair):

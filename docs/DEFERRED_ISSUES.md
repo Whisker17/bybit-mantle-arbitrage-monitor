@@ -32,7 +32,8 @@ soon — anything touching key handling, RPC credentials defaults to at least Hi
 ## Open
 
 - **SPCXx / AMZNx / COINx / MCDx asset withdrawal fee unmeasured** (Low, WHI-1090).
-  Remaining bybit-fluxion inventory is dir2-ineligible (runtime skip + blank
+  `src/monitor/symbols/models.py::PairsConfig` / `src/monitor/metrics/withdrawal.py::is_unpriced_dir2`
+  — remaining bybit-fluxion inventory is dir2-ineligible (runtime skip + blank
   Net). Not re-measured here — execution repo also excludes them. Inventory
   load only requires a fee on `low_liquidity: false` AMM pairs, so a live
   TVL bounce on SPCXx would still be unpriced until this pin. Fix: measure

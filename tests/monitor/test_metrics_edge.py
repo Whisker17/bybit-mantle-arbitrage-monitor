@@ -270,12 +270,6 @@ def test_withdrawal_fee_on_edge_direction_aware() -> None:
     size = Decimal(1000)
     assert withdrawal_fee_bps(fee_usd, size) == Decimal(10)
 
-    from monitor.metrics.withdrawal import is_unpriced_dir2
-
-    assert is_unpriced_dir2("buy_bybit_sell_fluxion", None) is True
-    assert is_unpriced_dir2("buy_bybit_sell_fluxion", Decimal("0.005")) is False
-    assert is_unpriced_dir2("buy_fluxion_sell_bybit", None) is False
-
     cfg = MetricsConfig(
         version=1,
         size_ladder_usd=[Decimal(1000), Decimal(5000), Decimal(20000)],
@@ -344,3 +338,11 @@ def test_withdrawal_fee_on_edge_direction_aware() -> None:
     )
     assert unknown.costs.withdrawal_fee_kind == "unknown"
     assert unknown.costs.withdrawal_fee_usd == Decimal(0)
+
+
+def test_is_unpriced_dir2_only_when_dir2_fee_missing() -> None:
+    from monitor.metrics.withdrawal import is_unpriced_dir2
+
+    assert is_unpriced_dir2("buy_bybit_sell_fluxion", None) is True
+    assert is_unpriced_dir2("buy_bybit_sell_fluxion", Decimal("0.005")) is False
+    assert is_unpriced_dir2("buy_fluxion_sell_bybit", None) is False

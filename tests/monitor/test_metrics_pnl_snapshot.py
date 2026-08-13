@@ -645,24 +645,21 @@ def test_unknown_fee_dir2_cannot_populate_overview_net() -> None:
     dict Web Net + Bucket PnL consume). Unknown dir2 stays visible on
     buckets (kind=unknown) but cannot be overview best / Net / sort keys.
     """
-    snap = _dir2_rich_snapshot(asset_withdrawal_fee_tokens=None)
-    dir2 = snap.tables["buy_bybit_sell_fluxion"]
+    unknown = _dir2_rich_snapshot(asset_withdrawal_fee_tokens=None)
+    priced = _dir2_rich_snapshot(asset_withdrawal_fee_tokens=Decimal("0.005"))
+    dir2 = unknown.tables["buy_bybit_sell_fluxion"]
     assert dir2.amm_buckets
     assert all(r.costs.withdrawal_fee_kind == "unknown" for r in dir2.amm_buckets)
-    # Per-direction Q* claim is also suppressed (detail cannot re-surface it).
     assert dir2.optimal is None
 
-    assert snap.best.direction != "buy_bybit_sell_fluxion"
-    # API/Web display seam: same dict `_enrich_overview_row` copies onto the
-    # overview row (WHI-966). Unpriced dir2 cannot populate Net or sort keys.
-    row = snap.best.overview_enrichment_wire()
+    # Same quotes: measured fee lets dir2 win; missing fee must not.
+    assert priced.best.direction == "buy_bybit_sell_fluxion"
+    assert unknown.best.direction != "buy_bybit_sell_fluxion"
+    assert unknown.status != "no_fillable"
+    row = unknown.best.overview_enrichment_wire()
     assert row["net_edge_direction"] != "buy_bybit_sell_fluxion"
-    if row["net_edge_bps"] is None:
-        assert row["pnl_optimal_net_usd"] is None
-        assert row["pnl_optimal_net_bps"] is None
-    else:
+    if row["net_edge_bps"] is not None:
         assert row["net_edge_direction"] == "buy_fluxion_sell_bybit"
-        assert snap.status != "no_fillable"
 
 
 def test_measured_fee_dir2_can_win_overview_when_best() -> None:
@@ -713,6 +710,7 @@ def test_overview_net_wire_blank_when_non_ok() -> None:
         "no_book",
         "pricing_anomaly",
         "no_fillable",
+        "fee_unknown",
         "stale",
     ):
         summary = PnlOptimalSummary(status=status, has_depth=status != "no_depth")

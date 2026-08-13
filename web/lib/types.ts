@@ -22,6 +22,7 @@ export type PnlStatus =
   | "pricing_anomaly"
   | "no_depth"
   | "no_fillable"
+  | "fee_unknown"
   | "stale";
 
 /**

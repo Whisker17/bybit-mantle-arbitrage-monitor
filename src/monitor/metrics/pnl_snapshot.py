@@ -47,6 +47,8 @@ PnlStatus = Literal[
     "pricing_anomaly",
     "no_depth",
     "no_fillable",
+    # WHI-1090: dir2 was fillable but unpriced (no measured asset fee).
+    "fee_unknown",
     # Kept for wire/UI compat. WHI-821 no longer early-returns this to wipe
     # tables — quiet CEX is annotated via quote_aged + *_quote_age_ms instead.
     "stale",
@@ -468,7 +470,7 @@ def build_pnl_pair_snapshot(
                 rfq_quotes.append(q)
 
     tables: dict[Direction, PnlBucketTable] = {}
-    stripped_unpriced_dir2 = False
+    dir2_fillable_but_unpriced = False
     for direction in _DIRECTIONS:
         table = pnl_bucket_table(
             pair_id=pair_id,
@@ -488,7 +490,9 @@ def build_pnl_pair_snapshot(
         # waterfall can still show ``withdrawal_fee_kind=unknown``; strip the
         # optimal so overview Net / sort / detail "best" cannot rank it.
         if is_unpriced_dir2(direction, asset_withdrawal_fee_tokens) and table.optimal is not None:
-            stripped_unpriced_dir2 = table.optimal.result.fillable
+            dir2_fillable_but_unpriced = (
+                dir2_fillable_but_unpriced or table.optimal.result.fillable
+            )
             table = replace(table, optimal=None)
         tables[direction] = table
 
@@ -534,10 +538,9 @@ def build_pnl_pair_snapshot(
             unfillable_status: PnlStatus = quote_reason
         elif not has_depth:
             unfillable_status = "no_depth"
-        elif stripped_unpriced_dir2:
+        elif dir2_fillable_but_unpriced:
             # Fillable but unpriced — do not label the book "unfillable".
-            # Net / sort stay blank via empty best (WHI-1090).
-            unfillable_status = base_status
+            unfillable_status = "fee_unknown"
         else:
             unfillable_status = "no_fillable"
         best = _empty_summary(
