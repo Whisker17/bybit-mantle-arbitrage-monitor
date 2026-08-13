@@ -12,6 +12,7 @@ from monitor.metrics.amm_pool import amm_pool_from_pair_tick
 from monitor.metrics.capture import (
     CaptureSparkPoint,
     build_amm_samples,
+    build_rfq_samples,
     compute_capture_from_samples,
     series_stats,
     sparkline_from_windows,
@@ -19,7 +20,7 @@ from monitor.metrics.capture import (
 from monitor.metrics.config import CaptureConfig, load_metrics_config
 from monitor.metrics.pnl_v2 import compute_pnl_usd
 from monitor.metrics.withdrawal import withdrawal_params_from_pair
-from monitor.quotes import BybitBookTick, FluxionPoolStateTick
+from monitor.quotes import BybitBookTick, FluxionPoolStateTick, FluxionRfqQuoteTick
 from monitor.symbols import load_pairs_config
 
 _TS_MS = int(datetime(2026, 1, 15, 16, 0, tzinfo=UTC).timestamp() * 1000)
@@ -230,6 +231,81 @@ class TestSparkline:
         assert pts[1].n_windows == 1
         assert pts[1].capturable_usd == Decimal(2)
         assert pts[2].n_windows == 0
+
+
+class TestWithdrawalOnRfqSamples:
+    """WHI-1090: the RFQ builder shares the same unpriced-dir2 skip."""
+
+    def _book(self, pair_id: str, symbol: str, *, mid: Decimal) -> BybitBookTick:
+        return BybitBookTick(
+            pair_id=pair_id,
+            symbol=symbol,
+            exchange_ts_ms=_TS_MS,
+            recv_ts_ms=_TS_MS,
+            bid=mid,
+            ask=mid,
+            bid_de_multiplied=mid,
+            ask_de_multiplied=mid,
+            multiplier=Decimal(1),
+        )
+
+    def _tick(self, pair, *, leg: str) -> FluxionRfqQuoteTick:
+        """Profitable poll on ``leg``: sell → dir2 at 105, buy → dir1 at ~90.9."""
+        native = Decimal(10) ** pair.fluxion.native_decimals
+        quote = Decimal(10) ** 6
+        if leg == "sell":
+            amount_in, amount_out = native, Decimal(105) * quote
+        else:
+            amount_in, amount_out = Decimal(100) * quote, Decimal("1.1") * native
+        return FluxionRfqQuoteTick(
+            pair_id=pair.id,
+            poll_ts_ms=_TS_MS,
+            recv_ts_ms=_TS_MS,
+            token_in="0xin",
+            token_out="0xout",
+            amount_in=str(int(amount_in)),
+            amount_out=str(int(amount_out)),
+            price=None,
+            side=leg,
+            request_id=None,
+            http_status=200,
+            available=True,
+        )
+
+    def _samples(self, pair, *, leg: str):
+        return build_rfq_samples(
+            pair=pair,
+            books=[self._book(pair.id, pair.bybit.symbol, mid=Decimal(100))],
+            rfq_ticks=[self._tick(pair, leg=leg)],
+            metrics_cfg=load_metrics_config(),
+            gaps=[],
+            align_ms=15_000,
+            max_trade_usd=Decimal(1000),
+        )
+
+    def test_unknown_fee_pair_drops_dir2_poll(self) -> None:
+        spcx = load_pairs_config().pair_by_id("SPCXx")
+        assert spcx.asset_withdrawal_fee_tokens is None
+        assert self._samples(spcx, leg="sell") == []
+        # Guard is direction-scoped, not pair-scoped: dir1 still scores.
+        dir1 = self._samples(spcx, leg="buy")
+        assert [s.direction for s in dir1] == ["buy_fluxion_sell_bybit"]
+
+    def test_measured_fee_pair_keeps_dir2_poll(self) -> None:
+        hood = load_pairs_config().pair_by_id("HOODx")
+        assert hood.asset_withdrawal_fee_tokens == Decimal("0.01")
+        dir2 = self._samples(hood, leg="sell")
+        assert [s.direction for s in dir2] == ["buy_bybit_sell_fluxion"]
+        fee_free = build_rfq_samples(
+            pair=hood.model_copy(update={"asset_withdrawal_fee_tokens": Decimal(0)}),
+            books=[self._book(hood.id, hood.bybit.symbol, mid=Decimal(100))],
+            rfq_ticks=[self._tick(hood, leg="sell")],
+            metrics_cfg=load_metrics_config(),
+            gaps=[],
+            align_ms=15_000,
+            max_trade_usd=Decimal(1000),
+        )
+        assert dir2[0].pnl_usd < fee_free[0].pnl_usd
 
 
 class TestWithdrawalOnAmmSamples:

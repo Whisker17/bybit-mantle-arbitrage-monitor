@@ -28,12 +28,17 @@ from monitor.analysis.edge_quant import (
     capturable_profit_single_flight,
     detect_windows,
 )
-from monitor.metrics.amm_pool import amm_pool_from_pair_tick
+from monitor.metrics.amm_pool import AmmPoolState, amm_pool_from_pair_tick
 from monitor.metrics.amm_quote import amm_quote_for_cex
 from monitor.metrics.config import CaptureConfig, MetricsConfig
-from monitor.metrics.edge import Direction, mid_from_bid_ask
+from monitor.metrics.edge import (
+    Direction,
+    VenueKind,
+    WithdrawalFeeParams,
+    mid_from_bid_ask,
+)
 from monitor.metrics.pnl_snapshot import levels_from_depth_curve, rfq_tick_to_poll_quote
-from monitor.metrics.pnl_v2 import compute_pnl_usd
+from monitor.metrics.pnl_v2 import PnlResult, RfqPollQuote, compute_pnl_usd
 from monitor.metrics.session import session_kind
 from monitor.metrics.withdrawal import is_unpriced_dir2, withdrawal_params_from_pair
 from monitor.quotes import (
@@ -319,6 +324,51 @@ def sparkline_from_windows(
     return out
 
 
+def _capture_pnl(
+    *,
+    wd: WithdrawalFeeParams,
+    pair_id: str,
+    book: BybitBookTick,
+    direction: Direction,
+    venue: VenueKind,
+    config: MetricsConfig,
+    size_usd: Decimal,
+    amm: AmmPoolState | None = None,
+    rfq: RfqPollQuote | None = None,
+    bybit_bids: list[tuple[Decimal, Decimal]] | None = None,
+    bybit_asks: list[tuple[Decimal, Decimal]] | None = None,
+) -> tuple[PnlResult, Decimal] | None:
+    """Fee-charged PnL (+ its bps) for one capture sample, or None when unscorable.
+
+    One seam for both sample builders so the WHI-1090 rules cannot drift apart:
+    a direction whose transfer cost is unmeasured (unpriced dir2) is skipped
+    rather than scored fee-free — otherwise Cap $/d reads optimistic — and the
+    measured pair fee is always charged. Unfillable / bps-less rows return None.
+    ``pnl_bucket_table`` applies the same guard to Q*; capture calls
+    ``compute_pnl_usd`` directly, so it needs its own skip.
+    """
+    if is_unpriced_dir2(direction, wd.asset_fee_tokens):
+        return None
+    result = compute_pnl_usd(
+        pair_id=pair_id,
+        bybit_bid=book.bid_de_multiplied,
+        bybit_ask=book.ask_de_multiplied,
+        size_usd=size_usd,
+        direction=direction,
+        venue=venue,
+        config=config,
+        amm=amm,
+        rfq=rfq,
+        bybit_bids=bybit_bids,
+        bybit_asks=bybit_asks,
+        asset_withdrawal_fee_tokens=wd.asset_fee_tokens,
+        price_multiplier=wd.price_multiplier,
+    )
+    if not result.fillable or result.pnl_bps is None:
+        return None
+    return result, result.pnl_bps
+
+
 def build_amm_samples(
     *,
     pair: Pair | BStocksPair,
@@ -396,24 +446,21 @@ def build_amm_samples(
         if cfg is None:
             continue
         for direction in DIRECTIONS:
-            if is_unpriced_dir2(direction, wd.asset_fee_tokens):
-                continue
-            r = compute_pnl_usd(
+            scored = _capture_pnl(
+                wd=wd,
                 pair_id=pair.id,
-                bybit_bid=book.bid_de_multiplied,
-                bybit_ask=book.ask_de_multiplied,
-                size_usd=size_usd,
+                book=book,
                 direction=direction,
                 venue="amm",
                 config=cfg,
+                size_usd=size_usd,
                 amm=amm,
                 bybit_bids=bids,
                 bybit_asks=asks,
-                asset_withdrawal_fee_tokens=wd.asset_fee_tokens,
-                price_multiplier=wd.price_multiplier,
             )
-            if not r.fillable or r.pnl_bps is None:
+            if scored is None:
                 continue
+            r, pnl_bps = scored
             out.append(
                 EdgeSample(
                     ts_ms=ts,
@@ -422,7 +469,7 @@ def build_amm_samples(
                     session=sess,  # type: ignore[arg-type]
                     venue="amm",
                     size_usd=size_usd,
-                    edge_bps=r.pnl_bps,
+                    edge_bps=pnl_bps,
                     pnl_usd=r.pnl_usd,
                 )
             )
@@ -484,21 +531,20 @@ def build_rfq_samples(
         )
         if cfg is None:
             continue
-        if is_unpriced_dir2(direction, wd.asset_fee_tokens):
-            continue
-        r = compute_pnl_usd(
+        scored = _capture_pnl(
+            wd=wd,
             pair_id=pair.id,
-            bybit_bid=book.bid_de_multiplied,
-            bybit_ask=book.ask_de_multiplied,
-            size_usd=Decimal(1),  # ignored for RFQ path
+            book=book,
             direction=direction,
             venue="rfq",
             config=cfg,
+            size_usd=Decimal(1),  # ignored for RFQ path
             rfq=poll,
-            asset_withdrawal_fee_tokens=wd.asset_fee_tokens,
-            price_multiplier=wd.price_multiplier,
         )
-        if not r.fillable or r.pnl_bps is None or r.size_usd <= 0:
+        if scored is None:
+            continue
+        r, pnl_bps = scored
+        if r.size_usd <= 0:
             continue
         if r.size_usd > max_trade_usd > 0:
             scale = max_trade_usd / r.size_usd
@@ -508,7 +554,7 @@ def build_rfq_samples(
         else:
             pnl = r.pnl_usd
             size = r.size_usd
-            bps = r.pnl_bps
+            bps = pnl_bps
         sess = session_kind(
             datetime.fromtimestamp(ts / 1000, tz=UTC), config=metrics_cfg
         ).value
