@@ -31,6 +31,14 @@ soon — anything touching key handling, RPC credentials defaults to at least Hi
 
 ## Open
 
+- **SPCXx / AMZNx / COINx / MCDx asset withdrawal fee unmeasured** (Low, WHI-1090).
+  Remaining bybit-fluxion inventory is dir2-ineligible (runtime skip + blank
+  Net). Not re-measured here — execution repo also excludes them. Inventory
+  load only requires a fee on `low_liquidity: false` AMM pairs, so a live
+  TVL bounce on SPCXx would still be unpriced until this pin. Fix: measure
+  via `GET /v5/asset/coin/query-info` or add an explicit `dir2_enabled:
+  false` inventory flag.
+
 - **Bybit maker fee unmodeled (always charge taker)** (Low, WHI-1042).
   Live tier is maker 10 / taker 15 bps; config pins only
   `costs.cex_taker_fee_bps`. Paper edge always models the crossing side.

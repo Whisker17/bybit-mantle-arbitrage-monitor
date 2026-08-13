@@ -76,7 +76,7 @@ inventory:
   - id: AAPLx
     name: Apple xStock
     low_liquidity: false
-    # MEASURED 2026-08-08 GET /v5/asset/coin/query-info Mantle (WHI-958 / WHI-1090).
+    # Measured 2026-08-08 GET /v5/asset/coin/query-info Mantle (WHI-958 / WHI-1090).
     asset_withdrawal_fee_tokens: '0.005'
     sigma_transit_bps:
       open: '24.85'
@@ -124,7 +124,7 @@ inventory:
   - id: GOOGLx
     name: Alphabet xStock
     low_liquidity: false
-    # MEASURED 2026-08-08 GET /v5/asset/coin/query-info Mantle (WHI-958 / WHI-1090).
+    # Measured 2026-08-08 GET /v5/asset/coin/query-info Mantle (WHI-958 / WHI-1090).
     asset_withdrawal_fee_tokens: '0.005'
     sigma_transit_bps:
       open: '74.27'
@@ -172,7 +172,7 @@ inventory:
   - id: METAx
     name: Meta xStock
     low_liquidity: false
-    # MEASURED 2026-08-08 GET /v5/asset/coin/query-info Mantle (WHI-958 / WHI-1090).
+    # Measured 2026-08-08 GET /v5/asset/coin/query-info Mantle (WHI-958 / WHI-1090).
     asset_withdrawal_fee_tokens: '0.0015'
     sigma_transit_bps:
       open: '22.36'
@@ -220,7 +220,7 @@ inventory:
   - id: TSLAx
     name: Tesla xStock
     low_liquidity: false
-    # MEASURED 2026-08-08 GET /v5/asset/coin/query-info Mantle (WHI-958 / WHI-1090).
+    # Measured 2026-08-08 GET /v5/asset/coin/query-info Mantle (WHI-958 / WHI-1090).
     asset_withdrawal_fee_tokens: '0.003'
     sigma_transit_bps:
       open: '25.13'

@@ -332,8 +332,12 @@ placeholders. Agents must not assume a module exists until its issue lands. -->
     0.005 / 0.0015 / 0.003); remaining SPCXx/AMZNx/COINx/MCDx stay
     unmeasured and dir2-ineligible. Unknown-fee dir2 cannot populate
     overview Net / Bucket PnL sort keys (stripped from PnL v2 best-of)
-    or Cap $/d (capture skips that direction). Liquid AMM pairs without
-    a fee fail inventory load. DESIGN §2.6.1 / §2.7.
+    or Cap $/d (capture skips that direction). Same guard is
+    market-agnostic — binance-pancake has no asset-fee schedule, so its
+    dir2 is excluded too. Capture now charges the measured fee on the
+    seven liquid pairs (Cap $/d was previously unpriced for them as
+    well). Liquid AMM pairs without a fee fail inventory load. DESIGN
+    §2.6.1 / §2.7.
 
 ## Build, test, run
 

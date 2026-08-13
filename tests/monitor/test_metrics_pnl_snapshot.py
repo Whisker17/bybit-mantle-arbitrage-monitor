@@ -653,13 +653,16 @@ def test_unknown_fee_dir2_cannot_populate_overview_net() -> None:
     assert dir2.optimal is None
 
     assert snap.best.direction != "buy_bybit_sell_fluxion"
-    wire = snap.best.overview_net_wire()
-    assert wire["net_edge_direction"] != "buy_bybit_sell_fluxion"
-    usd, bps = snap.best.flat_sort_fields()
-    if wire["net_edge_bps"] is None:
-        assert usd is None and bps is None
+    # API/Web display seam: same dict `_enrich_overview_row` copies onto the
+    # overview row (WHI-966). Unpriced dir2 cannot populate Net or sort keys.
+    row = snap.best.overview_enrichment_wire()
+    assert row["net_edge_direction"] != "buy_bybit_sell_fluxion"
+    if row["net_edge_bps"] is None:
+        assert row["pnl_optimal_net_usd"] is None
+        assert row["pnl_optimal_net_bps"] is None
     else:
-        assert wire["net_edge_direction"] == "buy_fluxion_sell_bybit"
+        assert row["net_edge_direction"] == "buy_fluxion_sell_bybit"
+        assert snap.status != "no_fillable"
 
 
 def test_measured_fee_dir2_can_win_overview_when_best() -> None:

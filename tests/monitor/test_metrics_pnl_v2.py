@@ -586,31 +586,30 @@ def test_withdrawal_fee_uses_listed_mid_with_multiplier() -> None:
 def test_googlx_dir2_withdrawal_at_ticket_qstar() -> None:
     """WHI-1090 AC: GOOGLx fee at the observed Q* is ~51.9 bps.
 
-    Ticket numbers (2026-08-13): Q* $332, fee $1.722 → 51.9 bps. Residual
-    vs the execution bot is the assets_per_share wrapper→native offset
-    (pools.py 1:1 shortcut; GOOGLx aps ≈ 1.000418 ≈ 4.2 bps), not the fee.
+    Ticket pins (2026-08-13): fee $1.722 at Q* $332 → 51.9 bps. Listed mid
+    344.4 is that USD fee / 0.005 tokens. Residual vs the execution bot is
+    the assets_per_share wrapper→native offset (pools.py 1:1 shortcut;
+    GOOGLx aps ≈ 1.000418 ≈ 4.2 bps), not the fee.
     """
     from monitor.metrics.edge import withdrawal_fee_bps, withdrawal_fee_usd_for_direction
+    from monitor.symbols import load_pairs_config
 
-    fee_tokens = Decimal("0.005")
-    fee_usd = Decimal("1.722")
-    q_star = Decimal(332)
-    listed_mid = fee_usd / fee_tokens  # 344.4
+    googl = load_pairs_config().pair_by_id("GOOGLx")
+    fee_tokens = googl.asset_withdrawal_fee_tokens
+    assert fee_tokens == Decimal("0.005")
+    listed_mid = Decimal("344.4")
+    # Listed mid = de-multiplied mid × inventory multiplier (not dm mid alone).
+    dm_mid = listed_mid / googl.bybit.multiplier
     got_usd, kind = withdrawal_fee_usd_for_direction(
         direction="buy_bybit_sell_fluxion",
         stable_fee_usd=Decimal(0),
         asset_fee_tokens=fee_tokens,
-        listed_token_price_usd=listed_mid,
+        listed_token_price_usd=dm_mid * googl.bybit.multiplier,
     )
     assert kind == "asset"
-    assert got_usd == fee_usd
-    bps = withdrawal_fee_bps(got_usd, q_star)
-    # Ticket quotes 51.9 bps at this Q* (1.722 / 332 × 10_000).
+    assert got_usd == Decimal("1.722")
+    bps = withdrawal_fee_bps(got_usd, Decimal(332))
     assert abs(bps - Decimal("51.9")) < Decimal("0.05")
-    # Same pin the inventory now carries.
-    from monitor.symbols import load_pairs_config
-
-    assert load_pairs_config().pair_by_id("GOOGLx").asset_withdrawal_fee_tokens == fee_tokens
 
 
 def test_withdrawal_fee_unknown_when_token_fee_missing() -> None:

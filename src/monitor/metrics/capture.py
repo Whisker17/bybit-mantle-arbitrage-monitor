@@ -35,7 +35,7 @@ from monitor.metrics.edge import Direction, mid_from_bid_ask
 from monitor.metrics.pnl_snapshot import levels_from_depth_curve, rfq_tick_to_poll_quote
 from monitor.metrics.pnl_v2 import compute_pnl_usd
 from monitor.metrics.session import session_kind
-from monitor.metrics.withdrawal import withdrawal_params_from_pair
+from monitor.metrics.withdrawal import is_unpriced_dir2, withdrawal_params_from_pair
 from monitor.quotes import (
     BybitBookTick,
     BybitDepthTick,
@@ -396,12 +396,7 @@ def build_amm_samples(
         if cfg is None:
             continue
         for direction in DIRECTIONS:
-            # WHI-1090: unknown-fee dir2 is unpriced — do not let it
-            # inflate Cap $/d or headline the capture card.
-            if (
-                direction == "buy_bybit_sell_fluxion"
-                and wd.asset_fee_tokens is None
-            ):
+            if is_unpriced_dir2(direction, wd.asset_fee_tokens):
                 continue
             r = compute_pnl_usd(
                 pair_id=pair.id,
@@ -489,7 +484,7 @@ def build_rfq_samples(
         )
         if cfg is None:
             continue
-        if direction == "buy_bybit_sell_fluxion" and wd.asset_fee_tokens is None:
+        if is_unpriced_dir2(direction, wd.asset_fee_tokens):
             continue
         r = compute_pnl_usd(
             pair_id=pair.id,

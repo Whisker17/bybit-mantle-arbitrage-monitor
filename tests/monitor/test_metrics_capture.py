@@ -8,13 +8,19 @@ from decimal import Decimal
 import pytest
 
 from monitor.analysis.edge_quant import EdgeSample, capturable_profit_single_flight
+from monitor.metrics.amm_pool import amm_pool_from_pair_tick
 from monitor.metrics.capture import (
     CaptureSparkPoint,
+    build_amm_samples,
     compute_capture_from_samples,
     series_stats,
     sparkline_from_windows,
 )
-from monitor.metrics.config import CaptureConfig
+from monitor.metrics.config import CaptureConfig, load_metrics_config
+from monitor.metrics.pnl_v2 import compute_pnl_usd
+from monitor.metrics.withdrawal import withdrawal_params_from_pair
+from monitor.quotes import BybitBookTick, FluxionPoolStateTick
+from monitor.symbols import load_pairs_config
 
 _TS_MS = int(datetime(2026, 1, 15, 16, 0, tzinfo=UTC).timestamp() * 1000)
 
@@ -229,9 +235,7 @@ class TestSparkline:
 class TestWithdrawalOnAmmSamples:
     """WHI-1090: Cap $/d must charge measured dir2 fees and skip unknown."""
 
-    def _book(self, pair_id: str, symbol: str, *, mid: Decimal, ts: int = _TS_MS):
-        from monitor.quotes import BybitBookTick
-
+    def _book(self, pair_id: str, symbol: str, *, mid: Decimal, ts: int = _TS_MS) -> BybitBookTick:
         return BybitBookTick(
             pair_id=pair_id,
             symbol=symbol,
@@ -244,9 +248,9 @@ class TestWithdrawalOnAmmSamples:
             multiplier=Decimal(1),
         )
 
-    def _pool(self, pair_id: str, pool: str, *, mid: Decimal, ts: int = _TS_MS):
-        from monitor.quotes import FluxionPoolStateTick
-
+    def _pool(
+        self, pair_id: str, pool: str, *, mid: Decimal, ts: int = _TS_MS
+    ) -> FluxionPoolStateTick:
         ratio = Decimal(10) ** 12 / mid
         sqrt_price_x96 = int(ratio.sqrt() * Decimal(2**96))
         return FluxionPoolStateTick(
@@ -266,9 +270,6 @@ class TestWithdrawalOnAmmSamples:
         )
 
     def _samples(self, pair):
-        from monitor.metrics.capture import build_amm_samples
-        from monitor.metrics.config import load_metrics_config
-
         book = self._book(pair.id, pair.bybit.symbol, mid=Decimal(100))
         pool = self._pool(
             pair.id,
@@ -289,8 +290,6 @@ class TestWithdrawalOnAmmSamples:
         )
 
     def test_unknown_fee_pair_emits_no_dir2_samples(self) -> None:
-        from monitor.symbols import load_pairs_config
-
         spcx = load_pairs_config().pair_by_id("SPCXx")
         assert spcx.asset_withdrawal_fee_tokens is None
         samples = self._samples(spcx)
@@ -298,11 +297,6 @@ class TestWithdrawalOnAmmSamples:
         assert "buy_bybit_sell_fluxion" not in dirs
 
     def test_measured_fee_pair_charges_dir2_withdrawal(self) -> None:
-        from monitor.metrics.amm_pool import amm_pool_from_pair_tick
-        from monitor.metrics.pnl_v2 import compute_pnl_usd
-        from monitor.metrics.withdrawal import withdrawal_params_from_pair
-        from monitor.symbols import load_pairs_config
-
         hood = load_pairs_config().pair_by_id("HOODx")
         wd = withdrawal_params_from_pair(hood)
         assert wd.asset_fee_tokens == Decimal("0.01")
@@ -314,8 +308,6 @@ class TestWithdrawalOnAmmSamples:
             hood.id, hood.fluxion.amm.pool, mid=Decimal("101")  # type: ignore[union-attr]
         )
         amm = amm_pool_from_pair_tick(hood, pool, quote_decimals=6)
-        from monitor.metrics.config import load_metrics_config
-
         cfg = load_metrics_config()
         unpriced = compute_pnl_usd(
             pair_id=hood.id,
@@ -344,8 +336,6 @@ class TestWithdrawalOnAmmSamples:
 
 
 def test_capture_config_defaults_load() -> None:
-    from monitor.metrics.config import load_metrics_config
-
     cfg = load_metrics_config()
     assert cfg.capture.enabled is True
     assert cfg.capture.trade_duration_ms == 390_000
