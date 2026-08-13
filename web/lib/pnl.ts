@@ -55,6 +55,7 @@ const STATUS_LABEL: Record<PnlStatus, string> = {
   pricing_anomaly: "price anomaly",
   no_depth: "no depth",
   no_fillable: "unfillable",
+  fee_unknown: "fee unknown",
   // Legacy wire status (pre-WHI-821 wipe path). Prefer quote_aged annotation.
   stale: "quote aged",
 };

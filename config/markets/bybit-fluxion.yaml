@@ -76,6 +76,8 @@ inventory:
   - id: AAPLx
     name: Apple xStock
     low_liquidity: false
+    # Measured 2026-08-08 GET /v5/asset/coin/query-info Mantle (WHI-958 / WHI-1090).
+    asset_withdrawal_fee_tokens: '0.005'
     sigma_transit_bps:
       open: '24.85'
       closed: '9.84'
@@ -122,6 +124,8 @@ inventory:
   - id: GOOGLx
     name: Alphabet xStock
     low_liquidity: false
+    # Measured 2026-08-08 GET /v5/asset/coin/query-info Mantle (WHI-958 / WHI-1090).
+    asset_withdrawal_fee_tokens: '0.005'
     sigma_transit_bps:
       open: '74.27'
       closed: '22.18'
@@ -168,6 +172,8 @@ inventory:
   - id: METAx
     name: Meta xStock
     low_liquidity: false
+    # Measured 2026-08-08 GET /v5/asset/coin/query-info Mantle (WHI-958 / WHI-1090).
+    asset_withdrawal_fee_tokens: '0.0015'
     sigma_transit_bps:
       open: '22.36'
       closed: '13.18'
@@ -214,6 +220,8 @@ inventory:
   - id: TSLAx
     name: Tesla xStock
     low_liquidity: false
+    # Measured 2026-08-08 GET /v5/asset/coin/query-info Mantle (WHI-958 / WHI-1090).
+    asset_withdrawal_fee_tokens: '0.003'
     sigma_transit_bps:
       open: '25.13'
       closed: '11.86'
@@ -236,6 +244,7 @@ inventory:
   - id: SPCXx
     name: SpaceX xStock
     low_liquidity: true
+    # Unmeasured — dir2-ineligible until GET /v5/asset/coin/query-info (WHI-1090).
     sigma_transit_bps:
       open: '78.51'
       closed: '42.75'
@@ -258,6 +267,7 @@ inventory:
   - id: AMZNx
     name: Amazon.com xStock
     low_liquidity: true
+    # No AMM; dir2-ineligible until asset_withdrawal_fee_tokens is measured (WHI-1090).
     bybit:
       symbol: AMZNXUSDT
       base_coin: AMZNX
@@ -273,6 +283,7 @@ inventory:
   - id: COINx
     name: Coinbase xStock
     low_liquidity: true
+    # No AMM; dir2-ineligible until asset_withdrawal_fee_tokens is measured (WHI-1090).
     bybit:
       symbol: COINXUSDT
       base_coin: COINX
@@ -288,6 +299,7 @@ inventory:
   - id: MCDx
     name: McDonald's xStock
     low_liquidity: true
+    # No AMM; dir2-ineligible until asset_withdrawal_fee_tokens is measured (WHI-1090).
     bybit:
       symbol: MCDXUSDT
       base_coin: MCDX

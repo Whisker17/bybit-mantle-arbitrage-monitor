@@ -126,7 +126,8 @@ class Pair(BaseModel):
     fluxion: FluxionSide
     # Bybit Mantle-chain withdrawal fee in **token units** (not USD). Measured
     # via GET /v5/asset/coin/query-info. None = unmeasured → PnL/edge annotate
-    # fee_unknown on direction 2 (never silent 0). WHI-961.
+    # fee_unknown on direction 2 (never silent 0). Liquid AMM pairs must set
+    # this (WHI-1090); dust / no-pool inventory stays None until measured.
     asset_withdrawal_fee_tokens: Decimal | None = None
     # WHI-962: session-split transit σ (bps @ ~10 min). None = unmeasured
     # (no sequential bar; panel does not invent a default).
@@ -190,6 +191,18 @@ class PairsConfig(BaseModel):
                 raise ValueError(
                     f"{pair.id}: low_liquidity={pair.low_liquidity} disagrees with "
                     f"rule (no AMM or est_liquidity_usd < {threshold})"
+                )
+            # Dir2-enabled = liquid AMM. Missing fee is a config gap, not a
+            # runtime unknown — the dashboard must not rank an unpriced dir2
+            # Net against fully-costed rows (WHI-1090).
+            if (
+                not pair.low_liquidity
+                and pair.fluxion.amm is not None
+                and pair.asset_withdrawal_fee_tokens is None
+            ):
+                raise ValueError(
+                    f"{pair.id}: liquid AMM pair requires measured "
+                    "asset_withdrawal_fee_tokens (dir2 ineligible otherwise)"
                 )
 
         # Per-pair poll floor so concurrent EXACT_INPUT quotes stay ≤ rate_limit.

@@ -30,6 +30,7 @@ from monitor.metrics.edge import (
     mid_from_bid_ask,
     withdrawal_fee_usd_for_direction,
 )
+from monitor.metrics.withdrawal import is_unpriced_dir2
 
 DepthSource = Literal["l1", "book"]
 
@@ -1032,7 +1033,9 @@ def pnl_bucket_table(
         )
 
     optimal = None
-    if include_optimal:
+    if include_optimal and not is_unpriced_dir2(
+        direction, asset_withdrawal_fee_tokens
+    ):
         optimal = optimal_size(
             pair_id=pair_id,
             bybit_bid=bybit_bid,

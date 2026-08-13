@@ -105,6 +105,7 @@ describe("overviewPnlCell", () => {
       "empty_pool",
       "invalid_mid",
       "pricing_anomaly",
+      "fee_unknown",
       "stale",
     ] as const) {
       const cell = overviewPnlCell({
@@ -119,7 +120,7 @@ describe("overviewPnlCell", () => {
       assert.equal(cell.kind, "status");
       if (cell.kind === "status") {
         assert.notEqual(cell.label, "no depth");
-        assert.match(cell.label, /book|pool|aged|mid|anomaly/);
+        assert.match(cell.label, /book|pool|aged|mid|anomaly|fee/);
       }
     }
   });
@@ -194,6 +195,29 @@ describe("overviewNetCell empty title passthrough", () => {
       "empty pool",
     );
     assert.equal(cell.title, "empty pool");
+  });
+
+  it("labels fee_unknown instead of unfillable (WHI-1090)", () => {
+    const cell = overviewNetCell({
+      net_edge_bps: null,
+      net_size_usd: null,
+      pnl_v2: { status: "fee_unknown" },
+    });
+    assert.equal(cell.emptyLabel, "fee unknown");
+    assert.match(cell.title, /fee unknown/);
+    const bucket = overviewPnlCell({
+      status: "fee_unknown",
+      has_depth: true,
+      direction: null,
+      optimal_notional_usd: null,
+      optimal_net_pnl_usd: null,
+      optimal_net_pnl_bps: null,
+      bybit_depth_source: null,
+    });
+    assert.equal(bucket.kind, "status");
+    if (bucket.kind === "status") {
+      assert.equal(bucket.label, "fee unknown");
+    }
   });
 
   it("maps ok+null-bps blank Net to unfillable (parity with Bucket PnL)", () => {

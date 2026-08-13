@@ -94,9 +94,11 @@ notional and direction as Bucket PnL), **not** at the fixed M3 $1 000
 reference. API enrichment (`PnlOptimalSummary.overview_net_wire`) sets
 `net_edge_bps` / `net_edge_direction` / `net_size_usd` from the optimal
 cash-flow bps when `pnl_v2.status == ok` (incl. quote_aged); non-ok blanks
-Net rather than falling back to $1 000. The M3 formula above remains the
-wear algebra at a chosen \(Q\) for detail ladders. **TUI is frozen** and
-still shows $1 000 Net until explicitly updated or retired.
+Net rather than falling back to $1 000. Unknown-fee dir2 is stripped from
+the PnL v2 best-of before these fields are filled (WHI-1090) so an
+unpriced row cannot sort against fully-costed pairs. The M3 formula above
+remains the wear algebra at a chosen \(Q\) for detail ladders. **TUI is
+frozen** and still shows $1 000 Net until explicitly updated or retired.
 `EdgeStats` / `breach_size_usd` stay on the fixed $1 000 rung (secondary
 diagnostic; see ADR-0002 EdgeStats epoch policy).
 
@@ -129,9 +131,17 @@ bucket table. Methodology derivation and Hummingbot comparison:
   (stable return) charges `stable_withdrawal_fee_usd` (measured 0 for
   USDC/USDT Mantle); dir2 (xStock Bybit→Mantle) charges
   `asset_withdrawal_fee_tokens × listed Bybit mid` where listed mid =
-  de-multiplied mid × `bybit.multiplier`. Pairs without a measured token fee
-  annotate `withdrawal_fee_kind=unknown` (never a silent 0). **No wallet
-  budget checker.** Thin book / AMM range exhaust → `fillable=false`.
+  de-multiplied mid × `bybit.multiplier`. All seven Fluxion-liquid pairs
+  carry a measured token fee (WHI-1090; HOODX/CRCLX/NVDAX from WHI-961,
+  AAPLX/GOOGLX/METAX/TSLAX from the 2026-08-08 `/v5/asset/coin/query-info`
+  pin). Dust / no-pool inventory (SPCXx, AMZNx, COINx, MCDx) stays
+  unmeasured and is **dir2-ineligible** until measured. A missing fee still
+  annotates `withdrawal_fee_kind=unknown` (never a silent 0) and **cannot**
+  populate overview Net, Bucket PnL sort keys, or Cap $/d — unknown dir2
+  is stripped from PnL v2 best-of and skipped in capture samples. Liquid
+  AMM pairs without a fee fail inventory load (config gap, not a runtime
+  unknown). **No wallet budget checker.** Thin book / AMM range exhaust →
+  `fillable=false`.
 - **Size variable \(Q\)** (AMM path) = single-trade USD notional at
   **de-multiplied** Bybit mid. Matched base \(q\) is identical on both legs
   **after** Bybit fee rules (§2.6.2); see research note §4.2–4.4.
@@ -330,7 +340,7 @@ algorithms under `monitor.metrics` / `monitor.attribution` stay market-agnostic.
 | Gas per AMM swap | market `costs.gas_usd_per_swap` | Mantle ~$0.01; BSC inventory default $0.05 (non-zero constant). |
 | Quote basis wear | market `costs.quote_basis_bps` → `usdt_usdc_basis_bps` | Signed USDC premium (bps); bybit-fluxion **7.5**, binance-pancake **0** (same quote). Engine signs by direction (WHI-960). |
 | Stable withdrawal fee | market `costs.stable_withdrawal_fee_usd` → `MetricsConfig.stable_withdrawal_fee_usd` | Dir1 capital-return fee (USD). Measured **0** for USDC/USDT Mantle (WHI-961). |
-| Asset withdrawal fee | per-pair `asset_withdrawal_fee_tokens` (inventory) | Dir2: `tokens × listed mid` (`dm_mid × bybit.multiplier`). Measured HOODX/CRCLX/NVDAX; else `withdrawal_fee_kind=unknown` (never silent 0). |
+| Asset withdrawal fee | per-pair `asset_withdrawal_fee_tokens` (inventory) | Dir2: `tokens × listed mid` (`dm_mid × bybit.multiplier`). Measured on all seven liquid xStocks (WHI-1090). Unmeasured → `withdrawal_fee_kind=unknown` (never silent 0); unknown dir2 cannot populate overview Net / Cap $/d (including binance-pancake, which has no asset-fee schedule). Liquid Bybit AMM pairs without a fee fail config load. |
 | Pool fee | inventory per-pool `amm.fee` (UniV3 units) | Injected into `AmmPoolState.pool_fee` at tick lift — not a global YAML. |
 | Quote token decimals | market `dex.quote_decimals` | Mantle USDC=6; BSC USDT=18. API/CLI pass this into `amm_pool_from_pair_tick`. Pure `amm_pool_from_tick` always requires explicit decimals. Pair-wrapper defaults (6/18) remain only for frozen TUI call sites that omit the arg (Bybit-only until M7-5). |
 | CEX depth VWAP | journal `bybit_depth` (table name reused per ADR-0001) | M7-3 Binance depth20 precomputes the same bucket curve shape. |

@@ -276,9 +276,10 @@ placeholders. Agents must not assume a module exists until its issue lands. -->
   - **Withdrawal fee cost line (WHI-961) landed:** direction-aware transfer
     cost in PnL v2 + M3 edge — dir1 `stable_withdrawal_fee_usd` (0 measured),
     dir2 `asset_withdrawal_fee_tokens × listed mid` (mid × multiplier);
-    HOODX/CRCLX/NVDAX populated; unmeasured pairs annotate
-    `withdrawal_fee_kind=unknown` (never silent 0). Web cost waterfall surfaces
-    the line. DESIGN §2.6.1 amended.
+    all seven liquid pairs populated (WHI-1090); unmeasured dust / no-pool
+    pairs annotate `withdrawal_fee_kind=unknown` (never silent 0) and are
+    dir2-ineligible. Web cost waterfall surfaces the line. DESIGN §2.6.1
+    amended.
   - **Sequential drift bar (WHI-962) landed:** per-pair session-split
     `sigma_transit_bps` (WHI-915 / m8-delay-decay @10m) on bybit-fluxion
     inventory; API `drift_premium_bps = k × σ` + per-direction
@@ -326,6 +327,17 @@ placeholders. Agents must not assume a module exists until its issue lands. -->
     spam); overview CEX Vol / ratio render `geo_blocked` (journal-derived
     volume stays detail-only). Note
     `docs/references/whi-974-us-host-upstream-gaps.md`.
+  - **Dir2 withdrawal fee backfill (WHI-1090) landed:** measured
+    `asset_withdrawal_fee_tokens` on AAPLx/GOOGLx/METAx/TSLAx (0.005 /
+    0.005 / 0.0015 / 0.003); remaining SPCXx/AMZNx/COINx/MCDx stay
+    unmeasured and dir2-ineligible. Unknown-fee dir2 cannot populate
+    overview Net / Bucket PnL sort keys (stripped from PnL v2 best-of)
+    or Cap $/d (capture skips that direction). When unpriced dir2 is the
+    only fillable AMM side, PnL status is `fee_unknown` (not
+    `no_fillable`). The guard is market-agnostic: binance-pancake has no
+    asset-fee schedule, so its dir2 is excluded too. Capture now charges
+    the measured fee on the seven liquid pairs. Liquid AMM pairs without
+    a fee fail inventory load. DESIGN §2.6.1 / §2.7.
 
 ## Build, test, run
 

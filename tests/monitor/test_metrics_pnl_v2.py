@@ -583,6 +583,60 @@ def test_withdrawal_fee_uses_listed_mid_with_multiplier() -> None:
     assert r.costs.withdrawal_fee_kind == "asset"
 
 
+def test_googlx_dir2_withdrawal_at_ticket_qstar() -> None:
+    """WHI-1090 AC: GOOGLx fee at the observed Q* is ~51.9 bps.
+
+    Ticket pins (2026-08-13): fee $1.722 at Q* $332 → 51.9 bps. Listed mid
+    344.4 is independent of the de-multiplied mid. Residual vs the execution
+    bot is the assets_per_share wrapper→native offset (pools.py 1:1 shortcut;
+    GOOGLx aps ≈ 1.000418 ≈ 4.2 bps), not the fee.
+    """
+    from monitor.metrics.edge import withdrawal_fee_bps
+    from monitor.symbols import load_pairs_config
+
+    googl = load_pairs_config().pair_by_id("GOOGLx")
+    fee_tokens = googl.asset_withdrawal_fee_tokens
+    assert fee_tokens == Decimal("0.005")
+    listed_mid = Decimal("344.4")
+    dm_mid = listed_mid / googl.bybit.multiplier
+    r = compute_pnl_usd(
+        pair_id="GOOGLx",
+        bybit_bid=dm_mid,
+        bybit_ask=dm_mid,
+        size_usd=Decimal(332),
+        direction="buy_bybit_sell_fluxion",
+        venue="amm",
+        config=_cfg(gas=Decimal(0), fee_bps=Decimal(0), basis=Decimal(0)),
+        amm=_pool_at_mid(dm_mid, pool_fee=0),
+        asset_withdrawal_fee_tokens=fee_tokens,
+        price_multiplier=googl.bybit.multiplier,
+    )
+    assert r.costs.withdrawal_fee_kind == "asset"
+    assert r.costs.withdrawal_fee_usd == Decimal("1.722")
+    # Engine must use listed mid (× multiplier), not the de-multiplied book.
+    assert r.costs.withdrawal_fee_usd != fee_tokens * dm_mid
+    bps = withdrawal_fee_bps(r.costs.withdrawal_fee_usd, Decimal(332))
+    assert abs(bps - Decimal("51.9")) < Decimal("0.05")
+
+
+def test_pnl_bucket_table_withholds_qstar_for_unknown_dir2() -> None:
+    """Engine seam: unpriced dir2 keeps buckets but no ranked Q* (WHI-1090)."""
+    mid = Decimal(100)
+    table = pnl_bucket_table(
+        pair_id="AMZNx",
+        bybit_bid=mid,
+        bybit_ask=mid,
+        direction="buy_bybit_sell_fluxion",
+        config=_cfg(gas=Decimal(0), fee_bps=Decimal(0), basis=Decimal(0)),
+        amm=_pool_at_mid(Decimal("101"), pool_fee=0),
+        include_optimal=True,
+        asset_withdrawal_fee_tokens=None,
+    )
+    assert table.amm_buckets
+    assert all(r.costs.withdrawal_fee_kind == "unknown" for r in table.amm_buckets)
+    assert table.optimal is None
+
+
 def test_withdrawal_fee_unknown_when_token_fee_missing() -> None:
     """Unmeasured pair: dir2 annotates unknown, never a silent asset 0."""
     cfg = _cfg(gas=Decimal(0), fee_bps=Decimal(0), basis=Decimal(0))

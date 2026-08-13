@@ -31,6 +31,48 @@ soon — anything touching key handling, RPC credentials defaults to at least Hi
 
 ## Open
 
+- **SPCXx / AMZNx / COINx / MCDx asset withdrawal fee unmeasured** (Low, WHI-1090).
+  `src/monitor/symbols/models.py::PairsConfig` / `src/monitor/metrics/withdrawal.py::is_unpriced_dir2`
+  — remaining bybit-fluxion inventory is dir2-ineligible (runtime skip + blank
+  Net). Not re-measured here — execution repo also excludes them. Inventory
+  load only requires a fee on `low_liquidity: false` AMM pairs, so a live
+  TVL bounce on SPCXx would still be unpriced until this pin. Fix: measure
+  via `GET /v5/asset/coin/query-info` or add an explicit `dir2_enabled:
+  false` inventory flag.
+
+- **binance-pancake dir2 Net / Cap $/d permanently unpriced** (Low, WHI-1090).
+  `src/monitor/metrics/withdrawal.py::withdrawal_params_from_pair` — every
+  `BStocksPair` has `asset_fee_tokens=None` (no measured transfer schedule).
+  The WHI-1090 ranking guard therefore blanks dir2 Q* / Net / Cap $/d for
+  the whole market. Correct until a BSC withdrawal schedule is measured.
+  Fix: pin a per-pair fee or an explicit same-quote "no transfer" schedule.
+
+- **GOOGLx dir2 Net not reconciled against the bot's live `net_edge_bps`**
+  (Low, WHI-1090 → ops). Spec AC asked that GOOGLx dir2 **Net** agree with the
+  sibling `mantle-stocks-arbitrage-bots` `net_edge_bps` to within the known
+  `assets_per_share` offset. The deterministic half ships: the withdrawal line is
+  pinned at the ticket's Q\* ($1.722 @ $332 → 51.9 bps, listed mid = de-multiplied
+  mid × multiplier) in
+  `tests/monitor/test_metrics_pnl_v2.py::test_googlx_dir2_withdrawal_at_ticket_qstar`,
+  and the residual is named — `monitor/fluxion/pools.py` wrapper→native 1:1
+  shortcut, GOOGLx aps ≈ 1.000418 ≈ 4.2 bps. A **Net**-level comparison needs the
+  monitor journal and the bot journal on the same host at the same timestamp, so it
+  cannot be a CI artifact. Fix: sample both on arb-bot-vps after deploy and record
+  the delta (expect ≈ the aps offset, not the fee line).
+
+- **`fee_unknown` is AMM-Q* only** (Low, WHI-1090).
+  `src/monitor/metrics/pnl_snapshot.py::build_pnl_pair_snapshot` — RFQ-only
+  unpriced dir2 still reports `no_fillable`. Overview Net is AMM Q*
+  (ADR-0002), so the number cannot leak; the status string is imprecise.
+  Fix as a label refinement if RFQ-only unknown pairs need a distinct chip.
+
+- **M3 EdgeStats still include unknown-fee dir2 $1K rows** (Low, WHI-1090).
+  `src/monitor/tui/builder.py::build_edge_snapshot` — P50/P95/P99 and
+  cost-floor breach counts still score dir2 with `withdrawal_fee_kind=unknown`
+  (fee line 0). Overview Net / Bucket PnL / Cap $/d are already gated.
+  TUI is frozen; EdgeStats stay a $1K secondary diagnostic (ADR-0002).
+  Fix if a future issue makes EdgeStats a headline number.
+
 - **Bybit maker fee unmodeled (always charge taker)** (Low, WHI-1042).
   Live tier is maker 10 / taker 15 bps; config pins only
   `costs.cex_taker_fee_bps`. Paper edge always models the crossing side.

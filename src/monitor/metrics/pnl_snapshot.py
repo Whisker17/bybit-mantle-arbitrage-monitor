@@ -29,6 +29,7 @@ from monitor.metrics.pnl_v2 import (
     RfqPollQuote,
     pnl_bucket_table,
 )
+from monitor.metrics.withdrawal import is_unpriced_dir2
 from monitor.quotes import (
     BybitBookTick,
     BybitDepthTick,
@@ -46,6 +47,8 @@ PnlStatus = Literal[
     "pricing_anomaly",
     "no_depth",
     "no_fillable",
+    # WHI-1090: dir2 was fillable but unpriced (no measured asset fee).
+    "fee_unknown",
     # Kept for wire/UI compat. WHI-821 no longer early-returns this to wipe
     # tables — quiet CEX is annotated via quote_aged + *_quote_age_ms instead.
     "stale",
@@ -157,7 +160,8 @@ class PnlOptimalSummary:
         the same optimal net bps / direction / notional as Bucket PnL. Non-ok
         statuses blank Net — never fall back to M3 ``reference_size_usd`` $1K,
         which reintroduces structural sign disagreement with Bucket PnL.
-        Venue is always AMM (Q* search is AMM-only).
+        Venue is always AMM (Q* search is AMM-only). Unknown-fee dir2 is
+        stripped before best-of (WHI-1090) so it cannot populate these fields.
         """
         if not self._has_numeric_optimal():
             return {
@@ -466,8 +470,9 @@ def build_pnl_pair_snapshot(
                 rfq_quotes.append(q)
 
     tables: dict[Direction, PnlBucketTable] = {}
+    dir2_fillable_but_unpriced = False
     for direction in _DIRECTIONS:
-        tables[direction] = pnl_bucket_table(
+        table = pnl_bucket_table(
             pair_id=pair_id,
             bybit_bid=bybit.bid_de_multiplied,
             bybit_ask=bybit.ask_de_multiplied,
@@ -481,6 +486,13 @@ def build_pnl_pair_snapshot(
             asset_withdrawal_fee_tokens=asset_withdrawal_fee_tokens,
             price_multiplier=price_multiplier,
         )
+        # pnl_bucket_table already withholds Q* for unpriced dir2; buckets
+        # stay so the waterfall can show withdrawal_fee_kind=unknown.
+        if is_unpriced_dir2(direction, asset_withdrawal_fee_tokens) and any(
+            row.fillable for row in table.amm_buckets
+        ):
+            dir2_fillable_but_unpriced = True
+        tables[direction] = table
 
     # Prefer the direction with higher fillable optimal PnL; ties → smaller Q.
     candidates: list[OptimalSizeResult] = []
@@ -524,6 +536,9 @@ def build_pnl_pair_snapshot(
             unfillable_status: PnlStatus = quote_reason
         elif not has_depth:
             unfillable_status = "no_depth"
+        elif dir2_fillable_but_unpriced:
+            # Fillable but unpriced — do not label the book "unfillable".
+            unfillable_status = "fee_unknown"
         else:
             unfillable_status = "no_fillable"
         best = _empty_summary(
