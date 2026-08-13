@@ -40,6 +40,20 @@ soon — anything touching key handling, RPC credentials defaults to at least Hi
   via `GET /v5/asset/coin/query-info` or add an explicit `dir2_enabled:
   false` inventory flag.
 
+- **binance-pancake dir2 Net / Cap $/d permanently unpriced** (Low, WHI-1090).
+  `src/monitor/metrics/withdrawal.py::withdrawal_params_from_pair` — every
+  `BStocksPair` has `asset_fee_tokens=None` (no measured transfer schedule).
+  The WHI-1090 ranking guard therefore blanks dir2 Q* / Net / Cap $/d for
+  the whole market. Correct until a BSC withdrawal schedule is measured.
+  Fix: pin a per-pair fee or an explicit same-quote "no transfer" schedule.
+
+- **M3 EdgeStats still include unknown-fee dir2 $1K rows** (Low, WHI-1090).
+  `src/monitor/tui/builder.py::build_edge_snapshot` — P50/P95/P99 and
+  cost-floor breach counts still score dir2 with `withdrawal_fee_kind=unknown`
+  (fee line 0). Overview Net / Bucket PnL / Cap $/d are already gated.
+  TUI is frozen; EdgeStats stay a $1K secondary diagnostic (ADR-0002).
+  Fix if a future issue makes EdgeStats a headline number.
+
 - **Bybit maker fee unmodeled (always charge taker)** (Low, WHI-1042).
   Live tier is maker 10 / taker 15 bps; config pins only
   `costs.cex_taker_fee_bps`. Paper edge always models the crossing side.

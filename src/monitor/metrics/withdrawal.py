@@ -1,7 +1,8 @@
-"""Per-pair withdrawal fee params for PnL/edge (WHI-961).
+"""Per-pair withdrawal fee params and dir2 ranking eligibility (WHI-961 / WHI-1090).
 
-Single seam for inventory → engine: API, TUI, and CLI call
-``withdrawal_params_from_pair`` so pair fee + multiplier stay consistent.
+Inventory → engine: API, TUI, and CLI call ``withdrawal_params_from_pair``
+so pair fee + multiplier stay consistent. ``is_unpriced_dir2`` is the
+shared ranking guard (PnL v2 Q*, capture samples).
 """
 
 from __future__ import annotations

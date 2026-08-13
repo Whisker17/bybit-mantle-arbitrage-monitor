@@ -619,6 +619,24 @@ def test_googlx_dir2_withdrawal_at_ticket_qstar() -> None:
     assert abs(bps - Decimal("51.9")) < Decimal("0.05")
 
 
+def test_pnl_bucket_table_withholds_qstar_for_unknown_dir2() -> None:
+    """Engine seam: unpriced dir2 keeps buckets but no ranked Q* (WHI-1090)."""
+    mid = Decimal(100)
+    table = pnl_bucket_table(
+        pair_id="AMZNx",
+        bybit_bid=mid,
+        bybit_ask=mid,
+        direction="buy_bybit_sell_fluxion",
+        config=_cfg(gas=Decimal(0), fee_bps=Decimal(0), basis=Decimal(0)),
+        amm=_pool_at_mid(Decimal("101"), pool_fee=0),
+        include_optimal=True,
+        asset_withdrawal_fee_tokens=None,
+    )
+    assert table.amm_buckets
+    assert all(r.costs.withdrawal_fee_kind == "unknown" for r in table.amm_buckets)
+    assert table.optimal is None
+
+
 def test_withdrawal_fee_unknown_when_token_fee_missing() -> None:
     """Unmeasured pair: dir2 annotates unknown, never a silent asset 0."""
     cfg = _cfg(gas=Decimal(0), fee_bps=Decimal(0), basis=Decimal(0))

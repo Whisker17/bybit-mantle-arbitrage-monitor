@@ -486,14 +486,12 @@ def build_pnl_pair_snapshot(
             asset_withdrawal_fee_tokens=asset_withdrawal_fee_tokens,
             price_multiplier=price_multiplier,
         )
-        # WHI-1090: unknown-fee dir2 is not a priced Q*. Keep buckets so the
-        # waterfall can still show ``withdrawal_fee_kind=unknown``; strip the
-        # optimal so overview Net / sort / detail "best" cannot rank it.
-        if is_unpriced_dir2(direction, asset_withdrawal_fee_tokens) and table.optimal is not None:
-            dir2_fillable_but_unpriced = (
-                dir2_fillable_but_unpriced or table.optimal.result.fillable
-            )
-            table = replace(table, optimal=None)
+        # pnl_bucket_table already withholds Q* for unpriced dir2; buckets
+        # stay so the waterfall can show withdrawal_fee_kind=unknown.
+        if is_unpriced_dir2(direction, asset_withdrawal_fee_tokens) and any(
+            row.fillable for row in table.amm_buckets
+        ):
+            dir2_fillable_but_unpriced = True
         tables[direction] = table
 
     # Prefer the direction with higher fillable optimal PnL; ties → smaller Q.
