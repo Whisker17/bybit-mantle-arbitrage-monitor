@@ -47,6 +47,25 @@ soon — anything touching key handling, RPC credentials defaults to at least Hi
   the whole market. Correct until a BSC withdrawal schedule is measured.
   Fix: pin a per-pair fee or an explicit same-quote "no transfer" schedule.
 
+- **GOOGLx dir2 Net not reconciled against the bot's live `net_edge_bps`**
+  (Low, WHI-1090 → ops). Spec AC asked that GOOGLx dir2 **Net** agree with the
+  sibling `mantle-stocks-arbitrage-bots` `net_edge_bps` to within the known
+  `assets_per_share` offset. The deterministic half ships: the withdrawal line is
+  pinned at the ticket's Q\* ($1.722 @ $332 → 51.9 bps, listed mid = de-multiplied
+  mid × multiplier) in
+  `tests/monitor/test_metrics_pnl_v2.py::test_googlx_dir2_withdrawal_at_ticket_qstar`,
+  and the residual is named — `monitor/fluxion/pools.py` wrapper→native 1:1
+  shortcut, GOOGLx aps ≈ 1.000418 ≈ 4.2 bps. A **Net**-level comparison needs the
+  monitor journal and the bot journal on the same host at the same timestamp, so it
+  cannot be a CI artifact. Fix: sample both on arb-bot-vps after deploy and record
+  the delta (expect ≈ the aps offset, not the fee line).
+
+- **`fee_unknown` is AMM-Q* only** (Low, WHI-1090).
+  `src/monitor/metrics/pnl_snapshot.py::build_pnl_pair_snapshot` — RFQ-only
+  unpriced dir2 still reports `no_fillable`. Overview Net is AMM Q*
+  (ADR-0002), so the number cannot leak; the status string is imprecise.
+  Fix as a label refinement if RFQ-only unknown pairs need a distinct chip.
+
 - **M3 EdgeStats still include unknown-fee dir2 $1K rows** (Low, WHI-1090).
   `src/monitor/tui/builder.py::build_edge_snapshot` — P50/P95/P99 and
   cost-floor breach counts still score dir2 with `withdrawal_fee_kind=unknown`
