@@ -157,7 +157,8 @@ class PnlOptimalSummary:
         the same optimal net bps / direction / notional as Bucket PnL. Non-ok
         statuses blank Net — never fall back to M3 ``reference_size_usd`` $1K,
         which reintroduces structural sign disagreement with Bucket PnL.
-        Venue is always AMM (Q* search is AMM-only).
+        Venue is always AMM (Q* search is AMM-only). Unknown-fee dir2 is
+        stripped before best-of (WHI-1090) so it cannot populate these fields.
         """
         if not self._has_numeric_optimal():
             return {
@@ -467,7 +468,7 @@ def build_pnl_pair_snapshot(
 
     tables: dict[Direction, PnlBucketTable] = {}
     for direction in _DIRECTIONS:
-        tables[direction] = pnl_bucket_table(
+        table = pnl_bucket_table(
             pair_id=pair_id,
             bybit_bid=bybit.bid_de_multiplied,
             bybit_ask=bybit.ask_de_multiplied,
@@ -481,6 +482,16 @@ def build_pnl_pair_snapshot(
             asset_withdrawal_fee_tokens=asset_withdrawal_fee_tokens,
             price_multiplier=price_multiplier,
         )
+        # WHI-1090: unknown-fee dir2 is not a priced Q*. Keep buckets so the
+        # waterfall can still show ``withdrawal_fee_kind=unknown``; strip the
+        # optimal so overview Net / sort / detail "best" cannot rank it.
+        if (
+            direction == "buy_bybit_sell_fluxion"
+            and table.optimal is not None
+            and table.optimal.result.costs.withdrawal_fee_kind == "unknown"
+        ):
+            table = replace(table, optimal=None)
+        tables[direction] = table
 
     # Prefer the direction with higher fillable optimal PnL; ties → smaller Q.
     candidates: list[OptimalSizeResult] = []

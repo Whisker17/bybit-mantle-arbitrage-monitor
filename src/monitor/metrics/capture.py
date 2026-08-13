@@ -35,6 +35,7 @@ from monitor.metrics.edge import Direction, mid_from_bid_ask
 from monitor.metrics.pnl_snapshot import levels_from_depth_curve, rfq_tick_to_poll_quote
 from monitor.metrics.pnl_v2 import compute_pnl_usd
 from monitor.metrics.session import session_kind
+from monitor.metrics.withdrawal import withdrawal_params_from_pair
 from monitor.quotes import (
     BybitBookTick,
     BybitDepthTick,
@@ -344,6 +345,7 @@ def build_amm_samples(
     """
     if not books or not pools:
         return []
+    wd = withdrawal_params_from_pair(pair)
     if (basis_ts_ms is None) ^ (basis_bps_series is None):
         raise ValueError(
             "basis_ts_ms and basis_bps_series must both be set or both omitted"
@@ -394,6 +396,13 @@ def build_amm_samples(
         if cfg is None:
             continue
         for direction in DIRECTIONS:
+            # WHI-1090: unknown-fee dir2 is unpriced — do not let it
+            # inflate Cap $/d or headline the capture card.
+            if (
+                direction == "buy_bybit_sell_fluxion"
+                and wd.asset_fee_tokens is None
+            ):
+                continue
             r = compute_pnl_usd(
                 pair_id=pair.id,
                 bybit_bid=book.bid_de_multiplied,
@@ -405,6 +414,8 @@ def build_amm_samples(
                 amm=amm,
                 bybit_bids=bids,
                 bybit_asks=asks,
+                asset_withdrawal_fee_tokens=wd.asset_fee_tokens,
+                price_multiplier=wd.price_multiplier,
             )
             if not r.fillable or r.pnl_bps is None:
                 continue
@@ -439,6 +450,7 @@ def build_rfq_samples(
     """Score RFQ samples at poll times (poll-native size, capped for single-flight)."""
     if not books or not rfq_ticks:
         return []
+    wd = withdrawal_params_from_pair(pair)
     if (basis_ts_ms is None) ^ (basis_bps_series is None):
         raise ValueError(
             "basis_ts_ms and basis_bps_series must both be set or both omitted"
@@ -477,6 +489,8 @@ def build_rfq_samples(
         )
         if cfg is None:
             continue
+        if direction == "buy_bybit_sell_fluxion" and wd.asset_fee_tokens is None:
+            continue
         r = compute_pnl_usd(
             pair_id=pair.id,
             bybit_bid=book.bid_de_multiplied,
@@ -486,6 +500,8 @@ def build_rfq_samples(
             venue="rfq",
             config=cfg,
             rfq=poll,
+            asset_withdrawal_fee_tokens=wd.asset_fee_tokens,
+            price_multiplier=wd.price_multiplier,
         )
         if not r.fillable or r.pnl_bps is None or r.size_usd <= 0:
             continue

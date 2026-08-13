@@ -83,19 +83,29 @@ def test_load_checked_in_pairs_config() -> None:
     aapl = cfg.pair_by_id("AAPLx")
     assert aapl.bybit.multiplier == Decimal("1.0026642075893797")
     assert aapl.low_liquidity is False
-    # Unmeasured until WHI-961 schedule expands — must stay None (not silent 0).
-    assert aapl.asset_withdrawal_fee_tokens is None
 
-    hood = cfg.pair_by_id("HOODx")
-    assert hood.asset_withdrawal_fee_tokens == Decimal("0.01")
-    crcl = cfg.pair_by_id("CRCLx")
-    assert crcl.asset_withdrawal_fee_tokens == Decimal("0.005")
-    nvda = cfg.pair_by_id("NVDAx")
-    assert nvda.asset_withdrawal_fee_tokens == Decimal("0.005")
+    # WHI-1090: every dir2-enabled (liquid AMM) pair carries a measured
+    # Bybit Mantle-chain token fee. Source: GET /v5/asset/coin/query-info
+    # 2026-08-08, same pin as execution-repo config/symbols.yaml (WHI-958).
+    expected_fees = {
+        "AAPLx": Decimal("0.005"),
+        "CRCLx": Decimal("0.005"),
+        "GOOGLx": Decimal("0.005"),
+        "HOODx": Decimal("0.01"),
+        "METAx": Decimal("0.0015"),
+        "NVDAx": Decimal("0.005"),
+        "TSLAx": Decimal("0.003"),
+    }
+    for pair_id, fee in expected_fees.items():
+        assert cfg.pair_by_id(pair_id).asset_withdrawal_fee_tokens == fee
+    assert {p.id for p in cfg.liquid_pairs()} == set(expected_fees)
 
-    spcx = cfg.pair_by_id("SPCXx")
-    assert spcx.low_liquidity is True
-    assert spcx.asset_withdrawal_fee_tokens is None
+    # Dust / no-pool inventory is dir2-ineligible until measured — None,
+    # never a silent 0 (WHI-961 contract).
+    for pair_id in ("SPCXx", "AMZNx", "COINx", "MCDx"):
+        pair = cfg.pair_by_id(pair_id)
+        assert pair.low_liquidity is True
+        assert pair.asset_withdrawal_fee_tokens is None
 
 
 def test_required_pair_fields_present() -> None:
@@ -175,13 +185,19 @@ def _pair_yaml(
     quote_token_address: str = "0x09Bc4E0D864854c6aFB6eB9A9cdF58aC190D0dF9",
     low_liquidity: bool = True,
     amm_block: str = "amm: null",
+    asset_withdrawal_fee_tokens: str | None = None,
 ) -> str:
     base = _base_coin(pair_id)
+    fee_line = (
+        ""
+        if asset_withdrawal_fee_tokens is None
+        else f'\n          asset_withdrawal_fee_tokens: "{asset_withdrawal_fee_tokens}"'
+    )
     return dedent(
         f"""\
         - id: {pair_id}
           name: test
-          low_liquidity: {str(low_liquidity).lower()}
+          low_liquidity: {str(low_liquidity).lower()}{fee_line}
           bybit:
             symbol: {symbol}
             base_coin: {base}
@@ -233,6 +249,38 @@ def test_load_rejects_low_liquidity_mismatch(tmp_path: Path) -> None:
     )
     with pytest.raises(PairsConfigError, match="low_liquidity"):
         load_pairs_config(path)
+
+
+_LIQUID_AMM = (
+    "amm:\n"
+    "              kind: v3\n"
+    "              pool: \"0x5e7935d70b5d14b6cf36fbde59944533fab96b3c\"\n"
+    "              fee: 3000\n"
+    "              est_liquidity_usd: 100000"
+)
+
+
+def test_load_rejects_liquid_amm_without_asset_withdrawal_fee(tmp_path: Path) -> None:
+    """WHI-1090: a dir2-enabled pair with no measured fee is a config gap."""
+    path = _write_pairs_yaml(
+        tmp_path,
+        _pair_yaml(low_liquidity=False, amm_block=_LIQUID_AMM),
+    )
+    with pytest.raises(PairsConfigError, match="asset_withdrawal_fee_tokens"):
+        load_pairs_config(path)
+
+
+def test_load_accepts_liquid_amm_with_measured_fee(tmp_path: Path) -> None:
+    path = _write_pairs_yaml(
+        tmp_path,
+        _pair_yaml(
+            low_liquidity=False,
+            amm_block=_LIQUID_AMM,
+            asset_withdrawal_fee_tokens="0.005",
+        ),
+    )
+    cfg = load_pairs_config(path)
+    assert cfg.pair_by_id("TSLAx").asset_withdrawal_fee_tokens == Decimal("0.005")
 
 
 def test_load_rejects_quote_address_mismatch(tmp_path: Path) -> None:

@@ -616,6 +616,67 @@ def test_empty_reconstructed_depth_is_no_depth() -> None:
     assert snap.status == "no_depth"
 
 
+def _dir2_rich_snapshot(
+    *,
+    asset_withdrawal_fee_tokens: Decimal | None,
+    price_multiplier: Decimal = Decimal(1),
+):
+    """CEX 100 / AMM 101 → ~100 bps dir2 gross, under the 300 bps anomaly gate."""
+    pair = _load_aapl_pair()
+    pool_tick = _pool_tick(mid=Decimal("101"))
+    amm = amm_pool_from_tick(pair, pool_tick)
+    return build_pnl_pair_snapshot(
+        pair_id=pair.id,
+        bybit=_book(bid=Decimal(100), ask=Decimal(100)),
+        amm=amm,
+        amm_tick=pool_tick,
+        config=_cfg(gas=Decimal(0), fee_bps=Decimal(10)),
+        depth=_depth(),
+        native_decimals=pair.fluxion.native_decimals,
+        asset_withdrawal_fee_tokens=asset_withdrawal_fee_tokens,
+        price_multiplier=price_multiplier,
+    )
+
+
+def test_unknown_fee_dir2_cannot_populate_overview_net() -> None:
+    """WHI-1090: unpriced dir2 must not sort against fully-costed rows.
+
+    Display-layer seam: snapshot → overview_net_wire / flat_sort_fields (the
+    dict Web Net + Bucket PnL consume). Unknown dir2 stays visible on
+    buckets (kind=unknown) but cannot be overview best / Net / sort keys.
+    """
+    snap = _dir2_rich_snapshot(asset_withdrawal_fee_tokens=None)
+    dir2 = snap.tables["buy_bybit_sell_fluxion"]
+    assert dir2.amm_buckets
+    assert all(r.costs.withdrawal_fee_kind == "unknown" for r in dir2.amm_buckets)
+    # Per-direction Q* claim is also suppressed (detail cannot re-surface it).
+    assert dir2.optimal is None
+
+    assert snap.best.direction != "buy_bybit_sell_fluxion"
+    wire = snap.best.overview_net_wire()
+    assert wire["net_edge_direction"] != "buy_bybit_sell_fluxion"
+    usd, bps = snap.best.flat_sort_fields()
+    if wire["net_edge_bps"] is None:
+        assert usd is None and bps is None
+    else:
+        assert wire["net_edge_direction"] == "buy_fluxion_sell_bybit"
+
+
+def test_measured_fee_dir2_can_win_overview_when_best() -> None:
+    """Measured dir2 still competes — WHI-1090 only blanks *unknown* fees."""
+    snap = _dir2_rich_snapshot(
+        asset_withdrawal_fee_tokens=Decimal("0.005"),
+        price_multiplier=Decimal(1),
+    )
+    dir2 = snap.tables["buy_bybit_sell_fluxion"]
+    assert dir2.optimal is not None
+    assert dir2.optimal.result.costs.withdrawal_fee_kind == "asset"
+    assert snap.best.direction == "buy_bybit_sell_fluxion"
+    wire = snap.best.overview_net_wire()
+    assert wire["net_edge_direction"] == "buy_bybit_sell_fluxion"
+    assert wire["net_edge_bps"] is not None
+
+
 def test_overview_net_wire_ok_matches_optimal() -> None:
     """ADR-0002: ok summary drives Net from the same Q* bps / direction / size."""
     summary = PnlOptimalSummary(

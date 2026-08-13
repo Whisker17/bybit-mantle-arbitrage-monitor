@@ -583,6 +583,36 @@ def test_withdrawal_fee_uses_listed_mid_with_multiplier() -> None:
     assert r.costs.withdrawal_fee_kind == "asset"
 
 
+def test_googlx_dir2_withdrawal_at_ticket_qstar() -> None:
+    """WHI-1090 AC: GOOGLx fee at the observed Q* is ~51.9 bps.
+
+    Ticket numbers (2026-08-13): Q* $332, fee $1.722 → 51.9 bps. Residual
+    vs the execution bot is the assets_per_share wrapper→native offset
+    (pools.py 1:1 shortcut; GOOGLx aps ≈ 1.000418 ≈ 4.2 bps), not the fee.
+    """
+    from monitor.metrics.edge import withdrawal_fee_bps, withdrawal_fee_usd_for_direction
+
+    fee_tokens = Decimal("0.005")
+    fee_usd = Decimal("1.722")
+    q_star = Decimal(332)
+    listed_mid = fee_usd / fee_tokens  # 344.4
+    got_usd, kind = withdrawal_fee_usd_for_direction(
+        direction="buy_bybit_sell_fluxion",
+        stable_fee_usd=Decimal(0),
+        asset_fee_tokens=fee_tokens,
+        listed_token_price_usd=listed_mid,
+    )
+    assert kind == "asset"
+    assert got_usd == fee_usd
+    bps = withdrawal_fee_bps(got_usd, q_star)
+    # Ticket quotes 51.9 bps at this Q* (1.722 / 332 × 10_000).
+    assert abs(bps - Decimal("51.9")) < Decimal("0.05")
+    # Same pin the inventory now carries.
+    from monitor.symbols import load_pairs_config
+
+    assert load_pairs_config().pair_by_id("GOOGLx").asset_withdrawal_fee_tokens == fee_tokens
+
+
 def test_withdrawal_fee_unknown_when_token_fee_missing() -> None:
     """Unmeasured pair: dir2 annotates unknown, never a silent asset 0."""
     cfg = _cfg(gas=Decimal(0), fee_bps=Decimal(0), basis=Decimal(0))
